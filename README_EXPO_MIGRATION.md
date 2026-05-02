@@ -50,14 +50,34 @@ Build static files into `dist/`:
 
 - `npm run build` (same as `npm run export:web`)
 
-### Firebase Hosting
+### Firebase Hosting (recommended with Firebase Auth/Firestore)
 
-`firebase.json` is configured to serve `dist/` with SPA fallback (Expo Router).
+`firebase.json` serves **`dist/`** with SPA rewrites to **`index.html`** (Expo Router).
 
-1. `npm run build`
-2. `firebase deploy --only hosting`
+**One-time setup**
 
-Add your hosting domain under Firebase Console → Authentication → Settings → **Authorized domains**.
+1. In [Firebase Console](https://console.firebase.google.com/) → Project settings, copy your **Project ID**.
+2. Copy `.firebaserc.example` to `.firebaserc` and replace `YOUR_FIREBASE_PROJECT_ID` with that ID  
+   (or run `firebase use --add` after login — it creates `.firebaserc`).
+3. Enable **Hosting** for the project if prompted the first time you deploy.
+
+**Deploy the web app**
+
+1. Ensure `.env` has all `EXPO_PUBLIC_*` keys (they are baked in at build time).
+2. From the project root:
+   - `npm install`
+   - `npm run deploy:hosting`  
+     (runs `npm run build` then `firebase deploy --only hosting`)
+
+**Deploy Firestore rules/indexes + Hosting together**
+
+- `npm run deploy:firebase`
+
+**After deploy**
+
+- Firebase gives you a URL like `https://<project-id>.web.app` / `firebaseapp.com`.
+- Add that domain under **Authentication → Settings → Authorized domains**.
+- For Google sign-in on the web, ensure OAuth/Web client settings allow your hosting origin.
 
 ### Netlify
 
@@ -65,7 +85,7 @@ Add your hosting domain under Firebase Console → Authentication → Settings �
 
 1. In Netlify → **Site configuration → Build & deploy**: set **Publish directory** to `dist` (or leave blank so `netlify.toml` applies). Remove any stale custom path that still says `web-dist`.
 2. Connect the repo in Netlify **or** drag-drop the `dist` folder after a local `npm run build`.
-2. Set the same `EXPO_PUBLIC_*` env vars in Netlify → Site settings → Environment variables.
-3. Add your `*.netlify.app` URL to Firebase **Authorized domains**.
+3. Set the same `EXPO_PUBLIC_*` env vars in Netlify → Site settings → Environment variables.
+4. Add your `*.netlify.app` URL to Firebase **Authorized domains**.
 
 Reuse `.env` locally for builds; hosting providers need those variables at **build time** so Firebase initializes correctly in the bundle.

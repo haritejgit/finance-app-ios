@@ -10,6 +10,8 @@
     "web": "expo start --web",
     "build": "expo export --platform web --output-dir dist",
     "export:web": "npm run build",
+    "deploy:hosting": "npm run build && firebase deploy --only hosting",
+    "deploy:firebase": "firebase deploy --only firestore,hosting",
     "lint": "expo lint"
   },
   "dependencies": {
@@ -45,6 +47,7 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@types/react": "~19.1.10",
+    "firebase-tools": "^15.16.0",
     "typescript": "~5.8.3"
   }
 }

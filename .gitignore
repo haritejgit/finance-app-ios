@@ -19,3 +19,6 @@ web-dist
 .expo
 .env
 .env.*
+.firebase
+firebase-debug.log
+firestore-debug.log
