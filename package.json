@@ -8,6 +8,8 @@
     "ios": "expo run:ios",
     "android": "expo run:android",
     "web": "expo start --web",
+    "build": "expo export --platform web --output-dir dist",
+    "export:web": "npm run build",
     "lint": "expo lint"
   },
   "dependencies": {

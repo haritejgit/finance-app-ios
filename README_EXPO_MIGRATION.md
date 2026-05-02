@@ -43,3 +43,29 @@ If you have Firebase CLI installed, deploy both with:
 - `firebase login`
 - `firebase use <your-project-id>`
 - `firebase deploy --only firestore`
+
+## Web export (phone browser, no Expo Go)
+
+Build static files into `dist/`:
+
+- `npm run build` (same as `npm run export:web`)
+
+### Firebase Hosting
+
+`firebase.json` is configured to serve `dist/` with SPA fallback (Expo Router).
+
+1. `npm run build`
+2. `firebase deploy --only hosting`
+
+Add your hosting domain under Firebase Console → Authentication → Settings → **Authorized domains**.
+
+### Netlify
+
+`netlify.toml` runs `npm run build` and publishes **`dist/`** (matches Netlify’s usual publish folder).
+
+1. In Netlify → **Site configuration → Build & deploy**: set **Publish directory** to `dist` (or leave blank so `netlify.toml` applies). Remove any stale custom path that still says `web-dist`.
+2. Connect the repo in Netlify **or** drag-drop the `dist` folder after a local `npm run build`.
+2. Set the same `EXPO_PUBLIC_*` env vars in Netlify → Site settings → Environment variables.
+3. Add your `*.netlify.app` URL to Firebase **Authorized domains**.
+
+Reuse `.env` locally for builds; hosting providers need those variables at **build time** so Firebase initializes correctly in the bundle.

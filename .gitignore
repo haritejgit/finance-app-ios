@@ -15,6 +15,7 @@
 local.properties
 node_modules
 dist
+web-dist
 .expo
 .env
 .env.*
