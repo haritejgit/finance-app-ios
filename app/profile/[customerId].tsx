@@ -413,48 +413,6 @@ export default function ProfileScreen() {
               <Text style={styles.delete}>Delete Customer</Text>
             </Pressable>
             <Text style={styles.history}>Transaction History</Text>
-            {false && (payments.length === 0 ? (
-              <View style={styles.emptyHistoryContainer}>
-                <Text style={styles.emptyHistoryIcon}>📋</Text>
-                <Text style={styles.emptyHistoryTitle}>No Transactions</Text>
-                <Text style={styles.emptyHistorySubtitle}>Payment history will appear here</Text>
-              </View>
-            ) : (
-              payments.map((p, index) => (
-                <View key={p.id} style={styles.paymentCard}>
-                  <View style={styles.paymentHeader}>
-                    <View style={styles.paymentDateContainer}>
-                      <Text style={styles.paymentDate}>
-                        {new Date(p.paymentDate).toLocaleDateString('en-US', { 
-                          weekday: 'short', 
-                          month: 'short', 
-                          day: 'numeric' 
-                        })}
-                      </Text>
-                      <Text style={styles.paymentYear}>
-                        {new Date(p.paymentDate).getFullYear()}
-                      </Text>
-                    </View>
-                    <View style={styles.paymentAmountContainer}>
-                      <Text style={styles.paymentAmount}>Rs.{p.amountPaid.toFixed(2)}</Text>
-                      <View style={[styles.paymentTypeBadge, { 
-                        backgroundColor: (p.paymentType as PaymentType) === "DUE" ? colors.missedRed : colors.paidGreen 
-                      }]}>
-                        <Text style={styles.paymentTypeText}>
-                          {(p.paymentType as PaymentType) === "DUE" ? "DUE" : p.paymentType}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                  {(p.paymentMode === "CASH") && (
-                    <Text style={styles.paymentMode}>💵 Cash Payment</Text>
-                  )}
-                  {(p.paymentMode === "PHONE") && (
-                    <Text style={styles.paymentMode}>📱 Phone Payment</Text>
-                  )}
-                </View>
-              ))
-            ))}
             <PaymentHistory 
               payments={payments} 
               onEdit={openEditPaymentModal}

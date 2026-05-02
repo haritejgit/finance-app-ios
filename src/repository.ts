@@ -282,6 +282,11 @@ function toMillis(value: any) {
   return 0;
 }
 
+function toAmount(value: any) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
 export async function getTodayDashboardStats(userId: string) {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
@@ -301,7 +306,7 @@ export async function getTodayDashboardStats(userId: string) {
       const paymentDate = toMillis(payment.paymentDate);
       return paymentDate >= startMs && paymentDate <= endMs && payment.paymentType !== "DUE";
     })
-    .reduce((sum, payment) => sum + payment.amountPaid, 0);
+    .reduce((sum, payment) => sum + toAmount(payment.amountPaid), 0);
 
   const distributedToday = loansSnap.docs
     .map((d) => d.data() as Loan)
@@ -309,7 +314,7 @@ export async function getTodayDashboardStats(userId: string) {
       const startDate = toMillis(loan.startDate);
       return startDate >= startMs && startDate <= endMs;
     })
-    .reduce((sum, loan) => sum + loan.principalAmount, 0);
+    .reduce((sum, loan) => sum + toAmount(loan.principalAmount), 0);
 
   return { collectionToday, distributedToday };
 }
