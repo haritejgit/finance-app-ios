@@ -1,0 +1,50 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow a signed-in user to read/write only documents where userId matches auth.uid.
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner() {
+      return isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    function isCreatingOwnDoc() {
+      return isSignedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /users/{uid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /villages/{docId} {
+      allow read, update, delete: if isOwner();
+      allow create: if isCreatingOwnDoc();
+      allow list: if isSignedIn() && query.where == 'userId' && query.value == request.auth.uid;
+    }
+
+    match /customers/{docId} {
+      allow read, update, delete: if isOwner();
+      allow create: if isCreatingOwnDoc();
+      allow list: if isSignedIn() && query.where == 'userId' && query.value == request.auth.uid;
+    }
+
+    match /loans/{docId} {
+      allow read, update, delete: if isOwner();
+      allow create: if isCreatingOwnDoc();
+      allow list: if isSignedIn() && query.where == 'userId' && query.value == request.auth.uid;
+    }
+
+    match /payments/{docId} {
+      allow read, update, delete: if isOwner();
+      allow create: if isCreatingOwnDoc();
+      allow list: if isSignedIn() && query.where == 'userId' && query.value == request.auth.uid;
+    }
+
+    // Deny everything else by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
