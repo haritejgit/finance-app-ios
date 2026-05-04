@@ -16,6 +16,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import * as Location from "expo-location";
 import { useAuth } from "../../src/auth-context";
 import {
   addPayment,
@@ -171,8 +172,11 @@ export default function ProfileScreen() {
     locationDesc: "",
     coName: "",
     coId: "",
+    latitude: null as number | null,
+    longitude: null as number | null,
   });
-  
+  const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
+
   // Payment edit/delete state
   const [editingPayment, setEditingPayment] = useState<any | null>(null);
   const [editPaymentOpen, setEditPaymentOpen] = useState(false);
@@ -201,8 +205,45 @@ export default function ProfileScreen() {
       locationDesc: customer.locationDesc || "",
       coName: customer.coName || "",
       coId: customer.coId?.toString() || "",
+      latitude: customer.latitude ?? null,
+      longitude: customer.longitude ?? null,
     });
     setEditOpen(true);
+  };
+
+  // Function to open Google Maps with customer location
+  const openGoogleMaps = () => {
+    if (!customer?.latitude || !customer?.longitude) {
+      alert('Customer location not available');
+      return;
+    }
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${customer.latitude},${customer.longitude}`;
+    Linking.openURL(url).catch(() => {
+      alert('Unable to open maps');
+    });
+  };
+
+  // Function to update customer location in edit modal
+  const updateEditLocation = async () => {
+    setIsUpdatingLocation(true);
+    try {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        alert('Permission to access location was denied');
+        return;
+      }
+
+      let location = await Location.getCurrentPositionAsync({});
+      setEditForm(prev => ({
+        ...prev,
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      }));
+    } catch (error) {
+      alert('Failed to get location');
+    } finally {
+      setIsUpdatingLocation(false);
+    }
   };
 
   const updateCustomerDetails = async () => {
@@ -215,12 +256,12 @@ export default function ProfileScreen() {
       phone: editForm.phone,
       aadhar: editForm.aadhar,
       locationDesc: editForm.locationDesc,
-      latitude: customer.latitude,
-      longitude: customer.longitude,
+      latitude: editForm.latitude ?? customer.latitude,
+      longitude: editForm.longitude ?? customer.longitude,
       coName: editForm.coName || undefined,
       coId: editForm.coId ? Number(editForm.coId) : undefined,
       villageId: customer.villageId,
-      userId: customer.userId, // Preserve the original userId
+      userId: customer.userId,
       isActive: customer.isActive,
       createdAt: customer.createdAt,
     };
@@ -403,6 +444,15 @@ export default function ProfileScreen() {
             </Pressable>
             <Pressable style={styles.editBtn} onPress={openEditModal}>
               <Text style={styles.editBtnText}>EDIT CUSTOMER</Text>
+            </Pressable>
+            <Pressable 
+              style={[styles.outline, { backgroundColor: customer?.latitude ? colors.blue2 : '#ccc' }]} 
+              onPress={openGoogleMaps}
+              disabled={!customer?.latitude}
+            >
+              <Text style={[styles.outlineText, { color: colors.white }]}>
+                {customer?.latitude ? '📍 GO TO LOCATION' : '📍 NO LOCATION SET'}
+              </Text>
             </Pressable>
             <Pressable
               onPress={async () => {
@@ -634,6 +684,27 @@ export default function ProfileScreen() {
               onChangeText={(text) => setEditForm(prev => ({ ...prev, locationDesc: text }))}
               style={styles.input}
             />
+
+            {/* Location Update Section */}
+            <View style={styles.locationUpdateSection}>
+              <Text style={styles.locationLabel}>Current Location:</Text>
+              {editForm.latitude && editForm.longitude ? (
+                <Text style={styles.locationCoords}>
+                  📍 {editForm.latitude.toFixed(6)}, {editForm.longitude.toFixed(6)}
+                </Text>
+              ) : (
+                <Text style={styles.locationNotSet}>No location set</Text>
+              )}
+              <Pressable 
+                style={[styles.updateLocationBtn, isUpdatingLocation && styles.updateLocationBtnDisabled]} 
+                onPress={updateEditLocation}
+                disabled={isUpdatingLocation}
+              >
+                <Text style={styles.updateLocationBtnText}>
+                  {isUpdatingLocation ? 'Getting Location...' : editForm.latitude ? '📍 Update Location' : '📍 Set Location'}
+                </Text>
+              </Pressable>
+            </View>
             
             <TextInput
               placeholder="C/O Name"
@@ -858,4 +929,11 @@ const styles = StyleSheet.create({
   modeBtnActive: { backgroundColor: colors.blue2, borderColor: colors.blue2 },
   modeText: { color: "#666", fontWeight: "600" },
   modeTextActive: { color: colors.white },
+  locationUpdateSection: { backgroundColor: "#f8f9fa", borderRadius: 12, padding: 16, marginVertical: 8, borderWidth: 1, borderColor: "#e0e0e0" },
+  locationLabel: { fontSize: 14, fontWeight: "600", color: "#333", marginBottom: 8 },
+  locationCoords: { fontSize: 14, color: "#28a745", marginBottom: 12, fontFamily: Platform.OS === "ios" ? "Courier" : "monospace" },
+  locationNotSet: { fontSize: 14, color: "#999", marginBottom: 12, fontStyle: "italic" },
+  updateLocationBtn: { backgroundColor: colors.blue2, borderRadius: 10, padding: 12, alignItems: "center" },
+  updateLocationBtnDisabled: { backgroundColor: "#ccc" },
+  updateLocationBtnText: { color: colors.white, fontWeight: "700", fontSize: 14 },
 });

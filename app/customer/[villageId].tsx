@@ -18,20 +18,83 @@ import {
 } from "react-native";
 import * as Location from "expo-location";
 import { useAuth } from "../../src/auth-context";
-import { addCustomerWithLoan, getCustomers, getVillageById } from "../../src/repository";
-import { Customer, Village } from "../../src/types";
+import { addCustomerWithLoan, getCustomers, getPaymentsForCustomer, getVillageById } from "../../src/repository";
+import { Customer, Village, Payment } from "../../src/types";
 import { colors } from "../../src/theme";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+
+// Helper to check if date is today
+function isToday(timestamp: number): boolean {
+  const date = new Date(timestamp);
+  const today = new Date();
+  return date.getDate() === today.getDate() &&
+    date.getMonth() === today.getMonth() &&
+    date.getFullYear() === today.getFullYear();
+}
+
+// Get customer payment status for today
+type PaymentStatus = 'paid' | 'due' | 'none';
+async function getCustomerPaymentStatus(userId: string, customerId: string): Promise<PaymentStatus> {
+  try {
+    const payments = await getPaymentsForCustomer(userId, customerId);
+    const todayPayment = payments.find(p => isToday(p.paymentDate));
+    if (todayPayment) {
+      return todayPayment.paymentType === 'DUE' ? 'due' : 'paid';
+    }
+    return 'none';
+  } catch {
+    return 'none';
+  }
+}
 
 const CustomerRow = memo(function CustomerRow({
   customer,
   onOpen,
+  paymentStatus,
 }: {
   customer: Customer;
   onOpen: (customerId: string) => void;
+  paymentStatus: PaymentStatus;
 }) {
+  // Determine background color based on payment status
+  const getBackgroundColor = () => {
+    switch (paymentStatus) {
+      case 'paid':
+        return '#d4edda'; // Light green
+      case 'due':
+        return '#f8d7da'; // Light red
+      default:
+        return colors.white; // Plain white
+    }
+  };
+
+  const getBorderColor = () => {
+    switch (paymentStatus) {
+      case 'paid':
+        return '#28a745'; // Green border
+      case 'due':
+        return '#dc3545'; // Red border
+      default:
+        return 'transparent';
+    }
+  };
+
+  const getStatusBadge = () => {
+    switch (paymentStatus) {
+      case 'paid':
+        return <Text style={styles.statusBadgePaid}>✓ PAID</Text>;
+      case 'due':
+        return <Text style={styles.statusBadgeDue}>✗ DUE</Text>;
+      default:
+        return null;
+    }
+  };
+
   return (
-    <Pressable style={styles.item} onPress={() => onOpen(customer.id)}>
+    <Pressable 
+      style={[styles.item, { backgroundColor: getBackgroundColor(), borderColor: getBorderColor(), borderWidth: paymentStatus !== 'none' ? 2 : 0 }]} 
+      onPress={() => onOpen(customer.id)}
+    >
       <View style={styles.idContainer}>
         <Text style={styles.badge}>{customer.numericalId}</Text>
         {customer.coId && (
@@ -44,6 +107,7 @@ const CustomerRow = memo(function CustomerRow({
         {customer.coName && (
           <Text style={styles.coName}>{customer.coName}</Text>
         )}
+        {getStatusBadge()}
       </View>
       <Pressable style={styles.quickCallBtn} onPress={() => Linking.openURL(`tel:${customer.phone}`)}>
         <Text style={styles.quickCallText}>CALL</Text>
@@ -99,12 +163,25 @@ export default function CustomerListScreen() {
   const [registrationDate, setRegistrationDate] = useState(formatDateInput(Date.now()));
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [tempRegistrationDate, setTempRegistrationDate] = useState<Date>(new Date());
+  const [paymentStatuses, setPaymentStatuses] = useState<Record<string, PaymentStatus>>({});
 
   const reload = async () => {
     if (!user || !villageId) return;
     const [list, villageDetails] = await Promise.all([getCustomers(user.uid, villageId), getVillageById(villageId)]);
-    setCustomers(list);
+    // Sort customers by numericalId
+    const sortedList = list.sort((a, b) => a.numericalId - b.numericalId);
+    setCustomers(sortedList);
     setVillage(villageDetails);
+    
+    // Fetch payment status for each customer
+    const statuses: Record<string, PaymentStatus> = {};
+    await Promise.all(
+      sortedList.map(async (customer) => {
+        const status = await getCustomerPaymentStatus(user.uid, customer.id);
+        statuses[customer.id] = status;
+      })
+    );
+    setPaymentStatuses(statuses);
   };
   useEffect(() => {
     reload();
@@ -136,13 +213,17 @@ export default function CustomerListScreen() {
 
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return customers;
-    return customers.filter((c) =>
-      [c.name, c.phone, c.numericalId.toString(), c.coName || "", c.coId?.toString() || ""]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedQuery)
-    );
+    let result = customers;
+    if (normalizedQuery) {
+      result = customers.filter((c) =>
+        [c.name, c.phone, c.numericalId.toString(), c.coName || "", c.coId?.toString() || ""]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedQuery)
+      );
+    }
+    // Always sort by numericalId
+    return result.sort((a, b) => a.numericalId - b.numericalId);
   }, [customers, query]);
 
   const openCustomer = useCallback((customerId: string) => {
@@ -150,8 +231,14 @@ export default function CustomerListScreen() {
   }, []);
 
   const renderCustomer = useCallback(
-    ({ item }: { item: Customer }) => <CustomerRow customer={item} onOpen={openCustomer} />,
-    [openCustomer]
+    ({ item }: { item: Customer }) => (
+      <CustomerRow 
+        customer={item} 
+        onOpen={openCustomer} 
+        paymentStatus={paymentStatuses[item.id] || 'none'} 
+      />
+    ),
+    [openCustomer, paymentStatuses]
   );
 
   return (
@@ -420,6 +507,8 @@ const styles = StyleSheet.create({
   name: { fontWeight: "700", fontSize: 16, color: "#333" },
   phone: { color: "#777" },
   coName: { color: "#666", fontSize: 12, fontStyle: "italic", marginTop: 2 },
+  statusBadgePaid: { fontSize: 10, color: "#28a745", fontWeight: "700", marginTop: 4, backgroundColor: "#d4edda", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
+  statusBadgeDue: { fontSize: 10, color: "#dc3545", fontWeight: "700", marginTop: 4, backgroundColor: "#f8d7da", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
   quickCallBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#4CAF50", justifyContent: "center", alignItems: "center" },
   quickCallText: { fontSize: 18, color: colors.white },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
