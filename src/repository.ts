@@ -19,6 +19,30 @@ const coll = {
   payments: collection(db, "payments"),
 };
 
+// Simple in-memory cache for better performance
+const cache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getCacheKey(userId: string, type: string, id?: string) {
+  return id ? `${userId}:${type}:${id}` : `${userId}:${type}`;
+}
+
+function getCached<T>(key: string): T | null {
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data as T;
+  }
+  return null;
+}
+
+function setCache(key: string, data: any) {
+  cache.set(key, { data, timestamp: Date.now() });
+}
+
+function clearCache() {
+  cache.clear();
+}
+
 function stripUndefined<T extends Record<string, any>>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
 }
@@ -27,10 +51,17 @@ function id() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-export async function getVillages(userId: string) {
+export async function getVillages(userId: string, useCache = true) {
+  const cacheKey = getCacheKey(userId, "villages");
+  if (useCache) {
+    const cached = getCached<Village[]>(cacheKey);
+    if (cached) return cached;
+  }
   const q = query(coll.villages, where("userId", "==", userId));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data() as Village);
+  const villages = snap.docs.map((d) => d.data() as Village);
+  setCache(cacheKey, villages);
+  return villages;
 }
 
 export async function getVillageById(villageId: string) {
@@ -54,7 +85,12 @@ export async function updateVillageDayShift(villageId: string, dayOfWeek: string
   });
 }
 
-export async function getCustomers(userId: string, villageId: string) {
+export async function getCustomers(userId: string, villageId: string, useCache = true) {
+  const cacheKey = getCacheKey(userId, "customers", villageId);
+  if (useCache) {
+    const cached = getCached<Customer[]>(cacheKey);
+    if (cached) return cached;
+  }
   const q = query(
     coll.customers,
     where("userId", "==", userId),
@@ -62,22 +98,19 @@ export async function getCustomers(userId: string, villageId: string) {
     where("isActive", "==", true)
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data() as Customer);
+  const customers = snap.docs.map((d) => d.data() as Customer);
+  setCache(cacheKey, customers);
+  return customers;
 }
 
-export async function getNextNumericalId(userId: string, dayOfWeek: string, shift: string) {
-  const villages = await getVillages(userId);
-  const scopedVillageIds = villages
-    .filter((v) => v.dayOfWeek === dayOfWeek && v.shift === shift)
-    .map((v) => v.id);
-  if (scopedVillageIds.length === 0) return 1;
-
-  const q = query(coll.customers, where("userId", "==", userId), where("isActive", "==", true));
-  const snap = await getDocs(q);
+export async function getNextNumericalId(userId: string, villageId: string) {
+  // Scope by specific village only - fresh serial numbers per village
+  const coll = collection(db, "customers");
+  const snap = await getDocs(query(coll, where("userId", "==", userId), where("villageId", "==", villageId)));
   let max = 0;
   snap.docs.forEach((d) => {
     const c = d.data() as Customer;
-    if (scopedVillageIds.includes(c.villageId)) max = Math.max(max, c.numericalId);
+    max = Math.max(max, c.numericalId);
   });
   return max + 1;
 }
@@ -91,7 +124,7 @@ export async function addCustomerWithLoan(
   principalAmount: number,
   startDate: number
 ) {
-  const numericalId = await getNextNumericalId(userId, dayOfWeek, shift);
+  const numericalId = await getNextNumericalId(userId, villageId);
   const customer: Customer = {
     id: id(),
     numericalId,

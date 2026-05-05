@@ -14,8 +14,8 @@ import {
   TextInput,
   View,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
-import XLSX from 'xlsx-js-style';
 import { useAuth } from "../src/auth-context";
 import { getPaymentsByDate } from "../src/repository";
 import { colors } from "../src/theme";
@@ -25,6 +25,15 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { collection, query, where, orderBy, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '../src/firebase';
+
+// Lazy load heavy XLSX library
+let XLSX: any = null;
+async function loadXLSX() {
+  if (!XLSX) {
+    XLSX = await import('xlsx-js-style');
+  }
+  return XLSX;
+}
 
 function formatDateInput(ts: number) {
   const d = new Date(ts);
@@ -405,8 +414,13 @@ interface Payment {
     }
   };
 
+  const [isExporting, setIsExporting] = useState(false);
+
   const exportLoanTracker = async () => {
     try {
+      setIsExporting(true);
+      // Lazy load XLSX library
+      const XLSX = await loadXLSX();
       // Create weekly loan tracker Excel workbook
       const wb = XLSX.utils.book_new();
       
@@ -709,6 +723,8 @@ interface Payment {
         'Unable to export Excel file. Please try again or contact support.\n\n💡 Tip: Make sure you have enough storage space and try again.',
         [{ text: 'OK', style: 'default' }]
       );
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -845,9 +861,13 @@ interface Payment {
   };
 
   const exportWeeklyCollectionReport = async () => {
-    if (!user) return;
+    if (!user || isExporting) return;
 
     try {
+      setIsExporting(true);
+      // Lazy load XLSX library
+      const XLSX = await loadXLSX();
+      
       const fromTs = parseDateInput(fromDate);
       const toTs = parseDateInput(toDate);
       if (!fromTs || !toTs || fromTs > toTs) {
@@ -1006,11 +1026,33 @@ interface Payment {
             setStyle(1, col, headerStyle);
           }
 
-          const sortedCustomers = [...shiftCustomers].sort((a, b) =>
-            (a.numericalId ?? Number.MAX_SAFE_INTEGER) - (b.numericalId ?? Number.MAX_SAFE_INTEGER)
-          );
+          // Group customers by village, then sort by numericalId within each village
+          const sortedVillages = [...shiftVillages].sort((a, b) => a.name.localeCompare(b.name));
+          
+          sortedVillages.forEach((village) => {
+            const villageCustomers = shiftCustomers
+              .filter((c) => c.villageId === village.id)
+              .sort((a, b) => (a.numericalId ?? Number.MAX_SAFE_INTEGER) - (b.numericalId ?? Number.MAX_SAFE_INTEGER));
+            
+            if (villageCustomers.length === 0) return;
+            
+            // Add village header row
+            const villageHeaderRow = sheetData.length;
+            sheetData.push([`🏘️ ${village.name}`]);
+            setStyle(villageHeaderRow, 0, { 
+              font: { bold: true, color: { rgb: WHITE }, sz: 11 }, 
+              fill: { patternType: 'solid', fgColor: { rgb: '1565C0' } },
+              alignment: baseAlignment 
+            });
+            // Merge village header across all columns
+            for (let col = 1; col < 4 + weekDates.length; col++) {
+              setStyle(villageHeaderRow, col, { 
+                fill: { patternType: 'solid', fgColor: { rgb: '1565C0' } },
+                alignment: baseAlignment 
+              });
+            }
 
-          sortedCustomers.forEach((customer) => {
+            villageCustomers.forEach((customer) => {
             const rowIndex = sheetData.length;
             const villageName = shiftVillages.find((v) => v.id === customer.villageId)?.name ?? '';
             const customerLoans = loansData.filter((loan) => loan.customerId === customer.id);
@@ -1092,6 +1134,7 @@ interface Payment {
             });
 
             sheetData.push(row);
+            });
           });
 
           sheetData.push([]);
@@ -1172,6 +1215,8 @@ interface Payment {
       }
     } catch (error: any) {
       Alert.alert('Export Failed', `Unable to create report.\n\n${error?.message ?? 'Unknown error'}`);
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -1288,10 +1333,13 @@ interface Payment {
           </Pressable>
 
           <Pressable
-            style={styles.loanTrackerBtn}
+            style={[styles.loanTrackerBtn, isExporting && styles.loanTrackerBtnDisabled]}
             onPress={exportWeeklyCollectionReport}
+            disabled={isExporting}
           >
-            <Text style={styles.loanTrackerBtnText}>📊 Weekly Collection Report</Text>
+            <Text style={styles.loanTrackerBtnText}>
+              {isExporting ? '⏳ Exporting...' : '📊 Weekly Collection Report'}
+            </Text>
           </Pressable>
 
           <View style={styles.quickStats}>
@@ -1774,6 +1822,9 @@ const styles = StyleSheet.create({
     color: colors.white, 
     fontSize: 18, 
     fontWeight: '700' 
+  },
+  loanTrackerBtnDisabled: {
+    opacity: 0.6,
   },
   
   quickStats: { marginTop: 'auto' },
