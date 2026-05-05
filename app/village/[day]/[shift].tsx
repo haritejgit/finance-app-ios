@@ -3,10 +3,13 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Dimensions, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useAuth } from "../../../src/auth-context";
-import { addVillage, deleteVillage, getVillages } from "../../../src/repository";
+import { addVillage, deleteVillage, getVillages, updateVillageDayShift } from "../../../src/repository";
 import { Village } from "../../../src/types";
 import { colors } from "../../../src/theme";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
+const SHIFTS = ["Morning", "Evening"] as const;
 
 export default function VillageListScreen() {
   const { day, shift } = useLocalSearchParams<{ day: string; shift: string }>();
@@ -16,6 +19,11 @@ export default function VillageListScreen() {
   const [newVillageName, setNewVillageName] = useState("");
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [villageToDelete, setVillageToDelete] = useState<Village | null>(null);
+  const [moveModalVisible, setMoveModalVisible] = useState(false);
+  const [villageToMove, setVillageToMove] = useState<Village | null>(null);
+  const [moveDay, setMoveDay] = useState<string>("Monday");
+  const [moveShift, setMoveShift] = useState<string>("Morning");
+  const [moveSaving, setMoveSaving] = useState(false);
 
   const reload = async () => {
     if (!user) return;
@@ -27,8 +35,35 @@ export default function VillageListScreen() {
 
   const filtered = useMemo(() => villages.filter((v) => v.dayOfWeek === day && v.shift === shift), [villages, day, shift]);
 
-  const handleDeleteVillage = (village: Village) => {
-    setVillageToDelete(village);
+  const openMoveModal = (village: Village) => {
+    setVillageToMove(village);
+    setMoveDay(village.dayOfWeek);
+    setMoveShift(village.shift);
+    setMoveModalVisible(true);
+  };
+
+  const closeMoveModal = () => {
+    setMoveModalVisible(false);
+    setVillageToMove(null);
+  };
+
+  const saveMove = async () => {
+    if (!villageToMove) return;
+    try {
+      setMoveSaving(true);
+      await updateVillageDayShift(villageToMove.id, moveDay, moveShift);
+      closeMoveModal();
+      await reload();
+    } finally {
+      setMoveSaving(false);
+    }
+  };
+
+  const requestDeleteFromMoveModal = () => {
+    if (!villageToMove) return;
+    const v = villageToMove;
+    closeMoveModal();
+    setVillageToDelete(v);
     setDeleteConfirmVisible(true);
   };
 
@@ -95,7 +130,8 @@ export default function VillageListScreen() {
             renderItem={({ item, index }) => (
               <Pressable
                 onPress={() => router.push(`/customer/${item.id}`)}
-                onLongPress={() => handleDeleteVillage(item)}
+                onLongPress={() => openMoveModal(item)}
+                delayLongPress={450}
                 style={styles.villageCard}
               >
                 <View style={styles.villageHeader}>
@@ -104,7 +140,7 @@ export default function VillageListScreen() {
                     <Text style={styles.villageIndexText}>{index + 1}</Text>
                   </View>
                 </View>
-                <Text style={styles.villageSubtext}>Tap to view customers • Long press to delete</Text>
+                <Text style={styles.villageSubtext}>Tap to view customers • Hold to change day/shift</Text>
               </Pressable>
             )}
             ListEmptyComponent={
@@ -119,6 +155,62 @@ export default function VillageListScreen() {
       </SafeAreaView>
 
       <Modal
+        visible={moveModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={closeMoveModal}
+      >
+        <View style={styles.moveModalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeMoveModal} />
+          <View style={[styles.moveSheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <Text style={styles.moveTitle}>Move village</Text>
+            {villageToMove && (
+              <Text style={styles.moveVillageName}>{villageToMove.name}</Text>
+            )}
+            <Text style={styles.moveSectionLabel}>Day</Text>
+            <View style={styles.moveChipWrap}>
+              {DAYS.map((d) => (
+                <Pressable
+                  key={d}
+                  onPress={() => setMoveDay(d)}
+                  style={[styles.moveChip, moveDay === d && styles.moveChipOn]}
+                >
+                  <Text style={[styles.moveChipText, moveDay === d && styles.moveChipTextOn]} numberOfLines={1}>
+                    {d.slice(0, 3)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={styles.moveSectionLabel}>Shift</Text>
+            <View style={styles.moveShiftRow}>
+              {SHIFTS.map((s) => (
+                <Pressable
+                  key={s}
+                  onPress={() => setMoveShift(s)}
+                  style={[styles.moveShiftBtn, moveShift === s && styles.moveShiftBtnOn]}
+                >
+                  <Text style={[styles.moveShiftText, moveShift === s && styles.moveShiftTextOn]}>{s}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable
+              style={[styles.moveSaveBtn, moveSaving && styles.moveSaveBtnDisabled]}
+              onPress={saveMove}
+              disabled={moveSaving}
+            >
+              <Text style={styles.moveSaveText}>{moveSaving ? "Saving…" : "Save"}</Text>
+            </Pressable>
+            <Pressable style={styles.moveCancelBtn} onPress={closeMoveModal}>
+              <Text style={styles.moveCancelText}>Cancel</Text>
+            </Pressable>
+            <Pressable style={styles.moveDeleteLink} onPress={requestDeleteFromMoveModal}>
+              <Text style={styles.moveDeleteLinkText}>Delete village…</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
         visible={deleteConfirmVisible}
         transparent={true}
         animationType="fade"
@@ -128,7 +220,9 @@ export default function VillageListScreen() {
           <View style={styles.confirmDialog}>
             <Text style={styles.confirmTitle}>Delete Village</Text>
             <Text style={styles.confirmMessage}>
-              Are you sure you want to delete "{villageToDelete?.name}"? This action cannot be undone.
+              Are you sure you want to delete "{villageToDelete?.name}"?
+              {'\n\n'}
+              ⚠️ All customers and their loan/payment records in this village will be permanently deleted!
             </Text>
             <View style={styles.confirmButtons}>
               <Pressable style={styles.cancelBtn} onPress={cancelDelete}>
@@ -181,6 +275,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 40
   },
+  moveModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
   confirmDialog: {
     backgroundColor: colors.white,
     borderRadius: 16,
@@ -231,5 +330,119 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.white
+  },
+  moveSheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    maxHeight: "85%",
+  },
+  moveTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#333",
+    textAlign: "center",
+  },
+  moveVillageName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.blue2,
+    textAlign: "center",
+    marginTop: 6,
+    marginBottom: 16,
+  },
+  moveSectionLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#666",
+    marginBottom: 8,
+  },
+  moveChipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 16,
+  },
+  moveChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    backgroundColor: "#f9f9f9",
+  },
+  moveChipOn: {
+    backgroundColor: "#e3f2fd",
+    borderColor: colors.blue2,
+  },
+  moveChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#555",
+  },
+  moveChipTextOn: {
+    color: colors.blue2,
+  },
+  moveShiftRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 20,
+  },
+  moveShiftBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    alignItems: "center",
+    backgroundColor: "#f9f9f9",
+  },
+  moveShiftBtnOn: {
+    backgroundColor: "#e3f2fd",
+    borderColor: colors.blue2,
+  },
+  moveShiftText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#555",
+  },
+  moveShiftTextOn: {
+    color: colors.blue2,
+  },
+  moveSaveBtn: {
+    backgroundColor: colors.blue2,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  moveSaveBtnDisabled: {
+    opacity: 0.6,
+  },
+  moveSaveText: {
+    color: colors.white,
+    fontWeight: "700",
+    fontSize: 16,
+  },
+  moveCancelBtn: {
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  moveCancelText: {
+    color: "#666",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  moveDeleteLink: {
+    paddingVertical: 10,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  moveDeleteLinkText: {
+    color: "#c62828",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

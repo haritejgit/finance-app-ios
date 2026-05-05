@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
+  Alert,
   Dimensions,
   FlatList,
   KeyboardAvoidingView,
@@ -390,25 +391,46 @@ export default function CustomerListScreen() {
                 </View>
 
                 <Text style={styles.label}>Registration Date *</Text>
-                <View style={styles.dateInputContainer}>
-                  <TextInput
-                    placeholder="Registration Date (YYYY-MM-DD)"
+                {Platform.OS === 'web' ? (
+                  <input
+                    type="date"
                     value={registrationDate}
-                    onChangeText={setRegistrationDate}
-                    style={[styles.input, styles.dateInput]}
-                    autoCapitalize="none"
+                    onChange={(e) => setRegistrationDate(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: 12,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: '#ccc',
+                      fontSize: 14,
+                      fontFamily: 'inherit',
+                      cursor: 'pointer',
+                      marginBottom: 8,
+                    }}
                   />
-                  <Pressable style={styles.datePickerBtn} onPress={() => {
-                    setTempRegistrationDate(new Date(parseDateInput(registrationDate) ?? Date.now()));
-                    setShowDatePicker(true);
-                  }}>
-                    <Text style={styles.datePickerBtnText}>📅</Text>
-                  </Pressable>
-                </View>
-                {parseDateInput(registrationDate) && (
-                  <Text style={styles.dayDisplay}>
-                    {formatDateWithDay(parseDateInput(registrationDate)!)}
-                  </Text>
+                ) : (
+                  <>
+                    <View style={styles.dateInputContainer}>
+                      <TextInput
+                        placeholder="Registration Date (YYYY-MM-DD)"
+                        value={registrationDate}
+                        onChangeText={setRegistrationDate}
+                        style={[styles.input, styles.dateInput]}
+                        autoCapitalize="none"
+                      />
+                      <Pressable style={styles.datePickerBtn} onPress={() => {
+                        setTempRegistrationDate(new Date(parseDateInput(registrationDate) ?? Date.now()));
+                        setShowDatePicker(true);
+                      }}>
+                        <Text style={styles.datePickerBtnText}>📅</Text>
+                      </Pressable>
+                    </View>
+                    {parseDateInput(registrationDate) && (
+                      <Text style={styles.dayDisplay}>
+                        {formatDateWithDay(parseDateInput(registrationDate)!)}
+                      </Text>
+                    )}
+                  </>
                 )}
                 {showDatePicker && (
                   <View style={Platform.OS === "ios" ? styles.pickerContainer : null}>
@@ -476,6 +498,7 @@ export default function CustomerListScreen() {
                       setCustomers((current) => [...current, createdCustomer]);
                       setForm({ name: "", phone: "", aadhar: "", locationDesc: "", coName: "", coId: "", principal: "", coordinates: null });
                       setRegistrationDate(formatDateInput(Date.now()));
+                      Alert.alert('✅ Success', `Customer "${createdCustomer.name}" has been created successfully!`);
                     }}
                     disabled={!form.name || !form.phone || !form.principal}
                   >

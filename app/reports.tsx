@@ -19,6 +19,7 @@ import XLSX from 'xlsx-js-style';
 import { useAuth } from "../src/auth-context";
 import { getPaymentsByDate } from "../src/repository";
 import { colors } from "../src/theme";
+import { Village, Customer, Loan, Payment } from "../src/types";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -404,322 +405,6 @@ interface Payment {
     }
   };
 
-const exportWeeklyCollectionReport = async () => {
-  if (!user) return;
-
-  try {
-    const fromTs = parseDateInput(fromDate);
-    const toTs = parseDateInput(toDate);
-    if (!fromTs || !toTs || fromTs > toTs) {
-      Alert.alert('Invalid Date Range', 'Please select a valid From and To date.');
-      return;
-    }
-
-    const toMillis = (value: any): number => {
-      if (typeof value === 'number') return value;
-      if (value instanceof Date) return value.getTime();
-      if (value?.toMillis) return value.toMillis();
-      if (typeof value?.seconds === 'number') return value.seconds * 1000;
-      return 0;
-    };
-
-    const money = (value: any): number => {
-      const parsed = Number(value);
-      return Number.isFinite(parsed) ? parsed : 0;
-    };
-
-    const getStartOfDay = (ts: number): number => {
-      const d = new Date(ts);
-      d.setHours(0, 0, 0, 0);
-      return d.getTime();
-    };
-
-    const getEndOfDay = (ts: number): number => {
-      const d = new Date(ts);
-      d.setHours(23, 59, 59, 999);
-      return d.getTime();
-    };
-
-    const getCollectionWeekStart = (startDate: number, dayName: string): number => {
-      const dayMap: Record<string, number> = {
-        Sunday: 0,
-        Monday: 1,
-        Tuesday: 2,
-        Wednesday: 3,
-        Thursday: 4,
-        Friday: 5,
-        Saturday: 6,
-      };
-      const targetDay = dayMap[dayName];
-      const d = new Date(startDate);
-      while (targetDay !== undefined && d.getDay() !== targetDay) {
-        d.setDate(d.getDate() - 1);
-      }
-      return getStartOfDay(d.getTime());
-    };
-
-    const formatSheetDate = (ts: number): string => {
-      const d = new Date(ts);
-      const day = `${d.getDate()}`.padStart(2, '0');
-      const month = `${d.getMonth() + 1}`.padStart(2, '0');
-      return `${day}-${month}-${d.getFullYear()}`;
-    };
-
-    const fetchUserCollection = async <T,>(name: string): Promise<T[]> => {
-      const snap = await getDocs(query(collection(db, name), where('userId', '==', user.uid)));
-      return snap.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as object) })) as T[];
-    };
-
-    const villagesData = await fetchUserCollection<Village>('villages');
-    const customersData = await fetchUserCollection<Customer>('customers');
-    const loansData = (await fetchUserCollection<Loan>('loans')).map((loan) => ({
-      ...loan,
-      startDate: toMillis(loan.startDate),
-      principalAmount: money(loan.principalAmount),
-      totalPayable: money(loan.totalPayable),
-    }));
-    const paymentsData = (await fetchUserCollection<Payment>('payments')).map((payment) => ({
-      ...payment,
-      paymentDate: toMillis(payment.paymentDate),
-      amountPaid: money(payment.amountPaid),
-    }));
-
-    if (customersData.length === 0 || villagesData.length === 0) {
-      Alert.alert('No Data Found', 'No customers or villages found for this account.');
-      return;
-    }
-
-    const ORANGE = 'C55A11';
-    const RED = 'FF0000';
-    const WHITE = 'FFFFFF';
-    const BLACK = '000000';
-    const GRAY = 'C0C0C0';
-
-    const baseAlignment = { horizontal: 'center', vertical: 'center', wrapText: true };
-    const standardStyle = { alignment: baseAlignment };
-    const headerStyle = {
-      font: { bold: true, color: { rgb: BLACK } },
-      fill: { patternType: 'solid', fgColor: { rgb: GRAY } },
-      alignment: baseAlignment,
-      border: {
-        top: { style: 'thin', color: { rgb: BLACK } },
-        bottom: { style: 'thin', color: { rgb: BLACK } },
-        left: { style: 'thin', color: { rgb: BLACK } },
-        right: { style: 'thin', color: { rgb: BLACK } },
-      },
-    };
-    const dueStyle = {
-      font: { bold: true, color: { rgb: WHITE } },
-      fill: { patternType: 'solid', fgColor: { rgb: RED } },
-      alignment: baseAlignment,
-    };
-    const orangeStyle = {
-      font: { bold: true, color: { rgb: ORANGE } },
-      alignment: baseAlignment,
-    };
-    const redTextStyle = {
-      font: { bold: true, color: { rgb: RED } },
-      alignment: baseAlignment,
-    };
-
-    const wb = XLSX.utils.book_new();
-    const reportStart = getStartOfDay(fromTs);
-    const reportEnd = getEndOfDay(toTs);
-    const orderedDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const orderedShifts = ['Morning', 'Evening'];
-    const makeSheetName = (dayName: string, shiftName: string) =>
-      `${dayName} ${shiftName}`.replace(/[\\/?*[\]:]/g, '').slice(0, 31);
-
-    for (const dayName of orderedDays) {
-      for (const shiftName of orderedShifts) {
-        const shiftVillages = villagesData.filter((v) => v.dayOfWeek === dayName && v.shift === shiftName);
-        const shiftCustomers = customersData.filter((customer) =>
-          shiftVillages.some((village) => village.id === customer.villageId)
-        );
-        if (shiftCustomers.length === 0) continue;
-
-        const weekDates: number[] = [];
-        let currentWeek = getCollectionWeekStart(reportStart, dayName);
-        while (currentWeek <= reportEnd) {
-          weekDates.push(currentWeek);
-          const next = new Date(currentWeek);
-          next.setDate(next.getDate() + 7);
-          currentWeek = next.getTime();
-        }
-        if (weekDates.length === 0) continue;
-
-        const weeklyDisbursed = new Array(weekDates.length).fill(0);
-        const weeklyCollected = new Array(weekDates.length).fill(0);
-        const sheetTitle = `${dayName} ${shiftName}`;
-        const sheetData: any[][] = [
-          [sheetTitle],
-          ['ID', 'C/O', 'Name', 'Village, Phone Number and Aadhar', ...weekDates.map(formatSheetDate)],
-        ];
-        const cellStyles = new Map<string, any>();
-        const setStyle = (rowIndex: number, colIndex: number, style: any) => {
-          cellStyles.set(XLSX.utils.encode_cell({ r: rowIndex, c: colIndex }), style);
-        };
-
-        setStyle(0, 0, { font: { bold: true, color: { rgb: BLACK }, sz: 12 }, alignment: baseAlignment });
-        for (let col = 0; col < 4 + weekDates.length; col += 1) {
-          setStyle(1, col, headerStyle);
-        }
-
-        const sortedCustomers = [...shiftCustomers].sort((a, b) =>
-          (a.numericalId ?? Number.MAX_SAFE_INTEGER) - (b.numericalId ?? Number.MAX_SAFE_INTEGER)
-        );
-
-        sortedCustomers.forEach((customer) => {
-        const rowIndex = sheetData.length;
-        const villageName = shiftVillages.find((v) => v.id === customer.villageId)?.name ?? '';
-        const customerLoans = loansData.filter((loan) => loan.customerId === customer.id);
-        const customerPayments = paymentsData.filter((payment) =>
-          customerLoans.some((loan) => loan.id === payment.loanId)
-        );
-        const row: any[] = [
-          customer.numericalId ?? '',
-          customer.coId?.toString() ?? customer.coName ?? '',
-          customer.name ?? '',
-          `${villageName}\n${customer.phone ?? ''}\n${customer.aadhar ?? ''}`,
-        ];
-        for (let col = 0; col < 4; col += 1) setStyle(rowIndex, col, standardStyle);
-
-        weekDates.forEach((weekDate, weekIdx) => {
-          const startOfWeek = weekDate;
-          const endOfWeek = weekDate + 7 * 24 * 60 * 60 * 1000 - 1000;
-          const weekPayments = customerPayments.filter(
-            (payment) => payment.paymentDate >= startOfWeek && payment.paymentDate <= endOfWeek
-          );
-          const loanStartingThisWeek = customerLoans.find((loan) => {
-            const loanStartDay = getStartOfDay(loan.startDate);
-            return loanStartDay >= startOfWeek && loanStartDay <= endOfWeek;
-          });
-          const colIndex = 4 + weekIdx;
-
-          if (loanStartingThisWeek) {
-            const renewalPayment = weekPayments.find((payment) => payment.paymentType === 'RENEWAL_CLOSURE');
-            const displayedAmount = money(loanStartingThisWeek.totalPayable);
-            const principalAmount = money(loanStartingThisWeek.principalAmount);
-            weeklyDisbursed[weekIdx] += principalAmount;
-
-            if (renewalPayment) {
-              const previousBalance = money(renewalPayment.amountPaid);
-              weeklyCollected[weekIdx] += previousBalance;
-              row.push(`${Math.trunc(previousBalance)}\n${Math.trunc(displayedAmount)}`);
-              setStyle(rowIndex, colIndex, orangeStyle);
-            } else {
-              row.push(Math.trunc(displayedAmount));
-              setStyle(rowIndex, colIndex, orangeStyle);
-            }
-          } else if (weekPayments.length > 0) {
-            const regularPayment = weekPayments
-              .filter((payment) => payment.paymentType === 'REGULAR')
-              .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
-
-            if (regularPayment > 0) {
-              weeklyCollected[weekIdx] += regularPayment;
-              row.push(regularPayment);
-              setStyle(rowIndex, colIndex, standardStyle);
-            } else if (weekPayments.some((payment) => payment.paymentType === 'DUE')) {
-              row.push('Due');
-              setStyle(rowIndex, colIndex, dueStyle);
-            } else {
-              row.push('');
-              setStyle(rowIndex, colIndex, standardStyle);
-            }
-          } else {
-            const wasAnyLoanOpen = customerLoans.some((loan) => {
-              const startedBefore = getStartOfDay(loan.startDate) <= endOfWeek;
-              const notClosedBefore =
-                loan.status === 'ACTIVE' ||
-                customerPayments.some(
-                  (payment) =>
-                    payment.loanId === loan.id &&
-                    getEndOfDay(payment.paymentDate) >= startOfWeek
-                );
-              return startedBefore && notClosedBefore;
-            });
-
-            if (wasAnyLoanOpen) {
-              row.push('Due');
-              setStyle(rowIndex, colIndex, dueStyle);
-            } else {
-              row.push('');
-              setStyle(rowIndex, colIndex, standardStyle);
-            }
-          }
-        });
-
-        sheetData.push(row);
-      });
-
-      sheetData.push([]);
-      const collectedRowIndex = sheetData.length;
-      sheetData.push(['', '', '', 'TOTAL COLLECTED', ...weeklyCollected]);
-      const disbursedRowIndex = sheetData.length;
-      sheetData.push([
-        '',
-        '',
-        '',
-        'TOTAL DISBURSED',
-        ...weeklyDisbursed.map((amount) => amount - (amount / 100) * 2),
-      ]);
-
-      weekDates.forEach((_, index) => {
-        setStyle(collectedRowIndex, 4 + index, orangeStyle);
-        setStyle(disbursedRowIndex, 4 + index, redTextStyle);
-      });
-      setStyle(collectedRowIndex, 3, orangeStyle);
-      setStyle(disbursedRowIndex, 3, redTextStyle);
-
-      const ws = XLSX.utils.aoa_to_sheet(sheetData);
-      cellStyles.forEach((style, cellRef) => {
-        if (ws[cellRef]) ws[cellRef].s = style;
-      });
-      ws['!cols'] = [
-        { wch: 10 },
-        { wch: 10 },
-        { wch: 22 },
-        { wch: 35 },
-        ...weekDates.map(() => ({ wch: 15 })),
-      ];
-      ws['!rows'] = sheetData.map((_, index) => {
-        if (index === 0) return { hpt: 24 };
-        if (index === 1) return { hpt: 25 };
-        if (index >= 2 && index < collectedRowIndex - 1) return { hpt: 48 };
-        return { hpt: 24 };
-      });
-
-        XLSX.utils.book_append_sheet(wb, ws, makeSheetName(dayName, shiftName));
-      }
-    }
-
-    if (wb.SheetNames.length === 0) {
-      const ws = XLSX.utils.aoa_to_sheet([['No customer data found for the selected date range.']]);
-      XLSX.utils.book_append_sheet(wb, ws, 'No Data');
-    }
-
-    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    const base64 = arrayBufferToBase64(excelBuffer);
-    const filename = `Weekly_Loan_Tracker_${Date.now()}.xlsx`;
-    const fileUri = `${FileSystem.cacheDirectory || FileSystem.documentDirectory || ''}${filename}`;
-
-    await FileSystem.writeAsStringAsync(fileUri, base64, { encoding: 'base64' });
-
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(fileUri, {
-        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        dialogTitle: 'Save Weekly Loan Tracker',
-      });
-      Alert.alert('Report Generated', `File saved as ${filename}`);
-    } else {
-      Alert.alert('Sharing Unavailable', 'File sharing is not supported on this device.');
-    }
-  } catch (error: any) {
-    // Error logged, alert shown below
-    Alert.alert('Export Failed', `Unable to create report.\n\n${error?.message ?? 'Unknown error'}`);
-  }
-};
   const exportLoanTracker = async () => {
     try {
       // Create weekly loan tracker Excel workbook
@@ -1136,7 +821,9 @@ const exportWeeklyCollectionReport = async () => {
           return loanDate >= startMs && loanDate <= endMs;
         });
 
-      const totalDistributed = dayLoans.reduce((sum, loan) => sum + (loan.principalAmount || 0), 0);
+      const totalDistributedRaw = dayLoans.reduce((sum, loan) => sum + (loan.principalAmount || 0), 0);
+      // Deduct 20 Rs per 1000 Rs distributed
+      const totalDistributed = totalDistributedRaw - (Math.floor(totalDistributedRaw / 1000) * 20);
 
       const newData = {
         cashCollection,
@@ -1157,6 +844,337 @@ const exportWeeklyCollectionReport = async () => {
     }
   };
 
+  const exportWeeklyCollectionReport = async () => {
+    if (!user) return;
+
+    try {
+      const fromTs = parseDateInput(fromDate);
+      const toTs = parseDateInput(toDate);
+      if (!fromTs || !toTs || fromTs > toTs) {
+        Alert.alert('Invalid Date Range', 'Please select a valid From and To date.');
+        return;
+      }
+
+      const toMillis = (value: any): number => {
+        if (typeof value === 'number') return value;
+        if (value instanceof Date) return value.getTime();
+        if (value?.toMillis) return value.toMillis();
+        if (typeof value?.seconds === 'number') return value.seconds * 1000;
+        return 0;
+      };
+
+      const money = (value: any): number => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+      };
+
+      const getStartOfDay = (ts: number): number => {
+        const d = new Date(ts);
+        d.setHours(0, 0, 0, 0);
+        return d.getTime();
+      };
+
+      const getEndOfDay = (ts: number): number => {
+        const d = new Date(ts);
+        d.setHours(23, 59, 59, 999);
+        return d.getTime();
+      };
+
+      const getCollectionWeekStart = (startDate: number, dayName: string): number => {
+        const dayMap: Record<string, number> = {
+          Sunday: 0,
+          Monday: 1,
+          Tuesday: 2,
+          Wednesday: 3,
+          Thursday: 4,
+          Friday: 5,
+          Saturday: 6,
+        };
+        const targetDay = dayMap[dayName];
+        const d = new Date(startDate);
+        while (targetDay !== undefined && d.getDay() !== targetDay) {
+          d.setDate(d.getDate() - 1);
+        }
+        return getStartOfDay(d.getTime());
+      };
+
+      const formatSheetDate = (ts: number): string => {
+        const d = new Date(ts);
+        const day = `${d.getDate()}`.padStart(2, '0');
+        const month = `${d.getMonth() + 1}`.padStart(2, '0');
+        return `${day}-${month}-${d.getFullYear()}`;
+      };
+
+      const fetchUserCollection = async <T,>(name: string): Promise<T[]> => {
+        const snap = await getDocs(query(collection(db, name), where('userId', '==', user.uid)));
+        return snap.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as object) })) as T[];
+      };
+
+      const villagesData = await fetchUserCollection<Village>('villages');
+      const customersData = await fetchUserCollection<Customer>('customers');
+      const loansData = (await fetchUserCollection<Loan>('loans')).map((loan) => ({
+        ...loan,
+        startDate: toMillis(loan.startDate),
+        principalAmount: money(loan.principalAmount),
+        totalPayable: money(loan.totalPayable),
+      }));
+      const paymentsData = (await fetchUserCollection<Payment>('payments')).map((payment) => ({
+        ...payment,
+        paymentDate: toMillis(payment.paymentDate),
+        amountPaid: money(payment.amountPaid),
+      }));
+
+      if (customersData.length === 0 || villagesData.length === 0) {
+        Alert.alert('No Data Found', 'No customers or villages found for this account.');
+        return;
+      }
+
+      const ORANGE = 'C55A11';
+      const RED = 'FF0000';
+      const WHITE = 'FFFFFF';
+      const BLACK = '000000';
+      const GRAY = 'C0C0C0';
+
+      const baseAlignment = { horizontal: 'center', vertical: 'center', wrapText: true };
+      const standardStyle = { alignment: baseAlignment };
+
+      const headerStyle = {
+        font: { bold: true, color: { rgb: BLACK } },
+        fill: { patternType: 'solid', fgColor: { rgb: GRAY } },
+        alignment: baseAlignment,
+        border: {
+          top: { style: 'thin', color: { rgb: BLACK } },
+          bottom: { style: 'thin', color: { rgb: BLACK } },
+          left: { style: 'thin', color: { rgb: BLACK } },
+          right: { style: 'thin', color: { rgb: BLACK } },
+        },
+      };
+      const dueStyle = {
+        font: { bold: true, color: { rgb: WHITE } },
+        fill: { patternType: 'solid', fgColor: { rgb: RED } },
+        alignment: baseAlignment,
+      };
+      const orangeStyle = {
+        font: { bold: true, color: { rgb: ORANGE } },
+        alignment: baseAlignment,
+      };
+      const redTextStyle = {
+        font: { bold: true, color: { rgb: RED } },
+        alignment: baseAlignment,
+      };
+
+      const wb = XLSX.utils.book_new();
+      const reportStart = getStartOfDay(fromTs);
+      const reportEnd = getEndOfDay(toTs);
+      const orderedDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const orderedShifts = ['Morning', 'Evening'];
+      const makeSheetName = (dayName: string, shiftName: string) =>
+        `${dayName} ${shiftName}`.replace(/[\\/?*[\]:]/g, '').slice(0, 31);
+
+      for (const dayName of orderedDays) {
+        for (const shiftName of orderedShifts) {
+          const shiftVillages = villagesData.filter((v) => v.dayOfWeek === dayName && v.shift === shiftName);
+          const shiftCustomers = customersData.filter((customer) =>
+            shiftVillages.some((village) => village.id === customer.villageId)
+          );
+          if (shiftCustomers.length === 0) continue;
+
+          const weekDates: number[] = [];
+          let currentWeek = getCollectionWeekStart(reportStart, dayName);
+          while (currentWeek <= reportEnd) {
+            weekDates.push(currentWeek);
+            const next = new Date(currentWeek);
+            next.setDate(next.getDate() + 7);
+            currentWeek = next.getTime();
+          }
+          if (weekDates.length === 0) continue;
+
+          const weeklyDisbursed = new Array(weekDates.length).fill(0);
+          const weeklyCollected = new Array(weekDates.length).fill(0);
+          const sheetTitle = `${dayName} ${shiftName}`;
+          const sheetData: any[][] = [
+            [sheetTitle],
+            ['ID', 'C/O', 'Name', 'Village, Phone Number and Aadhar', ...weekDates.map(formatSheetDate)],
+          ];
+          const cellStyles = new Map<string, any>();
+          const setStyle = (rowIndex: number, colIndex: number, style: any) => {
+            cellStyles.set(XLSX.utils.encode_cell({ r: rowIndex, c: colIndex }), style);
+          };
+
+          setStyle(0, 0, { font: { bold: true, color: { rgb: BLACK }, sz: 12 }, alignment: baseAlignment });
+          for (let col = 0; col < 4 + weekDates.length; col += 1) {
+            setStyle(1, col, headerStyle);
+          }
+
+          const sortedCustomers = [...shiftCustomers].sort((a, b) =>
+            (a.numericalId ?? Number.MAX_SAFE_INTEGER) - (b.numericalId ?? Number.MAX_SAFE_INTEGER)
+          );
+
+          sortedCustomers.forEach((customer) => {
+            const rowIndex = sheetData.length;
+            const villageName = shiftVillages.find((v) => v.id === customer.villageId)?.name ?? '';
+            const customerLoans = loansData.filter((loan) => loan.customerId === customer.id);
+            const customerPayments = paymentsData.filter((payment) =>
+              customerLoans.some((loan) => loan.id === payment.loanId)
+            );
+            const row: any[] = [
+              customer.numericalId ?? '',
+              customer.coId?.toString() ?? customer.coName ?? '',
+              customer.name ?? '',
+              `${villageName}\n${customer.phone ?? ''}\n${customer.aadhar ?? ''}`,
+            ];
+            for (let col = 0; col < 4; col += 1) setStyle(rowIndex, col, standardStyle);
+
+            weekDates.forEach((weekDate, weekIdx) => {
+              const startOfWeek = weekDate;
+              const endOfWeek = weekDate + 7 * 24 * 60 * 60 * 1000 - 1000;
+              const weekPayments = customerPayments.filter(
+                (payment) => payment.paymentDate >= startOfWeek && payment.paymentDate <= endOfWeek
+              );
+              const loanStartingThisWeek = customerLoans.find((loan) => {
+                const loanStartDay = getStartOfDay(loan.startDate);
+                return loanStartDay >= startOfWeek && loanStartDay <= endOfWeek;
+              });
+              const colIndex = 4 + weekIdx;
+
+              if (loanStartingThisWeek) {
+                const renewalPayment = weekPayments.find((payment) => payment.paymentType === 'RENEWAL_CLOSURE');
+                const displayedAmount = money(loanStartingThisWeek.totalPayable);
+                const principalAmount = money(loanStartingThisWeek.principalAmount);
+                weeklyDisbursed[weekIdx] += principalAmount;
+
+                if (renewalPayment) {
+                  const previousBalance = money(renewalPayment.amountPaid);
+                  weeklyCollected[weekIdx] += previousBalance;
+                  row.push(`${Math.trunc(previousBalance)}\n${Math.trunc(displayedAmount)}`);
+                  setStyle(rowIndex, colIndex, orangeStyle);
+                } else {
+                  row.push(Math.trunc(displayedAmount));
+                  setStyle(rowIndex, colIndex, orangeStyle);
+                }
+              } else if (weekPayments.length > 0) {
+                const regularPayment = weekPayments
+                  .filter((payment) => payment.paymentType === 'REGULAR')
+                  .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
+
+                if (regularPayment > 0) {
+                  weeklyCollected[weekIdx] += regularPayment;
+                  row.push(regularPayment);
+                  setStyle(rowIndex, colIndex, standardStyle);
+                } else if (weekPayments.some((payment) => payment.paymentType === 'DUE')) {
+                  row.push('Due');
+                  setStyle(rowIndex, colIndex, dueStyle);
+                } else {
+                  row.push('');
+                  setStyle(rowIndex, colIndex, standardStyle);
+                }
+              } else {
+                const wasAnyLoanOpen = customerLoans.some((loan) => {
+                  const startedBefore = getStartOfDay(loan.startDate) <= endOfWeek;
+                  const notClosedBefore =
+                    loan.status === 'ACTIVE' ||
+                    customerPayments.some(
+                      (payment) =>
+                        payment.loanId === loan.id &&
+                        getEndOfDay(payment.paymentDate) >= startOfWeek
+                    );
+                  return startedBefore && notClosedBefore;
+                });
+
+                if (wasAnyLoanOpen) {
+                  row.push('Due');
+                  setStyle(rowIndex, colIndex, dueStyle);
+                } else {
+                  row.push('');
+                  setStyle(rowIndex, colIndex, standardStyle);
+                }
+              }
+            });
+
+            sheetData.push(row);
+          });
+
+          sheetData.push([]);
+          const collectedRowIndex = sheetData.length;
+          sheetData.push(['', '', '', 'TOTAL COLLECTED', ...weeklyCollected]);
+          const disbursedRowIndex = sheetData.length;
+          sheetData.push([
+            '',
+            '',
+            '',
+            'TOTAL DISBURSED',
+            ...weeklyDisbursed.map((amount) => amount - (amount / 100) * 2),
+          ]);
+
+          weekDates.forEach((_, index) => {
+            setStyle(collectedRowIndex, 4 + index, orangeStyle);
+            setStyle(disbursedRowIndex, 4 + index, redTextStyle);
+          });
+          setStyle(collectedRowIndex, 3, orangeStyle);
+          setStyle(disbursedRowIndex, 3, redTextStyle);
+
+          const ws = XLSX.utils.aoa_to_sheet(sheetData);
+          cellStyles.forEach((style, cellRef) => {
+            if (ws[cellRef]) ws[cellRef].s = style;
+          });
+          ws['!cols'] = [
+            { wch: 10 },
+            { wch: 10 },
+            { wch: 22 },
+            { wch: 35 },
+            ...weekDates.map(() => ({ wch: 15 })),
+          ];
+          ws['!rows'] = sheetData.map((_, index) => {
+            if (index === 0) return { hpt: 24 };
+            if (index === 1) return { hpt: 25 };
+            if (index >= 2 && index < collectedRowIndex - 1) return { hpt: 48 };
+            return { hpt: 24 };
+          });
+
+          XLSX.utils.book_append_sheet(wb, ws, makeSheetName(dayName, shiftName));
+        }
+      }
+
+      if (wb.SheetNames.length === 0) {
+        const ws = XLSX.utils.aoa_to_sheet([['No customer data found for the selected date range.']]);
+        XLSX.utils.book_append_sheet(wb, ws, 'No Data');
+      }
+
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const filename = `Weekly_Loan_Tracker_${Date.now()}.xlsx`;
+
+      // Web-compatible download
+      if (Platform.OS === 'web') {
+        const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        Alert.alert('Report Generated', `File downloaded as ${filename}`);
+      } else {
+        const base64 = arrayBufferToBase64(excelBuffer);
+        const fileUri = `${FileSystem.cacheDirectory || FileSystem.documentDirectory || ''}${filename}`;
+        await FileSystem.writeAsStringAsync(fileUri, base64, { encoding: 'base64' });
+
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            dialogTitle: 'Save Weekly Loan Tracker',
+          });
+          Alert.alert('Report Generated', `File saved as ${filename}`);
+        } else {
+          Alert.alert('Sharing Unavailable', 'File sharing is not supported on this device.');
+        }
+      }
+    } catch (error: any) {
+      Alert.alert('Export Failed', `Unable to create report.\n\n${error?.message ?? 'Unknown error'}`);
+    }
+  };
+
   return (
     <LinearGradient colors={[colors.blue1, colors.blue2]} style={styles.root}>
       <SafeAreaView style={[styles.safe, { paddingTop: insets.top }]} edges={['top']}>
@@ -1172,23 +1190,42 @@ const exportWeeklyCollectionReport = async () => {
             <View style={styles.dateInputContainer}>
               <View style={styles.dateInputRow}>
                 <Text style={styles.dateLabel}>From Date</Text>
-                <Pressable 
-                  style={styles.datePickerBtn} 
-                  onPress={() => {
-                    setTempFromDate(new Date(parseDateInput(fromDate) || Date.now()));
-                    setShowFromPicker(true);
-                  }}
-                >
-                  <Text style={styles.datePickerBtnText}>📅</Text>
-                </Pressable>
+                {Platform.OS === 'web' ? (
+                  <input
+                    type="date"
+                    value={fromDate}
+                    onChange={(e) => setFromDate(e.target.value)}
+                    style={{
+                      padding: 8,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: '#ccc',
+                      fontSize: 14,
+                      fontFamily: 'inherit',
+                      cursor: 'pointer',
+                    }}
+                  />
+                ) : (
+                  <Pressable 
+                    style={styles.datePickerBtn} 
+                    onPress={() => {
+                      setTempFromDate(new Date(parseDateInput(fromDate) || Date.now()));
+                      setShowFromPicker(true);
+                    }}
+                  >
+                    <Text style={styles.datePickerBtnText}>📅</Text>
+                  </Pressable>
+                )}
               </View>
-              <TextInput
-                value={fromDate}
-                onChangeText={setFromDate}
-                placeholder="YYYY-MM-DD"
-                style={styles.dateInput}
-                autoCapitalize="none"
-              />
+              {Platform.OS !== 'web' && (
+                <TextInput
+                  value={fromDate}
+                  onChangeText={setFromDate}
+                  placeholder="YYYY-MM-DD"
+                  style={styles.dateInput}
+                  autoCapitalize="none"
+                />
+              )}
               {parseDateInput(fromDate) && (
                 <Text style={styles.dayDisplay}>
                   {formatDateWithDay(parseDateInput(fromDate)!)}
@@ -1199,23 +1236,42 @@ const exportWeeklyCollectionReport = async () => {
             <View style={styles.dateInputContainer}>
               <View style={styles.dateInputRow}>
                 <Text style={styles.dateLabel}>To Date</Text>
-                <Pressable 
-                  style={styles.datePickerBtn} 
-                  onPress={() => {
-                    setTempToDate(new Date(parseDateInput(toDate) || Date.now()));
-                    setShowToPicker(true);
-                  }}
-                >
-                  <Text style={styles.datePickerBtnText}>📅</Text>
-                </Pressable>
+                {Platform.OS === 'web' ? (
+                  <input
+                    type="date"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
+                    style={{
+                      padding: 8,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: '#ccc',
+                      fontSize: 14,
+                      fontFamily: 'inherit',
+                      cursor: 'pointer',
+                    }}
+                  />
+                ) : (
+                  <Pressable 
+                    style={styles.datePickerBtn} 
+                    onPress={() => {
+                      setTempToDate(new Date(parseDateInput(toDate) || Date.now()));
+                      setShowToPicker(true);
+                    }}
+                  >
+                    <Text style={styles.datePickerBtnText}>📅</Text>
+                  </Pressable>
+                )}
               </View>
-              <TextInput
-                value={toDate}
-                onChangeText={setToDate}
-                placeholder="YYYY-MM-DD"
-                style={styles.dateInput}
-                autoCapitalize="none"
-              />
+              {Platform.OS !== 'web' && (
+                <TextInput
+                  value={toDate}
+                  onChangeText={setToDate}
+                  placeholder="YYYY-MM-DD"
+                  style={styles.dateInput}
+                  autoCapitalize="none"
+                />
+              )}
               {parseDateInput(toDate) && (
                 <Text style={styles.dayDisplay}>
                   {formatDateWithDay(parseDateInput(toDate)!)}
@@ -1435,25 +1491,48 @@ const exportWeeklyCollectionReport = async () => {
               <View style={styles.dayReportSection}>
                 <Text style={styles.dayReportLabel}>Select Date</Text>
                 <View style={styles.dayDateRow}>
-                  <TextInput
-                    value={dayReportDate}
-                    onChangeText={(text) => {
-                      setDayReportDate(text);
-                      setShowDayReportResult(false);
-                    }}
-                    placeholder="YYYY-MM-DD"
-                    style={styles.dayDateInput}
-                    autoCapitalize="none"
-                  />
-                  <Pressable 
-                    style={styles.dayDatePickerBtn} 
-                    onPress={() => {
-                      setTempDayDate(new Date(parseDateInput(dayReportDate) || Date.now()));
-                      setShowDayDatePicker(true);
-                    }}
-                  >
-                    <Text style={styles.dayDatePickerBtnText}>📅</Text>
-                  </Pressable>
+                  {Platform.OS === 'web' ? (
+                    <input
+                      type="date"
+                      value={dayReportDate}
+                      onChange={(e) => {
+                        setDayReportDate(e.target.value);
+                        setShowDayReportResult(false);
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: 12,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: '#ccc',
+                        fontSize: 14,
+                        fontFamily: 'inherit',
+                        cursor: 'pointer',
+                      }}
+                    />
+                  ) : (
+                    <>
+                      <TextInput
+                        value={dayReportDate}
+                        onChangeText={(text) => {
+                          setDayReportDate(text);
+                          setShowDayReportResult(false);
+                        }}
+                        placeholder="YYYY-MM-DD"
+                        style={styles.dayDateInput}
+                        autoCapitalize="none"
+                      />
+                      <Pressable 
+                        style={styles.dayDatePickerBtn} 
+                        onPress={() => {
+                          setTempDayDate(new Date(parseDateInput(dayReportDate) || Date.now()));
+                          setShowDayDatePicker(true);
+                        }}
+                      >
+                        <Text style={styles.dayDatePickerBtnText}>📅</Text>
+                      </Pressable>
+                    </>
+                  )}
                 </View>
                 {parseDateInput(dayReportDate) && (
                   <View style={styles.selectedDateDisplay}>

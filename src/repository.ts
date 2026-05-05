@@ -47,6 +47,13 @@ export async function deleteVillage(villageId: string) {
   await deleteDoc(doc(db, "villages", villageId));
 }
 
+export async function updateVillageDayShift(villageId: string, dayOfWeek: string, shift: string) {
+  await updateDoc(doc(db, "villages", villageId), {
+    dayOfWeek,
+    shift,
+  });
+}
+
 export async function getCustomers(userId: string, villageId: string) {
   const q = query(
     coll.customers,
@@ -308,13 +315,16 @@ export async function getTodayDashboardStats(userId: string) {
     })
     .reduce((sum, payment) => sum + toAmount(payment.amountPaid), 0);
 
-  const distributedToday = loansSnap.docs
+  const distributedTodayRaw = loansSnap.docs
     .map((d) => d.data() as Loan)
     .filter((loan) => {
       const startDate = toMillis(loan.startDate);
       return startDate >= startMs && startDate <= endMs;
     })
     .reduce((sum, loan) => sum + toAmount(loan.principalAmount), 0);
+  
+  // Deduct 20 Rs per 1000 Rs distributed
+  const distributedToday = distributedTodayRaw - (Math.floor(distributedTodayRaw / 1000) * 20);
 
   return { collectionToday, distributedToday };
 }

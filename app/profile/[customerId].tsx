@@ -1,8 +1,9 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, router } from "expo-router";
 import React, { memo, useEffect, useMemo, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
+  Alert,
   Dimensions,
   Keyboard,
   KeyboardAvoidingView,
@@ -188,6 +189,8 @@ export default function ProfileScreen() {
   const [tempEditPaymentDate, setTempEditPaymentDate] = useState<Date>(new Date());
   const [deletingPayment, setDeletingPayment] = useState<any | null>(null);
   const [deletePaymentConfirmOpen, setDeletePaymentConfirmOpen] = useState(false);
+  const [deleteCustomerConfirmOpen, setDeleteCustomerConfirmOpen] = useState(false);
+  const [isDeletingCustomer, setIsDeletingCustomer] = useState(false);
 
   const makePhoneCall = (phoneNumber: string) => {
     const phoneUrl = `tel:${phoneNumber}`;
@@ -455,10 +458,7 @@ export default function ProfileScreen() {
               </Text>
             </Pressable>
             <Pressable
-              onPress={async () => {
-                if (!customer) return;
-                await deleteCustomer(customer.id);
-              }}
+              onPress={() => setDeleteCustomerConfirmOpen(true)}
             >
               <Text style={styles.delete}>Delete Customer</Text>
             </Pressable>
@@ -477,24 +477,45 @@ export default function ProfileScreen() {
           <View style={styles.modal}>
             <Text style={styles.modalTitle}>Record Payment</Text>
             <TextInput placeholder="Amount" value={amount} onChangeText={setAmount} style={styles.input} keyboardType="numeric" />
-            <TextInput
-              placeholder="Payment Date (YYYY-MM-DD)"
-              value={paymentDateInput}
-              onChangeText={setPaymentDateInput}
-              style={styles.input}
-              autoCapitalize="none"
-            />
-            {parseDateInput(paymentDateInput) && (
-              <Text style={styles.dayDisplay}>
-                {formatDateWithDay(parseDateInput(paymentDateInput)!)}
-              </Text>
+            {Platform.OS === 'web' ? (
+              <input
+                type="date"
+                value={paymentDateInput}
+                onChange={(e) => setPaymentDateInput(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: '#ccc',
+                  fontSize: 14,
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                  marginBottom: 12,
+                }}
+              />
+            ) : (
+              <>
+                <TextInput
+                  placeholder="Payment Date (YYYY-MM-DD)"
+                  value={paymentDateInput}
+                  onChangeText={setPaymentDateInput}
+                  style={styles.input}
+                  autoCapitalize="none"
+                />
+                {parseDateInput(paymentDateInput) && (
+                  <Text style={styles.dayDisplay}>
+                    {formatDateWithDay(parseDateInput(paymentDateInput)!)}
+                  </Text>
+                )}
+                <Pressable style={styles.dateBtn} onPress={() => {
+                  setTempPaymentDate(new Date(parseDateInput(paymentDateInput) ?? Date.now()));
+                  setShowPaymentPicker(true);
+                }}>
+                  <Text style={styles.dateBtnText}>Pick Payment Date</Text>
+                </Pressable>
+              </>
             )}
-            <Pressable style={styles.dateBtn} onPress={() => {
-              setTempPaymentDate(new Date(parseDateInput(paymentDateInput) ?? Date.now()));
-              setShowPaymentPicker(true);
-            }}>
-              <Text style={styles.dateBtnText}>Pick Payment Date</Text>
-            </Pressable>
             {showPaymentPicker && (
               <View style={Platform.OS === "ios" ? styles.pickerContainer : null}>
                 <DateTimePicker
@@ -559,24 +580,45 @@ export default function ProfileScreen() {
         <View style={styles.modalWrap}>
           <View style={styles.modal}>
             <Text style={styles.modalTitle}>Mark as Due</Text>
-            <TextInput
-              placeholder="Due Date (YYYY-MM-DD)"
-              value={dueDateInput}
-              onChangeText={setDueDateInput}
-              style={styles.input}
-              autoCapitalize="none"
-            />
-            {parseDateInput(dueDateInput) && (
-              <Text style={styles.dayDisplay}>
-                {formatDateWithDay(parseDateInput(dueDateInput)!)}
-              </Text>
+            {Platform.OS === 'web' ? (
+              <input
+                type="date"
+                value={dueDateInput}
+                onChange={(e) => setDueDateInput(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: '#ccc',
+                  fontSize: 14,
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                  marginBottom: 12,
+                }}
+              />
+            ) : (
+              <>
+                <TextInput
+                  placeholder="Due Date (YYYY-MM-DD)"
+                  value={dueDateInput}
+                  onChangeText={setDueDateInput}
+                  style={styles.input}
+                  autoCapitalize="none"
+                />
+                {parseDateInput(dueDateInput) && (
+                  <Text style={styles.dayDisplay}>
+                    {formatDateWithDay(parseDateInput(dueDateInput)!)}
+                  </Text>
+                )}
+                <Pressable style={styles.dateBtn} onPress={() => {
+                  setTempDueDate(new Date(parseDateInput(dueDateInput) ?? Date.now()));
+                  setShowDuePicker(true);
+                }}>
+                  <Text style={styles.dateBtnText}>Pick Due Date</Text>
+                </Pressable>
+              </>
             )}
-            <Pressable style={styles.dateBtn} onPress={() => {
-              setTempDueDate(new Date(parseDateInput(dueDateInput) ?? Date.now()));
-              setShowDuePicker(true);
-            }}>
-              <Text style={styles.dateBtnText}>Pick Due Date</Text>
-            </Pressable>
             {showDuePicker && (
               <View style={Platform.OS === "ios" ? styles.pickerContainer : null}>
                 <DateTimePicker
@@ -745,26 +787,46 @@ export default function ProfileScreen() {
               style={styles.input} 
               keyboardType="numeric" 
             />
-            <TextInput
-              placeholder="Payment Date (YYYY-MM-DD)"
-              value={editPaymentDate}
-              onChangeText={setEditPaymentDate}
-              style={styles.input}
-              autoCapitalize="none"
-            />
-            {parseDateInput(editPaymentDate) && (
-              <Text style={styles.dayDisplay}>
-                {formatDateWithDay(parseDateInput(editPaymentDate)!)}
-              </Text>
+            {Platform.OS === 'web' ? (
+              <input
+                type="date"
+                value={editPaymentDate}
+                onChange={(e) => setEditPaymentDate(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: '#ccc',
+                  fontSize: 14,
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                  marginBottom: 12,
+                }}
+              />
+            ) : (
+              <>
+                <TextInput
+                  placeholder="Payment Date (YYYY-MM-DD)"
+                  value={editPaymentDate}
+                  onChangeText={setEditPaymentDate}
+                  style={styles.input}
+                  autoCapitalize="none"
+                />
+                {parseDateInput(editPaymentDate) && (
+                  <Text style={styles.dayDisplay}>
+                    {formatDateWithDay(parseDateInput(editPaymentDate)!)}
+                  </Text>
+                )}
+                <Pressable style={styles.dateBtn} onPress={() => {
+                  setTempEditPaymentDate(new Date(parseDateInput(editPaymentDate) ?? Date.now()));
+                  setShowEditPaymentPicker(true);
+                }}>
+                  <Text style={styles.dateBtnText}>Pick Payment Date</Text>
+                </Pressable>
+              </>
             )}
             {editPaymentError ? <Text style={styles.errorText}>{editPaymentError}</Text> : null}
-            
-            <Pressable style={styles.dateBtn} onPress={() => {
-              setTempEditPaymentDate(new Date(parseDateInput(editPaymentDate) ?? Date.now()));
-              setShowEditPaymentPicker(true);
-            }}>
-              <Text style={styles.dateBtnText}>Pick Payment Date</Text>
-            </Pressable>
             
             {showEditPaymentPicker && (
               <View style={Platform.OS === "ios" ? styles.pickerContainer : null}>
@@ -838,6 +900,49 @@ export default function ProfileScreen() {
               </Pressable>
               <Pressable style={[styles.primary, { backgroundColor: colors.missedRed }]} onPress={confirmDeletePayment}>
                 <Text style={styles.primaryText}>Delete</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete Customer Confirmation Modal */}
+      <Modal visible={deleteCustomerConfirmOpen} transparent animationType="fade">
+        <View style={styles.modalWrap}>
+          <View style={[styles.modal, { maxHeight: 220 }]}>
+            <Text style={styles.modalTitle}>Delete Customer</Text>
+            <Text style={{ marginBottom: 20, textAlign: "center" }}>
+              Are you sure you want to delete {customer?.name}?
+              {'\n\n'}
+              This will permanently delete the customer and all their loan/payment records.
+            </Text>
+            <View style={styles.modalButtons}>
+              <Pressable 
+                style={styles.cancelModalBtn} 
+                onPress={() => setDeleteCustomerConfirmOpen(false)}
+              >
+                <Text style={styles.cancelModalBtnText}>Cancel</Text>
+              </Pressable>
+              <Pressable 
+                style={[styles.primary, { backgroundColor: colors.missedRed }]} 
+                onPress={async () => {
+                  if (!customer) return;
+                  setIsDeletingCustomer(true);
+                  try {
+                    await deleteCustomer(customer.id);
+                    setDeleteCustomerConfirmOpen(false);
+                    router.back();
+                  } catch (error) {
+                    Alert.alert('Error', 'Failed to delete customer. Please try again.');
+                  } finally {
+                    setIsDeletingCustomer(false);
+                  }
+                }}
+                disabled={isDeletingCustomer}
+              >
+                <Text style={styles.primaryText}>
+                  {isDeletingCustomer ? 'Deleting...' : 'Delete'}
+                </Text>
               </Pressable>
             </View>
           </View>
