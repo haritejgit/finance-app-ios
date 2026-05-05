@@ -29,6 +29,7 @@ import {
   markDue,
   renewLoan,
   updateCustomer,
+  updateLoan,
   updatePayment
 } from "../../src/repository";
 import { Customer, Loan, PaymentMode, PaymentType } from "../../src/types";
@@ -191,6 +192,14 @@ export default function ProfileScreen() {
   const [deletePaymentConfirmOpen, setDeletePaymentConfirmOpen] = useState(false);
   const [deleteCustomerConfirmOpen, setDeleteCustomerConfirmOpen] = useState(false);
   const [isDeletingCustomer, setIsDeletingCustomer] = useState(false);
+  
+  // Loan edit state
+  const [editLoanOpen, setEditLoanOpen] = useState(false);
+  const [editLoanAmount, setEditLoanAmount] = useState("");
+  const [editLoanDate, setEditLoanDate] = useState(formatDateInput(Date.now()));
+  const [editLoanDateError, setEditLoanDateError] = useState("");
+  const [showEditLoanDatePicker, setShowEditLoanDatePicker] = useState(false);
+  const [tempEditLoanDate, setTempEditLoanDate] = useState<Date>(new Date());
 
   const makePhoneCall = (phoneNumber: string) => {
     const phoneUrl = `tel:${phoneNumber}`;
@@ -393,6 +402,44 @@ export default function ProfileScreen() {
     setDeletingPayment(null);
   };
 
+  // Loan edit handlers
+  const openEditLoanModal = () => {
+    if (!loan) return;
+    setEditLoanAmount(loan.principalAmount.toString());
+    setEditLoanDate(formatDateInput(loan.startDate));
+    setEditLoanDateError("");
+    setTempEditLoanDate(new Date(loan.startDate));
+    setEditLoanOpen(true);
+  };
+
+  const closeEditLoanModal = () => {
+    setEditLoanOpen(false);
+    setEditLoanAmount("");
+    setEditLoanDate(formatDateInput(Date.now()));
+    setEditLoanDateError("");
+    setShowEditLoanDatePicker(false);
+  };
+
+  const confirmEditLoan = async () => {
+    if (!loan || !user) return;
+    
+    const parsedDate = parseDateInput(editLoanDate);
+    if (!parsedDate) {
+      setEditLoanDateError("Enter date as YYYY-MM-DD");
+      return;
+    }
+    setEditLoanDateError("");
+    
+    await updateLoan(
+      loan,
+      Number(editLoanAmount || 0),
+      parsedDate
+    );
+    
+    closeEditLoanModal();
+    await reload();
+  };
+
   const confirmDeletePayment = async () => {
     if (!deletingPayment) return;
     await deletePayment(deletingPayment);
@@ -445,6 +492,11 @@ export default function ProfileScreen() {
             <Pressable style={styles.outline} onPress={() => setRenewOpen(true)}>
               <Text style={styles.outlineText}>RENEW LOAN</Text>
             </Pressable>
+            {loan && (
+              <Pressable style={styles.editLoanBtn} onPress={openEditLoanModal}>
+                <Text style={styles.editLoanBtnText}>✏️ EDIT LOAN</Text>
+              </Pressable>
+            )}
             <Pressable style={styles.editBtn} onPress={openEditModal}>
               <Text style={styles.editBtnText}>EDIT CUSTOMER</Text>
             </Pressable>
@@ -689,6 +741,102 @@ export default function ProfileScreen() {
             >
               <Text style={styles.primaryText}>Renew Now</Text>
             </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Edit Loan Modal */}
+      <Modal visible={editLoanOpen} transparent animationType="slide">
+        <KeyboardAvoidingView style={styles.modalWrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Edit Loan</Text>
+            
+            <Text style={styles.inputLabel}>Loan Amount (Principal)</Text>
+            <TextInput 
+              placeholder="Loan Amount" 
+              value={editLoanAmount} 
+              onChangeText={setEditLoanAmount} 
+              style={styles.input} 
+              keyboardType="numeric" 
+            />
+            
+            <Text style={styles.inputLabel}>Loan Start Date</Text>
+            {Platform.OS === "web" ? (
+              <input
+                type="date"
+                value={editLoanDate}
+                onChange={(e) => setEditLoanDate(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: '#ccc',
+                  marginBottom: 8,
+                  fontSize: 16,
+                }}
+              />
+            ) : (
+              <>
+                <TextInput
+                  placeholder="YYYY-MM-DD"
+                  value={editLoanDate}
+                  onChangeText={setEditLoanDate}
+                  style={styles.input}
+                />
+                {editLoanDate && parseDateInput(editLoanDate) && (
+                  <Text style={styles.datePreview}>
+                    {formatDateWithDay(parseDateInput(editLoanDate)!)}
+                  </Text>
+                )}
+                <Pressable style={styles.dateBtn} onPress={() => {
+                  setTempEditLoanDate(new Date(parseDateInput(editLoanDate) ?? Date.now()));
+                  setShowEditLoanDatePicker(true);
+                }}>
+                  <Text style={styles.dateBtnText}>Pick Date</Text>
+                </Pressable>
+              </>
+            )}
+            {editLoanDateError ? <Text style={styles.errorText}>{editLoanDateError}</Text> : null}
+            
+            {showEditLoanDatePicker && Platform.OS !== "web" && (
+              <View style={Platform.OS === "ios" ? styles.pickerContainer : null}>
+                <DateTimePicker
+                  value={tempEditLoanDate}
+                  mode="date"
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  onChange={(_, date) => {
+                    if (date) {
+                      setTempEditLoanDate(date);
+                      if (Platform.OS !== "ios") {
+                        setEditLoanDate(formatDateInput(date.getTime()));
+                        setShowEditLoanDatePicker(false);
+                      }
+                    }
+                  }}
+                />
+                {Platform.OS === "ios" && (
+                  <Pressable
+                    style={styles.pickerDoneBtn}
+                    onPress={() => {
+                      setEditLoanDate(formatDateInput(tempEditLoanDate.getTime()));
+                      setShowEditLoanDatePicker(false);
+                    }}
+                  >
+                    <Text style={styles.pickerDoneBtnText}>Done</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+            
+            <View style={styles.modalButtons}>
+              <Pressable style={styles.primary} onPress={confirmEditLoan}>
+                <Text style={styles.primaryText}>Save Changes</Text>
+              </Pressable>
+              <Pressable style={styles.cancelModalBtn} onPress={closeEditLoanModal}>
+                <Text style={styles.cancelModalBtnText}>Cancel</Text>
+              </Pressable>
+            </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -970,6 +1118,10 @@ const styles = StyleSheet.create({
   delete: { color: "#ffd6d6", textAlign: "center" },
   editBtn: { backgroundColor: colors.white, borderRadius: 14, padding: 12, alignItems: "center", borderWidth: 2, borderColor: colors.amber },
   editBtnText: { color: colors.blue2, fontWeight: "700" },
+  editLoanBtn: { borderWidth: 1, borderColor: colors.amber, borderRadius: 14, padding: 12, alignItems: "center", backgroundColor: colors.amber },
+  editLoanBtnText: { color: colors.white, fontWeight: "700" },
+  inputLabel: { fontSize: 14, fontWeight: "600", color: "#333", marginBottom: 4 },
+  datePreview: { fontSize: 12, color: "#666", fontStyle: "italic", marginBottom: 8 },
   history: { color: colors.white, fontSize: 18, fontWeight: "700" },
   emptyHistoryContainer: { backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 16, padding: 40, alignItems: "center", marginVertical: 20 },
   emptyHistoryIcon: { fontSize: 48, marginBottom: 16 },

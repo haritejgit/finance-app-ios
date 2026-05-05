@@ -168,6 +168,28 @@ export async function getActiveLoan(userId: string, customerId: string) {
   return snap.docs[0]?.data() as Loan | undefined;
 }
 
+export async function updateLoan(loan: Loan, newPrincipalAmount: number, newStartDate: number) {
+  // Recalculate interest and totals based on new principal
+  const interestAmount = newPrincipalAmount * 0.2;
+  const totalPayable = newPrincipalAmount + interestAmount;
+  
+  // Calculate how much has been paid so far
+  const paidSoFar = loan.totalPayable - loan.balanceAmount;
+  const newBalanceAmount = totalPayable - paidSoFar;
+  
+  const updatedLoan: Loan = {
+    ...loan,
+    principalAmount: newPrincipalAmount,
+    interestAmount: interestAmount,
+    totalPayable: totalPayable,
+    balanceAmount: newBalanceAmount,
+    startDate: newStartDate,
+  };
+  
+  await setDoc(doc(db, "loans", loan.id), stripUndefined(updatedLoan));
+  return updatedLoan;
+}
+
 export async function getPaymentsForCustomer(userId: string, customerId: string) {
   // Fast path for new writes where payment includes customerId.
   const fastQ = query(
