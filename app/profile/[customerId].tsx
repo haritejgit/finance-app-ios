@@ -465,55 +465,63 @@ export default function ProfileScreen() {
                     C/O: {customer.coName || 'N/A'} {customer.coId ? `(ID: ${customer.coId})` : ''}
                   </Text>
                 )}
+                {customer.locationDesc && (
+                  <Text style={styles.info}>
+                    📍 Location: {customer.locationDesc}
+                  </Text>
+                )}
               </View>
             )}
-            <View style={styles.row}>
-          <Pressable
-            style={[styles.action, { backgroundColor: colors.paidGreen }]}
-            onPress={() => {
-              setPaymentDateInput(formatDateInput(Date.now()));
-              setPaymentDateError("");
-              setPayOpen(true);
-            }}
-          >
-            <Text style={styles.actionTxt}>PAY</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.action, { backgroundColor: colors.missedRed }]}
-            onPress={() => {
-              setDueDateInput(formatDateInput(Date.now()));
-              setDueDateError("");
-              setDueOpen(true);
-            }}
-          >
-            <Text style={styles.actionTxt}>DUE</Text>
-          </Pressable>
-            </View>
-            <Pressable style={styles.outline} onPress={() => setRenewOpen(true)}>
-              <Text style={styles.outlineText}>RENEW LOAN</Text>
-            </Pressable>
-            {loan && (
-              <Pressable style={styles.editLoanBtn} onPress={openEditLoanModal}>
-                <Text style={styles.editLoanBtnText}>✏️ EDIT LOAN</Text>
+            <View style={styles.actionGrid}>
+              <Pressable
+                style={[styles.actionBtn, { backgroundColor: colors.paidGreen }]}
+                onPress={() => {
+                  setPaymentDateInput(formatDateInput(Date.now()));
+                  setPaymentDateError("");
+                  setPayOpen(true);
+                }}
+              >
+                <Text style={styles.actionIcon}>💵</Text>
+                <Text style={styles.actionLabel}>Pay</Text>
               </Pressable>
-            )}
-            <Pressable style={styles.editBtn} onPress={openEditModal}>
-              <Text style={styles.editBtnText}>EDIT CUSTOMER</Text>
-            </Pressable>
-            <Pressable 
-              style={[styles.outline, { backgroundColor: customer?.latitude ? colors.blue2 : '#ccc' }]} 
-              onPress={openGoogleMaps}
-              disabled={!customer?.latitude}
-            >
-              <Text style={[styles.outlineText, { color: colors.white }]}>
-                {customer?.latitude ? '📍 GO TO LOCATION' : '📍 NO LOCATION SET'}
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setDeleteCustomerConfirmOpen(true)}
-            >
-              <Text style={styles.delete}>Delete Customer</Text>
-            </Pressable>
+              <Pressable
+                style={[styles.actionBtn, { backgroundColor: colors.missedRed }]}
+                onPress={() => {
+                  setDueDateInput(formatDateInput(Date.now()));
+                  setDueDateError("");
+                  setDueOpen(true);
+                }}
+              >
+                <Text style={styles.actionIcon}>⚠️</Text>
+                <Text style={styles.actionLabel}>Due</Text>
+              </Pressable>
+              <Pressable style={[styles.actionBtn, { backgroundColor: colors.amber }]} onPress={() => setRenewOpen(true)}>
+                <Text style={styles.actionIcon}>🔄</Text>
+                <Text style={styles.actionLabel}>Renew</Text>
+              </Pressable>
+              {loan && (
+                <Pressable style={[styles.actionBtn, { backgroundColor: colors.blue3 }]} onPress={openEditLoanModal}>
+                  <Text style={styles.actionIcon}>✏️</Text>
+                  <Text style={styles.actionLabel}>Edit</Text>
+                </Pressable>
+              )}
+            </View>
+            
+            <View style={styles.iconBar}>
+              <Pressable style={styles.iconBtn} onPress={openEditModal}>
+                <Text style={styles.iconBtnIcon}>👤</Text>
+              </Pressable>
+              <Pressable 
+                style={[styles.iconBtn, !customer?.latitude && styles.iconBtnDisabled]} 
+                onPress={openGoogleMaps}
+                disabled={!customer?.latitude}
+              >
+                <Text style={styles.iconBtnIcon}>📍</Text>
+              </Pressable>
+              <Pressable style={styles.iconBtn} onPress={() => setDeleteCustomerConfirmOpen(true)}>
+                <Text style={[styles.iconBtnIcon, { color: colors.missedRed }]}>🗑️</Text>
+              </Pressable>
+            </View>
             <Text style={styles.history}>Transaction History</Text>
             <PaymentHistory 
               payments={payments} 
@@ -1113,6 +1121,19 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 10 },
   action: { flex: 1, padding: 14, borderRadius: 12, alignItems: "center" },
   actionTxt: { color: colors.white, fontWeight: "800" },
+  
+  // New clean action grid
+  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginVertical: 8 },
+  actionBtn: { flex: 1, minWidth: 70, padding: 12, borderRadius: 12, alignItems: 'center', gap: 4 },
+  actionIcon: { fontSize: 24 },
+  actionLabel: { color: colors.white, fontSize: 12, fontWeight: '600' },
+  
+  // Icon bar for secondary actions
+  iconBar: { flexDirection: 'row', justifyContent: 'center', gap: 16, marginVertical: 12 },
+  iconBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  iconBtnDisabled: { backgroundColor: 'rgba(255,255,255,0.1)' },
+  iconBtnIcon: { fontSize: 24 },
+  
   outline: { borderWidth: 1, borderColor: colors.white, borderRadius: 14, padding: 12, alignItems: "center" },
   outlineText: { color: colors.white, fontWeight: "700" },
   delete: { color: "#ffd6d6", textAlign: "center" },

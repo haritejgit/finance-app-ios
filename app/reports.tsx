@@ -1325,22 +1325,28 @@ interface Payment {
             </View>
           </View>
 
-          <Pressable
-            style={styles.dayReportBtn}
-            onPress={() => setShowDayReportModal(true)}
-          >
-            <Text style={styles.dayReportBtnText}>� Day Report</Text>
-          </Pressable>
+          <View style={styles.exportGrid}>
+            <Pressable
+              style={styles.exportBtn}
+              onPress={() => setShowDayReportModal(true)}
+            >
+              <Text style={styles.exportIcon}>📋</Text>
+              <Text style={styles.exportLabel}>Day Report</Text>
+            </Pressable>
 
-          <Pressable
-            style={[styles.loanTrackerBtn, isExporting && styles.loanTrackerBtnDisabled]}
-            onPress={exportWeeklyCollectionReport}
-            disabled={isExporting}
-          >
-            <Text style={styles.loanTrackerBtnText}>
-              {isExporting ? '⏳ Exporting...' : '📊 Weekly Collection Report'}
-            </Text>
-          </Pressable>
+            <Pressable
+              style={[styles.exportBtn, isExporting && styles.exportBtnDisabled]}
+              onPress={exportWeeklyCollectionReport}
+              disabled={isExporting}
+            >
+              <Text style={styles.exportIcon}>
+                {isExporting ? '⏳' : '📊'}
+              </Text>
+              <Text style={styles.exportLabel}>
+                {isExporting ? 'Exporting...' : 'Weekly Report'}
+              </Text>
+            </Pressable>
+          </View>
 
           <View style={styles.quickStats}>
             <Text style={styles.statsTitle}>Quick Stats</Text>
@@ -1472,8 +1478,8 @@ interface Payment {
               <View style={styles.transactionsSection}>
                 <View style={styles.transactionsHeader}>
                   <Text style={styles.transactionsTitle}>Transactions ({reportData.length})</Text>
-                  <Pressable onPress={exportToCSV} style={styles.exportBtn}>
-                    <Text style={styles.exportBtnText}>Export CSV</Text>
+                  <Pressable onPress={exportToCSV} style={styles.exportBtnSmall}>
+                    <Text style={styles.exportBtnSmallText}>Export CSV</Text>
                   </Pressable>
                 </View>
                 
@@ -1806,25 +1812,31 @@ const styles = StyleSheet.create({
     fontWeight: '700' 
   },
   
-  loanTrackerBtn: { 
+  // Clean export button styles
+  exportGrid: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  exportBtn: { 
+    flex: 1,
     backgroundColor: colors.amber, 
     borderRadius: 16, 
-    padding: 18, 
+    padding: 16, 
     alignItems: 'center',
-    marginBottom: 30,
+    gap: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 8,
   },
-  loanTrackerBtnText: { 
-    color: colors.white, 
-    fontSize: 18, 
-    fontWeight: '700' 
+  exportBtnDisabled: {
+    opacity: 0.5,
   },
-  loanTrackerBtnDisabled: {
-    opacity: 0.6,
+  exportIcon: {
+    fontSize: 28,
+  },
+  exportLabel: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '700',
   },
   
   quickStats: { marginTop: 'auto' },
@@ -1893,8 +1905,8 @@ const styles = StyleSheet.create({
   transactionsSection: { marginBottom: 20 },
   transactionsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   transactionsTitle: { fontSize: 20, fontWeight: '700', color: '#333' },
-  exportBtn: { backgroundColor: colors.blue2, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
-  exportBtnText: { color: colors.white, fontWeight: '600', fontSize: 12 },
+  exportBtnSmall: { backgroundColor: colors.blue2, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  exportBtnSmallText: { color: colors.white, fontWeight: '600', fontSize: 12 },
   
   transactionItem: { 
     backgroundColor: colors.white, 

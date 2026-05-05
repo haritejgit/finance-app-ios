@@ -272,8 +272,8 @@ export default function CustomerListScreen() {
             }
           />
           
-          <Pressable style={styles.addBtn} onPress={() => setShowAdd(true)}>
-            <Text style={styles.addTxt}>ADD CUSTOMER</Text>
+          <Pressable style={styles.fab} onPress={() => setShowAdd(true)}>
+            <Text style={styles.fabIcon}>+</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -536,8 +536,23 @@ const styles = StyleSheet.create({
   quickCallText: { fontSize: 18, color: colors.white },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
   emptyText: { color: colors.white, fontSize: 16 },
-  addBtn: { backgroundColor: colors.white, borderRadius: 28, padding: 16, alignItems: "center", marginVertical: 10 },
-  addTxt: { color: colors.blue2, fontWeight: "800" },
+  fab: { 
+    position: 'absolute', 
+    right: 20, 
+    bottom: 20, 
+    width: 56, 
+    height: 56, 
+    borderRadius: 28, 
+    backgroundColor: colors.blue2, 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  fabIcon: { color: colors.white, fontSize: 28, fontWeight: '300' },
   modal: { flex: 1, backgroundColor: "#f7f9fc" },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10, backgroundColor: colors.white, borderBottomWidth: 1, borderBottomColor: "#e0e0e0" },
   modalTitle: { fontSize: 24, fontWeight: "700", color: "#333", flex: 1 },
