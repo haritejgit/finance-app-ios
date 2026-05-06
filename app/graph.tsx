@@ -80,7 +80,7 @@ const LineChart = ({ data, maxValue, label }: { data: number[]; maxValue: number
 };
 
 export default function GraphScreen() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [monthlyData, setMonthlyData] = useState({
     collections: [0, 0, 0, 0, 0, 0],
@@ -96,8 +96,10 @@ export default function GraphScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
+    // Wait for Firebase Auth to resolve before fetching
+    if (authLoading) return;
     fetchGraphData();
-  }, [user]);
+  }, [user, authLoading]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -105,7 +107,10 @@ export default function GraphScreen() {
   }, [user]);
 
   const fetchGraphData = async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     if (!refreshing) setLoading(true);
 
     try {

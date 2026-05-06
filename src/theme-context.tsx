@@ -20,7 +20,6 @@ const THEME_STORAGE_KEY = "finance_app_theme";
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const systemColorScheme = useColorScheme();
   const [colorScheme, setColorSchemeState] = useState<ColorScheme>("system");
-  const [isLoading, setIsLoading] = useState(true);
 
   // Load saved theme preference on mount
   useEffect(() => {
@@ -32,8 +31,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error("Failed to load theme:", error);
-      } finally {
-        setIsLoading(false);
       }
     };
 
@@ -60,10 +57,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const newScheme: ColorScheme = isDark ? "light" : "dark";
     await setColorScheme(newScheme);
   };
-
-  if (isLoading) {
-    return null;
-  }
 
   const value: ThemeContextValue = {
     isDark,

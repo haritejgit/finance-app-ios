@@ -27,6 +27,10 @@ export const lightColors = {
   background: "#FFFFFF",
   backgroundSecondary: "#F9FAFB",
   border: "#E5E7EB",
+  
+  // UI Components
+  card: "#FFFFFF",
+  primary: "#1E5BB8",
 };
 
 export const darkColors = {
@@ -58,6 +62,10 @@ export const darkColors = {
   background: "#1F2937",
   backgroundSecondary: "#111827",
   border: "#374151",
+  
+  // UI Components
+  card: "#374151",
+  primary: "#3B82F6",
 };
 
 export const colors = lightColors;

@@ -86,7 +86,7 @@ export default function ShiftSelectionScreen() {
 
             <Pressable
               style={styles.startBtn}
-              onPress={() => router.push(`/village/${selectedDay}/${selectedShift}`)}
+              onPress={() => router.push({ pathname: "/village/[day]/[shift]", params: { day: selectedDay, shift: selectedShift } })}
             >
               <Text style={styles.startText}>START COLLECTION</Text>
             </Pressable>

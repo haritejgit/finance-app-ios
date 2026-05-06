@@ -21,6 +21,7 @@ import {
 import * as Location from "expo-location";
 import { useAuth } from "../../src/auth-context";
 import { useTheme } from "../../src/theme-context";
+import { colors } from "../../src/theme";
 import { addCustomerWithLoan, getCustomers, getPaymentsForCustomer, getVillageById } from "../../src/repository";
 import { Customer, Village, Payment } from "../../src/types";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -64,24 +65,24 @@ const CustomerItem = React.memo(({ customer, onPress, status }: { customer: Cust
   const getBackgroundColor = useCallback(() => {
     switch (status) {
       case 'paid':
-        return isDark ? '#065f46' : '#d4edda'; // Dark green vs light green
+        return '#d4edda'; // Light green
       case 'due':
-        return isDark ? '#7f1d1d' : '#f8d7da'; // Dark red vs light red
+        return '#f8d7da'; // Light red
       default:
-        return colors.white; // Plain white
+        return '#FFFFFF'; // Plain white
     }
-  }, [status, colors.white, isDark]);
+  }, [status]);
 
   const getBorderColor = useCallback(() => {
     switch (status) {
       case 'paid':
-        return isDark ? '#10b981' : '#28a745'; // Green border
+        return '#28a745'; // Green border
       case 'due':
-        return isDark ? '#f87171' : '#dc3545'; // Red border
+        return '#dc3545'; // Red border
       default:
         return 'transparent';
     }
-  }, [status, isDark]);
+  }, [status]);
 
   return (
     <Pressable 
@@ -151,7 +152,8 @@ function parseDateInput(value: string) {
 
 export default function CustomerListScreen() {
   const { villageId } = useLocalSearchParams<{ villageId: string }>();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const { isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [query, setQuery] = useState("");
@@ -166,7 +168,10 @@ export default function CustomerListScreen() {
   const [isLoading, setIsLoading] = useState(true);
 
   const reload = async () => {
-    if (!user || !villageId) return;
+    if (!user || !villageId) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     const [list, villageDetails] = await Promise.all([getCustomers(user.uid, villageId), getVillageById(villageId)]);
     // Sort customers by numericalId
@@ -186,8 +191,10 @@ export default function CustomerListScreen() {
     setIsLoading(false);
   };
   useEffect(() => {
+    // Wait for Firebase Auth to resolve before fetching
+    if (authLoading) return;
     reload();
-  }, [user, villageId]);
+  }, [user, villageId, authLoading]);
 
   const getCurrentLocation = async () => {
     setIsGettingLocation(true);
@@ -247,6 +254,17 @@ export default function CustomerListScreen() {
     <LinearGradient colors={[colors.blue1, colors.blue2]} style={styles.root}>
       <SafeAreaView style={[styles.safe, { paddingTop: insets.top }]} edges={['top']}>
         <View style={styles.content}>
+          {/* Header with back button */}
+          <View style={styles.headerRow}>
+            <Pressable onPress={() => router.back()} style={styles.backBtn}>
+              <Text style={styles.backBtnText}>←</Text>
+            </Pressable>
+            <View style={styles.headerTextWrap}>
+              <Text style={styles.headerTitle}>{village?.name || 'Customers'}</Text>
+              <Text style={styles.headerSub}>{filtered.length} customer{filtered.length !== 1 ? 's' : ''}</Text>
+            </View>
+          </View>
+
           <TextInput 
             value={query} 
             onChangeText={setQuery} 
@@ -260,13 +278,12 @@ export default function CustomerListScreen() {
             keyExtractor={(i) => i.id}
             renderItem={renderCustomer}
             initialNumToRender={10}
-            maxToRenderPerBatch={5}
+            maxToRenderPerBatch={10}
             windowSize={5}
             removeClippedSubviews={true}
             getItemLayout={(data, index) => (
-              { length: 64, offset: 64 * index, index }
+              { length: 80, offset: 80 * index, index }
             )}
-            maxToRenderPerBatch={10}
             updateCellsBatchingPeriod={50}
             ListEmptyComponent={
               isLoading ? (
@@ -276,7 +293,9 @@ export default function CustomerListScreen() {
                 </View>
               ) : (
                 <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No customers found</Text>
+                  <Text style={styles.emptyIcon}>👥</Text>
+                  <Text style={styles.emptyText}>No customers yet</Text>
+                  <Text style={styles.emptySubText}>Tap + to add the first customer</Text>
                 </View>
               )
             }
@@ -534,6 +553,12 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
   content: { flex: 1, width: "100%", maxWidth: Math.min(Dimensions.get("window").width - 32, 370), alignSelf: "center", paddingTop: 8 },
+  headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 10 },
+  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center" },
+  backBtnText: { color: colors.white, fontSize: 20, fontWeight: "700" },
+  headerTextWrap: { flex: 1 },
+  headerTitle: { color: colors.white, fontSize: 20, fontWeight: "700" },
+  headerSub: { color: "rgba(255,255,255,0.7)", fontSize: 12 },
   search: { backgroundColor: "rgba(255,255,255,0.15)", borderColor: colors.white, borderWidth: 1, borderRadius: 22, color: colors.white, padding: 12, marginBottom: 10 },
   item: { backgroundColor: colors.white, borderRadius: 14, padding: 12, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 10 },
   badge: { width: 32, height: 32, textAlign: "center", textAlignVertical: "center", borderRadius: 16, backgroundColor: "#eaf2ff", color: colors.blue2, fontSize: 13, fontWeight: "700" },
@@ -547,7 +572,9 @@ const styles = StyleSheet.create({
   quickCallBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#4CAF50", justifyContent: "center", alignItems: "center" },
   quickCallText: { fontSize: 16, color: colors.white },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
-  emptyText: { color: colors.white, fontSize: 16 },
+  emptyIcon: { fontSize: 48, marginBottom: 12 },
+  emptyText: { color: colors.white, fontSize: 18, fontWeight: "700", marginBottom: 6 },
+  emptySubText: { color: "rgba(255,255,255,0.7)", fontSize: 14 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60, gap: 12 },
   loadingText: { color: colors.white, fontSize: 14, opacity: 0.8 },
   fab: { 

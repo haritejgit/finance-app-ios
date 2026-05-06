@@ -149,7 +149,7 @@ function toStartOfDay(ts: number) {
 
 export default function ProfileScreen() {
   const { customerId } = useLocalSearchParams<{ customerId: string }>();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [loan, setLoan] = useState<Loan | null>(null);
   const [payments, setPayments] = useState<any[]>([]);
@@ -311,8 +311,10 @@ export default function ProfileScreen() {
   };
   
   useEffect(() => {
+    // Wait for Firebase Auth to resolve before fetching
+    if (authLoading) return;
     reload();
-  }, [user, customerId]);
+  }, [user, customerId, authLoading]);
 
   const civilScore = useMemo(() => {
     if (!payments.length) return 750;

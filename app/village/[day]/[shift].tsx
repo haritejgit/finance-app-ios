@@ -12,8 +12,10 @@ const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 const SHIFTS = ["Morning", "Evening"] as const;
 
 export default function VillageListScreen() {
-  const { day, shift } = useLocalSearchParams<{ day: string; shift: string }>();
-  const { user } = useAuth();
+  const params = useLocalSearchParams<{ day: string; shift: string }>();
+  const day = typeof params.day === 'string' ? params.day : Array.isArray(params.day) ? params.day[0] : "Monday";
+  const shift = typeof params.shift === 'string' ? params.shift : Array.isArray(params.shift) ? params.shift[0] : "Morning";
+  const { user, loading: authLoading } = useAuth();
   const { colors, isDark, toggleDarkMode } = useTheme();
   const insets = useSafeAreaInsets();
   const [villages, setVillages] = useState<Village[]>([]);
@@ -25,14 +27,27 @@ export default function VillageListScreen() {
   const [moveDay, setMoveDay] = useState<string>("Monday");
   const [moveShift, setMoveShift] = useState<string>("Morning");
   const [moveSaving, setMoveSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const reload = async () => {
-    if (!user) return;
-    setVillages(await getVillages(user.uid));
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      setVillages(await getVillages(user.uid));
+    } catch (error) {
+      console.error("Failed to load villages:", error);
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => {
+    // Wait for Firebase Auth to resolve before fetching
+    if (authLoading) return;
     reload();
-  }, [user]);
+  }, [user, authLoading]);
 
   const filtered = useMemo(() => villages.filter((v) => v.dayOfWeek === day && v.shift === shift), [villages, day, shift]);
 
@@ -101,72 +116,80 @@ export default function VillageListScreen() {
             </View>
           </View>
 
-          <View style={styles.statsContainer}>
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>{filtered.length}</Text>
-              <Text style={styles.statLabel}>Active Villages</Text>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <Text style={[styles.loadingText, { color: colors.text }]}>Loading villages...</Text>
             </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>{villages.length}</Text>
-              <Text style={styles.statLabel}>Total Villages</Text>
-            </View>
-          </View>
-
-          <View style={styles.addContainer}>
-            <TextInput
-              placeholder="Enter village name..."
-              value={newVillageName}
-              onChangeText={setNewVillageName}
-              style={styles.input}
-              placeholderTextColor="rgba(255,255,255,0.6)"
-              autoCapitalize="words"
-              autoCorrect={false}
-            />
-            <Pressable
-              style={[styles.addBtn, !newVillageName.trim() && styles.addBtnDisabled]}
-              onPress={async () => {
-                if (!newVillageName.trim() || !user) return;
-                await addVillage(user.uid, newVillageName.trim(), String(day), String(shift));
-                setNewVillageName("");
-                await reload();
-              }}
-              disabled={!newVillageName.trim()}
-            >
-              <Text style={styles.addTxt}>Add Village</Text>
-            </Pressable>
-          </View>
-
-          <FlatList
-            data={filtered}
-            keyExtractor={(i) => i.id}
-            contentContainerStyle={styles.listContainer}
-            showsVerticalScrollIndicator={false}
-            renderItem={({ item, index }) => (
-              <Pressable
-                onPress={() => router.push(`/customer/${item.id}`)}
-                onLongPress={() => openMoveModal(item)}
-                delayLongPress={450}
-                style={styles.villageCard}
-              >
-                <View style={styles.villageHeader}>
-                  <View style={styles.villageInfo}>
-                    <Text style={styles.villageName}>{item.name}</Text>
-                    <Text style={styles.villageSubtext}>Tap to view customers</Text>
-                  </View>
-                  <View style={styles.villageIndex}>
-                    <Text style={styles.villageIndexText}>{index + 1}</Text>
-                  </View>
+          ) : (
+            <>
+              <View style={styles.statsContainer}>
+                <View style={[styles.statCard, { backgroundColor: colors.card }]}>
+                  <Text style={[styles.statNumber, { color: colors.text }]}>{filtered.length}</Text>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Active Villages</Text>
                 </View>
-              </Pressable>
-            )}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyIcon}>🏘️</Text>
-                <Text style={styles.emptyTitle}>No Villages</Text>
-                <Text style={styles.emptySubtitle}>Add a village to get started</Text>
+                <View style={[styles.statCard, { backgroundColor: colors.card }]}>
+                  <Text style={[styles.statNumber, { color: colors.text }]}>{villages.length}</Text>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total Villages</Text>
+                </View>
               </View>
-            }
-          />
+
+              <View style={styles.addContainer}>
+                <TextInput
+                  placeholder="Enter village name..."
+                  value={newVillageName}
+                  onChangeText={setNewVillageName}
+                  style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
+                  placeholderTextColor={colors.textSecondary}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                />
+                <Pressable
+                  style={[styles.addBtn, { backgroundColor: colors.primary }, !newVillageName.trim() && styles.addBtnDisabled]}
+                  onPress={async () => {
+                    if (!newVillageName.trim() || !user) return;
+                    await addVillage(user.uid, newVillageName.trim(), String(day), String(shift));
+                    setNewVillageName("");
+                    await reload();
+                  }}
+                  disabled={!newVillageName.trim()}
+                >
+                  <Text style={[styles.addTxt, { color: colors.white }]}>Add Village</Text>
+                </Pressable>
+              </View>
+
+              <FlatList
+                data={filtered}
+                keyExtractor={(i) => i.id}
+                contentContainerStyle={styles.listContainer}
+                showsVerticalScrollIndicator={false}
+                renderItem={({ item, index }) => (
+                  <Pressable
+                    onPress={() => router.push(`/customer/${item.id}`)}
+                    onLongPress={() => openMoveModal(item)}
+                    delayLongPress={450}
+                    style={[styles.villageCard, { backgroundColor: colors.card }]}
+                  >
+                    <View style={styles.villageHeader}>
+                      <View style={styles.villageInfo}>
+                        <Text style={[styles.villageName, { color: colors.text }]}>{item.name}</Text>
+                        <Text style={[styles.villageSubtext, { color: colors.textSecondary }]}>Tap to view customers</Text>
+                      </View>
+                      <View style={[styles.villageIndex, { backgroundColor: colors.primary }]}>
+                        <Text style={[styles.villageIndexText, { color: colors.white }]}>{index + 1}</Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyIcon}>🏘️</Text>
+                    <Text style={[styles.emptyTitle, { color: colors.text }]}>No Villages</Text>
+                    <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>Add a village to get started</Text>
+                  </View>
+                }
+              />
+            </>
+          )}
         </View>
       </SafeAreaView>
 
@@ -178,49 +201,49 @@ export default function VillageListScreen() {
       >
         <View style={styles.moveModalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closeMoveModal} />
-          <View style={[styles.moveSheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-            <Text style={styles.moveTitle}>Move village</Text>
+          <View style={[styles.moveSheet, { backgroundColor: colors.card, paddingBottom: Math.max(insets.bottom, 16), borderColor: colors.border }]}>
+            <Text style={[styles.moveTitle, { color: colors.text }]}>Move village</Text>
             {villageToMove && (
-              <Text style={styles.moveVillageName}>{villageToMove.name}</Text>
+              <Text style={[styles.moveVillageName, { color: colors.primary }]}>{villageToMove.name}</Text>
             )}
-            <Text style={styles.moveSectionLabel}>Day</Text>
+            <Text style={[styles.moveSectionLabel, { color: colors.textSecondary }]}>Day</Text>
             <View style={styles.moveChipWrap}>
               {DAYS.map((d) => (
                 <Pressable
                   key={d}
                   onPress={() => setMoveDay(d)}
-                  style={[styles.moveChip, moveDay === d && styles.moveChipOn]}
+                  style={[styles.moveChip, { borderColor: colors.border, backgroundColor: colors.backgroundSecondary }, moveDay === d && { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}
                 >
-                  <Text style={[styles.moveChipText, moveDay === d && styles.moveChipTextOn]} numberOfLines={1}>
+                  <Text style={[styles.moveChipText, { color: colors.textSecondary }, moveDay === d && { color: colors.primary }]} numberOfLines={1}>
                     {d.slice(0, 3)}
                   </Text>
                 </Pressable>
               ))}
             </View>
-            <Text style={styles.moveSectionLabel}>Shift</Text>
+            <Text style={[styles.moveSectionLabel, { color: colors.textSecondary }]}>Shift</Text>
             <View style={styles.moveShiftRow}>
               {SHIFTS.map((s) => (
                 <Pressable
                   key={s}
                   onPress={() => setMoveShift(s)}
-                  style={[styles.moveShiftBtn, moveShift === s && styles.moveShiftBtnOn]}
+                  style={[styles.moveShiftBtn, { borderColor: colors.border, backgroundColor: colors.backgroundSecondary }, moveShift === s && { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}
                 >
-                  <Text style={[styles.moveShiftText, moveShift === s && styles.moveShiftTextOn]}>{s}</Text>
+                  <Text style={[styles.moveShiftText, { color: colors.textSecondary }, moveShift === s && { color: colors.primary }]}>{s}</Text>
                 </Pressable>
               ))}
             </View>
             <Pressable
-              style={[styles.moveSaveBtn, moveSaving && styles.moveSaveBtnDisabled]}
+              style={[styles.moveSaveBtn, { backgroundColor: colors.primary }, moveSaving && styles.moveSaveBtnDisabled]}
               onPress={saveMove}
               disabled={moveSaving}
             >
-              <Text style={styles.moveSaveText}>{moveSaving ? "Saving…" : "Save"}</Text>
+              <Text style={[styles.moveSaveText, { color: colors.white }]}>{moveSaving ? "Saving…" : "Save"}</Text>
             </Pressable>
             <Pressable style={styles.moveCancelBtn} onPress={closeMoveModal}>
-              <Text style={styles.moveCancelText}>Cancel</Text>
+              <Text style={[styles.moveCancelText, { color: colors.textSecondary }]}>Cancel</Text>
             </Pressable>
             <Pressable style={styles.moveDeleteLink} onPress={requestDeleteFromMoveModal}>
-              <Text style={styles.moveDeleteLinkText}>Delete village…</Text>
+              <Text style={[styles.moveDeleteLinkText, { color: colors.error }]}>Delete village…</Text>
             </Pressable>
           </View>
         </View>
@@ -233,19 +256,19 @@ export default function VillageListScreen() {
         onRequestClose={cancelDelete}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.confirmDialog}>
-            <Text style={styles.confirmTitle}>Delete Village</Text>
-            <Text style={styles.confirmMessage}>
+          <View style={[styles.confirmDialog, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.confirmTitle, { color: colors.text }]}>Delete Village</Text>
+            <Text style={[styles.confirmMessage, { color: colors.textSecondary }]}>
               Are you sure you want to delete "{villageToDelete?.name}"?
               {'\n\n'}
               ⚠️ All customers and their loan/payment records in this village will be permanently deleted!
             </Text>
             <View style={styles.confirmButtons}>
-              <Pressable style={styles.cancelBtn} onPress={cancelDelete}>
-                <Text style={styles.cancelBtnText}>Cancel</Text>
+              <Pressable style={[styles.cancelBtn, { backgroundColor: colors.border }]} onPress={cancelDelete}>
+                <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
               </Pressable>
-              <Pressable style={styles.deleteBtn} onPress={confirmDelete}>
-                <Text style={styles.deleteBtnText}>Delete</Text>
+              <Pressable style={[styles.deleteBtn, { backgroundColor: '#ff4444' }]} onPress={confirmDelete}>
+                <Text style={[styles.deleteBtnText, { color: colors.white }]}>Delete</Text>
               </Pressable>
             </View>
           </View>
@@ -263,31 +286,33 @@ const styles = StyleSheet.create({
   content: { flex: 1, width: "100%", maxWidth: Math.min(screenWidth - 32, 370), alignSelf: "center", paddingTop: 8 },
   headerContainer: { marginBottom: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   headerLeft: { flex: 1 },
-  header: { color: colors.white, fontSize: 28, fontWeight: "700" },
+  header: { color: "#FFFFFF", fontSize: 28, fontWeight: "700" },
   sub: { color: "rgba(255,255,255,0.7)" },
   themeToggle: { flexDirection: "row", alignItems: "center", gap: 8 },
   themeText: { fontSize: 14, fontWeight: "600" },
   statsContainer: { flexDirection: "row", gap: 12, marginBottom: 16 },
-  statCard: { flex: 1, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 12, padding: 12, alignItems: "center" },
-  statNumber: { fontSize: 20, fontWeight: "700", color: colors.white },
-  statLabel: { fontSize: 11, color: "rgba(255,255,255,0.8)", marginTop: 2 },
+  statCard: { flex: 1, borderRadius: 12, padding: 12, alignItems: "center" },
+  statNumber: { fontSize: 20, fontWeight: "700", marginBottom: 2 },
+  statLabel: { fontSize: 11, marginTop: 2 },
   addContainer: { flexDirection: "row", gap: 8, marginBottom: 16 },
-  input: { flex: 1, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, color: colors.white, borderWidth: 1, borderColor: "rgba(255,255,255,0.3)" },
-  addBtn: { backgroundColor: colors.white, borderRadius: 12, paddingHorizontal: 24, justifyContent: "center", minWidth: 120 },
-  addBtnDisabled: { backgroundColor: "rgba(255,255,255,0.3)" },
-  addTxt: { color: colors.blue2, fontWeight: "700", fontSize: 14 },
+  input: { flex: 1, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, borderWidth: 1, fontSize: 16 },
+  addBtn: { borderRadius: 12, paddingHorizontal: 24, justifyContent: "center", minWidth: 120 },
+  addBtnDisabled: { opacity: 0.3 },
+  addTxt: { fontWeight: "700", fontSize: 14 },
   listContainer: { paddingBottom: 20 },
-  villageCard: { backgroundColor: colors.white, borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  villageCard: { borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
   villageHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   villageInfo: { flex: 1 },
-  villageName: { fontWeight: "700", fontSize: 18, color: "#333", marginBottom: 4 },
-  villageIndex: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.blue2, justifyContent: "center", alignItems: "center" },
-  villageIndexText: { color: colors.white, fontWeight: "700", fontSize: 14 },
-  villageSubtext: { color: "#666", fontSize: 13 },
+  villageName: { fontWeight: "700", fontSize: 18, marginBottom: 4 },
+  villageIndex: { width: 32, height: 32, borderRadius: 16, justifyContent: "center", alignItems: "center" },
+  villageIndexText: { fontWeight: "700", fontSize: 14 },
+  villageSubtext: { fontSize: 13 },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 16 },
-  emptyTitle: { fontSize: 18, fontWeight: "700", color: colors.white, marginBottom: 8 },
-  emptySubtitle: { fontSize: 14, color: "rgba(255,255,255,0.8)" },
+  emptyTitle: { fontSize: 18, fontWeight: "700", marginBottom: 8 },
+  emptySubtitle: { fontSize: 14 },
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
+  loadingText: { fontSize: 16, fontWeight: "600" },
   modalOverlay: { 
     flex: 1, 
     backgroundColor: 'rgba(0,0,0,0.5)', 
@@ -301,23 +326,21 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   confirmDialog: {
-    backgroundColor: colors.white,
     borderRadius: 16,
     padding: 24,
     width: '100%',
     maxWidth: 320,
-    alignItems: 'center'
+    alignItems: 'center',
+    borderWidth: 1,
   },
   confirmTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#333',
     marginBottom: 12,
     textAlign: 'center'
   },
   confirmMessage: {
     fontSize: 14,
-    color: '#666',
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 24
@@ -329,7 +352,6 @@ const styles = StyleSheet.create({
   },
   cancelBtn: {
     flex: 1,
-    backgroundColor: '#f0f0f0',
     borderRadius: 12,
     padding: 14,
     alignItems: 'center'
@@ -337,11 +359,9 @@ const styles = StyleSheet.create({
   cancelBtnText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#666'
   },
   deleteBtn: {
     flex: 1,
-    backgroundColor: '#ff4444',
     borderRadius: 12,
     padding: 14,
     alignItems: 'center'
@@ -349,26 +369,24 @@ const styles = StyleSheet.create({
   deleteBtnText: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.white
+    color: '#FFFFFF'
   },
   moveSheet: {
-    backgroundColor: colors.white,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingHorizontal: 20,
     paddingTop: 20,
     maxHeight: "85%",
+    borderWidth: 1,
   },
   moveTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#333",
     textAlign: "center",
   },
   moveVillageName: {
     fontSize: 16,
     fontWeight: "600",
-    color: colors.blue2,
     textAlign: "center",
     marginTop: 6,
     marginBottom: 16,
@@ -376,7 +394,6 @@ const styles = StyleSheet.create({
   moveSectionLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#666",
     marginBottom: 8,
   },
   moveChipWrap: {
@@ -390,20 +407,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#ddd",
-    backgroundColor: "#f9f9f9",
-  },
-  moveChipOn: {
-    backgroundColor: "#e3f2fd",
-    borderColor: colors.blue2,
   },
   moveChipText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#555",
-  },
-  moveChipTextOn: {
-    color: colors.blue2,
   },
   moveShiftRow: {
     flexDirection: "row",
@@ -415,24 +422,13 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#ddd",
     alignItems: "center",
-    backgroundColor: "#f9f9f9",
-  },
-  moveShiftBtnOn: {
-    backgroundColor: "#e3f2fd",
-    borderColor: colors.blue2,
   },
   moveShiftText: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#555",
-  },
-  moveShiftTextOn: {
-    color: colors.blue2,
   },
   moveSaveBtn: {
-    backgroundColor: colors.blue2,
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",
@@ -442,7 +438,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   moveSaveText: {
-    color: colors.white,
     fontWeight: "700",
     fontSize: 16,
   },
@@ -451,7 +446,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   moveCancelText: {
-    color: "#666",
     fontSize: 16,
     fontWeight: "600",
   },
@@ -461,7 +455,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   moveDeleteLinkText: {
-    color: "#c62828",
     fontSize: 14,
     fontWeight: "600",
   },
