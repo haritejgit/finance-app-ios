@@ -54,13 +54,15 @@ export default function ShiftSelectionScreen() {
             <Text style={styles.header}>Finance Dashboard</Text>
             <Text style={styles.welcome}>Welcome back, {user?.displayName || "User"}</Text>
             <View style={styles.statsGrid}>
-              <View style={styles.card}>
-                <Text style={styles.cardLabel}>TOTAL COLLECTION TODAY</Text>
-                <Text style={styles.cardAmount}>Rs.{todayStats.collectionToday.toFixed(2)}</Text>
+              <View style={styles.statCard}>
+                <Text style={styles.statIcon}>💰</Text>
+                <Text style={styles.statLabel}>COLLECTION TODAY</Text>
+                <Text style={styles.statAmount}>Rs.{todayStats.collectionToday.toFixed(2)}</Text>
               </View>
-              <View style={styles.card}>
-                <Text style={styles.cardLabel}>TOTAL DISTRIBUTED TODAY</Text>
-                <Text style={styles.cardAmount}>Rs.{todayStats.distributedToday.toFixed(2)}</Text>
+              <View style={styles.statCard}>
+                <Text style={styles.statIcon}>📤</Text>
+                <Text style={styles.statLabel}>DISTRIBUTED TODAY</Text>
+                <Text style={styles.statAmount}>Rs.{todayStats.distributedToday.toFixed(2)}</Text>
               </View>
             </View>
 
@@ -120,29 +122,33 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
   container: { paddingHorizontal: 16, paddingVertical: 8 },
-  content: { width: "100%", maxWidth: Math.min(screenWidth - 32, 370), alignSelf: "center", gap: 10 },
-  header: { color: colors.white, fontSize: 28, fontWeight: "700" },
-  welcome: { color: "rgba(255,255,255,0.9)", marginBottom: 8 },
-  statsGrid: { gap: 10 },
+  content: { width: "100%", maxWidth: Math.min(screenWidth - 32, 370), alignSelf: "center", gap: 8 },
+  header: { color: colors.white, fontSize: 24, fontWeight: "700" },
+  welcome: { color: "rgba(255,255,255,0.9)", fontSize: 14, marginBottom: 6 },
+  statsGrid: { flexDirection: 'row', gap: 10 },
+  statCard: { flex: 1, backgroundColor: colors.white, borderRadius: 16, padding: 16, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 6, elevation: 4 },
+  statIcon: { fontSize: 28, marginBottom: 6 },
+  statLabel: { color: '#666', fontSize: 11, fontWeight: '600', marginBottom: 4 },
+  statAmount: { color: colors.blue2, fontSize: 18, fontWeight: '700' },
   card: { backgroundColor: colors.white, borderRadius: 16, padding: 16 },
   cardLabel: { color: colors.blue2, fontSize: 12, fontWeight: "700", marginBottom: 6 },
   cardAmount: { color: colors.blue2, fontSize: 18, fontWeight: "800" },
-  section: { color: colors.white, fontSize: 16, fontWeight: "600", marginTop: 8 },
-  wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { borderColor: "rgba(255,255,255,0.4)", borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
+  section: { color: colors.white, fontSize: 15, fontWeight: "600", marginTop: 6 },
+  wrap: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chip: { borderColor: "rgba(255,255,255,0.4)", borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
   chipOn: { backgroundColor: colors.white },
-  chipText: { color: colors.white },
-  chipTextOn: { color: colors.blue3, fontWeight: "700" },
+  chipText: { color: colors.white, fontSize: 13 },
+  chipTextOn: { color: colors.blue3, fontWeight: "700", fontSize: 13 },
   row: { flexDirection: "row", gap: 12 },
-  shift: { flex: 1, borderRadius: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.4)", paddingVertical: 18, alignItems: "center" },
+  shift: { flex: 1, borderRadius: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.4)", paddingVertical: 14, alignItems: "center" },
   shiftOn: { backgroundColor: colors.white },
-  shiftText: { color: colors.white, fontWeight: "700" },
-  shiftTextOn: { color: colors.blue2 },
-  startBtn: { marginTop: 16, backgroundColor: colors.white, borderRadius: 28, padding: 16, alignItems: "center" },
-  startText: { color: colors.blue3, fontWeight: "800" },
-  outlineBtn: { borderWidth: 1, borderColor: colors.white, borderRadius: 28, padding: 14, alignItems: "center" },
-  outlineText: { color: colors.white, fontWeight: "700" },
-  graphBtn: { backgroundColor: "#9C27B0", borderRadius: 28, padding: 14, alignItems: "center" },
-  graphBtnText: { color: colors.white, fontWeight: "700" },
-  logout: { color: colors.white, textAlign: "center", marginTop: 12 },
+  shiftText: { color: colors.white, fontWeight: "700", fontSize: 14 },
+  shiftTextOn: { color: colors.blue2, fontSize: 14 },
+  startBtn: { marginTop: 14, backgroundColor: colors.white, borderRadius: 24, padding: 14, alignItems: "center" },
+  startText: { color: colors.blue3, fontWeight: "700", fontSize: 15 },
+  outlineBtn: { borderWidth: 1, borderColor: colors.white, borderRadius: 24, padding: 12, alignItems: "center" },
+  outlineText: { color: colors.white, fontWeight: "600", fontSize: 14 },
+  graphBtn: { backgroundColor: "#9C27B0", borderRadius: 24, padding: 12, alignItems: "center" },
+  graphBtnText: { color: colors.white, fontWeight: "600", fontSize: 14 },
+  logout: { color: colors.white, textAlign: "center", marginTop: 10, fontSize: 14 },
 });

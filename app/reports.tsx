@@ -729,7 +729,7 @@ interface Payment {
   };
 
   // Helper functions
-  const getPaymentCellValue = (payment) => {
+  const getPaymentCellValue = (payment: any) => {
     switch (payment.type) {
       case 'disbursement':
         return payment.amount.toString();
@@ -744,7 +744,7 @@ interface Payment {
     }
   };
   
-  const getPaymentCellStyle = (payment) => {
+  const getPaymentCellStyle = (payment: any) => {
     switch (payment.type) {
       case 'disbursement':
         return {
@@ -1027,7 +1027,7 @@ interface Payment {
           }
 
           // Group customers by village, then sort by numericalId within each village
-          const sortedVillages = [...shiftVillages].sort((a, b) => a.name.localeCompare(b.name));
+          const sortedVillages = [...shiftVillages].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
           
           sortedVillages.forEach((village) => {
             const villageCustomers = shiftCustomers
@@ -1389,7 +1389,9 @@ interface Payment {
                   setShowFromPicker(false);
                 }
               } else {
-                setFromDate(formatDateInput(selected.getTime()));
+                if (selected) {
+                  setFromDate(formatDateInput(selected.getTime()));
+                }
                 setShowFromPicker(false);
               }
             }}
@@ -1425,7 +1427,9 @@ interface Payment {
                   setShowToPicker(false);
                 }
               } else {
-                setToDate(formatDateInput(selected.getTime()));
+                if (selected) {
+                  setToDate(formatDateInput(selected.getTime()));
+                }
                 setShowToPicker(false);
               }
             }}

@@ -16,6 +16,7 @@ import {
   Text,
   TextInput,
   View,
+  ActivityIndicator,
 } from "react-native";
 import * as Location from "expo-location";
 import { useAuth } from "../../src/auth-context";
@@ -166,19 +167,6 @@ export default function ProfileScreen() {
   const [showDuePicker, setShowDuePicker] = useState(false);
   const [tempPaymentDate, setTempPaymentDate] = useState<Date>(new Date());
   const [tempDueDate, setTempDueDate] = useState<Date>(new Date());
-  const [editOpen, setEditOpen] = useState(false);
-  const [editForm, setEditForm] = useState({
-    name: "",
-    phone: "",
-    aadhar: "",
-    locationDesc: "",
-    coName: "",
-    coId: "",
-    latitude: null as number | null,
-    longitude: null as number | null,
-  });
-  const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
-
   // Payment edit/delete state
   const [editingPayment, setEditingPayment] = useState<any | null>(null);
   const [editPaymentOpen, setEditPaymentOpen] = useState(false);
@@ -192,14 +180,25 @@ export default function ProfileScreen() {
   const [deletePaymentConfirmOpen, setDeletePaymentConfirmOpen] = useState(false);
   const [deleteCustomerConfirmOpen, setDeleteCustomerConfirmOpen] = useState(false);
   const [isDeletingCustomer, setIsDeletingCustomer] = useState(false);
-  
-  // Loan edit state
-  const [editLoanOpen, setEditLoanOpen] = useState(false);
-  const [editLoanAmount, setEditLoanAmount] = useState("");
-  const [editLoanDate, setEditLoanDate] = useState(formatDateInput(Date.now()));
   const [editLoanDateError, setEditLoanDateError] = useState("");
   const [showEditLoanDatePicker, setShowEditLoanDatePicker] = useState(false);
   const [tempEditLoanDate, setTempEditLoanDate] = useState<Date>(new Date());
+  const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
+  
+  // Combined customer & loan edit state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    phone: "",
+    aadhar: "",
+    locationDesc: "",
+    coName: "",
+    coId: "",
+    latitude: null as number | null,
+    longitude: null as number | null,
+    loanAmount: "",
+    loanStartDate: formatDateInput(Date.now()),
+  });
 
   const makePhoneCall = (phoneNumber: string) => {
     const phoneUrl = `tel:${phoneNumber}`;
@@ -219,6 +218,8 @@ export default function ProfileScreen() {
       coId: customer.coId?.toString() || "",
       latitude: customer.latitude ?? null,
       longitude: customer.longitude ?? null,
+      loanAmount: loan ? loan.principalAmount.toString() : "",
+      loanStartDate: loan ? formatDateInput(loan.startDate) : formatDateInput(Date.now()),
     });
     setEditOpen(true);
   };
@@ -283,17 +284,32 @@ export default function ProfileScreen() {
     await reload();
   };
 
+  const [isLoading, setIsLoading] = useState(true);
+
   const reload = async () => {
-    if (!user || !customerId) return;
-    const [c, l, p] = await Promise.all([
-      getCustomerById(customerId),
-      getActiveLoan(user.uid, customerId),
-      getPaymentsForCustomer(user.uid, customerId),
-    ]);
-    setCustomer(c);
-    setLoan(l || null);
-    setPayments(p);
+    if (!user || !customerId) {
+      console.log('Missing user or customerId:', { user: !!user, customerId });
+      setIsLoading(false);
+      return;
+    }
+    try {
+      setIsLoading(true);
+      const [c, l, p] = await Promise.all([
+        getCustomerById(customerId),
+        getActiveLoan(user.uid, customerId),
+        getPaymentsForCustomer(user.uid, customerId),
+      ]);
+      setCustomer(c);
+      setLoan(l || null);
+      setPayments(p);
+    } catch (error) {
+      console.error('Error loading customer details:', error);
+      Alert.alert('Error', 'Failed to load customer details. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
+  
   useEffect(() => {
     reload();
   }, [user, customerId]);
@@ -402,41 +418,36 @@ export default function ProfileScreen() {
     setDeletingPayment(null);
   };
 
-  // Loan edit handlers
-  const openEditLoanModal = () => {
-    if (!loan) return;
-    setEditLoanAmount(loan.principalAmount.toString());
-    setEditLoanDate(formatDateInput(loan.startDate));
-    setEditLoanDateError("");
-    setTempEditLoanDate(new Date(loan.startDate));
-    setEditLoanOpen(true);
-  };
-
-  const closeEditLoanModal = () => {
-    setEditLoanOpen(false);
-    setEditLoanAmount("");
-    setEditLoanDate(formatDateInput(Date.now()));
-    setEditLoanDateError("");
-    setShowEditLoanDatePicker(false);
-  };
-
-  const confirmEditLoan = async () => {
-    if (!loan || !user) return;
+  // Combined edit confirm handler
+  const confirmEdit = async () => {
+    if (!customer || !user) return;
     
-    const parsedDate = parseDateInput(editLoanDate);
-    if (!parsedDate) {
-      setEditLoanDateError("Enter date as YYYY-MM-DD");
-      return;
+    // Update customer
+    await updateCustomer({
+      ...customer,
+      name: editForm.name,
+      phone: editForm.phone,
+      aadhar: editForm.aadhar,
+      locationDesc: editForm.locationDesc,
+      coName: editForm.coName,
+      coId: editForm.coId ? Number(editForm.coId) : undefined,
+      latitude: editForm.latitude ?? undefined,
+      longitude: editForm.longitude ?? undefined,
+    });
+    
+    // Update loan if exists
+    if (loan) {
+      const parsedDate = parseDateInput(editForm.loanStartDate);
+      if (parsedDate) {
+        await updateLoan(
+          loan,
+          Number(editForm.loanAmount || 0),
+          parsedDate
+        );
+      }
     }
-    setEditLoanDateError("");
     
-    await updateLoan(
-      loan,
-      Number(editLoanAmount || 0),
-      parsedDate
-    );
-    
-    closeEditLoanModal();
+    setEditOpen(false);
     await reload();
   };
 
@@ -450,25 +461,76 @@ export default function ProfileScreen() {
   return (
     <LinearGradient colors={[colors.blue1, colors.blue2]} style={styles.root}>
       <SafeAreaView style={styles.safe}>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.content}>
-            <Text style={styles.title}>{customer?.name || "Profile"}</Text>
-            <Text style={styles.card}>Civil Score: {civilScore}</Text>
-            <Text style={styles.card}>Current Balance: Rs.{loan?.balanceAmount?.toFixed(2) ?? "0.00"}</Text>
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.white} />
+            <Text style={styles.loadingText}>Loading customer details...</Text>
+          </View>
+        )}
+        {!isLoading && !customer && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorTitle}>⚠️ No Customer Found</Text>
+            <Text style={styles.errorMessage}>Unable to load customer details. Please try again.</Text>
+            <Pressable style={styles.backBtn} onPress={() => router.back()}>
+              <Text style={styles.backBtnText}>← Go Back</Text>
+            </Pressable>
+          </View>
+        )}
+        {!isLoading && customer && (
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <View style={styles.content}>
+            {/* Header Card */}
+            <View style={styles.headerCard}>
+              <Text style={styles.headerName}>{customer?.name || "Profile"}</Text>
+              {!!customer && (
+                <View style={styles.headerInfo}>
+                  <View style={styles.headerInfoRow}>
+                    <Text style={styles.headerIcon}>👤</Text>
+                    <Text style={styles.headerText}>Book No: {customer.numericalId}</Text>
+                  </View>
+                  <Pressable onPress={() => makePhoneCall(customer.phone)} style={styles.headerInfoRow}>
+                    <Text style={styles.headerIcon}>📞</Text>
+                    <Text style={[styles.headerText, styles.phoneLink]}>{customer.phone}</Text>
+                  </Pressable>
+                  <View style={styles.headerInfoRow}>
+                    <Text style={styles.headerIcon}>🆔</Text>
+                    <Text style={styles.headerText}>Aadhar: {customer.aadhar}</Text>
+                  </View>
+                </View>
+              )}
+            </View>
+
+            {/* Stats Cards */}
+            <View style={styles.statsRow}>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>CREDIT SCORE</Text>
+                <View style={styles.scoreContainer}>
+                  <Text style={styles.scoreValue}>{civilScore}</Text>
+                  <Text style={styles.scoreRating}>{Number(civilScore) >= 800 ? 'excellent' : Number(civilScore) >= 600 ? 'good' : 'fair'}</Text>
+                </View>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>CURRENT BALANCE</Text>
+                <Text style={styles.balanceValue}>Rs.{loan?.balanceAmount?.toFixed(2) ?? "0.00"}</Text>
+              </View>
+            </View>
+
+            {/* Additional Info */}
             {!!customer && (
               <View style={styles.infoContainer}>
-                <Text style={styles.info}>
-                  BOOK NO: {customer.numericalId} | <Pressable onPress={() => makePhoneCall(customer.phone)}><Text style={styles.phoneLink}>Phone: {customer.phone}</Text></Pressable> | Aadhar: {customer.aadhar}
-                </Text>
                 {(customer.coName || customer.coId) && (
-                  <Text style={styles.info}>
-                    C/O: {customer.coName || 'N/A'} {customer.coId ? `(ID: ${customer.coId})` : ''}
-                  </Text>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoIcon}>👥</Text>
+                    <Text style={styles.infoText}>
+                      C/O: {customer.coName || 'N/A'} {customer.coId ? `(ID: ${customer.coId})` : ''}
+                    </Text>
+                  </View>
                 )}
                 {customer.locationDesc && (
-                  <Text style={styles.info}>
-                    📍 Location: {customer.locationDesc}
-                  </Text>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoIcon}>📍</Text>
+                    <Text style={styles.infoText}>{customer.locationDesc}</Text>
+                  </View>
                 )}
               </View>
             )}
@@ -499,12 +561,6 @@ export default function ProfileScreen() {
                 <Text style={styles.actionIcon}>🔄</Text>
                 <Text style={styles.actionLabel}>Renew</Text>
               </Pressable>
-              {loan && (
-                <Pressable style={[styles.actionBtn, { backgroundColor: colors.blue3 }]} onPress={openEditLoanModal}>
-                  <Text style={styles.actionIcon}>✏️</Text>
-                  <Text style={styles.actionLabel}>Edit</Text>
-                </Pressable>
-              )}
             </View>
             
             <View style={styles.iconBar}>
@@ -530,6 +586,7 @@ export default function ProfileScreen() {
             />
           </View>
         </ScrollView>
+        )}
       </SafeAreaView>
 
       <Modal visible={payOpen} transparent animationType="slide">
@@ -753,180 +810,160 @@ export default function ProfileScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Edit Loan Modal */}
-      <Modal visible={editLoanOpen} transparent animationType="slide">
-        <KeyboardAvoidingView style={styles.modalWrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Edit Loan</Text>
-            
-            <Text style={styles.inputLabel}>Loan Amount (Principal)</Text>
-            <TextInput 
-              placeholder="Loan Amount" 
-              value={editLoanAmount} 
-              onChangeText={setEditLoanAmount} 
-              style={styles.input} 
-              keyboardType="numeric" 
-            />
-            
-            <Text style={styles.inputLabel}>Loan Start Date</Text>
-            {Platform.OS === "web" ? (
-              <input
-                type="date"
-                value={editLoanDate}
-                onChange={(e) => setEditLoanDate(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: 12,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: '#ccc',
-                  marginBottom: 8,
-                  fontSize: 16,
-                }}
-              />
-            ) : (
-              <>
-                <TextInput
-                  placeholder="YYYY-MM-DD"
-                  value={editLoanDate}
-                  onChangeText={setEditLoanDate}
-                  style={styles.input}
-                />
-                {editLoanDate && parseDateInput(editLoanDate) && (
-                  <Text style={styles.datePreview}>
-                    {formatDateWithDay(parseDateInput(editLoanDate)!)}
-                  </Text>
-                )}
-                <Pressable style={styles.dateBtn} onPress={() => {
-                  setTempEditLoanDate(new Date(parseDateInput(editLoanDate) ?? Date.now()));
-                  setShowEditLoanDatePicker(true);
-                }}>
-                  <Text style={styles.dateBtnText}>Pick Date</Text>
-                </Pressable>
-              </>
-            )}
-            {editLoanDateError ? <Text style={styles.errorText}>{editLoanDateError}</Text> : null}
-            
-            {showEditLoanDatePicker && Platform.OS !== "web" && (
-              <View style={Platform.OS === "ios" ? styles.pickerContainer : null}>
-                <DateTimePicker
-                  value={tempEditLoanDate}
-                  mode="date"
-                  display={Platform.OS === "ios" ? "spinner" : "default"}
-                  onChange={(_, date) => {
-                    if (date) {
-                      setTempEditLoanDate(date);
-                      if (Platform.OS !== "ios") {
-                        setEditLoanDate(formatDateInput(date.getTime()));
-                        setShowEditLoanDatePicker(false);
-                      }
-                    }
-                  }}
-                />
-                {Platform.OS === "ios" && (
-                  <Pressable
-                    style={styles.pickerDoneBtn}
-                    onPress={() => {
-                      setEditLoanDate(formatDateInput(tempEditLoanDate.getTime()));
-                      setShowEditLoanDatePicker(false);
-                    }}
-                  >
-                    <Text style={styles.pickerDoneBtnText}>Done</Text>
-                  </Pressable>
-                )}
-              </View>
-            )}
-            
-            <View style={styles.modalButtons}>
-              <Pressable style={styles.primary} onPress={confirmEditLoan}>
-                <Text style={styles.primaryText}>Save Changes</Text>
-              </Pressable>
-              <Pressable style={styles.cancelModalBtn} onPress={closeEditLoanModal}>
-                <Text style={styles.cancelModalBtnText}>Cancel</Text>
-              </Pressable>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
 
       <Modal visible={editOpen} transparent animationType="slide">
         <KeyboardAvoidingView style={styles.modalWrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Edit Customer Details</Text>
+            <Text style={styles.modalTitle}>Edit Customer & Loan</Text>
             
-            <TextInput
-              placeholder="Customer Name"
-              value={editForm.name}
-              onChangeText={(text) => setEditForm(prev => ({ ...prev, name: text }))}
-              style={styles.input}
-            />
-            
-            <TextInput
-              placeholder="Phone Number"
-              value={editForm.phone}
-              onChangeText={(text) => setEditForm(prev => ({ ...prev, phone: text }))}
-              style={styles.input}
-              keyboardType="phone-pad"
-            />
-            
-            <TextInput
-              placeholder="Aadhar Number"
-              value={editForm.aadhar}
-              onChangeText={(text) => setEditForm(prev => ({ ...prev, aadhar: text }))}
-              style={styles.input}
-            />
-            
-            <TextInput
-              placeholder="Location Description"
-              value={editForm.locationDesc}
-              onChangeText={(text) => setEditForm(prev => ({ ...prev, locationDesc: text }))}
-              style={styles.input}
-            />
+            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+              {/* Customer Section */}
+              <Text style={styles.sectionLabel}>Customer Details</Text>
+              
+              <TextInput
+                placeholder="Customer Name"
+                value={editForm.name}
+                onChangeText={(text) => setEditForm(prev => ({ ...prev, name: text }))}
+                style={styles.input}
+              />
+              
+              <TextInput
+                placeholder="Phone Number"
+                value={editForm.phone}
+                onChangeText={(text) => setEditForm(prev => ({ ...prev, phone: text }))}
+                style={styles.input}
+                keyboardType="phone-pad"
+              />
+              
+              <TextInput
+                placeholder="Aadhar Number"
+                value={editForm.aadhar}
+                onChangeText={(text) => setEditForm(prev => ({ ...prev, aadhar: text }))}
+                style={styles.input}
+              />
+              
+              <TextInput
+                placeholder="Location Description"
+                value={editForm.locationDesc}
+                onChangeText={(text) => setEditForm(prev => ({ ...prev, locationDesc: text }))}
+                style={styles.input}
+              />
 
-            {/* Location Update Section */}
-            <View style={styles.locationUpdateSection}>
-              <Text style={styles.locationLabel}>Current Location:</Text>
-              {editForm.latitude && editForm.longitude ? (
-                <Text style={styles.locationCoords}>
-                  📍 {editForm.latitude.toFixed(6)}, {editForm.longitude.toFixed(6)}
-                </Text>
-              ) : (
-                <Text style={styles.locationNotSet}>No location set</Text>
+              {/* Location Update Section */}
+              <View style={styles.locationUpdateSection}>
+                <Text style={styles.locationLabel}>Current Location:</Text>
+                {editForm.latitude && editForm.longitude ? (
+                  <Text style={styles.locationCoords}>
+                    📍 {editForm.latitude.toFixed(6)}, {editForm.longitude.toFixed(6)}
+                  </Text>
+                ) : (
+                  <Text style={styles.locationNotSet}>No location set</Text>
+                )}
+                <Pressable 
+                  style={[styles.updateLocationBtn, isUpdatingLocation && styles.updateLocationBtnDisabled]} 
+                  onPress={updateEditLocation}
+                  disabled={isUpdatingLocation}
+                >
+                  <Text style={styles.updateLocationBtnText}>
+                    {isUpdatingLocation ? 'Getting Location...' : editForm.latitude ? '📍 Update Location' : '📍 Set Location'}
+                  </Text>
+                </Pressable>
+              </View>
+              
+              <TextInput
+                placeholder="C/O Name"
+                value={editForm.coName}
+                onChangeText={(text) => setEditForm(prev => ({ ...prev, coName: text }))}
+                style={styles.input}
+              />
+              
+              <TextInput
+                placeholder="C/O ID"
+                value={editForm.coId}
+                onChangeText={(text) => setEditForm(prev => ({ ...prev, coId: text }))}
+                style={styles.input}
+                keyboardType="numeric"
+              />
+
+              {/* Loan Section */}
+              {loan && (
+                <>
+                  <Text style={styles.sectionLabel}>Loan Details</Text>
+                  
+                  <TextInput
+                    placeholder="Loan Amount (Principal)"
+                    value={editForm.loanAmount}
+                    onChangeText={(text) => setEditForm(prev => ({ ...prev, loanAmount: text }))}
+                    style={styles.input}
+                    keyboardType="numeric"
+                  />
+                  
+                  {/* Date Picker Section */}
+                  <Text style={styles.inputLabel}>Loan Start Date</Text>
+                  {Platform.OS === "web" ? (
+                    <input
+                      type="date"
+                      value={editForm.loanStartDate}
+                      onChange={(e) => {
+                        setEditForm(prev => ({ ...prev, loanStartDate: e.target.value }));
+                        setEditLoanDateError("");
+                      }}
+                      style={{
+                        width: "100%",
+                        padding: 12,
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: "#ddd",
+                        marginBottom: 8,
+                        fontSize: 16,
+                      }}
+                    />
+                  ) : (
+                    <>
+                      <Pressable
+                        style={styles.datePickerButton}
+                        onPress={() => {
+                          const parsed = parseDateInput(editForm.loanStartDate);
+                          setTempEditLoanDate(new Date(parsed ?? Date.now()));
+                          setShowEditLoanDatePicker(true);
+                        }}
+                      >
+                        <Text style={styles.datePickerButtonText}>
+                          {formatDateWithDay(parseDateInput(editForm.loanStartDate) || Date.now())}
+                        </Text>
+                      </Pressable>
+                      
+                      {showEditLoanDatePicker && (
+                        <DateTimePicker
+                          value={tempEditLoanDate}
+                          mode="date"
+                          display="default"
+                          onChange={(event: any, date?: Date) => {
+                            setShowEditLoanDatePicker(false);
+                            if (date) {
+                              setEditForm(prev => ({ ...prev, loanStartDate: formatDateInput(date.getTime()) }));
+                              setEditLoanDateError("");
+                            }
+                          }}
+                        />
+                      )}
+                    </>
+                  )}
+                  {editLoanDateError ? (
+                    <Text style={styles.errorText}>{editLoanDateError}</Text>
+                  ) : null}
+                </>
               )}
-              <Pressable 
-                style={[styles.updateLocationBtn, isUpdatingLocation && styles.updateLocationBtnDisabled]} 
-                onPress={updateEditLocation}
-                disabled={isUpdatingLocation}
-              >
-                <Text style={styles.updateLocationBtnText}>
-                  {isUpdatingLocation ? 'Getting Location...' : editForm.latitude ? '📍 Update Location' : '📍 Set Location'}
-                </Text>
-              </Pressable>
-            </View>
-            
-            <TextInput
-              placeholder="C/O Name"
-              value={editForm.coName}
-              onChangeText={(text) => setEditForm(prev => ({ ...prev, coName: text }))}
-              style={styles.input}
-            />
-            
-            <TextInput
-              placeholder="C/O ID"
-              value={editForm.coId}
-              onChangeText={(text) => setEditForm(prev => ({ ...prev, coId: text }))}
-              style={styles.input}
-              keyboardType="numeric"
-            />
-            
-            <View style={styles.modalButtons}>
-              <Pressable style={styles.cancelModalBtn} onPress={() => setEditOpen(false)}>
-                <Text style={styles.cancelModalBtnText}>Cancel</Text>
-              </Pressable>
-              <Pressable style={styles.primary} onPress={updateCustomerDetails}>
-                <Text style={styles.primaryText}>Save Changes</Text>
-              </Pressable>
-            </View>
+              
+              <View style={styles.modalButtons}>
+                <Pressable style={styles.cancelModalBtn} onPress={() => setEditOpen(false)}>
+                  <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                </Pressable>
+                <Pressable style={styles.primary} onPress={confirmEdit}>
+                  <Text style={styles.primaryText}>Save Changes</Text>
+                </Pressable>
+              </View>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -1112,28 +1149,52 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 20 },
-  content: { width: "100%", maxWidth: Math.min(Dimensions.get("window").width - 32, 370), alignSelf: "center", gap: 12 },
+  content: { width: "100%", maxWidth: Math.min(Dimensions.get("window").width - 32, 370), alignSelf: "center" },
+  
+  // Header Card Styles
+  headerCard: { backgroundColor: colors.white, borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 6, elevation: 4 },
+  headerName: { color: colors.blue2, fontSize: 20, fontWeight: '700', marginBottom: 10 },
+  headerInfo: { gap: 8 },
+  headerInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerIcon: { fontSize: 14, width: 20 },
+  headerText: { color: '#555', fontSize: 13 },
+  phoneLink: { color: colors.blue2, textDecorationLine: 'underline' },
+  
+  // Stats Row Styles
+  statsRow: { flexDirection: 'row', marginBottom: 12 },
+  statCard: { flex: 1, backgroundColor: colors.white, borderRadius: 14, padding: 14, marginHorizontal: 5, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  statLabel: { color: '#888', fontSize: 10, fontWeight: '600', marginBottom: 6, letterSpacing: 0.5 },
+  scoreContainer: { alignItems: 'center' },
+  scoreValue: { color: colors.blue2, fontSize: 24, fontWeight: '700' },
+  scoreRating: { color: colors.success, fontSize: 11, fontWeight: '500', marginTop: 2 },
+  balanceValue: { color: colors.blue2, fontSize: 18, fontWeight: '700', marginTop: 2 },
+  
+  // Info Section Styles
+  infoContainer: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, padding: 10 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 3 },
+  infoIcon: { fontSize: 14, width: 20 },
+  infoText: { color: colors.white, fontSize: 13, flex: 1 },
+  
+  // Action Grid Styles (2x2)
+  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', marginVertical: 4 },
+  actionBtn: { width: '47%', paddingVertical: 16, paddingHorizontal: 12, margin: 5, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4, elevation: 3 },
+  actionIcon: { fontSize: 24 },
+  actionLabel: { color: colors.white, fontSize: 13, fontWeight: '600' },
+  
+  // Icon Bar Styles
+  iconBar: { flexDirection: 'row', justifyContent: 'center', alignSelf: 'center', backgroundColor: colors.white, borderRadius: 24, padding: 6, paddingHorizontal: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#f5f5f5', alignItems: 'center', justifyContent: 'center', marginHorizontal: 3 },
+  iconBtnDisabled: { backgroundColor: '#f0f0f0', opacity: 0.5 },
+  iconBtnIcon: { fontSize: 18 },
+  
+  // Old styles (keeping for compatibility)
   title: { color: colors.white, fontSize: 26, fontWeight: "700" },
   card: { backgroundColor: colors.white, borderRadius: 14, padding: 14, color: colors.blue2, fontWeight: "700" },
   info: { color: colors.white, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 14, padding: 12 },
-  infoContainer: { gap: 8 },
-  phoneLink: { color: "#4FC3F7", textDecorationLine: "underline" },
+  phoneLinkOld: { color: "#4FC3F7", textDecorationLine: "underline" },
   row: { flexDirection: "row", gap: 10 },
   action: { flex: 1, padding: 14, borderRadius: 12, alignItems: "center" },
   actionTxt: { color: colors.white, fontWeight: "800" },
-  
-  // New clean action grid
-  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginVertical: 8 },
-  actionBtn: { flex: 1, minWidth: 70, padding: 12, borderRadius: 12, alignItems: 'center', gap: 4 },
-  actionIcon: { fontSize: 24 },
-  actionLabel: { color: colors.white, fontSize: 12, fontWeight: '600' },
-  
-  // Icon bar for secondary actions
-  iconBar: { flexDirection: 'row', justifyContent: 'center', gap: 16, marginVertical: 12 },
-  iconBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  iconBtnDisabled: { backgroundColor: 'rgba(255,255,255,0.1)' },
-  iconBtnIcon: { fontSize: 24 },
-  
   outline: { borderWidth: 1, borderColor: colors.white, borderRadius: 14, padding: 12, alignItems: "center" },
   outlineText: { color: colors.white, fontWeight: "700" },
   delete: { color: "#ffd6d6", textAlign: "center" },
@@ -1143,6 +1204,10 @@ const styles = StyleSheet.create({
   editLoanBtnText: { color: colors.white, fontWeight: "700" },
   inputLabel: { fontSize: 14, fontWeight: "600", color: "#333", marginBottom: 4 },
   datePreview: { fontSize: 12, color: "#666", fontStyle: "italic", marginBottom: 8 },
+  modalScroll: { maxHeight: 600 },
+  sectionLabel: { fontSize: 14, fontWeight: "700", color: colors.blue2, marginTop: 16, marginBottom: 8 },
+  datePickerButton: { backgroundColor: "#f5f5f5", padding: 12, borderRadius: 10, borderWidth: 1, borderColor: "#ddd", marginBottom: 8 },
+  datePickerButtonText: { fontSize: 16, color: "#333" },
   history: { color: colors.white, fontSize: 18, fontWeight: "700" },
   emptyHistoryContainer: { backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 16, padding: 40, alignItems: "center", marginVertical: 20 },
   emptyHistoryIcon: { fontSize: 48, marginBottom: 16 },
@@ -1214,4 +1279,13 @@ const styles = StyleSheet.create({
   updateLocationBtn: { backgroundColor: colors.blue2, borderRadius: 10, padding: 12, alignItems: "center" },
   updateLocationBtnDisabled: { backgroundColor: "#ccc" },
   updateLocationBtnText: { color: colors.white, fontWeight: "700", fontSize: 14 },
+  
+  // Loading & Error States
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 20 },
+  loadingText: { color: colors.white, fontSize: 16, marginTop: 12, fontWeight: "500" },
+  errorContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 20 },
+  errorTitle: { fontSize: 24, fontWeight: "700", color: colors.white, marginBottom: 12, textAlign: "center" },
+  errorMessage: { fontSize: 16, color: "rgba(255,255,255,0.9)", textAlign: "center", marginBottom: 24 },
+  backBtn: { backgroundColor: colors.white, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24 },
+  backBtnText: { color: colors.blue2, fontWeight: "700", fontSize: 16 },
 });

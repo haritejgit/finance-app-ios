@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   FlatList,
@@ -19,9 +20,9 @@ import {
 } from "react-native";
 import * as Location from "expo-location";
 import { useAuth } from "../../src/auth-context";
+import { useTheme } from "../../src/theme-context";
 import { addCustomerWithLoan, getCustomers, getPaymentsForCustomer, getVillageById } from "../../src/repository";
 import { Customer, Village, Payment } from "../../src/types";
-import { colors } from "../../src/theme";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Helper to check if date is today
@@ -48,40 +49,9 @@ async function getCustomerPaymentStatus(userId: string, customerId: string): Pro
   }
 }
 
-const CustomerRow = memo(function CustomerRow({
-  customer,
-  onOpen,
-  paymentStatus,
-}: {
-  customer: Customer;
-  onOpen: (customerId: string) => void;
-  paymentStatus: PaymentStatus;
-}) {
-  // Determine background color based on payment status
-  const getBackgroundColor = () => {
-    switch (paymentStatus) {
-      case 'paid':
-        return '#d4edda'; // Light green
-      case 'due':
-        return '#f8d7da'; // Light red
-      default:
-        return colors.white; // Plain white
-    }
-  };
-
-  const getBorderColor = () => {
-    switch (paymentStatus) {
-      case 'paid':
-        return '#28a745'; // Green border
-      case 'due':
-        return '#dc3545'; // Red border
-      default:
-        return 'transparent';
-    }
-  };
-
-  const getStatusBadge = () => {
-    switch (paymentStatus) {
+const CustomerItem = React.memo(({ customer, onPress, status }: { customer: Customer; onPress: () => void; status: PaymentStatus }) => {
+  const getStatusBadge = useCallback(() => {
+    switch (status) {
       case 'paid':
         return <Text style={styles.statusBadgePaid}>✓ PAID</Text>;
       case 'due':
@@ -89,12 +59,34 @@ const CustomerRow = memo(function CustomerRow({
       default:
         return null;
     }
-  };
+  }, [status]);
+
+  const getBackgroundColor = useCallback(() => {
+    switch (status) {
+      case 'paid':
+        return isDark ? '#065f46' : '#d4edda'; // Dark green vs light green
+      case 'due':
+        return isDark ? '#7f1d1d' : '#f8d7da'; // Dark red vs light red
+      default:
+        return colors.white; // Plain white
+    }
+  }, [status, colors.white, isDark]);
+
+  const getBorderColor = useCallback(() => {
+    switch (status) {
+      case 'paid':
+        return isDark ? '#10b981' : '#28a745'; // Green border
+      case 'due':
+        return isDark ? '#f87171' : '#dc3545'; // Red border
+      default:
+        return 'transparent';
+    }
+  }, [status, isDark]);
 
   return (
     <Pressable 
-      style={[styles.item, { backgroundColor: getBackgroundColor(), borderColor: getBorderColor(), borderWidth: paymentStatus !== 'none' ? 2 : 0 }]} 
-      onPress={() => onOpen(customer.id)}
+      style={[styles.item, { backgroundColor: getBackgroundColor(), borderColor: getBorderColor(), borderWidth: status !== 'none' ? 2 : 0 }]} 
+      onPress={onPress}
     >
       <View style={styles.idContainer}>
         <Text style={styles.badge}>{customer.numericalId}</Text>
@@ -110,7 +102,13 @@ const CustomerRow = memo(function CustomerRow({
         )}
         {getStatusBadge()}
       </View>
-      <Pressable style={styles.quickCallBtn} onPress={() => Linking.openURL(`tel:${customer.phone}`)}>
+      <Pressable 
+        style={styles.quickCallBtn} 
+        onPress={(e) => {
+          e.stopPropagation();
+          Linking.openURL(`tel:${customer.phone}`);
+        }}
+      >
         <Text style={styles.quickCallText}>CALL</Text>
       </Pressable>
     </Pressable>
@@ -165,9 +163,11 @@ export default function CustomerListScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [tempRegistrationDate, setTempRegistrationDate] = useState<Date>(new Date());
   const [paymentStatuses, setPaymentStatuses] = useState<Record<string, PaymentStatus>>({});
+  const [isLoading, setIsLoading] = useState(true);
 
   const reload = async () => {
     if (!user || !villageId) return;
+    setIsLoading(true);
     const [list, villageDetails] = await Promise.all([getCustomers(user.uid, villageId), getVillageById(villageId)]);
     // Sort customers by numericalId
     const sortedList = list.sort((a, b) => a.numericalId - b.numericalId);
@@ -183,6 +183,7 @@ export default function CustomerListScreen() {
       })
     );
     setPaymentStatuses(statuses);
+    setIsLoading(false);
   };
   useEffect(() => {
     reload();
@@ -233,10 +234,10 @@ export default function CustomerListScreen() {
 
   const renderCustomer = useCallback(
     ({ item }: { item: Customer }) => (
-      <CustomerRow 
+      <CustomerItem 
         customer={item} 
-        onOpen={openCustomer} 
-        paymentStatus={paymentStatuses[item.id] || 'none'} 
+        onPress={() => openCustomer(item.id)} 
+        status={paymentStatuses[item.id] || 'none'} 
       />
     ),
     [openCustomer, paymentStatuses]
@@ -250,8 +251,8 @@ export default function CustomerListScreen() {
             value={query} 
             onChangeText={setQuery} 
             placeholder="Search customers..." 
-            style={styles.search}
-            placeholderTextColor="rgba(255,255,255,0.6)"
+            style={[styles.search, { backgroundColor: isDark ? colors.grayLight : 'rgba(255,255,255,0.15)', color: colors.text }]}
+            placeholderTextColor={isDark ? colors.gray : "rgba(255,255,255,0.6)"}
           />
           
           <FlatList
@@ -261,14 +262,23 @@ export default function CustomerListScreen() {
             initialNumToRender={10}
             maxToRenderPerBatch={5}
             windowSize={5}
-            removeClippedSubviews={Platform.OS !== "ios"}
+            removeClippedSubviews={true}
             getItemLayout={(data, index) => (
-              { length: 70, offset: 70 * index, index }
+              { length: 64, offset: 64 * index, index }
             )}
+            maxToRenderPerBatch={10}
+            updateCellsBatchingPeriod={50}
             ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No customers found</Text>
-              </View>
+              isLoading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={colors.white} />
+                  <Text style={styles.loadingText}>Loading customers...</Text>
+                </View>
+              ) : (
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>No customers found</Text>
+                </View>
+              )
             }
           />
           
@@ -279,12 +289,12 @@ export default function CustomerListScreen() {
       </SafeAreaView>
 
       <Modal visible={showAdd} animationType="slide" onRequestClose={() => setShowAdd(false)}>
-        <SafeAreaView style={[styles.modal, { paddingTop: insets.top }]} edges={['top']}>
+        <SafeAreaView style={[styles.modal, { paddingTop: insets.top, backgroundColor: colors.background }]} edges={['top']}>
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>New Customer Registration</Text>
+            <View style={[styles.modalHeader, { backgroundColor: colors.white, borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>New Customer Registration</Text>
               <Pressable onPress={() => setShowAdd(false)} style={styles.closeBtn}>
-                <Text style={styles.closeBtnText}>✕</Text>
+                <Text style={[styles.closeBtnText, { color: colors.gray }]}>✕</Text>
               </Pressable>
             </View>
             
@@ -302,13 +312,13 @@ export default function CustomerListScreen() {
                     />
                   </View>
                   <View style={styles.formColumn}>
-                    <Text style={styles.label}>Phone *</Text>
+                    <Text style={[styles.label, { color: colors.text }]}>Phone *</Text>
                     <TextInput
                       placeholder="Phone number"
-                      placeholderTextColor="#999"
+                      placeholderTextColor={colors.gray}
                       value={form.phone}
                       onChangeText={(t) => setForm((f) => ({ ...f, phone: t }))}
-                      style={styles.input}
+                      style={[styles.input, { backgroundColor: colors.white, borderColor: colors.border, color: colors.text }]}
                       keyboardType="phone-pad"
                     />
                   </View>
@@ -488,6 +498,8 @@ export default function CustomerListScreen() {
                           phone: form.phone,
                           aadhar: form.aadhar,
                           locationDesc: form.locationDesc,
+                          latitude: form.coordinates?.latitude,
+                          longitude: form.coordinates?.longitude,
                           coName: form.coName || undefined,
                           coId: form.coId ? Number(form.coId) : undefined,
                         },
@@ -523,36 +535,38 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   content: { flex: 1, width: "100%", maxWidth: Math.min(Dimensions.get("window").width - 32, 370), alignSelf: "center", paddingTop: 8 },
   search: { backgroundColor: "rgba(255,255,255,0.15)", borderColor: colors.white, borderWidth: 1, borderRadius: 22, color: colors.white, padding: 12, marginBottom: 10 },
-  item: { backgroundColor: colors.white, borderRadius: 16, padding: 14, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 12 },
-  badge: { width: 36, height: 36, textAlign: "center", textAlignVertical: "center", borderRadius: 18, backgroundColor: "#eaf2ff", color: colors.blue2, fontWeight: "700" },
+  item: { backgroundColor: colors.white, borderRadius: 14, padding: 12, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 10 },
+  badge: { width: 32, height: 32, textAlign: "center", textAlignVertical: "center", borderRadius: 16, backgroundColor: "#eaf2ff", color: colors.blue2, fontSize: 13, fontWeight: "700" },
   idContainer: { alignItems: "center", gap: 4 },
   coIdBadge: { fontSize: 10, textAlign: "center", backgroundColor: "#fff3e0", color: "#f57c00", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, fontWeight: "600" },
-  name: { fontWeight: "700", fontSize: 16, color: "#333" },
-  phone: { color: "#777" },
-  coName: { color: "#666", fontSize: 12, fontStyle: "italic", marginTop: 2 },
+  name: { fontWeight: "600", fontSize: 15, color: "#333" },
+  phone: { color: "#777", fontSize: 13 },
+  coName: { color: "#666", fontSize: 11, fontStyle: "italic", marginTop: 1 },
   statusBadgePaid: { fontSize: 10, color: "#28a745", fontWeight: "700", marginTop: 4, backgroundColor: "#d4edda", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
   statusBadgeDue: { fontSize: 10, color: "#dc3545", fontWeight: "700", marginTop: 4, backgroundColor: "#f8d7da", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
-  quickCallBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#4CAF50", justifyContent: "center", alignItems: "center" },
-  quickCallText: { fontSize: 18, color: colors.white },
+  quickCallBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#4CAF50", justifyContent: "center", alignItems: "center" },
+  quickCallText: { fontSize: 16, color: colors.white },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
   emptyText: { color: colors.white, fontSize: 16 },
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60, gap: 12 },
+  loadingText: { color: colors.white, fontSize: 14, opacity: 0.8 },
   fab: { 
     position: 'absolute', 
-    right: 20, 
-    bottom: 20, 
-    width: 56, 
-    height: 56, 
-    borderRadius: 28, 
+    right: 16, 
+    bottom: 16, 
+    width: 50, 
+    height: 50, 
+    borderRadius: 25, 
     backgroundColor: colors.blue2, 
     alignItems: 'center', 
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 6,
   },
-  fabIcon: { color: colors.white, fontSize: 28, fontWeight: '300' },
+  fabIcon: { color: colors.white, fontSize: 24, fontWeight: '300' },
   modal: { flex: 1, backgroundColor: "#f7f9fc" },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10, backgroundColor: colors.white, borderBottomWidth: 1, borderBottomColor: "#e0e0e0" },
   modalTitle: { fontSize: 24, fontWeight: "700", color: "#333", flex: 1 },

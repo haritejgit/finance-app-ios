@@ -1,11 +1,11 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { Dimensions, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Dimensions, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View, Switch } from "react-native";
 import { useAuth } from "../../../src/auth-context";
+import { useTheme } from "../../../src/theme-context";
 import { addVillage, deleteVillage, getVillages, updateVillageDayShift } from "../../../src/repository";
 import { Village } from "../../../src/types";
-import { colors } from "../../../src/theme";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
@@ -14,6 +14,7 @@ const SHIFTS = ["Morning", "Evening"] as const;
 export default function VillageListScreen() {
   const { day, shift } = useLocalSearchParams<{ day: string; shift: string }>();
   const { user } = useAuth();
+  const { colors, isDark, toggleDarkMode } = useTheme();
   const insets = useSafeAreaInsets();
   const [villages, setVillages] = useState<Village[]>([]);
   const [newVillageName, setNewVillageName] = useState("");
@@ -85,28 +86,41 @@ export default function VillageListScreen() {
       <SafeAreaView style={[styles.safe, { paddingTop: insets.top }]} edges={['top']}>
         <View style={styles.content}>
           <View style={styles.headerContainer}>
-            <Text style={styles.header}>Villages</Text>
-            <Text style={styles.sub}>{day} • {shift}</Text>
+            <View style={styles.headerLeft}>
+              <Text style={styles.header}>Villages</Text>
+              <Text style={styles.sub}>{day} • {shift}</Text>
+            </View>
+            <View style={styles.themeToggle}>
+              <Text style={[styles.themeText, { color: colors.textSecondary }]}>Dark</Text>
+              <Switch
+                value={isDark}
+                onValueChange={toggleDarkMode}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={isDark ? colors.primary : colors.background}
+              />
+            </View>
           </View>
 
           <View style={styles.statsContainer}>
             <View style={styles.statCard}>
               <Text style={styles.statNumber}>{filtered.length}</Text>
-              <Text style={styles.statLabel}>Active</Text>
+              <Text style={styles.statLabel}>Active Villages</Text>
             </View>
             <View style={styles.statCard}>
               <Text style={styles.statNumber}>{villages.length}</Text>
-              <Text style={styles.statLabel}>Total</Text>
+              <Text style={styles.statLabel}>Total Villages</Text>
             </View>
           </View>
 
           <View style={styles.addContainer}>
-            <TextInput 
-              placeholder="Enter village name..." 
-              value={newVillageName} 
-              onChangeText={setNewVillageName} 
+            <TextInput
+              placeholder="Enter village name..."
+              value={newVillageName}
+              onChangeText={setNewVillageName}
               style={styles.input}
               placeholderTextColor="rgba(255,255,255,0.6)"
+              autoCapitalize="words"
+              autoCorrect={false}
             />
             <Pressable
               style={[styles.addBtn, !newVillageName.trim() && styles.addBtnDisabled]}
@@ -118,7 +132,7 @@ export default function VillageListScreen() {
               }}
               disabled={!newVillageName.trim()}
             >
-              <Text style={styles.addTxt}>ADD</Text>
+              <Text style={styles.addTxt}>Add Village</Text>
             </Pressable>
           </View>
 
@@ -135,12 +149,14 @@ export default function VillageListScreen() {
                 style={styles.villageCard}
               >
                 <View style={styles.villageHeader}>
-                  <Text style={styles.villageName}>{item.name}</Text>
+                  <View style={styles.villageInfo}>
+                    <Text style={styles.villageName}>{item.name}</Text>
+                    <Text style={styles.villageSubtext}>Tap to view customers</Text>
+                  </View>
                   <View style={styles.villageIndex}>
                     <Text style={styles.villageIndexText}>{index + 1}</Text>
                   </View>
                 </View>
-                <Text style={styles.villageSubtext}>Tap to view customers • Hold to change day/shift</Text>
               </Pressable>
             )}
             ListEmptyComponent={
@@ -245,25 +261,29 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
   content: { flex: 1, width: "100%", maxWidth: Math.min(screenWidth - 32, 370), alignSelf: "center", paddingTop: 8 },
-  headerContainer: { marginBottom: 16 },
+  headerContainer: { marginBottom: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  headerLeft: { flex: 1 },
   header: { color: colors.white, fontSize: 28, fontWeight: "700" },
   sub: { color: "rgba(255,255,255,0.7)" },
+  themeToggle: { flexDirection: "row", alignItems: "center", gap: 8 },
+  themeText: { fontSize: 14, fontWeight: "600" },
   statsContainer: { flexDirection: "row", gap: 12, marginBottom: 16 },
   statCard: { flex: 1, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 12, padding: 12, alignItems: "center" },
   statNumber: { fontSize: 20, fontWeight: "700", color: colors.white },
   statLabel: { fontSize: 11, color: "rgba(255,255,255,0.8)", marginTop: 2 },
   addContainer: { flexDirection: "row", gap: 8, marginBottom: 16 },
   input: { flex: 1, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, color: colors.white, borderWidth: 1, borderColor: "rgba(255,255,255,0.3)" },
-  addBtn: { backgroundColor: colors.white, borderRadius: 12, paddingHorizontal: 20, justifyContent: "center", minWidth: 60 },
+  addBtn: { backgroundColor: colors.white, borderRadius: 12, paddingHorizontal: 24, justifyContent: "center", minWidth: 120 },
   addBtnDisabled: { backgroundColor: "rgba(255,255,255,0.3)" },
-  addTxt: { color: colors.blue2, fontWeight: "700" },
+  addTxt: { color: colors.blue2, fontWeight: "700", fontSize: 14 },
   listContainer: { paddingBottom: 20 },
-  villageCard: { backgroundColor: colors.white, borderRadius: 16, padding: 16, marginBottom: 12 },
-  villageHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-  villageName: { fontWeight: "700", fontSize: 18, color: "#333", flex: 1 },
-  villageIndex: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.blue2, justifyContent: "center", alignItems: "center" },
-  villageIndexText: { color: colors.white, fontWeight: "700", fontSize: 12 },
-  villageSubtext: { color: "#666", fontSize: 12 },
+  villageCard: { backgroundColor: colors.white, borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  villageHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  villageInfo: { flex: 1 },
+  villageName: { fontWeight: "700", fontSize: 18, color: "#333", marginBottom: 4 },
+  villageIndex: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.blue2, justifyContent: "center", alignItems: "center" },
+  villageIndexText: { color: colors.white, fontWeight: "700", fontSize: 14 },
+  villageSubtext: { color: "#666", fontSize: 13 },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 16 },
   emptyTitle: { fontSize: 18, fontWeight: "700", color: colors.white, marginBottom: 8 },
