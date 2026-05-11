@@ -75,6 +75,14 @@ function toStartOfDay(ts: number) {
   return d.getTime();
 }
 
+function toMillis(value: any) {
+  if (typeof value === "number") return value;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value?.toMillis === "function") return value.toMillis();
+  if (typeof value?.seconds === "number") return value.seconds * 1000;
+  return 0;
+}
+
 export default function ReportsScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -820,7 +828,11 @@ interface Payment {
       
       const villages = villagesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Village[];
       const customers = customersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Customer[];
+      const activeCustomers = customers.filter((customer) => customer.isActive !== false);
+      const activeCustomerIds = new Set(activeCustomers.map((customer) => customer.id));
       const loans = loansSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Loan[];
+      const activeLoans = loans.filter((loan) => activeCustomerIds.has(loan.customerId));
+      const loanCustomerById = new Map(activeLoans.map((loan) => [loan.id, loan.customerId]));
       const payments = paymentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Payment[];
       
       // Prepare results array
@@ -835,18 +847,28 @@ interface Payment {
       for (const dayName of dayNames) {
         for (const shiftName of shifts) {
           const shiftVillages = villages.filter(v => v.dayOfWeek === dayName && v.shift === shiftName);
-          const shiftCustomers = customers.filter(c => shiftVillages.some(v => v.id === c.villageId));
-          const shiftLoans = loans.filter(l => shiftCustomers.some(c => c.id === l.customerId));
-          const shiftPayments = payments.filter(p => shiftCustomers.some(c => c.id === p.customerId));
+          const shiftCustomers = activeCustomers.filter(c => shiftVillages.some(v => v.id === c.villageId));
+          const shiftCustomerIds = new Set(shiftCustomers.map((customer) => customer.id));
+          const shiftLoans = activeLoans.filter(l => shiftCustomerIds.has(l.customerId));
+          const shiftPayments = payments.filter((payment) => {
+            const customerId = payment.customerId ?? loanCustomerById.get(payment.loanId);
+            return !!customerId && shiftCustomerIds.has(customerId);
+          });
           
           // Calculate collected amount (excluding DUE payments)
           const collected = shiftPayments
-            .filter(p => p.paymentType !== "DUE" && p.paymentDate >= from && p.paymentDate <= to)
+            .filter(p => {
+              const paymentDate = toMillis(p.paymentDate);
+              return p.paymentType !== "DUE" && paymentDate >= from && paymentDate <= to;
+            })
             .reduce((sum, p) => sum + Number(p.amountPaid ?? 0), 0);
           
           // Calculate distributed amount (loans disbursed in date range)
           const distributed = shiftLoans
-            .filter(l => l.startDate >= from && l.startDate <= to)
+            .filter(l => {
+              const startDate = toMillis(l.startDate);
+              return startDate >= from && startDate <= to;
+            })
             .reduce((sum, l) => sum + Number(l.principalAmount ?? 0), 0);
           
           totalCollected += collected;
@@ -907,12 +929,33 @@ interface Payment {
         collection(db, "payments"),
         where("userId", "==", user.uid)
       );
-      const paymentsSnap = await getDocs(paymentsQuery);
+      const [paymentsSnap, loansSnap, customersSnap] = await Promise.all([
+        getDocs(paymentsQuery),
+        getDocs(query(collection(db, "loans"), where("userId", "==", user.uid))),
+        getDocs(query(collection(db, "customers"), where("userId", "==", user.uid))),
+      ]);
+      const activeCustomerIds = new Set(
+        customersSnap.docs
+          .map((d) => d.data() as any)
+          .filter((customer) => customer.isActive !== false)
+          .map((customer) => customer.id)
+      );
+      const activeLoans = loansSnap.docs
+        .map((d) => d.data() as any)
+        .filter((loan) => activeCustomerIds.has(loan.customerId));
+      const loanCustomerById = new Map(activeLoans.map((loan) => [loan.id, loan.customerId]));
       const dayPayments = paymentsSnap.docs
         .map((d) => d.data() as any)
         .filter((p) => {
-          const paymentDate = p.paymentDate?.toMillis ? p.paymentDate.toMillis() : p.paymentDate;
-          return paymentDate >= startMs && paymentDate <= endMs && p.paymentType !== "DUE";
+          const paymentDate = toMillis(p.paymentDate);
+          const customerId = p.customerId ?? loanCustomerById.get(p.loanId);
+          return (
+            paymentDate >= startMs &&
+            paymentDate <= endMs &&
+            p.paymentType !== "DUE" &&
+            !!customerId &&
+            activeCustomerIds.has(customerId)
+          );
         });
 
       // Calculate collections by mode
@@ -927,18 +970,10 @@ interface Payment {
         }
       });
 
-      // Fetch loans distributed on that day
-      const loansQuery = query(
-        collection(db, "loans"),
-        where("userId", "==", user.uid)
-      );
-      const loansSnap = await getDocs(loansQuery);
-      const dayLoans = loansSnap.docs
-        .map((d) => d.data() as any)
-        .filter((loan) => {
-          const loanDate = loan.startDate?.toMillis ? loan.startDate.toMillis() : loan.startDate;
-          return loanDate >= startMs && loanDate <= endMs;
-        });
+      const dayLoans = activeLoans.filter((loan) => {
+        const loanDate = toMillis(loan.startDate);
+        return loanDate >= startMs && loanDate <= endMs;
+      });
 
       const totalDistributedRaw = dayLoans.reduce((sum, loan) => sum + (loan.principalAmount || 0), 0);
       // Deduct 20 Rs per 1000 Rs distributed
@@ -1034,7 +1069,9 @@ interface Payment {
       };
 
       const villagesData = await fetchUserCollection<Village>('villages');
-      const customersData = await fetchUserCollection<Customer>('customers');
+      const customersData = (await fetchUserCollection<Customer>('customers')).filter(
+        (customer) => customer.isActive !== false
+      );
       const loansData = (await fetchUserCollection<Loan>('loans')).map((loan) => ({
         ...loan,
         startDate: toMillis(loan.startDate),
@@ -1863,21 +1900,21 @@ interface Payment {
 
       {/* Totals Modal */}
       <Modal visible={showTotalsModal} animationType="slide" presentationStyle="pageSheet">
-        <SafeAreaView style={styles.modalSafe}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>📊 Totals Report</Text>
+        <SafeAreaView style={[styles.modalSafe, styles.totalsModalSafe]}>
+          <View style={[styles.modalHeader, styles.totalsModalHeader]}>
+            <Text style={[styles.modalTitle, styles.totalsModalTitle]}>📊 Totals Report</Text>
             <Pressable onPress={() => setShowTotalsModal(false)} style={styles.closeBtn}>
               <Text style={styles.closeBtnText}>✕</Text>
             </Pressable>
           </View>
 
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-            <ScrollView style={styles.modalContent}>
+            <ScrollView style={[styles.modalContent, styles.totalsModalContent]}>
               <View style={styles.totalsDateSection}>
-                <Text style={styles.sectionTitle}>Select Date Range</Text>
+                <Text style={[styles.sectionTitle, styles.totalsSectionTitle]}>Select Date Range</Text>
                 
                 <View style={styles.totalsDateInputContainer}>
-                  <Text style={styles.dateLabel}>From Date</Text>
+                  <Text style={[styles.dateLabel, styles.totalsDateLabel]}>From Date</Text>
                   {Platform.OS === 'web' ? (
                     <input
                       type="date"
@@ -1916,7 +1953,7 @@ interface Payment {
                 </View>
 
                 <View style={styles.totalsDateInputContainer}>
-                  <Text style={styles.dateLabel}>To Date</Text>
+                  <Text style={[styles.dateLabel, styles.totalsDateLabel]}>To Date</Text>
                   {Platform.OS === 'web' ? (
                     <input
                       type="date"
@@ -2224,6 +2261,12 @@ const styles = StyleSheet.create({
   pickerDoneBtnText: { color: colors.white, fontWeight: '600', fontSize: 16 },
   
   modalSafe: { flex: 1, backgroundColor: colors.background },
+  totalsModalSafe: { backgroundColor: '#eef4ff' },
+  totalsModalHeader: { backgroundColor: colors.blue2, borderBottomColor: '#174a96' },
+  totalsModalTitle: { color: colors.white },
+  totalsModalContent: { backgroundColor: '#eef4ff' },
+  totalsSectionTitle: { color: colors.blue2 },
+  totalsDateLabel: { color: colors.blue2 },
   modalHeader: { 
     flexDirection: 'row', 
     justifyContent: 'space-between', 

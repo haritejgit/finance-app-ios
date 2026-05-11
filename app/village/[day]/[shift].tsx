@@ -259,7 +259,7 @@ export default function VillageListScreen() {
           <View style={[styles.confirmDialog, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.confirmTitle, { color: colors.text }]}>Delete Village</Text>
             <Text style={[styles.confirmMessage, { color: colors.textSecondary }]}>
-              Are you sure you want to delete "{villageToDelete?.name}"?
+              Are you sure you want to delete {villageToDelete?.name}?
               {'\n\n'}
               ⚠️ All customers and their loan/payment records in this village will be permanently deleted!
             </Text>

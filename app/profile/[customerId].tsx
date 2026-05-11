@@ -427,7 +427,7 @@ export default function ProfileScreen() {
 
     const normalizedAadhar = editForm.aadhar ? editForm.aadhar.replace(/\D/g, "").trim() : "";
     if (normalizedAadhar) {
-      const existingCustomer = await getCustomerByAadhar(user.uid, normalizedAadhar);
+      const existingCustomer = await getCustomerByAadhar(user.uid, normalizedAadhar, customer.id);
       if (existingCustomer && existingCustomer.id !== customer.id) {
         Alert.alert(
           'Duplicate Aadhar Detected',
@@ -1146,10 +1146,10 @@ export default function ProfileScreen() {
               <Pressable 
                 style={[styles.primary, { backgroundColor: colors.missedRed }]} 
                 onPress={async () => {
-                  if (!customer) return;
+                  if (!customer || !user) return;
                   setIsDeletingCustomer(true);
                   try {
-                    await deleteCustomer(customer.id);
+                    await deleteCustomer(user.uid, customer.id);
                     setDeleteCustomerConfirmOpen(false);
                     router.back();
                   } catch (error) {

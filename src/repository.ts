@@ -10,7 +10,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { Customer, Loan, Payment, PaymentMode, PaymentType, Village } from "./types";
+import { Customer, Loan, Payment, PaymentMode, Village } from "./types";
 
 const coll = {
   villages: collection(db, "villages"),
@@ -222,6 +222,53 @@ export async function getPaymentsForCustomer(userId: string, customerId: string)
     .sort((a, b) => b.paymentDate - a.paymentDate);
 }
 
+export async function getPaymentStatusesForCustomersToday(userId: string, customerIds: string[]) {
+  const wantedCustomerIds = new Set(customerIds);
+  if (wantedCustomerIds.size === 0) return {} as Record<string, "paid" | "due" | "none">;
+
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setHours(23, 59, 59, 999);
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+
+  const [paymentsSnap, loansSnap] = await Promise.all([
+    getDocs(query(coll.payments, where("userId", "==", userId))),
+    getDocs(query(coll.loans, where("userId", "==", userId))),
+  ]);
+
+  const customerIdByLoanId = new Map(
+    loansSnap.docs
+      .map((d) => d.data() as Loan)
+      .filter((loan) => wantedCustomerIds.has(loan.customerId))
+      .map((loan) => [loan.id, loan.customerId])
+  );
+  const statuses = Object.fromEntries(
+    customerIds.map((customerId) => [customerId, "none" as "paid" | "due" | "none"])
+  );
+
+  paymentsSnap.docs
+    .map((d) => d.data() as Payment)
+    .forEach((payment) => {
+      const paymentDate = toMillis(payment.paymentDate);
+      if (paymentDate < startMs || paymentDate > endMs) return;
+
+      const customerId = payment.customerId ?? customerIdByLoanId.get(payment.loanId);
+      if (!customerId || !wantedCustomerIds.has(customerId)) return;
+
+      if (payment.paymentType === "DUE") {
+        if (statuses[customerId] !== "paid") {
+          statuses[customerId] = "due";
+        }
+      } else {
+        statuses[customerId] = "paid";
+      }
+    });
+
+  return statuses;
+}
+
 export async function addPayment(loan: Loan, amountPaid: number, paymentDate: number, mode: PaymentMode) {
   const payment: Payment = {
     id: id(),
@@ -362,21 +409,40 @@ export async function getTodayDashboardStats(userId: string) {
   const startMs = start.getTime();
   const endMs = end.getTime();
 
-  const [paymentsSnap, loansSnap] = await Promise.all([
+  const [paymentsSnap, loansSnap, customersSnap] = await Promise.all([
     getDocs(query(coll.payments, where("userId", "==", userId))),
     getDocs(query(coll.loans, where("userId", "==", userId))),
+    getDocs(query(coll.customers, where("userId", "==", userId))),
   ]);
+
+  const activeCustomerIds = new Set(
+    customersSnap.docs
+      .map((d) => d.data() as Customer)
+      .filter((customer) => customer.isActive !== false)
+      .map((customer) => customer.id)
+  );
+  const activeLoanCustomerById = new Map<string, string>();
+  const activeLoans = loansSnap.docs
+    .map((d) => d.data() as Loan)
+    .filter((loan) => activeCustomerIds.has(loan.customerId));
+  activeLoans.forEach((loan) => activeLoanCustomerById.set(loan.id, loan.customerId));
 
   const collectionToday = paymentsSnap.docs
     .map((d) => d.data() as Payment)
     .filter((payment) => {
       const paymentDate = toMillis(payment.paymentDate);
-      return paymentDate >= startMs && paymentDate <= endMs && payment.paymentType !== "DUE";
+      const customerId = payment.customerId ?? activeLoanCustomerById.get(payment.loanId);
+      return (
+        paymentDate >= startMs &&
+        paymentDate <= endMs &&
+        payment.paymentType !== "DUE" &&
+        !!customerId &&
+        activeCustomerIds.has(customerId)
+      );
     })
     .reduce((sum, payment) => sum + toAmount(payment.amountPaid), 0);
 
-  const distributedTodayRaw = loansSnap.docs
-    .map((d) => d.data() as Loan)
+  const distributedTodayRaw = activeLoans
     .filter((loan) => {
       const startDate = toMillis(loan.startDate);
       return startDate >= startMs && startDate <= endMs;
@@ -402,15 +468,15 @@ export async function updateCustomer(customer: Customer) {
   clearCache();
 }
 
-export async function deleteCustomer(customerId: string) {
+export async function deleteCustomer(userId: string, customerId: string) {
   // Delete all loans associated with this customer
-  const loansQ = query(coll.loans, where("customerId", "==", customerId));
+  const loansQ = query(coll.loans, where("userId", "==", userId), where("customerId", "==", customerId));
   const loansSnap = await getDocs(loansQ);
   
   // Delete all payments for these loans first
   for (const loanDoc of loansSnap.docs) {
     const loanId = loanDoc.id;
-    const paymentsQ = query(coll.payments, where("loanId", "==", loanId));
+    const paymentsQ = query(coll.payments, where("userId", "==", userId), where("loanId", "==", loanId));
     const paymentsSnap = await getDocs(paymentsQ);
     
     // Delete all payments for this loan
@@ -423,7 +489,7 @@ export async function deleteCustomer(customerId: string) {
   }
 
   // Delete any stray payments attached directly to the customer
-  const strayPaymentsQ = query(coll.payments, where("customerId", "==", customerId));
+  const strayPaymentsQ = query(coll.payments, where("userId", "==", userId), where("customerId", "==", customerId));
   const strayPaymentsSnap = await getDocs(strayPaymentsQ);
   for (const paymentDoc of strayPaymentsSnap.docs) {
     await deleteDoc(paymentDoc.ref);
@@ -434,7 +500,7 @@ export async function deleteCustomer(customerId: string) {
   clearCache();
 }
 
-export async function getCustomerByAadhar(userId: string, aadhar: string): Promise<Customer | null> {
+export async function getCustomerByAadhar(userId: string, aadhar: string, excludeCustomerId?: string): Promise<Customer | null> {
   const normalizedAadhar = normalizeAadhar(aadhar);
   if (!normalizedAadhar) return null;
 
@@ -442,7 +508,11 @@ export async function getCustomerByAadhar(userId: string, aadhar: string): Promi
   const snap = await getDocs(q);
   return snap.docs
     .map((d) => d.data() as Customer)
-    .find((customer) => normalizeAadhar(customer.aadhar) === normalizedAadhar) ?? null;
+    .find((customer) => 
+      customer.isActive !== false &&
+      customer.id !== excludeCustomerId &&
+      normalizeAadhar(customer.aadhar) === normalizedAadhar
+    ) ?? null;
 }
 
 export async function getCustomerLoanSummary(userId: string, aadhar: string): Promise<{customer: Customer | null, hasActiveLoan: boolean}> {

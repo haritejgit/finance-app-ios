@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   ActivityIndicator,
@@ -22,8 +22,8 @@ import * as Location from "expo-location";
 import { useAuth } from "../../src/auth-context";
 import { useTheme } from "../../src/theme-context";
 import { colors } from "../../src/theme";
-import { addCustomerWithLoan, getCustomers, getPaymentsForCustomer, getVillageById, getCustomerLoanSummary } from "../../src/repository";
-import { Customer, Village, Payment } from "../../src/types";
+import { addCustomerWithLoan, getCustomers, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary } from "../../src/repository";
+import { Customer, Village } from "../../src/types";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Helper to check if date is today
@@ -42,20 +42,7 @@ function normalizeAadhar(aadhar?: string) {
   return (aadhar ?? "").replace(/\D/g, "").trim();
 }
 
-async function getCustomerPaymentStatus(userId: string, customerId: string): Promise<PaymentStatus> {
-  try {
-    const payments = await getPaymentsForCustomer(userId, customerId);
-    const todayPayment = payments.find(p => isToday(p.paymentDate));
-    if (todayPayment) {
-      return todayPayment.paymentType === 'DUE' ? 'due' : 'paid';
-    }
-    return 'none';
-  } catch {
-    return 'none';
-  }
-}
-
-const CustomerItem = React.memo(({ customer, onPress, status, isNew }: { customer: Customer; onPress: () => void; status: PaymentStatus; isNew?: boolean }) => {
+const CustomerItem = React.memo(function CustomerItem({ customer, onPress, status, isNew }: { customer: Customer; onPress: () => void; status: PaymentStatus; isNew?: boolean }) {
   const getStatusBadge = useCallback(() => {
     switch (status) {
       case 'paid':
@@ -68,20 +55,24 @@ const CustomerItem = React.memo(({ customer, onPress, status, isNew }: { custome
   }, [status]);
 
   const getBackgroundColor = useCallback(() => {
-    if (isNew && status === 'none') {
-      return '#f2f4f8';
+    if (status === 'due') {
+      return '#f8d7da'; // Light red
+    }
+    if (isNew) {
+      return '#e5e7eb'; // Visible grey for customers added today
     }
     switch (status) {
       case 'paid':
         return '#f5f5f5'; // Light grey for paid status
-      case 'due':
-        return '#f8d7da'; // Light red
       default:
         return '#FFFFFF'; // Plain white
     }
   }, [status, isNew]);
 
   const getBorderColor = useCallback(() => {
+    if (isNew && status !== 'due') {
+      return '#9ca3af';
+    }
     switch (status) {
       case 'paid':
         return '#999999'; // Grey border for new payments
@@ -90,11 +81,11 @@ const CustomerItem = React.memo(({ customer, onPress, status, isNew }: { custome
       default:
         return 'transparent';
     }
-  }, [status]);
+  }, [status, isNew]);
 
   return (
     <Pressable 
-      style={[styles.item, { backgroundColor: getBackgroundColor(), borderColor: getBorderColor(), borderWidth: status !== 'none' ? 2 : 0 }]} 
+      style={[styles.item, { backgroundColor: getBackgroundColor(), borderColor: getBorderColor(), borderWidth: status !== 'none' || isNew ? 2 : 0 }]} 
       onPress={onPress}
     >
       <View style={styles.idContainer}>
@@ -108,6 +99,9 @@ const CustomerItem = React.memo(({ customer, onPress, status, isNew }: { custome
         <Text style={styles.phone}>{customer.phone}</Text>
         {customer.coName && (
           <Text style={styles.coName}>{customer.coName}</Text>
+        )}
+        {isNew && (
+          <Text style={styles.statusBadgeNew}>NEW</Text>
         )}
         {getStatusBadge()}
       </View>
@@ -174,6 +168,8 @@ export default function CustomerListScreen() {
   const [tempRegistrationDate, setTempRegistrationDate] = useState<Date>(new Date());
   const [paymentStatuses, setPaymentStatuses] = useState<Record<string, PaymentStatus>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [aadharWarning, setAadharWarning] = useState("");
+  const [aadharChecking, setAadharChecking] = useState(false);
 
   const reload = async () => {
     if (!user || !villageId) {
@@ -187,14 +183,7 @@ export default function CustomerListScreen() {
     setCustomers(sortedList);
     setVillage(villageDetails);
     
-    // Fetch payment status for each customer
-    const statuses: Record<string, PaymentStatus> = {};
-    await Promise.all(
-      sortedList.map(async (customer) => {
-        const status = await getCustomerPaymentStatus(user.uid, customer.id);
-        statuses[customer.id] = status;
-      })
-    );
+    const statuses = await getPaymentStatusesForCustomersToday(user.uid, sortedList.map((customer) => customer.id));
     setPaymentStatuses(statuses);
     setIsLoading(false);
   };
@@ -203,6 +192,46 @@ export default function CustomerListScreen() {
     if (authLoading) return;
     reload();
   }, [user, villageId, authLoading]);
+
+  useEffect(() => {
+    if (!showAdd || !user) {
+      setAadharWarning("");
+      setAadharChecking(false);
+      return;
+    }
+
+    const normalizedAadhar = normalizeAadhar(form.aadhar);
+    if (normalizedAadhar.length < 4) {
+      setAadharWarning("");
+      setAadharChecking(false);
+      return;
+    }
+
+    let cancelled = false;
+    setAadharChecking(true);
+    const timeout = setTimeout(async () => {
+      try {
+        const existingCustomer = await getCustomerLoanSummary(user.uid, normalizedAadhar);
+        if (cancelled) return;
+        if (existingCustomer.customer) {
+          setAadharWarning(
+            `Aadhar already exists for ${existingCustomer.customer.name} (Book No: ${existingCustomer.customer.numericalId})`
+          );
+        } else {
+          setAadharWarning("");
+        }
+      } finally {
+        if (!cancelled) {
+          setAadharChecking(false);
+        }
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [form.aadhar, showAdd, user]);
 
   const getCurrentLocation = async () => {
     setIsGettingLocation(true);
@@ -367,6 +396,11 @@ export default function CustomerListScreen() {
                       style={styles.input}
                       keyboardType="numeric"
                     />
+                    {aadharChecking ? (
+                      <Text style={styles.aadharHint}>Checking Aadhar...</Text>
+                    ) : aadharWarning ? (
+                      <Text style={styles.aadharWarning}>{aadharWarning}</Text>
+                    ) : null}
                   </View>
                   <View style={styles.formColumn}>
                     <Text style={styles.label}>Co-Applicant ID</Text>
@@ -600,6 +634,7 @@ const styles = StyleSheet.create({
   statusBadgePaid: { fontSize: 10, color: "#28a745", fontWeight: "700", marginTop: 4, backgroundColor: "#d4edda", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
   statusBadgePaidGrey: { fontSize: 10, color: "#666666", fontWeight: "700", marginTop: 4, backgroundColor: "#f5f5f5", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#999999" },
   statusBadgeDue: { fontSize: 10, color: "#dc3545", fontWeight: "700", marginTop: 4, backgroundColor: "#f8d7da", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
+  statusBadgeNew: { fontSize: 10, color: "#374151", fontWeight: "700", marginTop: 4, backgroundColor: "#f3f4f6", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#9ca3af" },
   quickCallBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#4CAF50", justifyContent: "center", alignItems: "center" },
   quickCallText: { fontSize: 16, color: colors.white },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
@@ -635,6 +670,8 @@ const styles = StyleSheet.create({
   formRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
   formColumn: { flex: 1 },
   label: { fontSize: 14, fontWeight: "600", color: "#333", marginBottom: 6 },
+  aadharHint: { color: "#666", fontSize: 12, marginTop: -4, marginBottom: 8 },
+  aadharWarning: { color: "#b91c1c", fontSize: 12, fontWeight: "600", marginTop: -4, marginBottom: 8 },
   input: { backgroundColor: colors.white, borderRadius: 12, padding: 14, fontSize: 16, borderWidth: 1, borderColor: "#e0e0e0", marginBottom: 8 },
   dateInputContainer: { flexDirection: "row", gap: 8, alignItems: "center" },
   dateInput: { flex: 1 },
