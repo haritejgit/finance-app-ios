@@ -1369,6 +1369,19 @@ interface Payment {
     <LinearGradient colors={[colors.blue1, colors.blue2]} style={styles.root}>
       <SafeAreaView style={[styles.safe, { paddingTop: insets.top }]} edges={['top']}>
         <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer}>
+          <View style={styles.reportHero}>
+            <Pressable style={styles.reportBackBtn} onPress={() => router.back()}>
+              <Icon name="arrow-back" size={20} color={colors.white} />
+            </Pressable>
+            <View style={styles.reportHeroIcon}>
+              <Icon name="document-text-outline" size={26} color={colors.white} />
+            </View>
+            <View style={styles.reportHeroCopy}>
+              <Text style={styles.reportEyebrow}>Reports</Text>
+              <Text style={styles.title}>Collection Desk</Text>
+              <Text style={styles.subtitle}>Daily totals, weekly tracker, and custom payment reports</Text>
+            </View>
+          </View>
           <View style={styles.header}>
             <Text style={styles.title}>📊 Reports</Text>
             <Text style={styles.subtitle}>Generate detailed payment reports</Text>
@@ -1468,6 +1481,45 @@ interface Payment {
                 </Text>
               )}
             </View>
+          </View>
+
+          <View style={styles.reportActionsGrid}>
+            <Pressable
+              style={[styles.reportActionCard, (!canGenerate || isGenerating) && styles.exportBtnDisabled]}
+              onPress={generateReport}
+              disabled={!canGenerate || isGenerating}
+            >
+              <View style={[styles.reportActionIcon, styles.reportActionIconBlue]}>
+                <Icon name="cash-outline" size={22} color={colors.blue2} />
+              </View>
+              <Text style={styles.reportActionTitle}>{isGenerating ? "Generating..." : "Payment Report"}</Text>
+              <Text style={styles.reportActionSub}>View and export payments</Text>
+            </Pressable>
+            <Pressable style={styles.reportActionCard} onPress={() => setShowDayReportModal(true)}>
+              <View style={[styles.reportActionIcon, styles.reportActionIconGreen]}>
+                <Icon name="sunny-outline" size={22} color={colors.teal} />
+              </View>
+              <Text style={styles.reportActionTitle}>Day Report</Text>
+              <Text style={styles.reportActionSub}>Shift collection totals</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.reportActionCard, isExporting && styles.exportBtnDisabled]}
+              onPress={exportWeeklyCollectionReport}
+              disabled={isExporting}
+            >
+              <View style={[styles.reportActionIcon, styles.reportActionIconOrange]}>
+                <Icon name="analytics-outline" size={22} color={colors.coral} />
+              </View>
+              <Text style={styles.reportActionTitle}>{isExporting ? "Exporting..." : "Weekly Report"}</Text>
+              <Text style={styles.reportActionSub}>Excel tracker format</Text>
+            </Pressable>
+            <Pressable style={styles.reportActionCard} onPress={() => setShowTotalsModal(true)}>
+              <View style={[styles.reportActionIcon, styles.reportActionIconPurple]}>
+                <Icon name="trending-up-outline" size={22} color="#7c3aed" />
+              </View>
+              <Text style={styles.reportActionTitle}>View Totals</Text>
+              <Text style={styles.reportActionSub}>Collected vs distributed</Text>
+            </Pressable>
           </View>
 
           <View style={styles.exportGrid}>
@@ -2136,14 +2188,21 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   content: { flex: 1, padding: 20 },
   scrollContent: { flex: 1 },
-  scrollContentContainer: { padding: 20, paddingBottom: 40 },
-  header: { alignItems: 'center', marginBottom: 30 },
-  title: { color: colors.white, fontSize: 32, fontWeight: '700', marginBottom: 8 },
-  subtitle: { color: 'rgba(255,255,255,0.8)', fontSize: 16, textAlign: 'center' },
+  scrollContentContainer: { padding: 16, paddingBottom: 40 },
+  header: { display: 'none' },
+  reportHero: { backgroundColor: 'rgba(255,255,255,0.16)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.24)', borderRadius: 22, padding: 16, marginBottom: 14, gap: 12 },
+  reportBackBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.24)' },
+  reportHeroIcon: { width: 52, height: 52, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  reportHeroCopy: { gap: 3 },
+  reportEyebrow: { color: 'rgba(255,255,255,0.76)', fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
+  title: { color: colors.white, fontSize: 30, fontWeight: '900', marginBottom: 2 },
+  subtitle: { color: 'rgba(255,255,255,0.82)', fontSize: 14, lineHeight: 20 },
   
-  dateSection: { marginBottom: 30 },
-  sectionTitle: { color: colors.white, fontSize: 20, fontWeight: '600', marginBottom: 16 },
-  dateInputContainer: { marginBottom: 20 },
+  dateSection: { marginBottom: 14, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 18, padding: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
+  sectionHeaderRow: { marginBottom: 12 },
+  sectionHint: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '700', marginTop: -8 },
+  sectionTitle: { color: colors.white, fontSize: 18, fontWeight: '900', marginBottom: 10 },
+  dateInputContainer: { marginBottom: 14 },
   dateInputRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   dateLabel: { color: colors.white, fontSize: 16, fontWeight: '600' },
   datePickerBtn: { 
@@ -2194,7 +2253,16 @@ const styles = StyleSheet.create({
   },
   
   // Clean export button styles
-  exportGrid: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  reportActionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 18 },
+  reportActionCard: { flexGrow: 1, flexBasis: '47%', minHeight: 132, backgroundColor: colors.white, borderRadius: 18, padding: 14, justifyContent: 'space-between', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 3 },
+  reportActionIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  reportActionIconBlue: { backgroundColor: '#eaf2ff' },
+  reportActionIconGreen: { backgroundColor: colors.mint },
+  reportActionIconOrange: { backgroundColor: '#fff0df' },
+  reportActionIconPurple: { backgroundColor: '#ede9fe' },
+  reportActionTitle: { color: colors.ink, fontSize: 15, fontWeight: '900' },
+  reportActionSub: { color: colors.gray, fontSize: 11, fontWeight: '700', marginTop: 3 },
+  exportGrid: { display: 'none' },
   exportBtn: { 
     flex: 1,
     backgroundColor: colors.amber, 
@@ -2220,7 +2288,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   
-  quickStats: { marginTop: 'auto' },
+  quickStats: { display: 'none' },
   statsTitle: { color: colors.white, fontSize: 18, fontWeight: '600', marginBottom: 16 },
   statsGrid: { flexDirection: 'row', gap: 12 },
   statCard: { 
@@ -2233,7 +2301,7 @@ const styles = StyleSheet.create({
   statNumber: { fontSize: 24, fontWeight: '700', color: colors.white, marginBottom: 4 },
   statLabel: { fontSize: 12, color: 'rgba(255,255,255,0.8)', textAlign: 'center' },
   
-  actionSection: { marginTop: 30 },
+  actionSection: { display: 'none' },
   totalsBtn: { 
     backgroundColor: colors.white, 
     borderRadius: 16, 

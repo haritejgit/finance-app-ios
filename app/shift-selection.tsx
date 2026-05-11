@@ -159,8 +159,8 @@ export default function ShiftSelectionScreen() {
                     >
                       <Icon
                         name={shift === "Morning" ? "sunny-outline" : "moon-outline"}
-                        size={18}
-                        color={selectedShift === shift ? colors.blue2 : "rgba(255,255,255,0.7)"}
+                        size={20}
+                        color={active ? colors.white : colors.blue2}
                       />
                       <Text style={[styles.shiftText, active && styles.shiftTextOn]}>{shift}</Text>
                     </Pressable>

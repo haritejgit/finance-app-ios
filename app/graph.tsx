@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -20,6 +20,7 @@ import { db } from "../src/firebase";
 import { formatAmountInKM } from "../src/utils";
 
 const screenWidth = Dimensions.get("window").width;
+const BUSINESS_START_DATE = new Date(2026, 3, 1).getTime();
 
 function getNetDistributedAmount(amount: number) {
   return amount - Math.floor(amount / 1000) * 20;
@@ -31,6 +32,7 @@ export default function GraphScreen() {
   const [monthlyData, setMonthlyData] = useState({
     collections: [0, 0, 0, 0, 0, 0],
     distributions: [0, 0, 0, 0, 0, 0],
+    labels: [] as string[],
   });
   const [stats, setStats] = useState({
     totalCollection: 0,
@@ -60,16 +62,20 @@ export default function GraphScreen() {
     if (!refreshing) setLoading(true);
 
     try {
-      // Get last 6 months of data
+      // Get business months from April 2026 onward.
       const now = new Date();
       const months = [];
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const cursor = new Date(BUSINESS_START_DATE);
+      cursor.setDate(1);
+      const endMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      while (cursor <= endMonth) {
+        const d = new Date(cursor);
         months.push({
           start: new Date(d.getFullYear(), d.getMonth(), 1).getTime(),
           end: new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59).getTime(),
           label: d.toLocaleDateString("en-US", { month: "short" }),
         });
+        cursor.setMonth(cursor.getMonth() + 1);
       }
 
       // Fetch payments
@@ -101,7 +107,7 @@ export default function GraphScreen() {
         return payments
           .filter((p) => {
             const date = p.paymentDate?.toMillis ? p.paymentDate.toMillis() : p.paymentDate;
-            return date >= month.start && date <= month.end && p.paymentType !== "DUE";
+            return date >= BUSINESS_START_DATE && date >= month.start && date <= month.end && p.paymentType !== "DUE";
           })
           .reduce((sum, p) => sum + (p.amountPaid || 0), 0);
       });
@@ -110,7 +116,7 @@ export default function GraphScreen() {
         const rawDistributed = loans
           .filter((loan) => {
             const date = loan.startDate?.toMillis ? loan.startDate.toMillis() : loan.startDate;
-            return date >= month.start && date <= month.end;
+            return date >= BUSINESS_START_DATE && date >= month.start && date <= month.end;
           })
           .reduce((sum, loan) => sum + (loan.principalAmount || 0), 0);
         return getNetDistributedAmount(rawDistributed);
@@ -122,10 +128,10 @@ export default function GraphScreen() {
 
       // Calculate growth rate (compare last month to first month)
       const growthRate = collections[0] > 0
-        ? ((collections[5] - collections[0]) / collections[0]) * 100
+        ? ((collections[collections.length - 1] - collections[0]) / collections[0]) * 100
         : 0;
 
-      setMonthlyData({ collections, distributions });
+      setMonthlyData({ collections, distributions, labels: months.map((month) => month.label) });
       setStats({
         totalCollection,
         totalDistributed,
@@ -142,14 +148,6 @@ export default function GraphScreen() {
 
   const maxCollection = Math.max(...monthlyData.collections, 1);
   const maxDistribution = Math.max(...monthlyData.distributions, 1);
-
-  const monthLabels = useMemo(() => {
-    const now = new Date();
-    return Array.from({ length: 6 }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
-      return d.toLocaleDateString("en-US", { month: "short" });
-    });
-  }, []);
 
   if (loading) {
     return (
@@ -249,7 +247,7 @@ export default function GraphScreen() {
                     return (
                       <View key={index} style={styles.barColumn}>
                         <View style={[styles.barVisual, { height: Math.max(height, 4) }]} />
-                        <Text style={styles.barLabel}>{monthLabels[index]}</Text>
+                        <Text style={styles.barLabel}>{monthlyData.labels[index]}</Text>
                         <Text style={styles.barAmount}>{formatAmountInKM(value, 0)}</Text>
                       </View>
                     );
@@ -270,7 +268,7 @@ export default function GraphScreen() {
                     return (
                       <View key={index} style={styles.barColumn}>
                         <View style={[styles.barVisual, styles.barVisualOrange, { height: Math.max(height, 4) }]} />
-                        <Text style={styles.barLabel}>{monthLabels[index]}</Text>
+                        <Text style={styles.barLabel}>{monthlyData.labels[index]}</Text>
                         <Text style={styles.barAmount}>{formatAmountInKM(value, 0)}</Text>
                       </View>
                     );
