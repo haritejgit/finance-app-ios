@@ -1,5 +1,4 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -21,6 +20,7 @@ import {
 } from "react-native";
 import * as Location from "expo-location";
 import { useAuth } from "../../src/auth-context";
+import Icon from "../../src/Icon";
 import { useTheme } from "../../src/theme-context";
 import { colors } from "../../src/theme";
 import { addCustomerWithLoan, getCustomers, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary } from "../../src/repository";
@@ -47,9 +47,9 @@ const CustomerItem = React.memo(function CustomerItem({ customer, onPress, statu
   const getStatusBadge = useCallback(() => {
     switch (status) {
       case 'paid':
-        return <View style={styles.statusBadgeContainer}><Ionicons name="checkmark" size={12} color="#666666" /><Text style={styles.statusBadgePaidGrey}> PAID</Text></View>;
+        return <View style={styles.statusBadgeContainer}><Icon name="checkmark" size={12} color="#666666" /><Text style={styles.statusBadgePaidGrey}> PAID</Text></View>;
       case 'due':
-        return <View style={styles.statusBadgeContainer}><Ionicons name="close" size={12} color="#dc3545" /><Text style={styles.statusBadgeDue}> DUE</Text></View>;
+        return <View style={styles.statusBadgeContainer}><Icon name="close" size={12} color="#dc3545" /><Text style={styles.statusBadgeDue}> DUE</Text></View>;
       default:
         return null;
     }
@@ -113,7 +113,7 @@ const CustomerItem = React.memo(function CustomerItem({ customer, onPress, statu
           Linking.openURL(`tel:${customer.phone}`);
         }}
       >
-        <Ionicons name="call" size={17} color={colors.white} />
+        <Icon name="call" size={17} color={colors.white} />
       </Pressable>
     </Pressable>
   );
@@ -296,7 +296,7 @@ export default function CustomerListScreen() {
           {/* Header with back button */}
           <View style={styles.headerRow}>
             <Pressable onPress={() => router.back()} style={styles.backBtn}>
-              <Ionicons name="arrow-back" size={20} color={colors.white} />
+              <Icon name="arrow-back" size={20} color={colors.white} />
             </Pressable>
             <View style={styles.headerTextWrap}>
               <Text style={styles.headerTitle}>{village?.name || 'Customers'}</Text>
@@ -336,7 +336,7 @@ export default function CustomerListScreen() {
                 </View>
               ) : (
                 <View style={styles.emptyContainer}>
-                  <Ionicons name="people" size={48} color={colors.white} />
+                  <Icon name="people" size={48} color={colors.white} />
                   <Text style={styles.emptyText}>No customers yet</Text>
                   <Text style={styles.emptySubText}>Tap + to add the first customer</Text>
                 </View>
@@ -345,7 +345,7 @@ export default function CustomerListScreen() {
           />
           
           <Pressable style={styles.fab} onPress={() => setShowAdd(true)}>
-            <Ionicons name="add" size={26} color={colors.white} />
+            <Icon name="add" size={26} color={colors.white} />
           </Pressable>
         </View>
       </SafeAreaView>
@@ -432,12 +432,12 @@ export default function CustomerListScreen() {
                     onPress={getCurrentLocation}
                     disabled={isGettingLocation}
                   >
-                    <Ionicons name="location" size={18} color={colors.white} />
+                    <Icon name="location" size={18} color={colors.white} />
                   </Pressable>
                 </View>
                 {form.coordinates && (
                   <Text style={styles.locationText}>
-                    <Ionicons name="location" size={12} color="#666" /> Location captured: {form.coordinates.latitude.toFixed(6)}, {form.coordinates.longitude.toFixed(6)}
+                    <Icon name="location" size={12} color="#666" /> Location captured: {form.coordinates.latitude.toFixed(6)}, {form.coordinates.longitude.toFixed(6)}
                   </Text>
                 )}
 

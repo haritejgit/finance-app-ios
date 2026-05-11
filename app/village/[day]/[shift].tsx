@@ -1,5 +1,4 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Dimensions, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View, Switch } from "react-native";
@@ -8,6 +7,7 @@ import { useTheme } from "../../../src/theme-context";
 import { addVillage, deleteVillage, getVillages, updateVillageDayShift } from "../../../src/repository";
 import { Village } from "../../../src/types";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import Icon from "../../../src/Icon";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 const SHIFTS = ["Morning", "Evening"] as const;
@@ -186,7 +186,7 @@ export default function VillageListScreen() {
                 )}
                 ListEmptyComponent={
                   <View style={styles.emptyContainer}>
-                    <Ionicons name="home-outline" size={48} color="rgba(255,255,255,0.7)" />
+                    <Icon name="home-outline" size={48} color="rgba(255,255,255,0.7)" />
                     <Text style={[styles.emptyTitle, { color: colors.text }]}>No Villages</Text>
                     <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>Add a village to get started</Text>
                   </View>

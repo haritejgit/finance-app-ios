@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
@@ -7,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../src/auth-context";
 import { getTodayDashboardStats } from "../src/repository";
 import { colors, gradient } from "../src/theme";
+import Icon from "../src/Icon";
 
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const shortDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -59,7 +59,7 @@ export default function ShiftSelectionScreen() {
             <View style={styles.hero}>
               <View style={styles.heroTop}>
                 <View style={styles.avatar}>
-                  <Ionicons name="wallet-outline" size={22} color={colors.white} />
+                  <Icon name="wallet-outline" size={22} color={colors.white} />
                 </View>
                 <View style={styles.heroCopy}>
                   <Text style={styles.eyebrow}>Today overview</Text>
@@ -72,14 +72,14 @@ export default function ShiftSelectionScreen() {
             <View style={styles.statsGrid}>
               <View style={styles.statCard}>
                 <View style={[styles.statIcon, styles.statIconGreen]}>
-                  <Ionicons name="cash-outline" size={20} color={colors.teal} />
+                  <Icon name="cash-outline" size={20} color={colors.teal} />
                 </View>
                 <Text style={styles.statLabel}>COLLECTION TODAY</Text>
                 <Text style={styles.statAmount}>{loading ? "..." : formatMoney(todayStats.collectionToday)}</Text>
               </View>
               <View style={styles.statCard}>
                 <View style={[styles.statIcon, styles.statIconOrange]}>
-                  <Ionicons name="trending-up-outline" size={20} color={colors.coral} />
+                  <Icon name="trending-up-outline" size={20} color={colors.coral} />
                 </View>
                 <Text style={styles.statLabel}>DISTRIBUTED TODAY</Text>
                 <Text style={styles.statAmount}>{loading ? "..." : formatMoney(todayStats.distributedToday)}</Text>
@@ -115,10 +115,10 @@ export default function ShiftSelectionScreen() {
                       onPress={() => setSelectedShift(shift)}
                       style={[styles.shift, active && styles.shiftOn]}
                     >
-                      <Ionicons
+                      <Icon
                         name={shift === "Morning" ? "sunny-outline" : "moon-outline"}
                         size={18}
-                        color={active ? colors.white : colors.blue2}
+                        color={selectedShift === shift ? colors.blue2 : "rgba(255,255,255,0.7)"}
                       />
                       <Text style={[styles.shiftText, active && styles.shiftTextOn]}>{shift}</Text>
                     </Pressable>
@@ -132,20 +132,20 @@ export default function ShiftSelectionScreen() {
               onPress={() => router.push({ pathname: "/village/[day]/[shift]", params: { day: selectedDay, shift: selectedShift } })}
             >
               <Text style={styles.startText}>Start Collection</Text>
-              <Ionicons name="arrow-forward" size={18} color={colors.white} />
+              <Icon name="arrow-forward" size={18} color={colors.white} />
             </Pressable>
 
             <View style={styles.quickGrid}>
               <Pressable style={styles.quickBtn} onPress={() => router.push("/reports")}>
-                <Ionicons name="document-text-outline" size={18} color={colors.blue2} />
+                <Icon name="document-text-outline" size={18} color={colors.blue2} />
                 <Text style={styles.quickText}>Reports</Text>
               </Pressable>
               <Pressable style={styles.quickBtn} onPress={() => router.push("/graph")}>
-                <Ionicons name="analytics-outline" size={18} color={colors.teal} />
+                <Icon name="analytics-outline" size={18} color={colors.teal} />
                 <Text style={styles.quickText}>Progress</Text>
               </Pressable>
               <Pressable style={styles.quickBtn} onPress={() => router.push("/settings")}>
-                <Ionicons name="settings-outline" size={18} color={colors.coral} />
+                <Icon name="settings-outline" size={18} color={colors.coral} />
                 <Text style={styles.quickText}>Settings</Text>
               </Pressable>
             </View>
