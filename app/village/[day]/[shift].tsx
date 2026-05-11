@@ -1,4 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Dimensions, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View, Switch } from "react-native";
@@ -170,6 +171,9 @@ export default function VillageListScreen() {
                     style={[styles.villageCard, { backgroundColor: colors.card }]}
                   >
                     <View style={styles.villageHeader}>
+                      <View style={styles.villageIcon}>
+                        <Ionicons name="business-outline" size={20} color={colors.blue2} />
+                      </View>
                       <View style={styles.villageInfo}>
                         <Text style={[styles.villageName, { color: colors.text }]}>{item.name}</Text>
                         <Text style={[styles.villageSubtext, { color: colors.textSecondary }]}>Tap to view customers</Text>
@@ -283,7 +287,7 @@ const screenWidth = Dimensions.get("window").width;
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  content: { flex: 1, width: "100%", maxWidth: Math.min(screenWidth - 32, 370), alignSelf: "center", paddingTop: 8 },
+  content: { flex: 1, width: "100%", maxWidth: Math.min(screenWidth - 32, 390), alignSelf: "center", paddingTop: 8 },
   headerContainer: { marginBottom: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   headerLeft: { flex: 1 },
   header: { color: "#FFFFFF", fontSize: 28, fontWeight: "700" },
@@ -291,17 +295,18 @@ const styles = StyleSheet.create({
   themeToggle: { flexDirection: "row", alignItems: "center", gap: 8 },
   themeText: { fontSize: 14, fontWeight: "600" },
   statsContainer: { flexDirection: "row", gap: 12, marginBottom: 16 },
-  statCard: { flex: 1, borderRadius: 12, padding: 12, alignItems: "center" },
+  statCard: { flex: 1, borderRadius: 16, padding: 14, alignItems: "center", shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
   statNumber: { fontSize: 20, fontWeight: "700", marginBottom: 2 },
   statLabel: { fontSize: 11, marginTop: 2 },
   addContainer: { flexDirection: "row", gap: 8, marginBottom: 16 },
-  input: { flex: 1, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, borderWidth: 1, fontSize: 16 },
-  addBtn: { borderRadius: 12, paddingHorizontal: 24, justifyContent: "center", minWidth: 120 },
+  input: { flex: 1, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, borderWidth: 1, fontSize: 16 },
+  addBtn: { borderRadius: 14, paddingHorizontal: 18, justifyContent: "center", minWidth: 112 },
   addBtnDisabled: { opacity: 0.3 },
   addTxt: { fontWeight: "700", fontSize: 14 },
   listContainer: { paddingBottom: 20 },
-  villageCard: { borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  villageCard: { borderRadius: 16, padding: 14, marginBottom: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
   villageHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  villageIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: "#eaf2ff", alignItems: "center", justifyContent: "center", marginRight: 10 },
   villageInfo: { flex: 1 },
   villageName: { fontWeight: "700", fontSize: 18, marginBottom: 4 },
   villageIndex: { width: 32, height: 32, borderRadius: 16, justifyContent: "center", alignItems: "center" },

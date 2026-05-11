@@ -1,14 +1,22 @@
 export const lightColors = {
-  // Modern Blue Gradient
-  blue1: "#2E7FF1",
-  blue2: "#1E5BB8", 
-  blue3: "#0D3B8B",
+  // Modern finance gradient
+  blue1: "#0EA5A4",
+  blue2: "#2563EB",
+  blue3: "#312E81",
+  teal: "#0F766E",
+  indigo: "#4338CA",
+  coral: "#F97316",
+  mint: "#DDFCF4",
+  sky: "#EAF4FF",
   
   // Neutrals
   white: "#FFFFFF",
   gray: "#6B7280",
   grayLight: "#F3F4F6",
   grayLighter: "#F9FAFB",
+  ink: "#111827",
+  surface: "#FFFFFF",
+  surfaceTint: "#F8FAFC",
   
   // Status Colors
   paidGreen: "#10B981",
@@ -30,20 +38,28 @@ export const lightColors = {
   
   // UI Components
   card: "#FFFFFF",
-  primary: "#1E5BB8",
+  primary: "#2563EB",
 };
 
 export const darkColors = {
-  // Modern Blue Gradient (adjusted for dark mode)
-  blue1: "#3B82F6",
-  blue2: "#2563EB", 
-  blue3: "#1D4ED8",
+  // Modern finance gradient (adjusted for dark mode)
+  blue1: "#14B8A6",
+  blue2: "#3B82F6",
+  blue3: "#4F46E5",
+  teal: "#2DD4BF",
+  indigo: "#818CF8",
+  coral: "#FB923C",
+  mint: "#0F2F2B",
+  sky: "#172554",
   
   // Neutrals
   white: "#1F2937",
   gray: "#D1D5DB",
   grayLight: "#374151",
   grayLighter: "#111827",
+  ink: "#F9FAFB",
+  surface: "#1F2937",
+  surfaceTint: "#111827",
   
   // Status Colors
   paidGreen: "#10B981",

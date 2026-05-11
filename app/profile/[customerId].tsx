@@ -1176,10 +1176,10 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 20 },
-  content: { width: "100%", maxWidth: Math.min(Dimensions.get("window").width - 32, 370), alignSelf: "center" },
+  content: { width: "100%", maxWidth: Math.min(Dimensions.get("window").width - 32, 390), alignSelf: "center" },
   
   // Header Card Styles
-  headerCard: { backgroundColor: colors.white, borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 6, elevation: 4 },
+  headerCard: { backgroundColor: colors.white, borderRadius: 18, padding: 16, marginBottom: 12, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 4 },
   headerName: { color: colors.blue2, fontSize: 20, fontWeight: '700', marginBottom: 10 },
   headerInfo: { gap: 8 },
   headerInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -1189,7 +1189,7 @@ const styles = StyleSheet.create({
   
   // Stats Row Styles
   statsRow: { flexDirection: 'row', marginBottom: 12 },
-  statCard: { flex: 1, backgroundColor: colors.white, borderRadius: 14, padding: 14, marginHorizontal: 5, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  statCard: { flex: 1, backgroundColor: colors.white, borderRadius: 16, padding: 14, marginHorizontal: 5, alignItems: 'center', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
   statLabel: { color: '#888', fontSize: 10, fontWeight: '600', marginBottom: 6, letterSpacing: 0.5 },
   scoreContainer: { alignItems: 'center' },
   scoreValue: { color: colors.blue2, fontSize: 24, fontWeight: '700' },
@@ -1204,13 +1204,13 @@ const styles = StyleSheet.create({
   
   // Action Grid Styles (2x2)
   actionGrid: { flexDirection: 'row', flexWrap: 'wrap', marginVertical: 4 },
-  actionBtn: { width: '47%', paddingVertical: 16, paddingHorizontal: 12, margin: 5, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4, elevation: 3 },
+  actionBtn: { width: '47%', minHeight: 76, paddingVertical: 16, paddingHorizontal: 12, margin: 5, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 8, elevation: 3 },
   actionIcon: { fontSize: 24 },
   actionLabel: { color: colors.white, fontSize: 13, fontWeight: '600' },
   
   // Icon Bar Styles
-  iconBar: { flexDirection: 'row', justifyContent: 'center', alignSelf: 'center', backgroundColor: colors.white, borderRadius: 24, padding: 6, paddingHorizontal: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
-  iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#f5f5f5', alignItems: 'center', justifyContent: 'center', marginHorizontal: 3 },
+  iconBar: { flexDirection: 'row', justifyContent: 'center', alignSelf: 'center', backgroundColor: colors.white, borderRadius: 18, padding: 6, paddingHorizontal: 12, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  iconBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: '#f5f7fb', alignItems: 'center', justifyContent: 'center', marginHorizontal: 3 },
   iconBtnDisabled: { backgroundColor: '#f0f0f0', opacity: 0.5 },
   iconBtnIcon: { fontSize: 18 },
   

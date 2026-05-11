@@ -1,4 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -112,7 +113,7 @@ const CustomerItem = React.memo(function CustomerItem({ customer, onPress, statu
           Linking.openURL(`tel:${customer.phone}`);
         }}
       >
-        <Text style={styles.quickCallText}>CALL</Text>
+        <Ionicons name="call" size={17} color={colors.white} />
       </Pressable>
     </Pressable>
   );
@@ -295,7 +296,7 @@ export default function CustomerListScreen() {
           {/* Header with back button */}
           <View style={styles.headerRow}>
             <Pressable onPress={() => router.back()} style={styles.backBtn}>
-              <Text style={styles.backBtnText}>←</Text>
+              <Ionicons name="arrow-back" size={20} color={colors.white} />
             </Pressable>
             <View style={styles.headerTextWrap}>
               <Text style={styles.headerTitle}>{village?.name || 'Customers'}</Text>
@@ -344,7 +345,7 @@ export default function CustomerListScreen() {
           />
           
           <Pressable style={styles.fab} onPress={() => setShowAdd(true)}>
-            <Text style={styles.fabIcon}>+</Text>
+            <Ionicons name="add" size={26} color={colors.white} />
           </Pressable>
         </View>
       </SafeAreaView>
@@ -614,28 +615,28 @@ export default function CustomerListScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  content: { flex: 1, width: "100%", maxWidth: Math.min(Dimensions.get("window").width - 32, 370), alignSelf: "center", paddingTop: 8 },
-  headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 10 },
-  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.2)", justifyContent: "center", alignItems: "center" },
+  content: { flex: 1, width: "100%", maxWidth: Math.min(Dimensions.get("window").width - 32, 390), alignSelf: "center", paddingTop: 8 },
+  headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 14, gap: 10 },
+  backBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.18)", justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.26)" },
   backBtnText: { color: colors.white, fontSize: 20, fontWeight: "700" },
   headerTextWrap: { flex: 1 },
-  headerTitle: { color: colors.white, fontSize: 20, fontWeight: "700" },
+  headerTitle: { color: colors.white, fontSize: 22, fontWeight: "800" },
   headerSub: { color: "rgba(255,255,255,0.7)", fontSize: 12 },
-  search: { backgroundColor: "rgba(255,255,255,0.15)", borderColor: colors.white, borderWidth: 1, borderRadius: 22, color: colors.white, padding: 12, marginBottom: 10 },
+  search: { backgroundColor: "rgba(255,255,255,0.16)", borderColor: "rgba(255,255,255,0.35)", borderWidth: 1, borderRadius: 16, color: colors.white, padding: 13, marginBottom: 12 },
   list: { flex: 1 },
   listContent: { paddingBottom: 20 },
-  item: { backgroundColor: colors.white, borderRadius: 14, padding: 12, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 10 },
-  badge: { width: 32, height: 32, textAlign: "center", textAlignVertical: "center", borderRadius: 16, backgroundColor: "#eaf2ff", color: colors.blue2, fontSize: 13, fontWeight: "700" },
+  item: { backgroundColor: colors.white, borderRadius: 16, padding: 13, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.09, shadowRadius: 8, elevation: 2 },
+  badge: { width: 34, height: 34, textAlign: "center", textAlignVertical: "center", borderRadius: 12, backgroundColor: "#eaf2ff", color: colors.blue2, fontSize: 13, fontWeight: "800" },
   idContainer: { alignItems: "center", gap: 4 },
   coIdBadge: { fontSize: 10, textAlign: "center", backgroundColor: "#fff3e0", color: "#f57c00", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, fontWeight: "600" },
-  name: { fontWeight: "600", fontSize: 15, color: "#333" },
+  name: { fontWeight: "800", fontSize: 15, color: "#333" },
   phone: { color: "#777", fontSize: 13 },
   coName: { color: "#666", fontSize: 11, fontStyle: "italic", marginTop: 1 },
   statusBadgePaid: { fontSize: 10, color: "#28a745", fontWeight: "700", marginTop: 4, backgroundColor: "#d4edda", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
   statusBadgePaidGrey: { fontSize: 10, color: "#666666", fontWeight: "700", marginTop: 4, backgroundColor: "#f5f5f5", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#999999" },
   statusBadgeDue: { fontSize: 10, color: "#dc3545", fontWeight: "700", marginTop: 4, backgroundColor: "#f8d7da", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
   statusBadgeNew: { fontSize: 10, color: "#374151", fontWeight: "700", marginTop: 4, backgroundColor: "#f3f4f6", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#9ca3af" },
-  quickCallBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#4CAF50", justifyContent: "center", alignItems: "center" },
+  quickCallBtn: { width: 38, height: 38, borderRadius: 14, backgroundColor: colors.teal, justifyContent: "center", alignItems: "center" },
   quickCallText: { fontSize: 16, color: colors.white },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
@@ -647,16 +648,16 @@ const styles = StyleSheet.create({
     position: 'absolute', 
     right: 16, 
     bottom: 16, 
-    width: 50, 
-    height: 50, 
-    borderRadius: 25, 
-    backgroundColor: colors.blue2, 
+    width: 54, 
+    height: 54, 
+    borderRadius: 18, 
+    backgroundColor: colors.coral, 
     alignItems: 'center', 
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
     elevation: 6,
   },
   fabIcon: { color: colors.white, fontSize: 24, fontWeight: '300' },
