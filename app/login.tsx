@@ -1,22 +1,12 @@
-import { Ionicons } from "@expo/vector-icons";
 import * as Google from "expo-auth-session/providers/google";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
-import React, { useState } from "react";
-import {
-  ActivityIndicator,
-  Dimensions,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import React, { useEffect, useState } from "react";
+import { Alert, Dimensions, Image, StyleSheet, Text, TextInput, View, ActivityIndicator, Pressable, ScrollView } from "react-native";
 import { useAuth } from "../src/auth-context";
 import { colors, gradient } from "../src/theme";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import Icon from "../src/Icon";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -84,7 +74,7 @@ export default function LoginScreen() {
           <View style={styles.content}>
             <View style={styles.brand}>
               <View style={styles.logo}>
-                <Ionicons name="wallet" size={30} color={colors.white} />
+                <Icon name="wallet" size={30} color={colors.white} />
               </View>
               <Text style={styles.title}>Finance Manager</Text>
               <Text style={styles.subtitle}>Fast collections, cleaner reports, better routes.</Text>
@@ -99,17 +89,17 @@ export default function LoginScreen() {
 
               {isSignUp && (
                 <View style={styles.inputShell}>
-                  <Ionicons name="person-outline" size={18} color={colors.gray} />
+                  <Icon name="person-outline" size={18} color={colors.gray} />
                   <TextInput value={name} onChangeText={setName} placeholder="Full Name" style={styles.input} placeholderTextColor={colors.gray} />
                 </View>
               )}
               <View style={styles.inputShell}>
-                <Ionicons name="mail-outline" size={18} color={colors.gray} />
+                <Icon name="mail-outline" size={18} color={colors.gray} />
                 <TextInput value={email} onChangeText={setEmail} placeholder="Email Address" style={styles.input} placeholderTextColor={colors.gray} autoCapitalize="none" />
               </View>
               {!forgot && (
                 <View style={styles.inputShell}>
-                  <Ionicons name="lock-closed-outline" size={18} color={colors.gray} />
+                  <Icon name="lock-closed-outline" size={18} color={colors.gray} />
                   <TextInput
                     value={password}
                     onChangeText={setPassword}
@@ -148,7 +138,7 @@ export default function LoginScreen() {
 
               {!isSignUp && !forgot && (
                 <Pressable style={styles.googleBtn} onPress={() => promptAsync()}>
-                  <Ionicons name="logo-google" size={18} color={colors.blue2} />
+                  <Icon name="logo-google" size={18} color={colors.blue2} />
                   <Text style={styles.googleText}>Continue with Google</Text>
                 </Pressable>
               )}

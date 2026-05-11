@@ -11,9 +11,9 @@ import {
   Text,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../src/auth-context";
 import { colors, gradient } from "../src/theme";
+import Icon from "../src/Icon";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../src/firebase";
@@ -230,7 +230,7 @@ export default function GraphScreen() {
         >
           <View style={styles.content}>
             <View style={styles.headerContainer}>
-              <Ionicons name="trending-up" size={28} color={colors.white} style={{marginRight: 8}} />
+              <Icon name="trending-up" size={28} color={colors.white} style={{marginRight: 8}} />
               <Text style={styles.header}>Business Progress</Text>
             </View>
             <Text style={styles.subtitle}>Track your financial growth</Text>
@@ -259,7 +259,7 @@ export default function GraphScreen() {
             <View style={styles.growthCard}>
               <Text style={styles.growthLabel}>6-Month Growth</Text>
               <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
-                <Ionicons name={stats.growthRate >= 0 ? "trending-up" : "trending-down"} size={24} color={stats.growthRate >= 0 ? "#4CAF50" : "#FF5722"} />
+                <Icon name={stats.growthRate >= 0 ? "trending-up" : "trending-down"} size={24} color={stats.growthRate >= 0 ? "#4CAF50" : "#FF5722"} />
                 <Text style={[styles.growthValue, stats.growthRate >= 0 ? styles.growthPositive : styles.growthNegative]}>
                   {Math.abs(stats.growthRate).toFixed(1)}%
                 </Text>

@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React from "react";
@@ -6,6 +5,7 @@ import { Dimensions, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../src/auth-context";
 import { colors, gradient } from "../src/theme";
+import Icon from "../src/Icon";
 
 export default function SettingsScreen() {
   const { user, logout } = useAuth();
@@ -15,12 +15,12 @@ export default function SettingsScreen() {
       <SafeAreaView style={styles.safe}>
         <View style={styles.content}>
           <Pressable style={styles.backBtn} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={20} color={colors.white} />
+            <Icon name="arrow-back" size={20} color={colors.white} />
           </Pressable>
 
           <View style={styles.header}>
             <View style={styles.avatar}>
-              <Ionicons name="person" size={28} color={colors.white} />
+              <Icon name="person" size={28} color={colors.white} />
             </View>
             <Text style={styles.title}>Settings</Text>
             <Text style={styles.subtitle}>Account and session details</Text>
@@ -29,7 +29,7 @@ export default function SettingsScreen() {
           <View style={styles.card}>
             <View style={styles.infoRow}>
               <View style={styles.infoIcon}>
-                <Ionicons name="mail-outline" size={18} color={colors.blue2} />
+                <Icon name="mail-outline" size={18} color={colors.blue2} />
               </View>
               <View style={styles.infoCopy}>
                 <Text style={styles.label}>Signed in as</Text>
@@ -39,7 +39,7 @@ export default function SettingsScreen() {
 
             <View style={styles.infoRow}>
               <View style={styles.infoIcon}>
-                <Ionicons name="id-card-outline" size={18} color={colors.teal} />
+                <Icon name="id-card-outline" size={18} color={colors.teal} />
               </View>
               <View style={styles.infoCopy}>
                 <Text style={styles.label}>Display name</Text>
@@ -54,7 +54,7 @@ export default function SettingsScreen() {
                 router.replace("/login");
               }}
             >
-              <Ionicons name="log-out-outline" size={18} color={colors.white} />
+              <Icon name="log-out-outline" size={18} color={colors.white} />
               <Text style={styles.logoutText}>Logout</Text>
             </Pressable>
           </View>

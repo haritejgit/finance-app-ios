@@ -16,8 +16,8 @@ import {
   View,
   ActivityIndicator,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../src/auth-context";
+import Icon from "../src/Icon";
 import { getPaymentsByDate } from "../src/repository";
 import { colors } from "../src/theme";
 import { Village, Customer, Loan, Payment } from "../src/types";
@@ -1471,7 +1471,7 @@ interface Payment {
               style={styles.exportBtn}
               onPress={() => setShowDayReportModal(true)}
             >
-              <Ionicons name="document-text-outline" size={24} color={colors.white} />
+              <Icon name="document-text-outline" size={24} color={colors.white} />
               <Text style={styles.exportLabel}>Day Report</Text>
             </Pressable>
 
@@ -1501,7 +1501,7 @@ interface Payment {
                 <Text style={styles.statLabel}>Date Range</Text>
               </View>
               <View style={styles.statCard}>
-                <Ionicons name="cash-outline" size={24} color={colors.white} />
+                <Icon name="cash-outline" size={24} color={colors.white} />
                 <Text style={styles.statLabel}>Payment Data</Text>
               </View>
             </View>
@@ -1830,7 +1830,7 @@ interface Payment {
                     
                     <View style={styles.dayReportResultCard}>
                       <View style={styles.dayReportRow}>
-                        <Ionicons name="cash-outline" size={20} color={colors.white} />
+                        <Icon name="cash-outline" size={20} color={colors.white} />
                         <Text style={styles.dayReportResultLabel}>Cash Collection</Text>
                       </View>
                       <Text style={styles.dayReportResultAmount}>Rs.{dayReportData.cashCollection.toFixed(2)}</Text>
@@ -1838,7 +1838,7 @@ interface Payment {
                     
                     <View style={styles.dayReportResultCard}>
                       <View style={styles.dayReportRow}>
-                        <Ionicons name="phone-portrait-outline" size={20} color={colors.white} />
+                        <Icon name="phone-portrait-outline" size={20} color={colors.white} />
                         <Text style={styles.dayReportResultLabel}>PhonePe Collection</Text>
                       </View>
                       <Text style={styles.dayReportResultAmount}>Rs.{dayReportData.phoneCollection.toFixed(2)}</Text>
@@ -1846,7 +1846,7 @@ interface Payment {
                     
                     <View style={[styles.dayReportResultCard, styles.dayReportResultTotalCard]}>
                       <View style={styles.dayReportRow}>
-                        <Ionicons name="cash-outline" size={20} color={colors.white} />
+                        <Icon name="cash-outline" size={20} color={colors.white} />
                         <Text style={styles.dayReportResultTotalLabel}>Total Cash Collected</Text>
                       </View>
                       <Text style={styles.dayReportResultTotalAmount}>Rs.{dayReportData.totalCollection.toFixed(2)}</Text>
@@ -1858,7 +1858,7 @@ interface Payment {
                     <Text style={styles.dayReportResultSectionTitle}>DISTRIBUTION SUMMARY</Text>
                     <View style={[styles.dayReportResultCard, styles.dayReportResultDistCard]}>
                       <View style={styles.dayReportRow}>
-                        <Ionicons name="arrow-up-outline" size={20} color={colors.white} />
+                        <Icon name="arrow-up-outline" size={20} color={colors.white} />
                         <Text style={styles.dayReportResultLabel}>Total Amount Distributed</Text>
                       </View>
                       <Text style={[styles.dayReportResultAmount, styles.distAmount]}>Rs.{dayReportData.totalDistributed.toFixed(2)}</Text>

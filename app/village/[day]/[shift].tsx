@@ -172,7 +172,7 @@ export default function VillageListScreen() {
                   >
                     <View style={styles.villageHeader}>
                       <View style={styles.villageIcon}>
-                        <Ionicons name="business-outline" size={20} color={colors.blue2} />
+                        <Icon name="business-outline" size={20} color={colors.blue2} />
                       </View>
                       <View style={styles.villageInfo}>
                         <Text style={[styles.villageName, { color: colors.text }]}>{item.name}</Text>
