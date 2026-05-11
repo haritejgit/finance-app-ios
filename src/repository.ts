@@ -397,6 +397,26 @@ export async function updateCustomer(customer: Customer) {
 }
 
 export async function deleteCustomer(customerId: string) {
+  // Delete all loans associated with this customer
+  const loansQ = query(coll.loans, where("customerId", "==", customerId));
+  const loansSnap = await getDocs(loansQ);
+  
+  // Delete all payments for these loans first
+  for (const loanDoc of loansSnap.docs) {
+    const loanId = loanDoc.id;
+    const paymentsQ = query(coll.payments, where("loanId", "==", loanId));
+    const paymentsSnap = await getDocs(paymentsQ);
+    
+    // Delete all payments for this loan
+    for (const paymentDoc of paymentsSnap.docs) {
+      await deleteDoc(paymentDoc.ref);
+    }
+    
+    // Delete the loan
+    await deleteDoc(loanDoc.ref);
+  }
+  
+  // Finally delete the customer
   await deleteDoc(doc(db, "customers", customerId));
 }
 

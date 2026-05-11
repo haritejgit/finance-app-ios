@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
   header: { color: colors.white, fontSize: 24, fontWeight: "700" },
   welcome: { color: "rgba(255,255,255,0.9)", fontSize: 14, marginBottom: 6 },
   statsGrid: { flexDirection: 'row', gap: 10 },
-  statCard: { flex: 1, backgroundColor: colors.white, borderRadius: 16, padding: 16, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 6, elevation: 4 },
+  statCard: { flex: 1, backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 16, padding: 16, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 6, elevation: 4 },
   statIcon: { fontSize: 28, marginBottom: 6 },
   statLabel: { color: '#666', fontSize: 11, fontWeight: '600', marginBottom: 4 },
   statAmount: { color: colors.blue2, fontSize: 18, fontWeight: '700' },

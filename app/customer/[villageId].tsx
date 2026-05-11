@@ -516,48 +516,12 @@ export default function CustomerListScreen() {
                       if (form.aadhar && form.aadhar.trim()) {
                         const existingCustomer = await getCustomerLoanSummary(user.uid, form.aadhar.trim());
                         if (existingCustomer.customer) {
-                          if (existingCustomer.hasActiveLoan) {
-                            Alert.alert(
-                              'Customer Already Exists',
-                              `This customer (Aadhar: ${form.aadhar}) already has an active loan with us.\n\nCustomer: ${existingCustomer.customer.name}\nPhone: ${existingCustomer.customer.phone}`,
-                              [{ text: 'OK' }]
-                            );
-                            return;
-                          } else {
-                            Alert.alert(
-                              'Customer Already Exists',
-                              `This customer (Aadhar: ${form.aadhar}) already exists in our records but has no active loan.\n\nCustomer: ${existingCustomer.customer.name}\nPhone: ${existingCustomer.customer.phone}\n\nDo you still want to proceed?`,
-                              [
-                                { text: 'Cancel', style: 'cancel' },
-                                { 
-                                  text: 'Proceed', 
-                                  onPress: async () => {
-                                    const createdCustomer = await addCustomerWithLoan(
-                                      user.uid,
-                                      village.id,
-                                      village.dayOfWeek,
-                                      village.shift,
-                                      {
-                                        name: form.name,
-                                        phone: form.phone,
-                                        aadhar: form.aadhar,
-                                        locationDesc: form.locationDesc,
-                                        latitude: form.coordinates?.latitude,
-                                        longitude: form.coordinates?.longitude,
-                                        coName: form.coName || undefined,
-                                        coId: form.coId ? Number(form.coId) : undefined,
-                                      },
-                                      Number(form.principal || 0),
-                                      parsedDate
-                                    );
-                                    setShowAdd(false);
-                                    setCustomers((current) => [...current, createdCustomer]);
-                                  }
-                                }
-                              ]
-                            );
-                            return;
-                          }
+                          Alert.alert(
+                            'Duplicate Aadhar Detected',
+                            `A customer with this Aadhar number already exists in our records.\n\nExisting Customer: ${existingCustomer.customer.name}\nPhone: ${existingCustomer.customer.phone}\nBook No: ${existingCustomer.customer.numericalId}\n\nPlease verify the Aadhar number or contact the existing customer.`,
+                            [{ text: 'OK', style: 'default' }]
+                          );
+                          return;
                         }
                       }
                       
@@ -614,6 +578,8 @@ const styles = StyleSheet.create({
   headerTitle: { color: colors.white, fontSize: 20, fontWeight: "700" },
   headerSub: { color: "rgba(255,255,255,0.7)", fontSize: 12 },
   search: { backgroundColor: "rgba(255,255,255,0.15)", borderColor: colors.white, borderWidth: 1, borderRadius: 22, color: colors.white, padding: 12, marginBottom: 10 },
+  list: { flex: 1 },
+  listContent: { paddingBottom: 20 },
   item: { backgroundColor: colors.white, borderRadius: 14, padding: 12, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 10 },
   badge: { width: 32, height: 32, textAlign: "center", textAlignVertical: "center", borderRadius: 16, backgroundColor: "#eaf2ff", color: colors.blue2, fontSize: 13, fontWeight: "700" },
   idContainer: { alignItems: "center", gap: 4 },
