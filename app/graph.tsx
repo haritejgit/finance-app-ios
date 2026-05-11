@@ -21,6 +21,10 @@ import { formatAmountInKM } from "../src/utils";
 
 const screenWidth = Dimensions.get("window").width;
 
+function getNetDistributedAmount(amount: number) {
+  return amount - Math.floor(amount / 1000) * 20;
+}
+
 export default function GraphScreen() {
   const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -103,12 +107,13 @@ export default function GraphScreen() {
       });
 
       const distributions = months.map((month) => {
-        return loans
+        const rawDistributed = loans
           .filter((loan) => {
             const date = loan.startDate?.toMillis ? loan.startDate.toMillis() : loan.startDate;
             return date >= month.start && date <= month.end;
           })
           .reduce((sum, loan) => sum + (loan.principalAmount || 0), 0);
+        return getNetDistributedAmount(rawDistributed);
       });
 
       // Calculate totals
@@ -169,40 +174,62 @@ export default function GraphScreen() {
           }
         >
           <View style={styles.content}>
-            <View style={styles.headerContainer}>
-              <Icon name="trending-up" size={28} color={colors.white} style={{marginRight: 8}} />
-              <Text style={styles.header}>Business Progress</Text>
+            <View style={styles.heroCard}>
+              <View style={styles.heroTop}>
+                <View style={styles.heroIcon}>
+                  <Icon name="analytics-outline" size={24} color={colors.white} />
+                </View>
+                <View style={styles.heroCopy}>
+                  <Text style={styles.eyebrow}>Business Progress</Text>
+                  <Text style={styles.header}>Money movement</Text>
+                </View>
+              </View>
+              <View style={styles.heroMetricRow}>
+                <View>
+                  <Text style={styles.heroMetricLabel}>Net position</Text>
+                  <Text style={[
+                    styles.heroMetricValue,
+                    stats.totalCollection >= stats.totalDistributed ? styles.heroPositive : styles.heroNegative,
+                  ]}>
+                    {formatAmountInKM(stats.totalCollection - stats.totalDistributed, 1)}
+                  </Text>
+                </View>
+                <View style={styles.heroPill}>
+                  <Icon name={stats.growthRate >= 0 ? "trending-up" : "trending-down"} size={18} color={stats.growthRate >= 0 ? colors.teal : colors.coral} />
+                  <Text style={styles.heroPillText}>{Math.abs(stats.growthRate).toFixed(1)}%</Text>
+                </View>
+              </View>
             </View>
-            <Text style={styles.subtitle}>Track your financial growth</Text>
 
             {/* Stats Cards */}
             <View style={styles.statsGrid}>
               <View style={styles.statCard}>
+                <View style={[styles.statIcon, styles.statIconGreen]}>
+                  <Icon name="cash-outline" size={18} color={colors.teal} />
+                </View>
                 <Text style={styles.statAmount}>{formatAmountInKM(stats.totalCollection, 1)}</Text>
                 <Text style={styles.statLabel}>Total Collection</Text>
               </View>
               <View style={styles.statCard}>
+                <View style={[styles.statIcon, styles.statIconOrange]}>
+                  <Icon name="trending-up-outline" size={18} color={colors.coral} />
+                </View>
                 <Text style={styles.statAmount}>{formatAmountInKM(stats.totalDistributed, 1)}</Text>
-                <Text style={styles.statLabel}>Total Distributed</Text>
+                <Text style={styles.statLabel}>Net Distributed</Text>
               </View>
               <View style={styles.statCard}>
+                <View style={[styles.statIcon, styles.statIconBlue]}>
+                  <Icon name="people" size={18} color={colors.blue2} />
+                </View>
                 <Text style={styles.statNumber}>{stats.totalCustomers}</Text>
                 <Text style={styles.statLabel}>Customers</Text>
               </View>
               <View style={styles.statCard}>
+                <View style={[styles.statIcon, styles.statIconPurple]}>
+                  <Icon name="wallet-outline" size={18} color="#7c3aed" />
+                </View>
                 <Text style={styles.statNumber}>{stats.totalLoans}</Text>
                 <Text style={styles.statLabel}>Active Loans</Text>
-              </View>
-            </View>
-
-            {/* Growth Indicator */}
-            <View style={styles.growthCard}>
-              <Text style={styles.growthLabel}>6-Month Growth</Text>
-              <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
-                <Icon name={stats.growthRate >= 0 ? "trending-up" : "trending-down"} size={24} color={stats.growthRate >= 0 ? "#4CAF50" : "#FF5722"} />
-                <Text style={[styles.growthValue, stats.growthRate >= 0 ? styles.growthPositive : styles.growthNegative]}>
-                  {Math.abs(stats.growthRate).toFixed(1)}%
-                </Text>
               </View>
             </View>
 
@@ -212,7 +239,10 @@ export default function GraphScreen() {
 
               {/* Collection Bar Chart */}
               <View style={styles.chartCard}>
-                <Text style={styles.chartTitle}>Monthly Collections</Text>
+                <View style={styles.chartTitleRow}>
+                  <Text style={styles.chartTitle}>Collections</Text>
+                  <Text style={styles.chartTotal}>{formatAmountInKM(stats.totalCollection, 1)}</Text>
+                </View>
                 <View style={styles.barsRow}>
                   {monthlyData.collections.map((value, index) => {
                     const height = maxCollection > 0 ? (value / maxCollection) * 120 : 0;
@@ -229,7 +259,11 @@ export default function GraphScreen() {
 
               {/* Distribution Bar Chart */}
               <View style={styles.chartCard}>
-                <Text style={styles.chartTitle}>Monthly Distributions</Text>
+                <View style={styles.chartTitleRow}>
+                  <Text style={styles.chartTitle}>Net Distributions</Text>
+                  <Text style={styles.chartTotal}>{formatAmountInKM(stats.totalDistributed, 1)}</Text>
+                </View>
+                <Text style={styles.deductionNote}>After Rs.20 reduction for every Rs.1000 distributed</Text>
                 <View style={styles.barsRow}>
                   {monthlyData.distributions.map((value, index) => {
                     const height = maxDistribution > 0 ? (value / maxDistribution) * 120 : 0;
@@ -278,25 +312,40 @@ export default function GraphScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  container: { paddingHorizontal: 16, paddingVertical: 20 },
+  container: { paddingHorizontal: 16, paddingVertical: 16 },
   content: { width: "100%", maxWidth: Math.min(screenWidth - 32, 430), alignSelf: "center", gap: 16 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   loadingText: { color: colors.white, marginTop: 12, fontSize: 16 },
-  headerContainer: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 8 },
-  header: { color: colors.white, fontSize: 28, fontWeight: "700", textAlign: "center" },
-  subtitle: { color: "rgba(255,255,255,0.8)", fontSize: 14, textAlign: "center", marginBottom: 8 },
+  heroCard: { backgroundColor: "rgba(255,255,255,0.16)", borderWidth: 1, borderColor: "rgba(255,255,255,0.24)", borderRadius: 22, padding: 18, gap: 20 },
+  heroTop: { flexDirection: "row", alignItems: "center", gap: 12 },
+  heroIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" },
+  heroCopy: { flex: 1 },
+  eyebrow: { color: "rgba(255,255,255,0.76)", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
+  header: { color: colors.white, fontSize: 27, fontWeight: "900" },
+  heroMetricRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
+  heroMetricLabel: { color: "rgba(255,255,255,0.72)", fontSize: 12, fontWeight: "800", textTransform: "uppercase" },
+  heroMetricValue: { fontSize: 34, fontWeight: "900", marginTop: 3 },
+  heroPositive: { color: "#bbf7d0" },
+  heroNegative: { color: "#fed7aa" },
+  heroPill: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.white, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  heroPillText: { color: colors.ink, fontSize: 13, fontWeight: "900" },
   statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   statCard: {
     flex: 1,
     minWidth: "45%",
-    backgroundColor: "rgba(255,255,255,0.18)",
+    backgroundColor: colors.white,
     borderRadius: 18,
     padding: 16,
-    alignItems: "center",
+    alignItems: "flex-start",
   },
-  statAmount: { color: colors.white, fontSize: 20, fontWeight: "700" },
-  statNumber: { color: colors.white, fontSize: 24, fontWeight: "700" },
-  statLabel: { color: "rgba(255,255,255,0.8)", fontSize: 12, marginTop: 4 },
+  statIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 10 },
+  statIconGreen: { backgroundColor: colors.mint },
+  statIconOrange: { backgroundColor: "#fff0df" },
+  statIconBlue: { backgroundColor: "#eaf2ff" },
+  statIconPurple: { backgroundColor: "#ede9fe" },
+  statAmount: { color: colors.ink, fontSize: 20, fontWeight: "900" },
+  statNumber: { color: colors.ink, fontSize: 24, fontWeight: "900" },
+  statLabel: { color: colors.gray, fontSize: 12, marginTop: 4, fontWeight: "800" },
   growthCard: {
     backgroundColor: "rgba(255,255,255,0.2)",
     borderRadius: 16,
@@ -310,7 +359,7 @@ const styles = StyleSheet.create({
   growthPositive: { color: "#4CAF50" },
   growthNegative: { color: "#FF5722" },
   chartsSection: { gap: 16 },
-  sectionTitle: { color: colors.white, fontSize: 18, fontWeight: "600" },
+  sectionTitle: { color: colors.white, fontSize: 18, fontWeight: "900" },
   chartCard: {
     backgroundColor: colors.white,
     borderRadius: 18,
@@ -321,13 +370,17 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 3,
   },
-  chartTitle: { color: colors.blue2, fontSize: 16, fontWeight: "700", marginBottom: 16 },
+  chartTitleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
+  chartTitle: { color: colors.blue2, fontSize: 16, fontWeight: "900" },
+  chartTotal: { color: colors.ink, fontSize: 14, fontWeight: "900" },
+  deductionNote: { color: colors.gray, fontSize: 11, fontWeight: "700", marginBottom: 10 },
   barsRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", height: 160 },
   barColumn: { flex: 1, alignItems: "center" },
   barVisual: {
     width: 30,
     backgroundColor: colors.blue2,
-    borderRadius: 4,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
   },
   barVisualOrange: { backgroundColor: "#FF9800" },
   barLabel: { fontSize: 10, color: "#666", marginTop: 8 },

@@ -142,7 +142,16 @@ const CustomerItem = React.memo(function CustomerItem({
       </View>
       <View style={{ flex: 1 }}>
         <View style={styles.nameRow}>
-          <Text style={styles.name} numberOfLines={1}>{customer.name}</Text>
+          <Text
+            style={[
+              styles.name,
+              status === "paid" && styles.namePaid,
+              status === "due" && styles.nameDue,
+            ]}
+            numberOfLines={1}
+          >
+            {customer.name}
+          </Text>
           {loan ? <Text style={styles.balancePill}>Rs.{Math.round(loan.balanceAmount)}</Text> : null}
         </View>
         <Text style={styles.phone}>{customer.phone}</Text>
@@ -940,6 +949,8 @@ const styles = StyleSheet.create({
   coIdBadge: { fontSize: 10, textAlign: "center", backgroundColor: "#fff3e0", color: "#f57c00", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, fontWeight: "600" },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   name: { flex: 1, fontWeight: "900", fontSize: 15, color: "#111827" },
+  namePaid: { color: "#16803a" },
+  nameDue: { color: "#dc3545" },
   balancePill: { color: colors.teal, backgroundColor: colors.mint, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, fontSize: 10, fontWeight: "900", overflow: "hidden" },
   phone: { color: "#777", fontSize: 13 },
   coName: { color: "#666", fontSize: 11, fontStyle: "italic", marginTop: 1 },

@@ -73,6 +73,7 @@ export default function ShiftSelectionScreen() {
       [
         customer.name,
         customer.phone,
+        customer.aadhar || "",
         customer.numericalId.toString(),
         customer.coName || "",
         customer.coId?.toString() || "",
@@ -103,6 +104,9 @@ export default function ShiftSelectionScreen() {
                   <Text style={styles.eyebrow}>Today overview</Text>
                   <Text style={styles.header}>Finance Dashboard</Text>
                 </View>
+                <Pressable style={styles.heroSearchBtn} onPress={openCustomerSearch}>
+                  <Icon name="search" size={20} color={colors.white} />
+                </Pressable>
               </View>
               <Text style={styles.welcome}>Welcome back, {user?.displayName || "User"}</Text>
             </View>
@@ -174,10 +178,6 @@ export default function ShiftSelectionScreen() {
             </Pressable>
 
             <View style={styles.quickGrid}>
-              <Pressable style={styles.quickBtn} onPress={openCustomerSearch}>
-                <Icon name="search" size={18} color={colors.blue2} />
-                <Text style={styles.quickText}>Search</Text>
-              </Pressable>
               <Pressable style={styles.quickBtn} onPress={() => router.push("/reports")}>
                 <Icon name="document-text-outline" size={18} color={colors.blue2} />
                 <Text style={styles.quickText}>Reports</Text>
@@ -218,7 +218,7 @@ export default function ShiftSelectionScreen() {
               <TextInput
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Name, phone, book no, village, shift..."
+                placeholder="Name, phone, Aadhar, book no, village..."
                 placeholderTextColor="#94a3b8"
                 style={styles.customerSearchInput}
                 autoFocus
@@ -292,6 +292,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.28)",
   },
   heroCopy: { flex: 1 },
+  heroSearchBtn: { width: 42, height: 42, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.18)", borderWidth: 1, borderColor: "rgba(255,255,255,0.28)", alignItems: "center", justifyContent: "center" },
   eyebrow: { color: "rgba(255,255,255,0.76)", fontSize: 12, fontWeight: "800", textTransform: "uppercase" },
   header: { color: colors.white, fontSize: 26, fontWeight: "800" },
   welcome: { color: "rgba(255,255,255,0.9)", fontSize: 14 },

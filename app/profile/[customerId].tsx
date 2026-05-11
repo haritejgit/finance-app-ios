@@ -198,6 +198,8 @@ export default function ProfileScreen() {
     coId: "",
     latitude: null as number | null,
     longitude: null as number | null,
+    aadharSubmitted: false,
+    passportPhotoSubmitted: false,
     loanAmount: "",
     loanStartDate: formatDateInput(Date.now()),
   });
@@ -220,6 +222,8 @@ export default function ProfileScreen() {
       coId: customer.coId?.toString() || "",
       latitude: customer.latitude ?? null,
       longitude: customer.longitude ?? null,
+      aadharSubmitted: customer.aadharSubmitted === true,
+      passportPhotoSubmitted: customer.passportPhotoSubmitted === true,
       loanAmount: loan ? loan.principalAmount.toString() : "",
       loanStartDate: loan ? formatDateInput(loan.startDate) : formatDateInput(Date.now()),
     });
@@ -275,6 +279,8 @@ export default function ProfileScreen() {
       longitude: editForm.longitude ?? customer.longitude,
       coName: editForm.coName || undefined,
       coId: editForm.coId ? Number(editForm.coId) : undefined,
+      aadharSubmitted: editForm.aadharSubmitted,
+      passportPhotoSubmitted: editForm.passportPhotoSubmitted,
       villageId: customer.villageId,
       userId: customer.userId,
       isActive: customer.isActive,
@@ -449,6 +455,8 @@ export default function ProfileScreen() {
       coId: editForm.coId ? Number(editForm.coId) : undefined,
       latitude: editForm.latitude ?? undefined,
       longitude: editForm.longitude ?? undefined,
+      aadharSubmitted: editForm.aadharSubmitted,
+      passportPhotoSubmitted: editForm.passportPhotoSubmitted,
     });
     
     // Update loan if exists
@@ -512,6 +520,12 @@ export default function ProfileScreen() {
                   <View style={styles.headerInfoRow}>
                     <Icon name="id-card" size={18} color={colors.blue2} style={{marginRight: 8}} />
                     <Text style={styles.headerText}>Aadhar: {customer.aadhar}</Text>
+                  </View>
+                  <View style={styles.headerInfoRow}>
+                    <Icon name="checkmark" size={18} color={colors.blue2} style={{marginRight: 8}} />
+                    <Text style={styles.headerText}>
+                      Docs: {customer.aadharSubmitted ? "Aadhar" : "Aadhar pending"} | {customer.passportPhotoSubmitted ? "Photo" : "Photo pending"}
+                    </Text>
                   </View>
                 </View>
               )}
@@ -594,17 +608,20 @@ export default function ProfileScreen() {
             
             <View style={styles.iconBar}>
               <Pressable style={styles.iconBtn} onPress={openEditModal}>
-                <Icon name="person" size={20} color={colors.white} />
+                <Icon name="person" size={21} color={colors.blue2} />
+                <Text style={styles.iconBtnLabel}>Edit</Text>
               </Pressable>
               <Pressable 
                 style={[styles.iconBtn, !customer?.latitude && styles.iconBtnDisabled]} 
                 onPress={openGoogleMaps}
                 disabled={!customer?.latitude}
               >
-                <Icon name="location" size={20} color={colors.white} />
+                <Icon name="location" size={21} color={customer?.latitude ? colors.teal : colors.gray} />
+                <Text style={styles.iconBtnLabel}>Map</Text>
               </Pressable>
               <Pressable style={styles.iconBtn} onPress={() => setDeleteCustomerConfirmOpen(true)}>
-                <Icon name="trash" size={20} color={colors.missedRed} />
+                <Icon name="trash" size={21} color={colors.missedRed} />
+                <Text style={[styles.iconBtnLabel, styles.iconBtnLabelDanger]}>Delete</Text>
               </Pressable>
             </View>
             <Text style={styles.history}>Transaction History</Text>
@@ -870,6 +887,27 @@ export default function ProfileScreen() {
                 onChangeText={(text) => setEditForm(prev => ({ ...prev, aadhar: text }))}
                 style={styles.input}
               />
+
+              <View style={styles.docsEditSection}>
+                <Pressable
+                  style={styles.docsCheckRow}
+                  onPress={() => setEditForm(prev => ({ ...prev, aadharSubmitted: !prev.aadharSubmitted }))}
+                >
+                  <View style={[styles.docsCheckbox, editForm.aadharSubmitted && styles.docsCheckboxOn]}>
+                    {editForm.aadharSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
+                  </View>
+                  <Text style={styles.docsCheckText}>Customer submitted Aadhar</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.docsCheckRow}
+                  onPress={() => setEditForm(prev => ({ ...prev, passportPhotoSubmitted: !prev.passportPhotoSubmitted }))}
+                >
+                  <View style={[styles.docsCheckbox, editForm.passportPhotoSubmitted && styles.docsCheckboxOn]}>
+                    {editForm.passportPhotoSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
+                  </View>
+                  <Text style={styles.docsCheckText}>Customer submitted passport photo</Text>
+                </Pressable>
+              </View>
               
               <TextInput
                 placeholder="Location Description"
@@ -1177,11 +1215,11 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 20 },
-  content: { width: "100%", maxWidth: Math.min(Dimensions.get("window").width - 32, 390), alignSelf: "center" },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 24 },
+  content: { width: "100%", maxWidth: Math.min(Dimensions.get("window").width - 32, 430), alignSelf: "center", gap: 12 },
   
   // Header Card Styles
-  headerCard: { backgroundColor: colors.white, borderRadius: 18, padding: 16, marginBottom: 12, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 4 },
+  headerCard: { backgroundColor: colors.white, borderRadius: 18, padding: 16, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 4 },
   headerName: { color: colors.blue2, fontSize: 20, fontWeight: '700', marginBottom: 10 },
   headerInfo: { gap: 8 },
   headerInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -1190,8 +1228,8 @@ const styles = StyleSheet.create({
   phoneLink: { color: colors.blue2, textDecorationLine: 'underline' },
   
   // Stats Row Styles
-  statsRow: { flexDirection: 'row', marginBottom: 12 },
-  statCard: { flex: 1, backgroundColor: colors.white, borderRadius: 16, padding: 14, marginHorizontal: 5, alignItems: 'center', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  statsRow: { flexDirection: 'row', gap: 10 },
+  statCard: { flex: 1, backgroundColor: colors.white, borderRadius: 16, padding: 14, alignItems: 'center', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
   statLabel: { color: '#888', fontSize: 10, fontWeight: '600', marginBottom: 6, letterSpacing: 0.5 },
   scoreContainer: { alignItems: 'center' },
   scoreValue: { color: colors.blue2, fontSize: 24, fontWeight: '700' },
@@ -1199,21 +1237,23 @@ const styles = StyleSheet.create({
   balanceValue: { color: colors.blue2, fontSize: 18, fontWeight: '700', marginTop: 2 },
   
   // Info Section Styles
-  infoContainer: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, padding: 10 },
+  infoContainer: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 14, padding: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
   infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 3 },
   infoIcon: { fontSize: 14, width: 20 },
   infoText: { color: colors.white, fontSize: 13, flex: 1 },
   
   // Action Grid Styles (2x2)
-  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', marginVertical: 4 },
-  actionBtn: { width: '47%', minHeight: 76, paddingVertical: 16, paddingHorizontal: 12, margin: 5, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 8, elevation: 3 },
+  actionGrid: { flexDirection: 'row', gap: 10 },
+  actionBtn: { flex: 1, minHeight: 74, paddingVertical: 14, paddingHorizontal: 10, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 8, elevation: 3 },
   actionIcon: { fontSize: 24 },
   actionLabel: { color: colors.white, fontSize: 13, fontWeight: '600' },
   
   // Icon Bar Styles
-  iconBar: { flexDirection: 'row', justifyContent: 'center', alignSelf: 'center', backgroundColor: colors.white, borderRadius: 18, padding: 6, paddingHorizontal: 12, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
-  iconBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: '#f5f7fb', alignItems: 'center', justifyContent: 'center', marginHorizontal: 3 },
+  iconBar: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: colors.white, borderRadius: 18, padding: 8, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  iconBtn: { flex: 1, minHeight: 52, borderRadius: 14, backgroundColor: '#eef4ff', alignItems: 'center', justifyContent: 'center', marginHorizontal: 3, gap: 3, borderWidth: 1, borderColor: '#dbeafe' },
   iconBtnDisabled: { backgroundColor: '#f0f0f0', opacity: 0.5 },
+  iconBtnLabel: { color: colors.blue2, fontSize: 10, fontWeight: "800" },
+  iconBtnLabelDanger: { color: colors.missedRed },
   iconBtnIcon: { fontSize: 18 },
   
   // Old styles (keeping for compatibility)
@@ -1235,6 +1275,11 @@ const styles = StyleSheet.create({
   datePreview: { fontSize: 12, color: "#666", fontStyle: "italic", marginBottom: 8 },
   modalScroll: { maxHeight: 600 },
   sectionLabel: { fontSize: 14, fontWeight: "700", color: colors.blue2, marginTop: 16, marginBottom: 8 },
+  docsEditSection: { backgroundColor: "#f8fafc", borderRadius: 12, borderWidth: 1, borderColor: "#e2e8f0", padding: 10, marginBottom: 10, gap: 8 },
+  docsCheckRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  docsCheckbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: "#cbd5e1", alignItems: "center", justifyContent: "center", backgroundColor: colors.white },
+  docsCheckboxOn: { backgroundColor: colors.blue2, borderColor: colors.blue2 },
+  docsCheckText: { flex: 1, color: "#334155", fontSize: 13, fontWeight: "700" },
   datePickerButton: { backgroundColor: "#f5f5f5", padding: 12, borderRadius: 10, borderWidth: 1, borderColor: "#ddd", marginBottom: 8 },
   datePickerButtonText: { fontSize: 16, color: "#333" },
   history: { color: colors.white, fontSize: 18, fontWeight: "700" },
