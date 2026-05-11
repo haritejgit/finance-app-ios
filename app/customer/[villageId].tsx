@@ -336,7 +336,7 @@ export default function CustomerListScreen() {
                 </View>
               ) : (
                 <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyIcon}>👥</Text>
+                  <Ionicons name="people" size={48} color={colors.white} />
                   <Text style={styles.emptyText}>No customers yet</Text>
                   <Text style={styles.emptySubText}>Tap + to add the first customer</Text>
                 </View>
@@ -432,9 +432,7 @@ export default function CustomerListScreen() {
                     onPress={getCurrentLocation}
                     disabled={isGettingLocation}
                   >
-                    <Text style={styles.locationBtnText}>
-                      {isGettingLocation ? "..." : "📍"}
-                    </Text>
+                    <Ionicons name="location" size={18} color={colors.white} />
                   </Pressable>
                 </View>
                 {form.coordinates && (

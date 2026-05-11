@@ -11,11 +11,13 @@ import {
   Text,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../src/auth-context";
 import { colors, gradient } from "../src/theme";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../src/firebase";
+import { formatAmountInKM } from "../src/utils";
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -227,17 +229,20 @@ export default function GraphScreen() {
           }
         >
           <View style={styles.content}>
-            <Text style={styles.header}>📈 Business Progress</Text>
+            <View style={styles.headerContainer}>
+              <Ionicons name="trending-up" size={28} color={colors.white} style={{marginRight: 8}} />
+              <Text style={styles.header}>Business Progress</Text>
+            </View>
             <Text style={styles.subtitle}>Track your financial growth</Text>
 
             {/* Stats Cards */}
             <View style={styles.statsGrid}>
               <View style={styles.statCard}>
-                <Text style={styles.statAmount}>Rs.{(stats.totalCollection / 1000).toFixed(1)}k</Text>
+                <Text style={styles.statAmount}>{formatAmountInKM(stats.totalCollection, 1)}</Text>
                 <Text style={styles.statLabel}>Total Collection</Text>
               </View>
               <View style={styles.statCard}>
-                <Text style={styles.statAmount}>Rs.{(stats.totalDistributed / 1000).toFixed(1)}k</Text>
+                <Text style={styles.statAmount}>{formatAmountInKM(stats.totalDistributed, 1)}</Text>
                 <Text style={styles.statLabel}>Total Distributed</Text>
               </View>
               <View style={styles.statCard}>
@@ -253,9 +258,12 @@ export default function GraphScreen() {
             {/* Growth Indicator */}
             <View style={styles.growthCard}>
               <Text style={styles.growthLabel}>6-Month Growth</Text>
-              <Text style={[styles.growthValue, stats.growthRate >= 0 ? styles.growthPositive : styles.growthNegative]}>
-                {stats.growthRate >= 0 ? "📈" : "📉"} {Math.abs(stats.growthRate).toFixed(1)}%
-              </Text>
+              <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+                <Ionicons name={stats.growthRate >= 0 ? "trending-up" : "trending-down"} size={24} color={stats.growthRate >= 0 ? "#4CAF50" : "#FF5722"} />
+                <Text style={[styles.growthValue, stats.growthRate >= 0 ? styles.growthPositive : styles.growthNegative]}>
+                  {Math.abs(stats.growthRate).toFixed(1)}%
+                </Text>
+              </View>
             </View>
 
             {/* Charts */}
@@ -272,7 +280,7 @@ export default function GraphScreen() {
                       <View key={index} style={styles.barColumn}>
                         <View style={[styles.barVisual, { height: Math.max(height, 4) }]} />
                         <Text style={styles.barLabel}>{monthLabels[index]}</Text>
-                        <Text style={styles.barAmount}>Rs.{(value / 1000).toFixed(0)}k</Text>
+                        <Text style={styles.barAmount}>{formatAmountInKM(value, 0)}</Text>
                       </View>
                     );
                   })}
@@ -289,7 +297,7 @@ export default function GraphScreen() {
                       <View key={index} style={styles.barColumn}>
                         <View style={[styles.barVisual, styles.barVisualOrange, { height: Math.max(height, 4) }]} />
                         <Text style={styles.barLabel}>{monthLabels[index]}</Text>
-                        <Text style={styles.barAmount}>Rs.{(value / 1000).toFixed(0)}k</Text>
+                        <Text style={styles.barAmount}>{formatAmountInKM(value, 0)}</Text>
                       </View>
                     );
                   })}
@@ -302,7 +310,7 @@ export default function GraphScreen() {
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Net Position:</Text>
                   <Text style={[styles.summaryValue, stats.totalCollection >= stats.totalDistributed ? styles.positive : styles.negative]}>
-                    Rs.{((stats.totalCollection - stats.totalDistributed) / 1000).toFixed(1)}k
+                    {formatAmountInKM((stats.totalCollection - stats.totalDistributed), 1)}
                   </Text>
                 </View>
                 <View style={styles.summaryRow}>
@@ -334,6 +342,7 @@ const styles = StyleSheet.create({
   content: { width: "100%", maxWidth: Math.min(screenWidth - 32, 400), alignSelf: "center", gap: 16 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   loadingText: { color: colors.white, marginTop: 12, fontSize: 16 },
+  headerContainer: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 8 },
   header: { color: colors.white, fontSize: 28, fontWeight: "700", textAlign: "center" },
   subtitle: { color: "rgba(255,255,255,0.8)", fontSize: 14, textAlign: "center", marginBottom: 8 },
   statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },

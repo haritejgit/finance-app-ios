@@ -19,6 +19,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import * as Location from "expo-location";
+import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../src/auth-context";
 import {
   addPayment,
@@ -484,7 +485,8 @@ export default function ProfileScreen() {
         )}
         {!isLoading && !customer && (
           <View style={styles.errorContainer}>
-            <Text style={styles.errorTitle}>⚠️ No Customer Found</Text>
+            <Ionicons name="warning" size={32} color={colors.missedRed} style={{marginBottom: 8}} />
+            <Text style={styles.errorTitle}>No Customer Found</Text>
             <Text style={styles.errorMessage}>Unable to load customer details. Please try again.</Text>
             <Pressable style={styles.backBtn} onPress={() => router.back()}>
               <Text style={styles.backBtnText}>← Go Back</Text>
@@ -500,15 +502,15 @@ export default function ProfileScreen() {
               {!!customer && (
                 <View style={styles.headerInfo}>
                   <View style={styles.headerInfoRow}>
-                    <Text style={styles.headerIcon}>👤</Text>
+                    <Ionicons name="person" size={18} color={colors.blue2} style={{marginRight: 8}} />
                     <Text style={styles.headerText}>Book No: {customer.numericalId}</Text>
                   </View>
                   <Pressable onPress={() => makePhoneCall(customer.phone)} style={styles.headerInfoRow}>
-                    <Text style={styles.headerIcon}>📞</Text>
+                    <Ionicons name="call" size={18} color={colors.blue2} style={{marginRight: 8}} />
                     <Text style={[styles.headerText, styles.phoneLink]}>{customer.phone}</Text>
                   </Pressable>
                   <View style={styles.headerInfoRow}>
-                    <Text style={styles.headerIcon}>🆔</Text>
+                    <Ionicons name="id-card" size={18} color={colors.blue2} style={{marginRight: 8}} />
                     <Text style={styles.headerText}>Aadhar: {customer.aadhar}</Text>
                   </View>
                 </View>
@@ -535,7 +537,7 @@ export default function ProfileScreen() {
               <View style={styles.infoContainer}>
                 {(customer.coName || customer.coId) && (
                   <View style={styles.infoRow}>
-                    <Text style={styles.infoIcon}>👥</Text>
+                    <Ionicons name="people" size={18} color={colors.blue2} style={{marginRight: 8}} />
                     <Text style={styles.infoText}>
                       C/O: {customer.coName || 'N/A'} {customer.coId ? `(ID: ${customer.coId})` : ''}
                     </Text>
@@ -543,7 +545,7 @@ export default function ProfileScreen() {
                 )}
                 {customer.locationDesc && (
                   <View style={styles.infoRow}>
-                    <Text style={styles.infoIcon}>📍</Text>
+                    <Ionicons name="location" size={18} color={colors.blue2} style={{marginRight: 8}} />
                     <Text style={styles.infoText}>{customer.locationDesc}</Text>
                   </View>
                 )}
@@ -570,7 +572,7 @@ export default function ProfileScreen() {
                   setPayOpen(true);
                 }}
               >
-                <Text style={styles.actionIcon}>💵</Text>
+                <Ionicons name="cash" size={20} color={colors.white} style={{marginBottom: 4}} />
                 <Text style={styles.actionLabel}>Pay</Text>
               </Pressable>
               <Pressable
@@ -581,28 +583,28 @@ export default function ProfileScreen() {
                   setDueOpen(true);
                 }}
               >
-                <Text style={styles.actionIcon}>⚠️</Text>
+                <Ionicons name="warning" size={20} color={colors.white} style={{marginBottom: 4}} />
                 <Text style={styles.actionLabel}>Due</Text>
               </Pressable>
               <Pressable style={[styles.actionBtn, { backgroundColor: colors.amber }]} onPress={() => setRenewOpen(true)}>
-                <Text style={styles.actionIcon}>🔄</Text>
+                <Ionicons name="refresh" size={20} color={colors.white} style={{marginBottom: 4}} />
                 <Text style={styles.actionLabel}>Renew</Text>
               </Pressable>
             </View>
             
             <View style={styles.iconBar}>
               <Pressable style={styles.iconBtn} onPress={openEditModal}>
-                <Text style={styles.iconBtnIcon}>👤</Text>
+                <Ionicons name="person" size={20} color={colors.white} />
               </Pressable>
               <Pressable 
                 style={[styles.iconBtn, !customer?.latitude && styles.iconBtnDisabled]} 
                 onPress={openGoogleMaps}
                 disabled={!customer?.latitude}
               >
-                <Text style={styles.iconBtnIcon}>📍</Text>
+                <Ionicons name="location" size={20} color={colors.white} />
               </Pressable>
               <Pressable style={styles.iconBtn} onPress={() => setDeleteCustomerConfirmOpen(true)}>
-                <Text style={[styles.iconBtnIcon, { color: colors.missedRed }]}>🗑️</Text>
+                <Ionicons name="trash" size={20} color={colors.missedRed} />
               </Pressable>
             </View>
             <Text style={styles.history}>Transaction History</Text>
