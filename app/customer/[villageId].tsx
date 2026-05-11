@@ -21,10 +21,9 @@ import {
 import * as Location from "expo-location";
 import { useAuth } from "../../src/auth-context";
 import Icon from "../../src/Icon";
-import { useTheme } from "../../src/theme-context";
 import { colors } from "../../src/theme";
-import { addCustomerWithLoan, getCustomers, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary } from "../../src/repository";
-import { Customer, Village } from "../../src/types";
+import { addCustomerWithLoan, addPayment, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary } from "../../src/repository";
+import { Customer, Loan, Village } from "../../src/types";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Helper to check if date is today
@@ -43,7 +42,43 @@ function normalizeAadhar(aadhar?: string) {
   return (aadhar ?? "").replace(/\D/g, "").trim();
 }
 
-const CustomerItem = React.memo(function CustomerItem({ customer, onPress, status, isNew }: { customer: Customer; onPress: () => void; status: PaymentStatus; isNew?: boolean }) {
+function hasCoordinates(customer: Customer) {
+  return typeof customer.latitude === "number" && typeof customer.longitude === "number";
+}
+
+function getSuggestedPaymentAmount(loan?: Loan) {
+  if (!loan) return 0;
+  const standardAmount = Math.max(1, Math.round(loan.principalAmount / 10));
+  return Math.min(standardAmount, loan.balanceAmount);
+}
+
+function toStartOfDay(ts: number) {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+const CustomerItem = React.memo(function CustomerItem({
+  customer,
+  onPress,
+  onOpenDirections,
+  onQuickPay,
+  status,
+  isNew,
+  loan,
+  isPaying,
+}: {
+  customer: Customer;
+  onPress: () => void;
+  onOpenDirections: () => void;
+  onQuickPay: () => void;
+  status: PaymentStatus;
+  isNew?: boolean;
+  loan?: Loan;
+  isPaying?: boolean;
+}) {
+  const hasLocation = hasCoordinates(customer);
+  const canPay = !!loan && loan.balanceAmount > 0 && status !== "paid" && !isPaying;
   const getStatusBadge = useCallback(() => {
     switch (status) {
       case 'paid':
@@ -96,7 +131,10 @@ const CustomerItem = React.memo(function CustomerItem({ customer, onPress, statu
         )}
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={styles.name}>{customer.name}</Text>
+        <View style={styles.nameRow}>
+          <Text style={styles.name} numberOfLines={1}>{customer.name}</Text>
+          {loan ? <Text style={styles.balancePill}>Rs.{Math.round(loan.balanceAmount)}</Text> : null}
+        </View>
         <Text style={styles.phone}>{customer.phone}</Text>
         {customer.coName && (
           <Text style={styles.coName}>{customer.coName}</Text>
@@ -106,15 +144,27 @@ const CustomerItem = React.memo(function CustomerItem({ customer, onPress, statu
         )}
         {getStatusBadge()}
       </View>
-      <Pressable 
-        style={styles.quickCallBtn} 
-        onPress={(e) => {
-          e.stopPropagation();
-          Linking.openURL(`tel:${customer.phone}`);
-        }}
-      >
-        <Icon name="call" size={17} color={colors.white} />
-      </Pressable>
+      <View style={styles.itemActions}>
+        <Pressable
+          style={[styles.iconActionBtn, !hasLocation && styles.iconActionBtnMuted]}
+          onPress={(e) => {
+            e.stopPropagation();
+            if (hasLocation) onOpenDirections();
+          }}
+        >
+          <Icon name="location" size={18} color={hasLocation ? colors.blue2 : "#9ca3af"} />
+        </Pressable>
+        <Pressable
+          style={[styles.quickPayBtn, !canPay && styles.quickPayBtnDisabled]}
+          disabled={!canPay}
+          onPress={(e) => {
+            e.stopPropagation();
+            onQuickPay();
+          }}
+        >
+          <Text style={styles.quickPayText}>{isPaying ? "..." : "Pay"}</Text>
+        </Pressable>
+      </View>
     </Pressable>
   );
 });
@@ -156,7 +206,6 @@ function parseDateInput(value: string) {
 export default function CustomerListScreen() {
   const { villageId } = useLocalSearchParams<{ villageId: string }>();
   const { user, loading: authLoading } = useAuth();
-  const { isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [query, setQuery] = useState("");
@@ -168,6 +217,8 @@ export default function CustomerListScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [tempRegistrationDate, setTempRegistrationDate] = useState<Date>(new Date());
   const [paymentStatuses, setPaymentStatuses] = useState<Record<string, PaymentStatus>>({});
+  const [activeLoans, setActiveLoans] = useState<Record<string, Loan>>({});
+  const [payingCustomerId, setPayingCustomerId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [aadharWarning, setAadharWarning] = useState("");
   const [aadharChecking, setAadharChecking] = useState(false);
@@ -177,16 +228,25 @@ export default function CustomerListScreen() {
       setIsLoading(false);
       return;
     }
-    setIsLoading(true);
-    const [list, villageDetails] = await Promise.all([getCustomers(user.uid, villageId), getVillageById(villageId)]);
-    // Sort customers by numericalId
-    const sortedList = list.sort((a, b) => a.numericalId - b.numericalId);
-    setCustomers(sortedList);
-    setVillage(villageDetails);
-    
-    const statuses = await getPaymentStatusesForCustomersToday(user.uid, sortedList.map((customer) => customer.id));
-    setPaymentStatuses(statuses);
-    setIsLoading(false);
+    try {
+      setIsLoading(true);
+      const [list, villageDetails] = await Promise.all([getCustomers(user.uid, villageId), getVillageById(villageId)]);
+      const sortedList = list.sort((a, b) => a.numericalId - b.numericalId);
+      setCustomers(sortedList);
+      setVillage(villageDetails);
+
+      const customerIds = sortedList.map((customer) => customer.id);
+      const [statuses, loansByCustomer] = await Promise.all([
+        getPaymentStatusesForCustomersToday(user.uid, customerIds),
+        getActiveLoansByCustomerIds(user.uid, customerIds),
+      ]);
+      setPaymentStatuses(statuses);
+      setActiveLoans(loansByCustomer);
+    } catch {
+      Alert.alert("Load failed", "Could not load customers. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
   useEffect(() => {
     // Wait for Firebase Auth to resolve before fetching
@@ -269,24 +329,68 @@ export default function CustomerListScreen() {
           .includes(normalizedQuery)
       );
     }
-    // Always sort by numericalId
-    return result.sort((a, b) => a.numericalId - b.numericalId);
+    return [...result].sort((a, b) => a.numericalId - b.numericalId);
   }, [customers, query]);
 
   const openCustomer = useCallback((customerId: string) => {
     router.push(`/profile/${customerId}`);
   }, []);
 
+  const openDirections = useCallback((customer: Customer) => {
+    if (!hasCoordinates(customer)) return;
+    const destination = `${customer.latitude},${customer.longitude}`;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert("Maps unavailable", "Unable to open Google Maps directions.");
+    });
+  }, []);
+
+  const quickPay = useCallback(async (customer: Customer) => {
+    if (!user) return;
+    const loan = activeLoans[customer.id];
+    if (!loan) {
+      Alert.alert("No active loan", "This customer does not have an active loan to mark paid.");
+      return;
+    }
+
+    const amount = getSuggestedPaymentAmount(loan);
+    if (amount <= 0) {
+      Alert.alert("Already cleared", "This loan has no remaining balance.");
+      return;
+    }
+
+    try {
+      setPayingCustomerId(customer.id);
+      await addPayment(loan, amount, toStartOfDay(Date.now()), "CASH");
+      setPaymentStatuses((current) => ({ ...current, [customer.id]: "paid" }));
+      setActiveLoans((current) => ({
+        ...current,
+        [customer.id]: {
+          ...loan,
+          balanceAmount: Math.max(0, loan.balanceAmount - amount),
+        },
+      }));
+    } catch {
+      Alert.alert("Payment failed", "Could not mark this customer as paid. Please try again.");
+    } finally {
+      setPayingCustomerId(null);
+    }
+  }, [activeLoans, user]);
+
   const renderCustomer = useCallback(
     ({ item }: { item: Customer }) => (
       <CustomerItem 
         customer={item} 
         onPress={() => openCustomer(item.id)} 
+        onOpenDirections={() => openDirections(item)}
+        onQuickPay={() => quickPay(item)}
         status={paymentStatuses[item.id] || 'none'} 
         isNew={isToday(item.createdAt)}
+        loan={activeLoans[item.id]}
+        isPaying={payingCustomerId === item.id}
       />
     ),
-    [openCustomer, paymentStatuses]
+    [activeLoans, openCustomer, openDirections, paymentStatuses, payingCustomerId, quickPay]
   );
 
   return (
@@ -304,13 +408,30 @@ export default function CustomerListScreen() {
             </View>
           </View>
 
-          <TextInput 
-            value={query} 
-            onChangeText={setQuery} 
-            placeholder="Search customers..." 
-            style={[styles.search, { backgroundColor: isDark ? colors.grayLight : 'rgba(255,255,255,0.15)', color: colors.text }]}
-            placeholderTextColor={isDark ? colors.gray : "rgba(255,255,255,0.6)"}
-          />
+          <View style={styles.searchShell}>
+            <Icon name="people" size={18} color="rgba(255,255,255,0.72)" />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search by name, phone, book no..."
+              style={[styles.search, { color: colors.white }]}
+              placeholderTextColor="rgba(255,255,255,0.62)"
+            />
+          </View>
+          <View style={styles.routeSummary}>
+            <View style={styles.routeSummaryCard}>
+              <Text style={styles.routeSummaryLabel}>Route total</Text>
+              <Text style={styles.routeSummaryValue}>{filtered.length}</Text>
+            </View>
+            <View style={styles.routeSummaryCard}>
+              <Text style={styles.routeSummaryLabel}>Paid today</Text>
+              <Text style={styles.routeSummaryValue}>{Object.values(paymentStatuses).filter((value) => value === "paid").length}</Text>
+            </View>
+            <View style={styles.routeSummaryCard}>
+              <Text style={styles.routeSummaryLabel}>Due today</Text>
+              <Text style={styles.routeSummaryValue}>{Object.values(paymentStatuses).filter((value) => value === "due").length}</Text>
+            </View>
+          </View>
           <FlatList
             data={filtered}
             keyExtractor={(i) => i.id}
@@ -322,9 +443,6 @@ export default function CustomerListScreen() {
             maxToRenderPerBatch={15}
             windowSize={10}
             removeClippedSubviews={true}
-            getItemLayout={(data, index) => (
-              { length: 64, offset: 64 * index, index }
-            )}
             updateCellsBatchingPeriod={50}
             disableVirtualization={false}
             legacyImplementation={false}
@@ -587,9 +705,9 @@ export default function CustomerListScreen() {
                         parsedDate
                       );
                       setShowAdd(false);
-                      setCustomers((current) => [...current, createdCustomer]);
                       setForm({ name: "", phone: "", aadhar: "", locationDesc: "", coName: "", coId: "", principal: "", coordinates: null });
                       setRegistrationDate(formatDateInput(Date.now()));
+                      await reload();
                       Alert.alert('✅ Success', `Customer "${createdCustomer.name}" has been created successfully!`);
                     }}
                     disabled={!form.name || !form.phone || !form.principal}
@@ -613,21 +731,28 @@ export default function CustomerListScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  content: { flex: 1, width: "100%", maxWidth: Math.min(Dimensions.get("window").width - 32, 390), alignSelf: "center", paddingTop: 8 },
-  headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 14, gap: 10 },
+  content: { flex: 1, width: "100%", maxWidth: Math.min(Dimensions.get("window").width - 32, 430), alignSelf: "center", paddingTop: 8 },
+  headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 10 },
   backBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.18)", justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.26)" },
   backBtnText: { color: colors.white, fontSize: 20, fontWeight: "700" },
   headerTextWrap: { flex: 1 },
   headerTitle: { color: colors.white, fontSize: 22, fontWeight: "800" },
   headerSub: { color: "rgba(255,255,255,0.7)", fontSize: 12 },
-  search: { backgroundColor: "rgba(255,255,255,0.16)", borderColor: "rgba(255,255,255,0.35)", borderWidth: 1, borderRadius: 16, color: colors.white, padding: 13, marginBottom: 12 },
+  searchShell: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "rgba(255,255,255,0.16)", borderColor: "rgba(255,255,255,0.35)", borderWidth: 1, borderRadius: 18, paddingHorizontal: 13, marginBottom: 10 },
+  search: { flex: 1, paddingVertical: 13, fontSize: 14 },
+  routeSummary: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  routeSummaryCard: { flex: 1, borderRadius: 16, padding: 12, backgroundColor: "rgba(255,255,255,0.14)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)" },
+  routeSummaryLabel: { color: "rgba(255,255,255,0.72)", fontSize: 10, fontWeight: "800", textTransform: "uppercase" },
+  routeSummaryValue: { color: colors.white, fontSize: 17, fontWeight: "900", marginTop: 2 },
   list: { flex: 1 },
   listContent: { paddingBottom: 20 },
-  item: { backgroundColor: colors.white, borderRadius: 16, padding: 13, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.09, shadowRadius: 8, elevation: 2 },
+  item: { backgroundColor: colors.white, borderRadius: 18, padding: 13, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 3 },
   badge: { width: 34, height: 34, textAlign: "center", textAlignVertical: "center", borderRadius: 12, backgroundColor: "#eaf2ff", color: colors.blue2, fontSize: 13, fontWeight: "800" },
   idContainer: { alignItems: "center", gap: 4 },
   coIdBadge: { fontSize: 10, textAlign: "center", backgroundColor: "#fff3e0", color: "#f57c00", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, fontWeight: "600" },
-  name: { fontWeight: "800", fontSize: 15, color: "#333" },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  name: { flex: 1, fontWeight: "900", fontSize: 15, color: "#111827" },
+  balancePill: { color: colors.teal, backgroundColor: colors.mint, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, fontSize: 10, fontWeight: "900", overflow: "hidden" },
   phone: { color: "#777", fontSize: 13 },
   coName: { color: "#666", fontSize: 11, fontStyle: "italic", marginTop: 1 },
   statusBadgeContainer: { flexDirection: "row", alignItems: "center", marginTop: 4, alignSelf: "flex-start" },
@@ -635,8 +760,12 @@ const styles = StyleSheet.create({
   statusBadgePaidGrey: { fontSize: 10, color: "#666666", fontWeight: "700", backgroundColor: "#f5f5f5", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#999999" },
   statusBadgeDue: { fontSize: 10, color: "#dc3545", fontWeight: "700", marginTop: 4, backgroundColor: "#f8d7da", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
   statusBadgeNew: { fontSize: 10, color: "#374151", fontWeight: "700", marginTop: 4, backgroundColor: "#f3f4f6", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#9ca3af" },
-  quickCallBtn: { width: 38, height: 38, borderRadius: 14, backgroundColor: colors.teal, justifyContent: "center", alignItems: "center" },
-  quickCallText: { fontSize: 16, color: colors.white },
+  itemActions: { alignItems: "center", gap: 8 },
+  iconActionBtn: { width: 38, height: 36, borderRadius: 13, backgroundColor: colors.sky, borderWidth: 1, borderColor: "#bfdbfe", justifyContent: "center", alignItems: "center" },
+  iconActionBtnMuted: { backgroundColor: "#f3f4f6", borderColor: "#e5e7eb" },
+  quickPayBtn: { minWidth: 48, height: 36, borderRadius: 13, backgroundColor: colors.paidGreen, justifyContent: "center", alignItems: "center", paddingHorizontal: 10 },
+  quickPayBtnDisabled: { backgroundColor: "#d1d5db" },
+  quickPayText: { color: colors.white, fontWeight: "900", fontSize: 12 },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyText: { color: colors.white, fontSize: 18, fontWeight: "700", marginBottom: 6 },

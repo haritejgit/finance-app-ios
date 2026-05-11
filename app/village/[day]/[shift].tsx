@@ -107,7 +107,7 @@ export default function VillageListScreen() {
               <Text style={styles.sub}>{day} • {shift}</Text>
             </View>
             <View style={styles.themeToggle}>
-              <Text style={[styles.themeText, { color: colors.textSecondary }]}>Dark</Text>
+              <Text style={styles.themeText}>Dark</Text>
               <Switch
                 value={isDark}
                 onValueChange={toggleDarkMode}
@@ -187,8 +187,8 @@ export default function VillageListScreen() {
                 ListEmptyComponent={
                   <View style={styles.emptyContainer}>
                     <Icon name="home-outline" size={48} color="rgba(255,255,255,0.7)" />
-                    <Text style={[styles.emptyTitle, { color: colors.text }]}>No Villages</Text>
-                    <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>Add a village to get started</Text>
+                    <Text style={styles.emptyTitle}>No Villages</Text>
+                    <Text style={styles.emptySubtitle}>Add a village to get started</Text>
                   </View>
                 }
               />
@@ -287,15 +287,15 @@ const screenWidth = Dimensions.get("window").width;
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  content: { flex: 1, width: "100%", maxWidth: Math.min(screenWidth - 32, 390), alignSelf: "center", paddingTop: 8 },
+  content: { flex: 1, width: "100%", maxWidth: Math.min(screenWidth - 32, 430), alignSelf: "center", paddingTop: 8 },
   headerContainer: { marginBottom: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   headerLeft: { flex: 1 },
   header: { color: "#FFFFFF", fontSize: 28, fontWeight: "700" },
   sub: { color: "rgba(255,255,255,0.7)" },
   themeToggle: { flexDirection: "row", alignItems: "center", gap: 8 },
-  themeText: { fontSize: 14, fontWeight: "600" },
+  themeText: { color: "rgba(255,255,255,0.82)", fontSize: 14, fontWeight: "700" },
   statsContainer: { flexDirection: "row", gap: 12, marginBottom: 16 },
-  statCard: { flex: 1, borderRadius: 16, padding: 14, alignItems: "center", shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  statCard: { flex: 1, borderRadius: 18, padding: 14, alignItems: "center", shadowColor: "#0f172a", shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 3 },
   statNumber: { fontSize: 20, fontWeight: "700", marginBottom: 2 },
   statLabel: { fontSize: 11, marginTop: 2 },
   addContainer: { flexDirection: "row", gap: 8, marginBottom: 16 },
@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
   addBtnDisabled: { opacity: 0.3 },
   addTxt: { fontWeight: "700", fontSize: 14 },
   listContainer: { paddingBottom: 20 },
-  villageCard: { borderRadius: 16, padding: 14, marginBottom: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  villageCard: { borderRadius: 18, padding: 14, marginBottom: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 3 },
   villageHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   villageIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: "#eaf2ff", alignItems: "center", justifyContent: "center", marginRight: 10 },
   villageInfo: { flex: 1 },
@@ -314,8 +314,8 @@ const styles = StyleSheet.create({
   villageSubtext: { fontSize: 13 },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 16 },
-  emptyTitle: { fontSize: 18, fontWeight: "700", marginBottom: 8 },
-  emptySubtitle: { fontSize: 14 },
+  emptyTitle: { color: "#FFFFFF", fontSize: 18, fontWeight: "800", marginBottom: 8 },
+  emptySubtitle: { color: "rgba(255,255,255,0.72)", fontSize: 14 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
   loadingText: { fontSize: 16, fontWeight: "600" },
   modalOverlay: { 

@@ -2,11 +2,11 @@ import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { Alert, Dimensions, Image, StyleSheet, Text, TextInput, View, ActivityIndicator, Pressable, ScrollView } from "react-native";
+import React, { useState } from "react";
+import { Dimensions, StyleSheet, Text, TextInput, View, ActivityIndicator, Pressable, ScrollView } from "react-native";
 import { useAuth } from "../src/auth-context";
 import { colors, gradient } from "../src/theme";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "../src/Icon";
 
 WebBrowser.maybeCompleteAuthSession();

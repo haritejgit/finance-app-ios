@@ -173,6 +173,25 @@ export async function getActiveLoan(userId: string, customerId: string) {
   return snap.docs[0]?.data() as Loan | undefined;
 }
 
+export async function getActiveLoansByCustomerIds(userId: string, customerIds: string[]) {
+  const wantedCustomerIds = new Set(customerIds);
+  if (wantedCustomerIds.size === 0) return {} as Record<string, Loan>;
+
+  const q = query(
+    coll.loans,
+    where("userId", "==", userId),
+    where("status", "==", "ACTIVE")
+  );
+  const snap = await getDocs(q);
+  return snap.docs
+    .map((d) => d.data() as Loan)
+    .filter((loan) => wantedCustomerIds.has(loan.customerId))
+    .reduce((loansByCustomer, loan) => {
+      loansByCustomer[loan.customerId] = loan;
+      return loansByCustomer;
+    }, {} as Record<string, Loan>);
+}
+
 export async function updateLoan(loan: Loan, newPrincipalAmount: number, newStartDate: number) {
   // Recalculate interest and totals based on new principal
   const interestAmount = newPrincipalAmount * 0.2;

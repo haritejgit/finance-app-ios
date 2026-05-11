@@ -21,66 +21,6 @@ import { formatAmountInKM } from "../src/utils";
 
 const screenWidth = Dimensions.get("window").width;
 
-// Simple Bar Chart Component
-const BarChart = ({ data, maxValue, label }: { data: number[]; maxValue: number; label: string }) => {
-  return (
-    <View style={styles.chartContainer}>
-      <Text style={styles.chartLabel}>{label}</Text>
-      <View style={styles.barsContainer}>
-        {data.map((value, index) => {
-          const height = maxValue > 0 ? (value / maxValue) * 150 : 0;
-          return (
-            <View key={index} style={styles.barWrapper}>
-              <View style={[styles.bar, { height: Math.max(height, 5) }]} />
-              <Text style={styles.barValue}>Rs.{(value / 1000).toFixed(0)}k</Text>
-            </View>
-          );
-        })}
-      </View>
-    </View>
-  );
-};
-
-// Simple Line Chart Component
-const LineChart = ({ data, maxValue, label }: { data: number[]; maxValue: number; label: string }) => {
-  const points = useMemo(() => {
-    if (data.length === 0 || maxValue === 0) return [];
-    const width = screenWidth - 80;
-    const stepX = width / (data.length - 1 || 1);
-    return data.map((value, index) => ({
-      x: index * stepX,
-      y: 150 - (value / maxValue) * 130,
-      value,
-    }));
-  }, [data, maxValue]);
-
-  return (
-    <View style={styles.chartContainer}>
-      <Text style={styles.chartLabel}>{label}</Text>
-      <View style={styles.lineChartContainer}>
-        <View style={styles.lineChartBackground}>
-          {points.map((point, index) => (
-            <View
-              key={index}
-              style={[
-                styles.dataPoint,
-                { left: point.x, bottom: 150 - point.y },
-              ]}
-            />
-          ))}
-        </View>
-        <View style={styles.lineChartLabels}>
-          {data.map((value, index) => (
-            <Text key={index} style={styles.lineValue}>
-              Rs.{(value / 1000).toFixed(0)}k
-            </Text>
-          ))}
-        </View>
-      </View>
-    </View>
-  );
-};
-
 export default function GraphScreen() {
   const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -339,7 +279,7 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
   container: { paddingHorizontal: 16, paddingVertical: 20 },
-  content: { width: "100%", maxWidth: Math.min(screenWidth - 32, 400), alignSelf: "center", gap: 16 },
+  content: { width: "100%", maxWidth: Math.min(screenWidth - 32, 430), alignSelf: "center", gap: 16 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   loadingText: { color: colors.white, marginTop: 12, fontSize: 16 },
   headerContainer: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 8 },
@@ -349,8 +289,8 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     minWidth: "45%",
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderRadius: 18,
     padding: 16,
     alignItems: "center",
   },
@@ -373,8 +313,13 @@ const styles = StyleSheet.create({
   sectionTitle: { color: colors.white, fontSize: 18, fontWeight: "600" },
   chartCard: {
     backgroundColor: colors.white,
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 16,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 3,
   },
   chartTitle: { color: colors.blue2, fontSize: 16, fontWeight: "700", marginBottom: 16 },
   barsRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", height: 160 },

@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
   container: { paddingHorizontal: 16, paddingVertical: 12 },
-  content: { width: "100%", maxWidth: Math.min(screenWidth - 32, 390), alignSelf: "center", gap: 12 },
+  content: { width: "100%", maxWidth: Math.min(screenWidth - 32, 430), alignSelf: "center", gap: 12 },
   hero: { paddingTop: 4, gap: 8 },
   heroTop: { flexDirection: "row", alignItems: "center", gap: 12 },
   avatar: {
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
   statIconOrange: { backgroundColor: "#FFF4E8" },
   statLabel: { color: "#64748b", fontSize: 10, fontWeight: "800", marginBottom: 4 },
   statAmount: { color: colors.ink, fontSize: 19, fontWeight: "800" },
-  panel: { backgroundColor: "rgba(255,255,255,0.94)", borderRadius: 18, padding: 14, gap: 10 },
+  panel: { backgroundColor: "rgba(255,255,255,0.96)", borderRadius: 20, padding: 16, gap: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.12, shadowRadius: 12, elevation: 4 },
   panelHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   panelTitle: { color: colors.ink, fontSize: 18, fontWeight: "800" },
   panelSub: { color: colors.gray, fontSize: 12, fontWeight: "700" },
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
   },
   startText: { color: colors.white, fontWeight: "800", fontSize: 15 },
   quickGrid: { flexDirection: "row", gap: 8 },
-  quickBtn: { flex: 1, backgroundColor: "rgba(255,255,255,0.92)", borderRadius: 14, paddingVertical: 12, alignItems: "center", gap: 4 },
+  quickBtn: { flex: 1, backgroundColor: "rgba(255,255,255,0.94)", borderRadius: 16, paddingVertical: 12, alignItems: "center", gap: 4, borderWidth: 1, borderColor: "rgba(255,255,255,0.35)" },
   quickText: { color: colors.ink, fontWeight: "800", fontSize: 12 },
   logout: { color: colors.white, textAlign: "center", marginTop: 6, fontSize: 14, fontWeight: "700", opacity: 0.92 },
 });
