@@ -542,6 +542,18 @@ export default function ProfileScreen() {
                 onPress={() => {
                   setPaymentDateInput(formatDateInput(Date.now()));
                   setPaymentDateError("");
+                  // Auto-fill payment amount based on loan amount
+                  if (loan) {
+                    let suggestedAmount = 0;
+                    if (loan.principalAmount === 5000) {
+                      suggestedAmount = 500;
+                    } else if (loan.principalAmount === 10000) {
+                      suggestedAmount = 1000;
+                    }
+                    setAmount(suggestedAmount.toString());
+                  } else {
+                    setAmount("");
+                  }
                   setPayOpen(true);
                 }}
               >

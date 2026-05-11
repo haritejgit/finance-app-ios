@@ -112,6 +112,17 @@ export default function ReportsScreen() {
   const [showDayReportResult, setShowDayReportResult] = useState(false);
   const [dayReportLoading, setDayReportLoading] = useState(false);
 
+  // Totals Report state
+  const [showTotalsModal, setShowTotalsModal] = useState(false);
+  const [totalsFromDate, setTotalsFromDate] = useState(formatDateInput(Date.now() - 7 * 24 * 60 * 60 * 1000));
+  const [totalsToDate, setTotalsToDate] = useState(formatDateInput(Date.now()));
+  const [showTotalsFromPicker, setShowTotalsFromPicker] = useState(false);
+  const [showTotalsToPicker, setShowTotalsToPicker] = useState(false);
+  const [tempTotalsFromDate, setTempTotalsFromDate] = useState(new Date());
+  const [tempTotalsToDate, setTempTotalsToDate] = useState(new Date());
+  const [totalsData, setTotalsData] = useState<any[]>([]);
+  const [totalsLoading, setTotalsLoading] = useState(false);
+
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
   const canGenerate = useMemo(() => {
@@ -776,6 +787,98 @@ interface Payment {
   };
 
   // Generate Day Report
+  // Generate Totals Report
+  const generateTotalsReport = async () => {
+    if (!user) {
+      Alert.alert("Error", "Please login first");
+      return;
+    }
+    
+    const from = parseDateInput(totalsFromDate);
+    const to = parseDateInput(totalsToDate);
+    
+    if (!from || !to) {
+      Alert.alert("Error", "Please select valid dates");
+      return;
+    }
+    
+    if (from > to) {
+      Alert.alert("Error", "From date cannot be after to date");
+      return;
+    }
+
+    setTotalsLoading(true);
+    
+    try {
+      // Fetch all data
+      const [villagesSnap, customersSnap, loansSnap, paymentsSnap] = await Promise.all([
+        getDocs(query(collection(db, "villages"), where("userId", "==", user.uid))),
+        getDocs(query(collection(db, "customers"), where("userId", "==", user.uid))),
+        getDocs(query(collection(db, "loans"), where("userId", "==", user.uid))),
+        getDocs(query(collection(db, "payments"), where("userId", "==", user.uid))),
+      ]);
+      
+      const villages = villagesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Village[];
+      const customers = customersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Customer[];
+      const loans = loansSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Loan[];
+      const payments = paymentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Payment[];
+      
+      // Prepare results array
+      const results: any[] = [];
+      const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+      const shifts = ["Morning", "Evening"];
+      
+      let totalCollected = 0;
+      let totalDistributed = 0;
+      
+      // Calculate for each day and shift
+      for (const dayName of dayNames) {
+        for (const shiftName of shifts) {
+          const shiftVillages = villages.filter(v => v.dayOfWeek === dayName && v.shift === shiftName);
+          const shiftCustomers = customers.filter(c => shiftVillages.some(v => v.id === c.villageId));
+          const shiftLoans = loans.filter(l => shiftCustomers.some(c => c.id === l.customerId));
+          const shiftPayments = payments.filter(p => shiftCustomers.some(c => c.id === p.customerId));
+          
+          // Calculate collected amount (excluding DUE payments)
+          const collected = shiftPayments
+            .filter(p => p.paymentType !== "DUE" && p.paymentDate >= from && p.paymentDate <= to)
+            .reduce((sum, p) => sum + p.amountPaid, 0);
+          
+          // Calculate distributed amount (loans disbursed in date range)
+          const distributed = shiftLoans
+            .filter(l => l.startDate >= from && l.startDate <= to)
+            .reduce((sum, l) => sum + l.principalAmount, 0);
+          
+          totalCollected += collected;
+          totalDistributed += distributed;
+          
+          results.push({
+            day: dayName,
+            shift: shiftName,
+            collected,
+            distributed
+          });
+        }
+      }
+      
+      // Add totals at the end
+      results.push({
+        day: "Total",
+        shift: "",
+        collected: totalCollected,
+        distributed: totalDistributed
+      });
+      
+      setTotalsData(results);
+      setShowTotalsModal(true);
+    } catch (error) {
+      console.error("Error generating totals report:", error);
+      Alert.alert("Error", "Failed to generate totals report");
+    } finally {
+      setTotalsLoading(false);
+    }
+  };
+
   const generateDayReport = async () => {
     if (!user) {
       Alert.alert("Error", "Please login first");
@@ -1365,6 +1468,13 @@ interface Payment {
               </View>
             </View>
           </View>
+
+          <View style={styles.actionSection}>
+            <Text style={styles.sectionTitle}>Actions</Text>
+            <Pressable style={styles.totalsBtn} onPress={() => setShowTotalsModal(true)}>
+              <Text style={styles.totalsBtnText}>📊 View Totals</Text>
+            </Pressable>
+          </View>
         </ScrollView>
       </SafeAreaView>
 
@@ -1750,6 +1860,231 @@ interface Payment {
           </View>
         </View>
       </Modal>
+
+      {/* Totals Modal */}
+      <Modal visible={showTotalsModal} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={styles.modalSafe}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>📊 Totals Report</Text>
+            <Pressable onPress={() => setShowTotalsModal(false)} style={styles.closeBtn}>
+              <Text style={styles.closeBtnText}>✕</Text>
+            </Pressable>
+          </View>
+
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+            <ScrollView style={styles.modalContent}>
+              <View style={styles.totalsDateSection}>
+                <Text style={styles.sectionTitle}>Select Date Range</Text>
+                
+                <View style={styles.totalsDateInputContainer}>
+                  <Text style={styles.dateLabel}>From Date</Text>
+                  {Platform.OS === 'web' ? (
+                    <input
+                      type="date"
+                      value={totalsFromDate}
+                      onChange={(e) => setTotalsFromDate(e.target.value)}
+                      style={{
+                        padding: 8,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: '#ccc',
+                        fontSize: 14,
+                        fontFamily: 'inherit',
+                        cursor: 'pointer',
+                      }}
+                    />
+                  ) : (
+                    <Pressable 
+                      style={styles.datePickerBtn} 
+                      onPress={() => {
+                        setTempTotalsFromDate(new Date(parseDateInput(totalsFromDate) || Date.now()));
+                        setShowTotalsFromPicker(true);
+                      }}
+                    >
+                      <Text style={styles.datePickerBtnText}>📅</Text>
+                    </Pressable>
+                  )}
+                  {Platform.OS !== 'web' && (
+                    <TextInput
+                      value={totalsFromDate}
+                      onChangeText={setTotalsFromDate}
+                      placeholder="YYYY-MM-DD"
+                      style={styles.dateInput}
+                      autoCapitalize="none"
+                    />
+                  )}
+                </View>
+
+                <View style={styles.totalsDateInputContainer}>
+                  <Text style={styles.dateLabel}>To Date</Text>
+                  {Platform.OS === 'web' ? (
+                    <input
+                      type="date"
+                      value={totalsToDate}
+                      onChange={(e) => setTotalsToDate(e.target.value)}
+                      style={{
+                        padding: 8,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: '#ccc',
+                        fontSize: 14,
+                        fontFamily: 'inherit',
+                        cursor: 'pointer',
+                      }}
+                    />
+                  ) : (
+                    <Pressable 
+                      style={styles.datePickerBtn} 
+                      onPress={() => {
+                        setTempTotalsToDate(new Date(parseDateInput(totalsToDate) || Date.now()));
+                        setShowTotalsToPicker(true);
+                      }}
+                    >
+                      <Text style={styles.datePickerBtnText}>📅</Text>
+                    </Pressable>
+                  )}
+                  {Platform.OS !== 'web' && (
+                    <TextInput
+                      value={totalsToDate}
+                      onChangeText={setTotalsToDate}
+                      placeholder="YYYY-MM-DD"
+                      style={styles.dateInput}
+                      autoCapitalize="none"
+                    />
+                  )}
+                </View>
+              </View>
+
+              <Pressable 
+                style={[styles.generateBtn, totalsLoading && styles.generateBtnDisabled]} 
+                onPress={generateTotalsReport}
+                disabled={totalsLoading}
+              >
+                <Text style={styles.generateBtnText}>
+                  {totalsLoading ? 'Generating...' : 'Generate Totals'}
+                </Text>
+              </Pressable>
+
+              {/* Totals Results */}
+              {totalsData.length > 0 && (
+                <View style={styles.totalsResults}>
+                  <Text style={styles.resultsTitle}>Totals Report</Text>
+                  {totalsData.map((item, index) => (
+                    <View key={index} style={[
+                      styles.totalsRow,
+                      item.day === 'Total' && styles.totalsRowTotal
+                    ]}>
+                      <Text style={[
+                        styles.totalsDayText,
+                        item.day === 'Total' && styles.totalsTotalText
+                      ]}>
+                        {item.day} {item.shift && `${item.shift === 'Morning' ? 'Mrg' : 'Evening'}`}
+                      </Text>
+                      <View style={styles.totalsAmounts}>
+                        <View style={styles.totalsAmountItem}>
+                          <Text style={styles.totalsAmountLabel}>Collected:</Text>
+                          <Text style={[
+                            styles.totalsAmountValue,
+                            item.collected > 0 && styles.totalsAmountValuePositive
+                          ]}>
+                            Rs.{item.collected.toFixed(2)}
+                          </Text>
+                        </View>
+                        <View style={styles.totalsAmountItem}>
+                          <Text style={styles.totalsAmountLabel}>Distributed:</Text>
+                          <Text style={[
+                            styles.totalsAmountValue,
+                            item.distributed > 0 && styles.totalsAmountValuePositive
+                          ]}>
+                            Rs.{item.distributed.toFixed(2)}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Totals Date Pickers */}
+      {showTotalsFromPicker && (
+        <View style={Platform.OS === "ios" ? styles.pickerContainer : null}>
+          <DateTimePicker
+            value={tempTotalsFromDate}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            style={Platform.OS === "ios" ? { backgroundColor: colors.white } : null}
+            themeVariant="light"
+            onChange={(event, selected) => {
+              if (selected) {
+                setTempTotalsFromDate(selected);
+                if (Platform.OS === "ios") {
+                  setTotalsFromDate(formatDateInput(selected.getTime()));
+                }
+              }
+              if (Platform.OS === "ios") {
+                if (event.type === "dismissed") {
+                  setShowTotalsFromPicker(false);
+                }
+              } else {
+                if (selected) {
+                  setTotalsFromDate(formatDateInput(selected.getTime()));
+                }
+                setShowTotalsFromPicker(false);
+              }
+            }}
+          />
+          {Platform.OS === "ios" && (
+            <Pressable style={styles.pickerDoneBtn} onPress={() => {
+              setTotalsFromDate(formatDateInput(tempTotalsFromDate.getTime()));
+              setShowTotalsFromPicker(false);
+            }}>
+              <Text style={styles.pickerDoneBtnText}>Done</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      {showTotalsToPicker && (
+        <View style={Platform.OS === "ios" ? styles.pickerContainer : null}>
+          <DateTimePicker
+            value={tempTotalsToDate}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            style={Platform.OS === "ios" ? { backgroundColor: colors.white } : null}
+            themeVariant="light"
+            onChange={(event, selected) => {
+              if (selected) {
+                setTempTotalsToDate(selected);
+                if (Platform.OS === "ios") {
+                  setTotalsToDate(formatDateInput(selected.getTime()));
+                }
+              }
+              if (Platform.OS === "ios") {
+                if (event.type === "dismissed") {
+                  setShowTotalsToPicker(false);
+                }
+              } else {
+                if (selected) {
+                  setTotalsToDate(formatDateInput(selected.getTime()));
+                }
+                setShowTotalsToPicker(false);
+              }
+            }}
+          />
+          {Platform.OS === "ios" && (
+            <Pressable style={styles.pickerDoneBtn} onPress={() => {
+              setTotalsToDate(formatDateInput(tempTotalsToDate.getTime()));
+              setShowTotalsToPicker(false);
+            }}>
+              <Text style={styles.pickerDoneBtnText}>Done</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
     </LinearGradient>
   );
 }
@@ -1856,6 +2191,24 @@ const styles = StyleSheet.create({
   statNumber: { fontSize: 24, fontWeight: '700', color: colors.white, marginBottom: 4 },
   statLabel: { fontSize: 12, color: 'rgba(255,255,255,0.8)', textAlign: 'center' },
   
+  actionSection: { marginTop: 30 },
+  totalsBtn: { 
+    backgroundColor: colors.white, 
+    borderRadius: 16, 
+    padding: 18, 
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  totalsBtnText: { 
+    color: colors.blue2, 
+    fontSize: 18, 
+    fontWeight: '700' 
+  },
+  
   pickerContainer: { 
     backgroundColor: colors.white, 
     borderRadius: 12, 
@@ -1886,6 +2239,62 @@ const styles = StyleSheet.create({
   closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center' },
   closeBtnText: { fontSize: 18, color: '#666', fontWeight: '600' },
   modalContent: { flex: 1, padding: 20 },
+  
+  // Totals modal styles
+  totalsDateSection: { marginBottom: 30 },
+  totalsDateInputContainer: { marginBottom: 20 },
+  totalsResults: { marginTop: 30 },
+  resultsTitle: { fontSize: 20, fontWeight: '700', color: '#333', marginBottom: 20 },
+  totalsRow: { 
+    backgroundColor: '#fff', 
+    borderRadius: 12, 
+    padding: 16, 
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  totalsRowTotal: {
+    backgroundColor: '#f0f8ff',
+    borderColor: colors.blue2,
+    borderWidth: 2,
+  },
+  totalsDayText: { 
+    fontSize: 16, 
+    fontWeight: '700', 
+    color: '#333', 
+    marginBottom: 12 
+  },
+  totalsTotalText: {
+    color: colors.blue2,
+    fontSize: 18,
+  },
+  totalsAmounts: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between',
+    gap: 20,
+  },
+  totalsAmountItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  totalsAmountLabel: { 
+    fontSize: 12, 
+    color: '#666', 
+    marginBottom: 4 
+  },
+  totalsAmountValue: { 
+    fontSize: 16, 
+    fontWeight: '700', 
+    color: '#333' 
+  },
+  totalsAmountValuePositive: { 
+    color: '#28a745' 
+  },
   
   summarySection: { marginBottom: 24 },
   summaryTitle: { fontSize: 20, fontWeight: '700', color: '#333', marginBottom: 16 },

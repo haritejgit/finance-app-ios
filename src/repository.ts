@@ -399,3 +399,19 @@ export async function updateCustomer(customer: Customer) {
 export async function deleteCustomer(customerId: string) {
   await deleteDoc(doc(db, "customers", customerId));
 }
+
+export async function getCustomerByAadhar(userId: string, aadhar: string): Promise<Customer | null> {
+  const q = query(coll.customers, where("userId", "==", userId), where("aadhar", "==", aadhar));
+  const snap = await getDocs(q);
+  return snap.empty ? null : snap.docs[0].data() as Customer;
+}
+
+export async function getCustomerLoanSummary(userId: string, aadhar: string): Promise<{customer: Customer | null, hasActiveLoan: boolean}> {
+  const customer = await getCustomerByAadhar(userId, aadhar);
+  if (!customer) {
+    return { customer: null, hasActiveLoan: false };
+  }
+  
+  const activeLoan = await getActiveLoan(userId, customer.id);
+  return { customer, hasActiveLoan: !!activeLoan };
+}

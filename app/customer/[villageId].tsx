@@ -22,7 +22,7 @@ import * as Location from "expo-location";
 import { useAuth } from "../../src/auth-context";
 import { useTheme } from "../../src/theme-context";
 import { colors } from "../../src/theme";
-import { addCustomerWithLoan, getCustomers, getPaymentsForCustomer, getVillageById } from "../../src/repository";
+import { addCustomerWithLoan, getCustomers, getPaymentsForCustomer, getVillageById, getCustomerLoanSummary } from "../../src/repository";
 import { Customer, Village, Payment } from "../../src/types";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -54,7 +54,7 @@ const CustomerItem = React.memo(({ customer, onPress, status }: { customer: Cust
   const getStatusBadge = useCallback(() => {
     switch (status) {
       case 'paid':
-        return <Text style={styles.statusBadgePaid}>✓ PAID</Text>;
+        return <Text style={styles.statusBadgePaidGrey}>✓ PAID</Text>;
       case 'due':
         return <Text style={styles.statusBadgeDue}>✗ DUE</Text>;
       default:
@@ -65,7 +65,7 @@ const CustomerItem = React.memo(({ customer, onPress, status }: { customer: Cust
   const getBackgroundColor = useCallback(() => {
     switch (status) {
       case 'paid':
-        return '#d4edda'; // Light green
+        return '#f5f5f5'; // Light grey for new payments
       case 'due':
         return '#f8d7da'; // Light red
       default:
@@ -76,7 +76,7 @@ const CustomerItem = React.memo(({ customer, onPress, status }: { customer: Cust
   const getBorderColor = useCallback(() => {
     switch (status) {
       case 'paid':
-        return '#28a745'; // Green border
+        return '#999999'; // Grey border for new payments
       case 'due':
         return '#dc3545'; // Red border
       default:
@@ -272,19 +272,23 @@ export default function CustomerListScreen() {
             style={[styles.search, { backgroundColor: isDark ? colors.grayLight : 'rgba(255,255,255,0.15)', color: colors.text }]}
             placeholderTextColor={isDark ? colors.gray : "rgba(255,255,255,0.6)"}
           />
-          
           <FlatList
             data={filtered}
             keyExtractor={(i) => i.id}
             renderItem={renderCustomer}
-            initialNumToRender={10}
-            maxToRenderPerBatch={10}
-            windowSize={5}
+            style={styles.list}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            initialNumToRender={15}
+            maxToRenderPerBatch={15}
+            windowSize={10}
             removeClippedSubviews={true}
             getItemLayout={(data, index) => (
-              { length: 80, offset: 80 * index, index }
+              { length: 64, offset: 64 * index, index }
             )}
             updateCellsBatchingPeriod={50}
+            disableVirtualization={false}
+            legacyImplementation={false}
             ListEmptyComponent={
               isLoading ? (
                 <View style={styles.loadingContainer}>
@@ -507,6 +511,56 @@ export default function CustomerListScreen() {
                         alert('Please enter a valid registration date');
                         return;
                       }
+                      
+                      // Check if customer already exists by Aadhar
+                      if (form.aadhar && form.aadhar.trim()) {
+                        const existingCustomer = await getCustomerLoanSummary(user.uid, form.aadhar.trim());
+                        if (existingCustomer.customer) {
+                          if (existingCustomer.hasActiveLoan) {
+                            Alert.alert(
+                              'Customer Already Exists',
+                              `This customer (Aadhar: ${form.aadhar}) already has an active loan with us.\n\nCustomer: ${existingCustomer.customer.name}\nPhone: ${existingCustomer.customer.phone}`,
+                              [{ text: 'OK' }]
+                            );
+                            return;
+                          } else {
+                            Alert.alert(
+                              'Customer Already Exists',
+                              `This customer (Aadhar: ${form.aadhar}) already exists in our records but has no active loan.\n\nCustomer: ${existingCustomer.customer.name}\nPhone: ${existingCustomer.customer.phone}\n\nDo you still want to proceed?`,
+                              [
+                                { text: 'Cancel', style: 'cancel' },
+                                { 
+                                  text: 'Proceed', 
+                                  onPress: async () => {
+                                    const createdCustomer = await addCustomerWithLoan(
+                                      user.uid,
+                                      village.id,
+                                      village.dayOfWeek,
+                                      village.shift,
+                                      {
+                                        name: form.name,
+                                        phone: form.phone,
+                                        aadhar: form.aadhar,
+                                        locationDesc: form.locationDesc,
+                                        latitude: form.coordinates?.latitude,
+                                        longitude: form.coordinates?.longitude,
+                                        coName: form.coName || undefined,
+                                        coId: form.coId ? Number(form.coId) : undefined,
+                                      },
+                                      Number(form.principal || 0),
+                                      parsedDate
+                                    );
+                                    setShowAdd(false);
+                                    setCustomers((current) => [...current, createdCustomer]);
+                                  }
+                                }
+                              ]
+                            );
+                            return;
+                          }
+                        }
+                      }
+                      
                       const createdCustomer = await addCustomerWithLoan(
                         user.uid,
                         village.id,
@@ -568,6 +622,7 @@ const styles = StyleSheet.create({
   phone: { color: "#777", fontSize: 13 },
   coName: { color: "#666", fontSize: 11, fontStyle: "italic", marginTop: 1 },
   statusBadgePaid: { fontSize: 10, color: "#28a745", fontWeight: "700", marginTop: 4, backgroundColor: "#d4edda", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
+  statusBadgePaidGrey: { fontSize: 10, color: "#666666", fontWeight: "700", marginTop: 4, backgroundColor: "#f5f5f5", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#999999" },
   statusBadgeDue: { fontSize: 10, color: "#dc3545", fontWeight: "700", marginTop: 4, backgroundColor: "#f8d7da", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
   quickCallBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#4CAF50", justifyContent: "center", alignItems: "center" },
   quickCallText: { fontSize: 16, color: colors.white },
