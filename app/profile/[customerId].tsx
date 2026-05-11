@@ -25,6 +25,7 @@ import {
   deleteCustomer,
   deletePayment,
   getActiveLoan,
+  getCustomerByAadhar,
   getCustomerById,
   getPaymentsForCustomer,
   markDue,
@@ -423,13 +424,25 @@ export default function ProfileScreen() {
   // Combined edit confirm handler
   const confirmEdit = async () => {
     if (!customer || !user) return;
+
+    const normalizedAadhar = editForm.aadhar ? editForm.aadhar.replace(/\D/g, "").trim() : "";
+    if (normalizedAadhar) {
+      const existingCustomer = await getCustomerByAadhar(user.uid, normalizedAadhar);
+      if (existingCustomer && existingCustomer.id !== customer.id) {
+        Alert.alert(
+          'Duplicate Aadhar Detected',
+          `A customer with this Aadhar number already exists in our records.\n\nExisting Customer: ${existingCustomer.name}\nPhone: ${existingCustomer.phone}\nBook No: ${existingCustomer.numericalId}\n\nPlease verify the Aadhar number or contact the existing customer.`,
+          [{ text: 'OK', style: 'default' }]
+        );
+        return;
+      }
+    }
     
-    // Update customer
     await updateCustomer({
       ...customer,
       name: editForm.name,
       phone: editForm.phone,
-      aadhar: editForm.aadhar,
+      aadhar: normalizedAadhar,
       locationDesc: editForm.locationDesc,
       coName: editForm.coName,
       coId: editForm.coId ? Number(editForm.coId) : undefined,

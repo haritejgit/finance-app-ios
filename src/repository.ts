@@ -47,6 +47,10 @@ function stripUndefined<T extends Record<string, any>>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
 }
 
+function normalizeAadhar(aadhar?: string) {
+  return (aadhar ?? "").replace(/\D/g, "").trim();
+}
+
 function id() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
@@ -149,6 +153,7 @@ export async function addCustomerWithLoan(
     status: "ACTIVE",
   };
   await setDoc(doc(db, "loans", loan.id), stripUndefined(loan));
+  clearCache();
   return customer;
 }
 
@@ -394,6 +399,7 @@ export async function getPaymentsByDate(userId: string, startDate: number, endDa
 
 export async function updateCustomer(customer: Customer) {
   await setDoc(doc(db, "customers", customer.id), stripUndefined(customer));
+  clearCache();
 }
 
 export async function deleteCustomer(customerId: string) {
@@ -415,15 +421,28 @@ export async function deleteCustomer(customerId: string) {
     // Delete the loan
     await deleteDoc(loanDoc.ref);
   }
+
+  // Delete any stray payments attached directly to the customer
+  const strayPaymentsQ = query(coll.payments, where("customerId", "==", customerId));
+  const strayPaymentsSnap = await getDocs(strayPaymentsQ);
+  for (const paymentDoc of strayPaymentsSnap.docs) {
+    await deleteDoc(paymentDoc.ref);
+  }
   
   // Finally delete the customer
   await deleteDoc(doc(db, "customers", customerId));
+  clearCache();
 }
 
 export async function getCustomerByAadhar(userId: string, aadhar: string): Promise<Customer | null> {
-  const q = query(coll.customers, where("userId", "==", userId), where("aadhar", "==", aadhar));
+  const normalizedAadhar = normalizeAadhar(aadhar);
+  if (!normalizedAadhar) return null;
+
+  const q = query(coll.customers, where("userId", "==", userId));
   const snap = await getDocs(q);
-  return snap.empty ? null : snap.docs[0].data() as Customer;
+  return snap.docs
+    .map((d) => d.data() as Customer)
+    .find((customer) => normalizeAadhar(customer.aadhar) === normalizedAadhar) ?? null;
 }
 
 export async function getCustomerLoanSummary(userId: string, aadhar: string): Promise<{customer: Customer | null, hasActiveLoan: boolean}> {

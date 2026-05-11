@@ -842,12 +842,12 @@ interface Payment {
           // Calculate collected amount (excluding DUE payments)
           const collected = shiftPayments
             .filter(p => p.paymentType !== "DUE" && p.paymentDate >= from && p.paymentDate <= to)
-            .reduce((sum, p) => sum + p.amountPaid, 0);
+            .reduce((sum, p) => sum + Number(p.amountPaid ?? 0), 0);
           
           // Calculate distributed amount (loans disbursed in date range)
           const distributed = shiftLoans
             .filter(l => l.startDate >= from && l.startDate <= to)
-            .reduce((sum, l) => sum + l.principalAmount, 0);
+            .reduce((sum, l) => sum + Number(l.principalAmount ?? 0), 0);
           
           totalCollected += collected;
           totalDistributed += distributed;
@@ -2223,7 +2223,7 @@ const styles = StyleSheet.create({
   pickerDoneBtn: { backgroundColor: colors.blue2, borderRadius: 8, padding: 12, alignItems: 'center', marginTop: 10 },
   pickerDoneBtnText: { color: colors.white, fontWeight: '600', fontSize: 16 },
   
-  modalSafe: { flex: 1, backgroundColor: '#f8f9fa' },
+  modalSafe: { flex: 1, backgroundColor: colors.background },
   modalHeader: { 
     flexDirection: 'row', 
     justifyContent: 'space-between', 
@@ -2244,29 +2244,29 @@ const styles = StyleSheet.create({
   totalsDateSection: { marginBottom: 30 },
   totalsDateInputContainer: { marginBottom: 20 },
   totalsResults: { marginTop: 30 },
-  resultsTitle: { fontSize: 20, fontWeight: '700', color: '#333', marginBottom: 20 },
+  resultsTitle: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 20 },
   totalsRow: { 
-    backgroundColor: '#fff', 
+    backgroundColor: colors.backgroundSecondary,
     borderRadius: 12, 
     padding: 16, 
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: colors.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.05,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
   },
   totalsRowTotal: {
-    backgroundColor: '#f0f8ff',
+    backgroundColor: '#e9f2ff',
     borderColor: colors.blue2,
     borderWidth: 2,
   },
   totalsDayText: { 
     fontSize: 16, 
     fontWeight: '700', 
-    color: '#333', 
+    color: colors.text, 
     marginBottom: 12 
   },
   totalsTotalText: {
@@ -2284,13 +2284,13 @@ const styles = StyleSheet.create({
   },
   totalsAmountLabel: { 
     fontSize: 12, 
-    color: '#666', 
+    color: colors.gray, 
     marginBottom: 4 
   },
   totalsAmountValue: { 
     fontSize: 16, 
     fontWeight: '700', 
-    color: '#333' 
+    color: colors.text 
   },
   totalsAmountValuePositive: { 
     color: '#28a745' 

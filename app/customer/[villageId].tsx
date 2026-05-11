@@ -37,6 +37,11 @@ function isToday(timestamp: number): boolean {
 
 // Get customer payment status for today
 type PaymentStatus = 'paid' | 'due' | 'none';
+
+function normalizeAadhar(aadhar?: string) {
+  return (aadhar ?? "").replace(/\D/g, "").trim();
+}
+
 async function getCustomerPaymentStatus(userId: string, customerId: string): Promise<PaymentStatus> {
   try {
     const payments = await getPaymentsForCustomer(userId, customerId);
@@ -50,7 +55,7 @@ async function getCustomerPaymentStatus(userId: string, customerId: string): Pro
   }
 }
 
-const CustomerItem = React.memo(({ customer, onPress, status }: { customer: Customer; onPress: () => void; status: PaymentStatus }) => {
+const CustomerItem = React.memo(({ customer, onPress, status, isNew }: { customer: Customer; onPress: () => void; status: PaymentStatus; isNew?: boolean }) => {
   const getStatusBadge = useCallback(() => {
     switch (status) {
       case 'paid':
@@ -63,15 +68,18 @@ const CustomerItem = React.memo(({ customer, onPress, status }: { customer: Cust
   }, [status]);
 
   const getBackgroundColor = useCallback(() => {
+    if (isNew && status === 'none') {
+      return '#f2f4f8';
+    }
     switch (status) {
       case 'paid':
-        return '#f5f5f5'; // Light grey for new payments
+        return '#f5f5f5'; // Light grey for paid status
       case 'due':
         return '#f8d7da'; // Light red
       default:
         return '#FFFFFF'; // Plain white
     }
-  }, [status]);
+  }, [status, isNew]);
 
   const getBorderColor = useCallback(() => {
     switch (status) {
@@ -245,6 +253,7 @@ export default function CustomerListScreen() {
         customer={item} 
         onPress={() => openCustomer(item.id)} 
         status={paymentStatuses[item.id] || 'none'} 
+        isNew={isToday(item.createdAt)}
       />
     ),
     [openCustomer, paymentStatuses]
@@ -513,8 +522,9 @@ export default function CustomerListScreen() {
                       }
                       
                       // Check if customer already exists by Aadhar
-                      if (form.aadhar && form.aadhar.trim()) {
-                        const existingCustomer = await getCustomerLoanSummary(user.uid, form.aadhar.trim());
+                      const normalizedAadhar = normalizeAadhar(form.aadhar);
+                      if (normalizedAadhar) {
+                        const existingCustomer = await getCustomerLoanSummary(user.uid, normalizedAadhar);
                         if (existingCustomer.customer) {
                           Alert.alert(
                             'Duplicate Aadhar Detected',
@@ -533,7 +543,7 @@ export default function CustomerListScreen() {
                         {
                           name: form.name,
                           phone: form.phone,
-                          aadhar: form.aadhar,
+                          aadhar: normalizedAadhar,
                           locationDesc: form.locationDesc,
                           latitude: form.coordinates?.latitude,
                           longitude: form.coordinates?.longitude,
