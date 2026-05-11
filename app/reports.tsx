@@ -9,13 +9,14 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
-  ScrollView,
   ActivityIndicator,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../src/auth-context";
 import { getPaymentsByDate } from "../src/repository";
 import { colors } from "../src/theme";
@@ -277,7 +278,7 @@ export default function ReportsScreen() {
       } else {
         // All sharing methods failed, show detailed instructions
         Alert.alert(
-          '📋 Excel Data Ready - Manual Creation Required',
+          'Excel Data Ready - Manual Creation Required',
           `Direct download failed, but all Excel data is ready!\n\n📈 Report Summary:\n• ${reportSummary.totalPayments} payments\n• Rs.${reportSummary.totalAmount.toFixed(2)} total\n• ${reportSummary.cashPayments} cash payments\n• ${reportSummary.phonePayments} phone payments\n\n💡 Manual Excel Creation Steps:\n\n1. Take a screenshot of this message\n2. Open Microsoft Excel on your computer\n3. Create new blank workbook\n4. Type the following data:\n\nDate,Amount,Type,Mode,Customer ID\n${reportData.map(p => 
             `${new Date(p.paymentDate).toLocaleDateString()},${p.amountPaid},${p.paymentType},${p.paymentMode},${p.customerId || ''}`
           ).join('\n')}\n\n5. Save as ${filename}\n\n📱 Alternative: Email this report data to yourself and open on computer.`,
@@ -726,7 +727,7 @@ interface Payment {
       } else {
         // All sharing methods failed, show detailed instructions
         Alert.alert(
-          '📋 Excel Data Ready - Manual Creation Required',
+          'Excel Data Ready - Manual Creation Required',
           `Direct download failed, but all Excel data is ready!\n\n📈 Report Summary:\n• ${reportSummary.totalPayments} payments\n• Rs.${reportSummary.totalAmount.toFixed(2)} total\n• ${reportSummary.cashPayments} cash payments\n• ${reportSummary.phonePayments} phone payments\n\n💡 Manual Excel Creation Steps:\n\n1. Take a screenshot of this message\n2. Open Microsoft Excel on your computer\n3. Create new blank workbook\n4. Type the following data:\n\nDate,Amount,Type,Mode,Customer ID\n${reportData.map(p => 
             `${new Date(p.paymentDate).toLocaleDateString()},${p.amountPaid},${p.paymentType},${p.paymentMode},${p.customerId || ''}`
           ).join('\n')}\n\n5. Save as ${filename}\n\n📱 Alternative: Email this report data to yourself and open on computer.`,
@@ -1178,7 +1179,7 @@ interface Payment {
             
             // Add village header row
             const villageHeaderRow = sheetData.length;
-            sheetData.push([`🏘️ ${village.name}`]);
+            sheetData.push([`Village: ${village.name}`]);
             setStyle(villageHeaderRow, 0, { 
               font: { bold: true, color: { rgb: WHITE }, sz: 11 }, 
               fill: { patternType: 'solid', fgColor: { rgb: '1565C0' } },
@@ -1470,7 +1471,7 @@ interface Payment {
               style={styles.exportBtn}
               onPress={() => setShowDayReportModal(true)}
             >
-              <Text style={styles.exportIcon}>📋</Text>
+              <Ionicons name="document-text-outline" size={24} color={colors.white} />
               <Text style={styles.exportLabel}>Day Report</Text>
             </Pressable>
 
@@ -1500,7 +1501,7 @@ interface Payment {
                 <Text style={styles.statLabel}>Date Range</Text>
               </View>
               <View style={styles.statCard}>
-                <Text style={styles.statNumber}>💰</Text>
+                <Ionicons name="cash-outline" size={24} color={colors.white} />
                 <Text style={styles.statLabel}>Payment Data</Text>
               </View>
             </View>
@@ -1829,7 +1830,7 @@ interface Payment {
                     
                     <View style={styles.dayReportResultCard}>
                       <View style={styles.dayReportRow}>
-                        <Text style={styles.dayReportIcon}>💵</Text>
+                        <Ionicons name="cash-outline" size={20} color={colors.white} />
                         <Text style={styles.dayReportResultLabel}>Cash Collection</Text>
                       </View>
                       <Text style={styles.dayReportResultAmount}>Rs.{dayReportData.cashCollection.toFixed(2)}</Text>
@@ -1837,7 +1838,7 @@ interface Payment {
                     
                     <View style={styles.dayReportResultCard}>
                       <View style={styles.dayReportRow}>
-                        <Text style={styles.dayReportIcon}>📱</Text>
+                        <Ionicons name="phone-portrait-outline" size={20} color={colors.white} />
                         <Text style={styles.dayReportResultLabel}>PhonePe Collection</Text>
                       </View>
                       <Text style={styles.dayReportResultAmount}>Rs.{dayReportData.phoneCollection.toFixed(2)}</Text>
@@ -1845,7 +1846,7 @@ interface Payment {
                     
                     <View style={[styles.dayReportResultCard, styles.dayReportResultTotalCard]}>
                       <View style={styles.dayReportRow}>
-                        <Text style={styles.dayReportIcon}>💰</Text>
+                        <Ionicons name="cash-outline" size={20} color={colors.white} />
                         <Text style={styles.dayReportResultTotalLabel}>Total Cash Collected</Text>
                       </View>
                       <Text style={styles.dayReportResultTotalAmount}>Rs.{dayReportData.totalCollection.toFixed(2)}</Text>
@@ -1857,7 +1858,7 @@ interface Payment {
                     <Text style={styles.dayReportResultSectionTitle}>DISTRIBUTION SUMMARY</Text>
                     <View style={[styles.dayReportResultCard, styles.dayReportResultDistCard]}>
                       <View style={styles.dayReportRow}>
-                        <Text style={styles.dayReportIcon}>📤</Text>
+                        <Ionicons name="arrow-up-outline" size={20} color={colors.white} />
                         <Text style={styles.dayReportResultLabel}>Total Amount Distributed</Text>
                       </View>
                       <Text style={[styles.dayReportResultAmount, styles.distAmount]}>Rs.{dayReportData.totalDistributed.toFixed(2)}</Text>

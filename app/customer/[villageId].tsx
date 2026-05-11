@@ -47,9 +47,9 @@ const CustomerItem = React.memo(function CustomerItem({ customer, onPress, statu
   const getStatusBadge = useCallback(() => {
     switch (status) {
       case 'paid':
-        return <Text style={styles.statusBadgePaidGrey}>✓ PAID</Text>;
+        return <View style={styles.statusBadgeContainer}><Ionicons name="checkmark" size={12} color="#666666" /><Text style={styles.statusBadgePaidGrey}> PAID</Text></View>;
       case 'due':
-        return <Text style={styles.statusBadgeDue}>✗ DUE</Text>;
+        return <View style={styles.statusBadgeContainer}><Ionicons name="close" size={12} color="#dc3545" /><Text style={styles.statusBadgeDue}> DUE</Text></View>;
       default:
         return null;
     }
@@ -437,7 +437,7 @@ export default function CustomerListScreen() {
                 </View>
                 {form.coordinates && (
                   <Text style={styles.locationText}>
-                    📍 Location captured: {form.coordinates.latitude.toFixed(6)}, {form.coordinates.longitude.toFixed(6)}
+                    <Ionicons name="location" size={12} color="#666" /> Location captured: {form.coordinates.latitude.toFixed(6)}, {form.coordinates.longitude.toFixed(6)}
                   </Text>
                 )}
 
@@ -630,8 +630,9 @@ const styles = StyleSheet.create({
   name: { fontWeight: "800", fontSize: 15, color: "#333" },
   phone: { color: "#777", fontSize: 13 },
   coName: { color: "#666", fontSize: 11, fontStyle: "italic", marginTop: 1 },
-  statusBadgePaid: { fontSize: 10, color: "#28a745", fontWeight: "700", marginTop: 4, backgroundColor: "#d4edda", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
-  statusBadgePaidGrey: { fontSize: 10, color: "#666666", fontWeight: "700", marginTop: 4, backgroundColor: "#f5f5f5", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#999999" },
+  statusBadgeContainer: { flexDirection: "row", alignItems: "center", marginTop: 4, alignSelf: "flex-start" },
+  statusBadgePaid: { fontSize: 10, color: "#28a745", fontWeight: "700", backgroundColor: "#d4edda", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
+  statusBadgePaidGrey: { fontSize: 10, color: "#666666", fontWeight: "700", backgroundColor: "#f5f5f5", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#999999" },
   statusBadgeDue: { fontSize: 10, color: "#dc3545", fontWeight: "700", marginTop: 4, backgroundColor: "#f8d7da", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
   statusBadgeNew: { fontSize: 10, color: "#374151", fontWeight: "700", marginTop: 4, backgroundColor: "#f3f4f6", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#9ca3af" },
   quickCallBtn: { width: 38, height: 38, borderRadius: 14, backgroundColor: colors.teal, justifyContent: "center", alignItems: "center" },

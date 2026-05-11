@@ -186,7 +186,7 @@ export default function VillageListScreen() {
                 )}
                 ListEmptyComponent={
                   <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyIcon}>🏘️</Text>
+                    <Ionicons name="home-outline" size={48} color="rgba(255,255,255,0.7)" />
                     <Text style={[styles.emptyTitle, { color: colors.text }]}>No Villages</Text>
                     <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>Add a village to get started</Text>
                   </View>
@@ -265,7 +265,7 @@ export default function VillageListScreen() {
             <Text style={[styles.confirmMessage, { color: colors.textSecondary }]}>
               Are you sure you want to delete {villageToDelete?.name}?
               {'\n\n'}
-              ⚠️ All customers and their loan/payment records in this village will be permanently deleted!
+              WARNING: All customers and their loan/payment records in this village will be permanently deleted!
             </Text>
             <View style={styles.confirmButtons}>
               <Pressable style={[styles.cancelBtn, { backgroundColor: colors.border }]} onPress={cancelDelete}>

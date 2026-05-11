@@ -18,8 +18,8 @@ import {
   View,
   ActivityIndicator,
 } from "react-native";
-import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import { useAuth } from "../../src/auth-context";
 import {
   addPayment,
@@ -51,7 +51,7 @@ const PaymentHistory = memo(function PaymentHistory({
   if (payments.length === 0) {
     return (
       <View style={styles.emptyHistoryContainer}>
-        <Text style={styles.emptyHistoryIcon}>📋</Text>
+        <Ionicons name="document-text-outline" size={48} color="rgba(255,255,255,0.7)" />
         <Text style={styles.emptyHistoryTitle}>No Transactions</Text>
         <Text style={styles.emptyHistorySubtitle}>Payment history will appear here</Text>
       </View>
@@ -883,7 +883,7 @@ export default function ProfileScreen() {
                 <Text style={styles.locationLabel}>Current Location:</Text>
                 {editForm.latitude && editForm.longitude ? (
                   <Text style={styles.locationCoords}>
-                    📍 {editForm.latitude.toFixed(6)}, {editForm.longitude.toFixed(6)}
+                    <Ionicons name="location" size={12} color="#666" /> {editForm.latitude.toFixed(6)}, {editForm.longitude.toFixed(6)}
                   </Text>
                 ) : (
                   <Text style={styles.locationNotSet}>No location set</Text>
@@ -894,7 +894,7 @@ export default function ProfileScreen() {
                   disabled={isUpdatingLocation}
                 >
                   <Text style={styles.updateLocationBtnText}>
-                    {isUpdatingLocation ? 'Getting Location...' : editForm.latitude ? '📍 Update Location' : '📍 Set Location'}
+                    {isUpdatingLocation ? 'Getting Location...' : editForm.latitude ? 'Update Location' : 'Set Location'}
                   </Text>
                 </Pressable>
               </View>
