@@ -84,6 +84,10 @@ function toMillis(value: any) {
   return 0;
 }
 
+function getNetDistributedAmount(amount: number) {
+  return amount - Math.floor(amount / 1000) * 20;
+}
+
 export default function ReportsScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -865,12 +869,13 @@ interface Payment {
             .reduce((sum, p) => sum + Number(p.amountPaid ?? 0), 0);
           
           // Calculate distributed amount (loans disbursed in date range)
-          const distributed = shiftLoans
+          const distributedRaw = shiftLoans
             .filter(l => {
               const startDate = toMillis(l.startDate);
               return startDate >= from && startDate <= to;
             })
             .reduce((sum, l) => sum + Number(l.principalAmount ?? 0), 0);
+          const distributed = getNetDistributedAmount(distributedRaw);
           
           totalCollected += collected;
           totalDistributed += distributed;
@@ -977,8 +982,7 @@ interface Payment {
       });
 
       const totalDistributedRaw = dayLoans.reduce((sum, loan) => sum + (loan.principalAmount || 0), 0);
-      // Deduct 20 Rs per 1000 Rs distributed
-      const totalDistributed = totalDistributedRaw - (Math.floor(totalDistributedRaw / 1000) * 20);
+      const totalDistributed = getNetDistributedAmount(totalDistributedRaw);
 
       const newData = {
         cashCollection,

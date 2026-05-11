@@ -20,6 +20,8 @@ export type Customer = {
   locationDesc: string;
   latitude?: number;
   longitude?: number;
+  aadharSubmitted?: boolean;
+  passportPhotoSubmitted?: boolean;
   coName?: string;
   coId?: number;
   villageId: string;

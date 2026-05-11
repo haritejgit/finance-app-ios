@@ -1,10 +1,10 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect } from "expo-router";
-import React, { useCallback, useState } from "react";
-import { Alert, Dimensions, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useMemo, useState } from "react";
+import { ActivityIndicator, Alert, Dimensions, FlatList, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../src/auth-context";
-import { getTodayDashboardStats } from "../src/repository";
+import { CustomerSearchResult, getAllActiveCustomersWithVillages, getTodayDashboardStats } from "../src/repository";
 import { colors, gradient } from "../src/theme";
 import Icon from "../src/Icon";
 
@@ -22,6 +22,10 @@ export default function ShiftSelectionScreen() {
   const [todayStats, setTodayStats] = useState({ collectionToday: 0, distributedToday: 0 });
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [allCustomers, setAllCustomers] = useState<CustomerSearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   const loadStats = useCallback(async () => {
     if (!user) return;
@@ -47,6 +51,40 @@ export default function ShiftSelectionScreen() {
     setRefreshing(true);
     loadStats();
   }, [loadStats]);
+
+  const openCustomerSearch = useCallback(async () => {
+    setSearchOpen(true);
+    if (!user || allCustomers.length > 0) return;
+    try {
+      setSearchLoading(true);
+      const customers = await getAllActiveCustomersWithVillages(user.uid);
+      setAllCustomers(customers);
+    } catch {
+      Alert.alert("Search failed", "Could not load customers. Please try again.");
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [allCustomers.length, user]);
+
+  const searchResults = useMemo(() => {
+    const normalized = searchQuery.trim().toLowerCase();
+    if (!normalized) return allCustomers.slice(0, 30);
+    return allCustomers.filter((customer) =>
+      [
+        customer.name,
+        customer.phone,
+        customer.numericalId.toString(),
+        customer.coName || "",
+        customer.coId?.toString() || "",
+        customer.villageName || "",
+        customer.villageDayOfWeek || "",
+        customer.villageShift || "",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalized)
+    );
+  }, [allCustomers, searchQuery]);
 
   return (
     <LinearGradient colors={[...gradient]} style={styles.root}>
@@ -136,6 +174,10 @@ export default function ShiftSelectionScreen() {
             </Pressable>
 
             <View style={styles.quickGrid}>
+              <Pressable style={styles.quickBtn} onPress={openCustomerSearch}>
+                <Icon name="search" size={18} color={colors.blue2} />
+                <Text style={styles.quickText}>Search</Text>
+              </Pressable>
               <Pressable style={styles.quickBtn} onPress={() => router.push("/reports")}>
                 <Icon name="document-text-outline" size={18} color={colors.blue2} />
                 <Text style={styles.quickText}>Reports</Text>
@@ -161,6 +203,71 @@ export default function ShiftSelectionScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      <Modal visible={searchOpen} animationType="slide" onRequestClose={() => setSearchOpen(false)}>
+        <SafeAreaView style={styles.searchModalSafe}>
+          <View style={styles.searchModalHeader}>
+            <Text style={styles.searchModalTitle}>Search Customers</Text>
+            <Pressable style={styles.searchCloseBtn} onPress={() => setSearchOpen(false)}>
+              <Icon name="close" size={18} color={colors.gray} />
+            </Pressable>
+          </View>
+          <View style={styles.searchModalContent}>
+            <View style={styles.customerSearchShell}>
+              <Icon name="search" size={18} color={colors.gray} />
+              <TextInput
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Name, phone, book no, village, shift..."
+                placeholderTextColor="#94a3b8"
+                style={styles.customerSearchInput}
+                autoFocus
+              />
+            </View>
+            {searchLoading ? (
+              <View style={styles.searchLoading}>
+                <ActivityIndicator color={colors.blue2} />
+                <Text style={styles.searchLoadingText}>Loading customers...</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={searchResults}
+                keyExtractor={(item) => item.id}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.searchResultsList}
+                ListEmptyComponent={
+                  <View style={styles.searchEmpty}>
+                    <Icon name="people" size={42} color="#94a3b8" />
+                    <Text style={styles.searchEmptyText}>No customers found</Text>
+                  </View>
+                }
+                renderItem={({ item }) => (
+                  <Pressable
+                    style={styles.searchCustomerRow}
+                    onPress={() => {
+                      setSearchOpen(false);
+                      setSearchQuery("");
+                      router.push(`/profile/${item.id}`);
+                    }}
+                  >
+                    <View style={styles.searchCustomerBadge}>
+                      <Text style={styles.searchCustomerBadgeText}>{item.numericalId}</Text>
+                    </View>
+                    <View style={styles.searchCustomerInfo}>
+                      <Text style={styles.searchCustomerName}>{item.name}</Text>
+                      <Text style={styles.searchCustomerMeta}>
+                        {item.villageName || "No village"} | {item.villageDayOfWeek || "-"} {item.villageShift || ""}
+                      </Text>
+                      <Text style={styles.searchCustomerPhone}>{item.phone}</Text>
+                    </View>
+                    <Icon name="arrow-forward" size={16} color={colors.gray} />
+                  </Pressable>
+                )}
+              />
+            )}
+          </View>
+        </SafeAreaView>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -260,4 +367,23 @@ const styles = StyleSheet.create({
   quickBtn: { flex: 1, backgroundColor: "rgba(255,255,255,0.94)", borderRadius: 16, paddingVertical: 12, alignItems: "center", gap: 4, borderWidth: 1, borderColor: "rgba(255,255,255,0.35)" },
   quickText: { color: colors.ink, fontWeight: "800", fontSize: 12 },
   logout: { color: colors.white, textAlign: "center", marginTop: 6, fontSize: 14, fontWeight: "700", opacity: 0.92 },
+  searchModalSafe: { flex: 1, backgroundColor: "#eef4ff" },
+  searchModalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingVertical: 14, backgroundColor: colors.white, borderBottomWidth: 1, borderBottomColor: colors.border },
+  searchModalTitle: { color: colors.ink, fontSize: 22, fontWeight: "900" },
+  searchCloseBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: "#f1f5f9", alignItems: "center", justifyContent: "center" },
+  searchModalContent: { flex: 1, padding: 16 },
+  customerSearchShell: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.white, borderRadius: 16, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, marginBottom: 12 },
+  customerSearchInput: { flex: 1, paddingVertical: 13, color: colors.ink, fontSize: 14 },
+  searchLoading: { alignItems: "center", justifyContent: "center", paddingVertical: 60, gap: 10 },
+  searchLoadingText: { color: colors.gray, fontWeight: "700" },
+  searchResultsList: { paddingBottom: 24 },
+  searchEmpty: { alignItems: "center", justifyContent: "center", paddingVertical: 60, gap: 10 },
+  searchEmptyText: { color: colors.gray, fontWeight: "800" },
+  searchCustomerRow: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.white, borderRadius: 16, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: colors.border },
+  searchCustomerBadge: { width: 38, height: 38, borderRadius: 13, backgroundColor: "#eaf2ff", alignItems: "center", justifyContent: "center" },
+  searchCustomerBadgeText: { color: colors.blue2, fontSize: 13, fontWeight: "900" },
+  searchCustomerInfo: { flex: 1 },
+  searchCustomerName: { color: colors.ink, fontSize: 15, fontWeight: "900" },
+  searchCustomerMeta: { color: colors.gray, fontSize: 12, fontWeight: "700", marginTop: 2 },
+  searchCustomerPhone: { color: colors.gray, fontSize: 12, marginTop: 2 },
 });

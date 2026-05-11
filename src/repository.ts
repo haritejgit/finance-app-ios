@@ -107,6 +107,40 @@ export async function getCustomers(userId: string, villageId: string, useCache =
   return customers;
 }
 
+export type CustomerSearchResult = Customer & {
+  villageName?: string;
+  villageDayOfWeek?: string;
+  villageShift?: string;
+};
+
+export async function getAllActiveCustomersWithVillages(userId: string): Promise<CustomerSearchResult[]> {
+  const [customersSnap, villagesSnap] = await Promise.all([
+    getDocs(query(coll.customers, where("userId", "==", userId))),
+    getDocs(query(coll.villages, where("userId", "==", userId))),
+  ]);
+
+  const villagesById = new Map(
+    villagesSnap.docs.map((d) => {
+      const village = d.data() as Village;
+      return [village.id, village];
+    })
+  );
+
+  return customersSnap.docs
+    .map((d) => d.data() as Customer)
+    .filter((customer) => customer.isActive !== false)
+    .map((customer) => {
+      const village = villagesById.get(customer.villageId);
+      return {
+        ...customer,
+        villageName: village?.name,
+        villageDayOfWeek: village?.dayOfWeek,
+        villageShift: village?.shift,
+      };
+    })
+    .sort((a, b) => a.numericalId - b.numericalId);
+}
+
 export async function getNextNumericalId(userId: string, villageId: string) {
   // Scope by specific village only - fresh serial numbers per village
   const coll = collection(db, "customers");
