@@ -398,14 +398,17 @@ export default function CustomerListScreen() {
 
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
+    const numericQuery = query.replace(/\D/g, "");
     let result = customers;
     if (normalizedQuery) {
-      result = customers.filter((c) =>
-        [c.name, c.phone, c.numericalId.toString(), c.coName || "", c.coId?.toString() || ""]
+      result = customers.filter((c) => {
+        const textMatch = [c.name, c.phone, c.numericalId.toString(), c.coName || "", c.coId?.toString() || ""]
           .join(" ")
           .toLowerCase()
-          .includes(normalizedQuery)
-      );
+          .includes(normalizedQuery);
+        const phoneMatch = numericQuery.length > 0 && (c.phone || "").replace(/\D/g, "").includes(numericQuery);
+        return textMatch || phoneMatch;
+      });
     }
     return [...result].sort((a, b) => a.numericalId - b.numericalId);
   }, [customers, query]);
@@ -545,7 +548,7 @@ export default function CustomerListScreen() {
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder="Search by name, phone, book no..."
+              placeholder="Search by name, mobile, book no..."
               style={[styles.search, { color: colors.white }]}
               placeholderTextColor="rgba(255,255,255,0.62)"
             />

@@ -84,6 +84,11 @@ function toMillis(value: any) {
   return 0;
 }
 
+function formatFilenameDate(ts: number) {
+  const d = new Date(ts);
+  return `${d.getDate()}-${d.getMonth() + 1}-${String(d.getFullYear()).slice(-2)}`;
+}
+
 function getNetDistributedAmount(amount: number) {
   return amount - Math.floor(amount / 1000) * 20;
 }
@@ -935,20 +940,28 @@ interface Payment {
         collection(db, "payments"),
         where("userId", "==", user.uid)
       );
-      const [paymentsSnap, loansSnap, customersSnap] = await Promise.all([
+      const [paymentsSnap, loansSnap, customersSnap, villagesSnap] = await Promise.all([
         getDocs(paymentsQuery),
         getDocs(query(collection(db, "loans"), where("userId", "==", user.uid))),
         getDocs(query(collection(db, "customers"), where("userId", "==", user.uid))),
+        getDocs(query(collection(db, "villages"), where("userId", "==", user.uid))),
       ]);
-      const activeCustomerIds = new Set(
+      const selectedDayName = startOfDay.toLocaleDateString("en-US", { weekday: "long" });
+      const shiftVillageIds = new Set(
+        villagesSnap.docs
+          .map((d) => d.data() as any)
+          .filter((village) => village.dayOfWeek === selectedDayName && village.shift === dayReportShift)
+          .map((village) => village.id)
+      );
+      const shiftCustomerIds = new Set(
         customersSnap.docs
           .map((d) => d.data() as any)
-          .filter((customer) => customer.isActive !== false)
+          .filter((customer) => customer.isActive !== false && shiftVillageIds.has(customer.villageId))
           .map((customer) => customer.id)
       );
       const activeLoans = loansSnap.docs
         .map((d) => d.data() as any)
-        .filter((loan) => activeCustomerIds.has(loan.customerId));
+        .filter((loan) => shiftCustomerIds.has(loan.customerId));
       const loanCustomerById = new Map(activeLoans.map((loan) => [loan.id, loan.customerId]));
       const dayPayments = paymentsSnap.docs
         .map((d) => d.data() as any)
@@ -960,7 +973,7 @@ interface Payment {
             paymentDate <= endMs &&
             p.paymentType !== "DUE" &&
             !!customerId &&
-            activeCustomerIds.has(customerId)
+            shiftCustomerIds.has(customerId)
           );
         });
 
@@ -1329,7 +1342,7 @@ interface Payment {
       }
 
       const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      const filename = `Weekly_Loan_Tracker_${Date.now()}.xlsx`;
+      const filename = `${formatFilenameDate(reportStart)} to ${formatFilenameDate(reportEnd)}.xlsx`;
 
       // Web-compatible download
       if (Platform.OS === 'web') {

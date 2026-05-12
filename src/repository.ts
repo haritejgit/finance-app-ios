@@ -76,10 +76,12 @@ export async function getVillageById(villageId: string) {
 export async function addVillage(userId: string, name: string, dayOfWeek: string, shift: string) {
   const village: Village = { id: id(), name, dayOfWeek, shift: shift as any, userId };
   await setDoc(doc(db, "villages", village.id), stripUndefined(village));
+  clearCache();
 }
 
 export async function deleteVillage(villageId: string) {
   await deleteDoc(doc(db, "villages", villageId));
+  clearCache();
 }
 
 export async function updateVillageDayShift(villageId: string, dayOfWeek: string, shift: string) {
@@ -87,6 +89,7 @@ export async function updateVillageDayShift(villageId: string, dayOfWeek: string
     dayOfWeek,
     shift,
   });
+  clearCache();
 }
 
 export async function getCustomers(userId: string, villageId: string, useCache = true) {
@@ -245,6 +248,7 @@ export async function updateLoan(loan: Loan, newPrincipalAmount: number, newStar
   };
   
   await setDoc(doc(db, "loans", loan.id), stripUndefined(updatedLoan));
+  clearCache();
   return updatedLoan;
 }
 
@@ -340,6 +344,7 @@ export async function addPayment(loan: Loan, amountPaid: number, paymentDate: nu
     balanceAmount: newBalance,
     status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
   });
+  clearCache();
 }
 
 export async function updatePayment(payment: Payment, newAmount: number, newDate: number, newMode: PaymentMode) {
@@ -363,6 +368,7 @@ export async function updatePayment(payment: Payment, newAmount: number, newDate
       status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
     });
   }
+  clearCache();
 }
 
 export async function deletePayment(payment: Payment) {
@@ -378,6 +384,7 @@ export async function deletePayment(payment: Payment) {
       status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
     });
   }
+  clearCache();
 }
 
 export async function markDue(loan: Loan, paymentDate: number) {
@@ -393,6 +400,7 @@ export async function markDue(loan: Loan, paymentDate: number) {
     userId: loan.userId,
   };
   await setDoc(doc(db, "payments", payment.id), stripUndefined(payment));
+  clearCache();
 }
 
 export async function renewLoan(loan: Loan, newPrincipal: number, date: number) {
@@ -426,6 +434,7 @@ export async function renewLoan(loan: Loan, newPrincipal: number, date: number) 
     status: "ACTIVE",
   };
   await setDoc(doc(db, "loans", newLoan.id), stripUndefined(newLoan));
+  clearCache();
 }
 
 export async function getCollectionToday(userId: string) {

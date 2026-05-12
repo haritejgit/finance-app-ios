@@ -1,7 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Dimensions, FlatList, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Animated, Dimensions, Easing, FlatList, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../src/auth-context";
 import { CustomerSearchResult, getAllActiveCustomersWithVillages, getTodayDashboardStats } from "../src/repository";
@@ -26,6 +26,16 @@ export default function ShiftSelectionScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [allCustomers, setAllCustomers] = useState<CustomerSearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const intro = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(intro, {
+      toValue: 1,
+      duration: 520,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [intro]);
 
   const loadStats = useCallback(async () => {
     if (!user) return;
@@ -68,9 +78,10 @@ export default function ShiftSelectionScreen() {
 
   const searchResults = useMemo(() => {
     const normalized = searchQuery.trim().toLowerCase();
+    const numericQuery = searchQuery.replace(/\D/g, "");
     if (!normalized) return allCustomers.slice(0, 30);
-    return allCustomers.filter((customer) =>
-      [
+    return allCustomers.filter((customer) => {
+      const textMatch = [
         customer.name,
         customer.phone,
         customer.aadhar || "",
@@ -83,8 +94,10 @@ export default function ShiftSelectionScreen() {
       ]
         .join(" ")
         .toLowerCase()
-        .includes(normalized)
-    );
+        .includes(normalized);
+      const phoneMatch = numericQuery.length > 0 && (customer.phone || "").replace(/\D/g, "").includes(numericQuery);
+      return textMatch || phoneMatch;
+    });
   }, [allCustomers, searchQuery]);
 
   return (
@@ -94,7 +107,15 @@ export default function ShiftSelectionScreen() {
           contentContainerStyle={styles.container}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
-          <View style={styles.content}>
+          <Animated.View
+            style={[
+              styles.content,
+              {
+                opacity: intro,
+                transform: [{ translateY: intro.interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) }],
+              },
+            ]}
+          >
             <View style={styles.hero}>
               <View style={styles.heroTop}>
                 <View style={styles.avatar}>
@@ -200,7 +221,7 @@ export default function ShiftSelectionScreen() {
             >
               <Text style={styles.logout}>Logout</Text>
             </Pressable>
-          </View>
+          </Animated.View>
         </ScrollView>
       </SafeAreaView>
 
@@ -218,7 +239,7 @@ export default function ShiftSelectionScreen() {
               <TextInput
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Name, phone, Aadhar, book no, village..."
+                placeholder="Name, mobile, Aadhar, book no, village..."
                 placeholderTextColor="#94a3b8"
                 style={styles.customerSearchInput}
                 autoFocus

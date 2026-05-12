@@ -292,6 +292,16 @@ export default function ProfileScreen() {
     await reload();
   };
 
+  const markDocumentSubmitted = async (field: "aadharSubmitted" | "passportPhotoSubmitted") => {
+    if (!customer) return;
+    const updatedCustomer: Customer = {
+      ...customer,
+      [field]: true,
+    };
+    await updateCustomer(updatedCustomer);
+    setCustomer(updatedCustomer);
+  };
+
   const [isLoading, setIsLoading] = useState(true);
 
   const reload = async () => {
@@ -530,6 +540,28 @@ export default function ProfileScreen() {
                 </View>
               )}
             </View>
+
+            {(!customer.aadharSubmitted || !customer.passportPhotoSubmitted) && (
+              <View style={styles.docsCard}>
+                <Text style={styles.docsTitle}>Pending Documents</Text>
+                {!customer.aadharSubmitted && (
+                  <Pressable style={styles.docsDetailRow} onPress={() => markDocumentSubmitted("aadharSubmitted")}>
+                    <View style={styles.docsDetailCheckbox}>
+                      <Icon name="checkmark" size={14} color={colors.white} />
+                    </View>
+                    <Text style={styles.docsDetailText}>Mark Aadhar submitted</Text>
+                  </Pressable>
+                )}
+                {!customer.passportPhotoSubmitted && (
+                  <Pressable style={styles.docsDetailRow} onPress={() => markDocumentSubmitted("passportPhotoSubmitted")}>
+                    <View style={styles.docsDetailCheckbox}>
+                      <Icon name="checkmark" size={14} color={colors.white} />
+                    </View>
+                    <Text style={styles.docsDetailText}>Mark passport photo submitted</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
 
             {/* Stats Cards */}
             <View style={styles.statsRow}>
@@ -888,27 +920,6 @@ export default function ProfileScreen() {
                 style={styles.input}
               />
 
-              <View style={styles.docsEditSection}>
-                <Pressable
-                  style={styles.docsCheckRow}
-                  onPress={() => setEditForm(prev => ({ ...prev, aadharSubmitted: !prev.aadharSubmitted }))}
-                >
-                  <View style={[styles.docsCheckbox, editForm.aadharSubmitted && styles.docsCheckboxOn]}>
-                    {editForm.aadharSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
-                  </View>
-                  <Text style={styles.docsCheckText}>Customer submitted Aadhar</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.docsCheckRow}
-                  onPress={() => setEditForm(prev => ({ ...prev, passportPhotoSubmitted: !prev.passportPhotoSubmitted }))}
-                >
-                  <View style={[styles.docsCheckbox, editForm.passportPhotoSubmitted && styles.docsCheckboxOn]}>
-                    {editForm.passportPhotoSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
-                  </View>
-                  <Text style={styles.docsCheckText}>Customer submitted passport photo</Text>
-                </Pressable>
-              </View>
-              
               <TextInput
                 placeholder="Location Description"
                 value={editForm.locationDesc}
@@ -1241,6 +1252,11 @@ const styles = StyleSheet.create({
   infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 3 },
   infoIcon: { fontSize: 14, width: 20 },
   infoText: { color: colors.white, fontSize: 13, flex: 1 },
+  docsCard: { backgroundColor: colors.white, borderRadius: 16, padding: 14, gap: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  docsTitle: { color: colors.blue2, fontSize: 14, fontWeight: "900" },
+  docsDetailRow: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#eef4ff", borderRadius: 12, padding: 10, borderWidth: 1, borderColor: "#dbeafe" },
+  docsDetailCheckbox: { width: 24, height: 24, borderRadius: 7, alignItems: "center", justifyContent: "center", backgroundColor: colors.blue2 },
+  docsDetailText: { color: colors.ink, fontSize: 13, fontWeight: "800", flex: 1 },
   
   // Action Grid Styles (2x2)
   actionGrid: { flexDirection: 'row', gap: 10 },

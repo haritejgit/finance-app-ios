@@ -2,8 +2,8 @@ import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useState } from "react";
-import { Dimensions, StyleSheet, Text, TextInput, View, ActivityIndicator, Pressable, ScrollView } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Animated, Dimensions, Easing, StyleSheet, Text, TextInput, View, ActivityIndicator, Pressable, ScrollView } from "react-native";
 import { useAuth } from "../src/auth-context";
 import { colors, gradient } from "../src/theme";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -21,6 +21,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const intro = useRef(new Animated.Value(0)).current;
   const [, response, promptAsync] = Google.useIdTokenAuthRequest({
     iosClientId: process.env.EXPO_PUBLIC_FIREBASE_IOS_GOOGLE_CLIENT_ID,
     webClientId: process.env.EXPO_PUBLIC_FIREBASE_WEB_GOOGLE_CLIENT_ID,
@@ -43,6 +44,15 @@ export default function LoginScreen() {
     };
     run();
   }, [response, signInGoogleWithIdToken]);
+
+  useEffect(() => {
+    Animated.timing(intro, {
+      toValue: 1,
+      duration: 520,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [intro]);
 
   const onSubmit = async () => {
     try {
@@ -73,15 +83,31 @@ export default function LoginScreen() {
       <SafeAreaView style={styles.safe}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <View style={styles.content}>
-            <View style={styles.brand}>
+            <Animated.View
+              style={[
+                styles.brand,
+                {
+                  opacity: intro,
+                  transform: [{ translateY: intro.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }],
+                },
+              ]}
+            >
               <View style={styles.logo}>
                 <Icon name="wallet" size={30} color={colors.white} />
               </View>
               <Text style={styles.title}>Finance Manager</Text>
               <Text style={styles.subtitle}>Fast collections, cleaner reports, better routes.</Text>
-            </View>
+            </Animated.View>
 
-            <View style={styles.card}>
+            <Animated.View
+              style={[
+                styles.card,
+                {
+                  opacity: intro,
+                  transform: [{ translateY: intro.interpolate({ inputRange: [0, 1], outputRange: [28, 0] }) }],
+                },
+              ]}
+            >
               <Text style={styles.formTitle}>{title}</Text>
               <Text style={styles.formSub}>{forgot ? "Enter your email to receive a reset link." : "Sign in to manage your daily finance flow."}</Text>
 
@@ -143,7 +169,7 @@ export default function LoginScreen() {
                   <Text style={styles.googleText}>Continue with Google</Text>
                 </Pressable>
               )}
-            </View>
+            </Animated.View>
           </View>
         </ScrollView>
       </SafeAreaView>

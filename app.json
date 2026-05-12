@@ -6,7 +6,9 @@
     "version": "1.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./app/src/main/ic_launcher-playstore.png",
     "splash": {
+      "image": "./app/src/main/ic_launcher-playstore.png",
       "resizeMode": "contain",
       "backgroundColor": "#2E7FF1"
     },
@@ -17,6 +19,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.haritej.financeapp",
       "buildNumber": "1",
+      "icon": "./app/src/main/ic_launcher-playstore.png",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "We use your location to tag customer home addresses.",
         "ITSAppUsesNonExemptEncryption": false
@@ -32,7 +35,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png",
+      "favicon": "./app/src/main/ic_launcher-playstore.png",
       "fonts": [
         "node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf",
         "node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialIcons.ttf",

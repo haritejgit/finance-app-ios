@@ -26,6 +26,14 @@ function getNetDistributedAmount(amount: number) {
   return amount - Math.floor(amount / 1000) * 20;
 }
 
+function toMillis(value: any) {
+  if (typeof value === "number") return value;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value?.toMillis === "function") return value.toMillis();
+  if (typeof value?.seconds === "number") return value.seconds * 1000;
+  return 0;
+}
+
 export default function GraphScreen() {
   const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -41,6 +49,7 @@ export default function GraphScreen() {
     totalLoans: 0,
     growthRate: 0,
   });
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -101,13 +110,26 @@ export default function GraphScreen() {
       );
       const customersSnap = await getDocs(customersQuery);
       const customers = customersSnap.docs.map((d) => d.data() as any);
+      const activeCustomers = customers.filter((customer) => customer.isActive !== false);
+      const activeCustomerIds = new Set(activeCustomers.map((customer) => customer.id));
+      const activeLoans = loans.filter((loan) => loan.status === "ACTIVE" && activeCustomerIds.has(loan.customerId));
+      const activeLoanCustomerIds = new Set(activeLoans.map((loan) => loan.customerId));
+      const loanCustomerById = new Map(loans.map((loan) => [loan.id, loan.customerId]));
 
       // Calculate monthly collections and distributions
       const collections = months.map((month) => {
         return payments
           .filter((p) => {
-            const date = p.paymentDate?.toMillis ? p.paymentDate.toMillis() : p.paymentDate;
-            return date >= BUSINESS_START_DATE && date >= month.start && date <= month.end && p.paymentType !== "DUE";
+            const date = toMillis(p.paymentDate);
+            const customerId = p.customerId ?? loanCustomerById.get(p.loanId);
+            return (
+              date >= BUSINESS_START_DATE &&
+              date >= month.start &&
+              date <= month.end &&
+              p.paymentType !== "DUE" &&
+              !!customerId &&
+              activeCustomerIds.has(customerId)
+            );
           })
           .reduce((sum, p) => sum + (p.amountPaid || 0), 0);
       });
@@ -115,8 +137,8 @@ export default function GraphScreen() {
       const distributions = months.map((month) => {
         const rawDistributed = loans
           .filter((loan) => {
-            const date = loan.startDate?.toMillis ? loan.startDate.toMillis() : loan.startDate;
-            return date >= BUSINESS_START_DATE && date >= month.start && date <= month.end;
+            const date = toMillis(loan.startDate);
+            return date >= BUSINESS_START_DATE && date >= month.start && date <= month.end && activeCustomerIds.has(loan.customerId);
           })
           .reduce((sum, loan) => sum + (loan.principalAmount || 0), 0);
         return getNetDistributedAmount(rawDistributed);
@@ -130,15 +152,36 @@ export default function GraphScreen() {
       const growthRate = collections[0] > 0
         ? ((collections[collections.length - 1] - collections[0]) / collections[0]) * 100
         : 0;
+      const currentMonth = months[months.length - 1];
+      const currentMonthDueCount = currentMonth
+        ? payments.filter((payment) => {
+            const date = toMillis(payment.paymentDate);
+            const customerId = payment.customerId ?? loanCustomerById.get(payment.loanId);
+            return date >= currentMonth.start && date <= currentMonth.end && payment.paymentType === "DUE" && !!customerId && activeCustomerIds.has(customerId);
+          }).length
+        : 0;
+      const collectionRatio = totalDistributed > 0 ? totalCollection / totalDistributed : 0;
+      const nextSuggestions = [
+        collectionRatio < 0.6
+          ? "Collections are below 60% of net distributions. Prioritize follow-ups for routes with repeated due marks."
+          : "Collection recovery is healthy. Keep the same route discipline and watch new disbursements closely.",
+        currentMonthDueCount > 0
+          ? `${currentMonthDueCount} due entries were marked this month. Review those customers before adding fresh loans.`
+          : "No due entries in the current month. This is a good window to strengthen customer documentation.",
+        activeCustomers.length !== activeLoans.length
+          ? "Some active customers do not have an active loan. Keep customer and loan records aligned for cleaner progress tracking."
+          : "Active customer count and active loan count are synced.",
+      ];
 
       setMonthlyData({ collections, distributions, labels: months.map((month) => month.label) });
       setStats({
         totalCollection,
         totalDistributed,
-        totalCustomers: customers.length,
-        totalLoans: loans.length,
+        totalCustomers: activeLoanCustomerIds.size,
+        totalLoans: activeLoans.length,
         growthRate,
       });
+      setSuggestions(nextSuggestions);
     } catch (error) {
       // Error handled silently
     } finally {
@@ -220,7 +263,7 @@ export default function GraphScreen() {
                   <Icon name="people" size={18} color={colors.blue2} />
                 </View>
                 <Text style={styles.statNumber}>{stats.totalCustomers}</Text>
-                <Text style={styles.statLabel}>Customers</Text>
+                <Text style={styles.statLabel}>Loan Customers</Text>
               </View>
               <View style={styles.statCard}>
                 <View style={[styles.statIcon, styles.statIconPurple]}>
@@ -293,6 +336,16 @@ export default function GraphScreen() {
                       : 0}%
                   </Text>
                 </View>
+              </View>
+
+              <View style={styles.suggestionCard}>
+                <Text style={styles.summaryTitle}>Suggestions</Text>
+                {suggestions.map((suggestion) => (
+                  <View key={suggestion} style={styles.suggestionRow}>
+                    <View style={styles.suggestionDot} />
+                    <Text style={styles.suggestionText}>{suggestion}</Text>
+                  </View>
+                ))}
               </View>
             </View>
 
@@ -421,6 +474,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
   },
+  suggestionCard: { backgroundColor: "rgba(255,255,255,0.95)", borderRadius: 16, padding: 18, gap: 10 },
+  suggestionRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  suggestionDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.teal, marginTop: 5 },
+  suggestionText: { flex: 1, color: colors.ink, fontSize: 13, lineHeight: 18, fontWeight: "700" },
   summaryTitle: { color: colors.blue2, fontSize: 16, fontWeight: "700", marginBottom: 12 },
   summaryRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
   summaryLabel: { color: "#666", fontSize: 14 },

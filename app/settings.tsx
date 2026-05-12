@@ -1,7 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useState } from "react";
-import { ActivityIndicator, Alert, Dimensions, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Dimensions, Platform, Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
@@ -9,8 +9,11 @@ import { collection, getDocs, query, where } from "firebase/firestore";
 import { useAuth } from "../src/auth-context";
 import { db } from "../src/firebase";
 import { colors, gradient } from "../src/theme";
+import { useTheme } from "../src/theme-context";
 import Icon from "../src/Icon";
 import { Customer, Loan, Payment, Village } from "../src/types";
+
+const BUSINESS_START_DATE = new Date(2026, 3, 1).getTime();
 
 let XLSX: any = null;
 async function loadXLSX() {
@@ -55,6 +58,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
 
 export default function SettingsScreen() {
   const { user, logout } = useAuth();
+  const { isDark, toggleDarkMode } = useTheme();
   const [isExporting, setIsExporting] = useState(false);
 
   const exportWholeData = async () => {
@@ -122,7 +126,7 @@ export default function SettingsScreen() {
         ...payments.map((payment) => payment.paymentDate),
         ...activeCustomers.map((customer) => toMillis(customer.createdAt)),
       ].filter((ts) => ts > 0);
-      const minDate = startOfDay(Math.min(...allDates, Date.now()));
+      const minDate = Math.max(BUSINESS_START_DATE, startOfDay(Math.min(...allDates, Date.now())));
       const maxDate = startOfDay(Math.max(...allDates, Date.now()));
       const weekDates: number[] = [];
       for (let cursor = minDate; cursor <= maxDate; cursor += 7 * 24 * 60 * 60 * 1000) {
@@ -327,6 +331,22 @@ export default function SettingsScreen() {
               </View>
             </View>
 
+            <View style={styles.themeRow}>
+              <View style={styles.infoIcon}>
+                <Icon name={isDark ? "moon-outline" : "sunny-outline"} size={18} color={colors.coral} />
+              </View>
+              <View style={styles.infoCopy}>
+                <Text style={styles.label}>Theme</Text>
+                <Text style={styles.value}>{isDark ? "Dark mode" : "Light mode"}</Text>
+              </View>
+              <Switch
+                value={isDark}
+                onValueChange={toggleDarkMode}
+                trackColor={{ false: colors.border, true: colors.blue2 }}
+                thumbColor={colors.white}
+              />
+            </View>
+
             <Pressable
               style={[styles.exportBtn, isExporting && styles.exportBtnDisabled]}
               onPress={exportWholeData}
@@ -370,6 +390,7 @@ const styles = StyleSheet.create({
   subtitle: { color: "rgba(255,255,255,0.78)", fontSize: 14 },
   card: { backgroundColor: colors.white, borderRadius: 22, padding: 20, gap: 14, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.18, shadowRadius: 18, elevation: 6 },
   infoRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 4 },
+  themeRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
   infoIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: colors.sky },
   infoCopy: { flex: 1 },
   label: { color: colors.gray, fontWeight: "800", fontSize: 11, textTransform: "uppercase" },

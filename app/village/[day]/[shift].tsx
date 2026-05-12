@@ -1,7 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { Dimensions, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View, Switch } from "react-native";
+import { Dimensions, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useAuth } from "../../../src/auth-context";
 import { useTheme } from "../../../src/theme-context";
 import { addVillage, deleteVillage, getVillages, updateVillageDayShift } from "../../../src/repository";
@@ -17,10 +17,11 @@ export default function VillageListScreen() {
   const day = typeof params.day === 'string' ? params.day : Array.isArray(params.day) ? params.day[0] : "Monday";
   const shift = typeof params.shift === 'string' ? params.shift : Array.isArray(params.shift) ? params.shift[0] : "Morning";
   const { user, loading: authLoading } = useAuth();
-  const { colors, isDark, toggleDarkMode } = useTheme();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [villages, setVillages] = useState<Village[]>([]);
   const [newVillageName, setNewVillageName] = useState("");
+  const [addModalVisible, setAddModalVisible] = useState(false);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [villageToDelete, setVillageToDelete] = useState<Village | null>(null);
   const [moveModalVisible, setMoveModalVisible] = useState(false);
@@ -76,6 +77,18 @@ export default function VillageListScreen() {
     }
   };
 
+  const closeAddModal = () => {
+    setAddModalVisible(false);
+    setNewVillageName("");
+  };
+
+  const saveVillage = async () => {
+    if (!newVillageName.trim() || !user) return;
+    await addVillage(user.uid, newVillageName.trim(), String(day), String(shift));
+    closeAddModal();
+    await reload();
+  };
+
   const requestDeleteFromMoveModal = () => {
     if (!villageToMove) return;
     const v = villageToMove;
@@ -106,15 +119,6 @@ export default function VillageListScreen() {
               <Text style={styles.header}>Villages</Text>
               <Text style={styles.sub}>{day} • {shift}</Text>
             </View>
-            <View style={styles.themeToggle}>
-              <Text style={styles.themeText}>Dark</Text>
-              <Switch
-                value={isDark}
-                onValueChange={toggleDarkMode}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={isDark ? colors.primary : colors.background}
-              />
-            </View>
           </View>
 
           {loading ? (
@@ -132,30 +136,6 @@ export default function VillageListScreen() {
                   <Text style={[styles.statNumber, { color: colors.text }]}>{villages.length}</Text>
                   <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total Villages</Text>
                 </View>
-              </View>
-
-              <View style={styles.addContainer}>
-                <TextInput
-                  placeholder="Enter village name..."
-                  value={newVillageName}
-                  onChangeText={setNewVillageName}
-                  style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-                  placeholderTextColor={colors.textSecondary}
-                  autoCapitalize="words"
-                  autoCorrect={false}
-                />
-                <Pressable
-                  style={[styles.addBtn, { backgroundColor: colors.primary }, !newVillageName.trim() && styles.addBtnDisabled]}
-                  onPress={async () => {
-                    if (!newVillageName.trim() || !user) return;
-                    await addVillage(user.uid, newVillageName.trim(), String(day), String(shift));
-                    setNewVillageName("");
-                    await reload();
-                  }}
-                  disabled={!newVillageName.trim()}
-                >
-                  <Text style={[styles.addTxt, { color: colors.white }]}>Add Village</Text>
-                </Pressable>
               </View>
 
               <FlatList
@@ -196,6 +176,50 @@ export default function VillageListScreen() {
           )}
         </View>
       </SafeAreaView>
+
+      {!loading && (
+        <Pressable
+          style={[styles.fab, { right: 20, bottom: Math.max(insets.bottom + 18, 28), backgroundColor: colors.coral }]}
+          onPress={() => setAddModalVisible(true)}
+        >
+          <Text style={styles.fabText}>+</Text>
+        </Pressable>
+      )}
+
+      <Modal
+        visible={addModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={closeAddModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.confirmDialog, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.confirmTitle, { color: colors.text }]}>Add Village</Text>
+            <Text style={[styles.addHint, { color: colors.textSecondary }]}>{day} / {shift}</Text>
+            <TextInput
+              placeholder="Village name"
+              value={newVillageName}
+              onChangeText={setNewVillageName}
+              style={[styles.input, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border, color: colors.text }]}
+              placeholderTextColor={colors.textSecondary}
+              autoCapitalize="words"
+              autoCorrect={false}
+            />
+            <View style={styles.confirmButtons}>
+              <Pressable style={[styles.cancelBtn, { backgroundColor: colors.border }]} onPress={closeAddModal}>
+                <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.deleteBtn, { backgroundColor: colors.primary }, !newVillageName.trim() && styles.addBtnDisabled]}
+                onPress={saveVillage}
+                disabled={!newVillageName.trim()}
+              >
+                <Text style={[styles.deleteBtnText, { color: colors.white }]}>Add</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={moveModalVisible}
@@ -292,18 +316,16 @@ const styles = StyleSheet.create({
   headerLeft: { flex: 1 },
   header: { color: "#FFFFFF", fontSize: 28, fontWeight: "700" },
   sub: { color: "rgba(255,255,255,0.7)" },
-  themeToggle: { flexDirection: "row", alignItems: "center", gap: 8 },
-  themeText: { color: "rgba(255,255,255,0.82)", fontSize: 14, fontWeight: "700" },
   statsContainer: { flexDirection: "row", gap: 12, marginBottom: 16 },
   statCard: { flex: 1, borderRadius: 18, padding: 14, alignItems: "center", shadowColor: "#0f172a", shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 3 },
   statNumber: { fontSize: 20, fontWeight: "700", marginBottom: 2 },
   statLabel: { fontSize: 11, marginTop: 2 },
-  addContainer: { flexDirection: "row", gap: 8, marginBottom: 16 },
   input: { flex: 1, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, borderWidth: 1, fontSize: 16 },
-  addBtn: { borderRadius: 14, paddingHorizontal: 18, justifyContent: "center", minWidth: 112 },
   addBtnDisabled: { opacity: 0.3 },
-  addTxt: { fontWeight: "700", fontSize: 14 },
-  listContainer: { paddingBottom: 20 },
+  addHint: { fontSize: 13, fontWeight: "700", marginTop: -4, marginBottom: 10, textAlign: "center" },
+  listContainer: { paddingBottom: 96 },
+  fab: { position: "absolute", width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", shadowColor: "#0f172a", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.24, shadowRadius: 12, elevation: 8 },
+  fabText: { color: "#FFFFFF", fontSize: 34, fontWeight: "600", lineHeight: 38 },
   villageCard: { borderRadius: 18, padding: 14, marginBottom: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 3 },
   villageHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   villageIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: "#eaf2ff", alignItems: "center", justifyContent: "center", marginRight: 10 },
