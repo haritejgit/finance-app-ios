@@ -8,6 +8,7 @@ import { useAuth } from "../src/auth-context";
 import { colors, gradient } from "../src/theme";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "../src/Icon";
+import FinanceMotion from "../src/FinanceMotion";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -92,8 +93,11 @@ export default function LoginScreen() {
                 },
               ]}
             >
-              <View style={styles.logo}>
-                <Icon name="wallet" size={30} color={colors.white} />
+              <View style={styles.motionStage}>
+                <FinanceMotion />
+                <View style={styles.logo}>
+                  <Icon name="wallet" size={30} color={colors.white} />
+                </View>
               </View>
               <Text style={styles.title}>Finance Manager</Text>
               <Text style={styles.subtitle}>Fast collections, cleaner reports, better routes.</Text>
@@ -185,7 +189,9 @@ const styles = StyleSheet.create({
   container: { paddingHorizontal: 20, paddingVertical: 18, flexGrow: 1, justifyContent: "center" },
   content: { width: "100%", maxWidth: Math.min(screenWidth - 40, 390), alignSelf: "center", gap: 18 },
   brand: { alignItems: "center", gap: 8 },
+  motionStage: { width: "100%", height: 150, alignItems: "center", justifyContent: "center" },
   logo: {
+    position: "absolute",
     width: 62,
     height: 62,
     borderRadius: 20,

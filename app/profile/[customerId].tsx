@@ -292,11 +292,11 @@ export default function ProfileScreen() {
     await reload();
   };
 
-  const markDocumentSubmitted = async (field: "aadharSubmitted" | "passportPhotoSubmitted") => {
+  const toggleDocumentSubmitted = async (field: "aadharSubmitted" | "passportPhotoSubmitted") => {
     if (!customer) return;
     const updatedCustomer: Customer = {
       ...customer,
-      [field]: true,
+      [field]: !customer[field],
     };
     await updateCustomer(updatedCustomer);
     setCustomer(updatedCustomer);
@@ -541,27 +541,26 @@ export default function ProfileScreen() {
               )}
             </View>
 
-            {(!customer.aadharSubmitted || !customer.passportPhotoSubmitted) && (
-              <View style={styles.docsCard}>
-                <Text style={styles.docsTitle}>Pending Documents</Text>
-                {!customer.aadharSubmitted && (
-                  <Pressable style={styles.docsDetailRow} onPress={() => markDocumentSubmitted("aadharSubmitted")}>
-                    <View style={styles.docsDetailCheckbox}>
-                      <Icon name="checkmark" size={14} color={colors.white} />
-                    </View>
-                    <Text style={styles.docsDetailText}>Mark Aadhar submitted</Text>
-                  </Pressable>
-                )}
-                {!customer.passportPhotoSubmitted && (
-                  <Pressable style={styles.docsDetailRow} onPress={() => markDocumentSubmitted("passportPhotoSubmitted")}>
-                    <View style={styles.docsDetailCheckbox}>
-                      <Icon name="checkmark" size={14} color={colors.white} />
-                    </View>
-                    <Text style={styles.docsDetailText}>Mark passport photo submitted</Text>
-                  </Pressable>
-                )}
+            <View style={styles.docsCard}>
+              <View style={styles.docsHeaderRow}>
+                <Text style={styles.docsTitle}>Customer Documents</Text>
+                <Text style={[styles.docsStatusText, customer.aadharSubmitted && customer.passportPhotoSubmitted ? styles.docsStatusComplete : styles.docsStatusPending]}>
+                  {customer.aadharSubmitted && customer.passportPhotoSubmitted ? "Complete" : "Pending"}
+                </Text>
               </View>
-            )}
+              <Pressable style={styles.docsDetailRow} onPress={() => toggleDocumentSubmitted("aadharSubmitted")}>
+                <View style={[styles.docsDetailCheckbox, customer.aadharSubmitted && styles.docsDetailCheckboxOn]}>
+                  {customer.aadharSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
+                </View>
+                <Text style={styles.docsDetailText}>Aadhar submitted</Text>
+              </Pressable>
+              <Pressable style={styles.docsDetailRow} onPress={() => toggleDocumentSubmitted("passportPhotoSubmitted")}>
+                <View style={[styles.docsDetailCheckbox, customer.passportPhotoSubmitted && styles.docsDetailCheckboxOn]}>
+                  {customer.passportPhotoSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
+                </View>
+                <Text style={styles.docsDetailText}>Passport photo submitted</Text>
+              </Pressable>
+            </View>
 
             {/* Stats Cards */}
             <View style={styles.statsRow}>
@@ -1253,9 +1252,14 @@ const styles = StyleSheet.create({
   infoIcon: { fontSize: 14, width: 20 },
   infoText: { color: colors.white, fontSize: 13, flex: 1 },
   docsCard: { backgroundColor: colors.white, borderRadius: 16, padding: 14, gap: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  docsHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   docsTitle: { color: colors.blue2, fontSize: 14, fontWeight: "900" },
+  docsStatusText: { fontSize: 11, fontWeight: "900", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, overflow: "hidden" },
+  docsStatusComplete: { color: "#047857", backgroundColor: "#d1fae5" },
+  docsStatusPending: { color: "#b45309", backgroundColor: "#fef3c7" },
   docsDetailRow: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#eef4ff", borderRadius: 12, padding: 10, borderWidth: 1, borderColor: "#dbeafe" },
-  docsDetailCheckbox: { width: 24, height: 24, borderRadius: 7, alignItems: "center", justifyContent: "center", backgroundColor: colors.blue2 },
+  docsDetailCheckbox: { width: 24, height: 24, borderRadius: 7, alignItems: "center", justifyContent: "center", backgroundColor: colors.white, borderWidth: 1, borderColor: "#bfdbfe" },
+  docsDetailCheckboxOn: { backgroundColor: colors.blue2, borderColor: colors.blue2 },
   docsDetailText: { color: colors.ink, fontSize: 13, fontWeight: "800", flex: 1 },
   
   // Action Grid Styles (2x2)

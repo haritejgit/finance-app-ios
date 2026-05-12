@@ -153,6 +153,10 @@ export default function GraphScreen() {
         ? ((collections[collections.length - 1] - collections[0]) / collections[0]) * 100
         : 0;
       const currentMonth = months[months.length - 1];
+      const previousMonth = months[months.length - 2];
+      const currentMonthCollection = collections[collections.length - 1] ?? 0;
+      const previousMonthCollection = previousMonth ? collections[collections.length - 2] ?? 0 : 0;
+      const currentMonthDistribution = distributions[distributions.length - 1] ?? 0;
       const currentMonthDueCount = currentMonth
         ? payments.filter((payment) => {
             const date = toMillis(payment.paymentDate);
@@ -160,18 +164,73 @@ export default function GraphScreen() {
             return date >= currentMonth.start && date <= currentMonth.end && payment.paymentType === "DUE" && !!customerId && activeCustomerIds.has(customerId);
           }).length
         : 0;
+      const currentMonthPaymentCount = currentMonth
+        ? payments.filter((payment) => {
+            const date = toMillis(payment.paymentDate);
+            const customerId = payment.customerId ?? loanCustomerById.get(payment.loanId);
+            return date >= currentMonth.start && date <= currentMonth.end && !!customerId && activeCustomerIds.has(customerId);
+          }).length
+        : 0;
       const collectionRatio = totalDistributed > 0 ? totalCollection / totalDistributed : 0;
-      const nextSuggestions = [
-        collectionRatio < 0.6
-          ? "Collections are below 60% of net distributions. Prioritize follow-ups for routes with repeated due marks."
-          : "Collection recovery is healthy. Keep the same route discipline and watch new disbursements closely.",
-        currentMonthDueCount > 0
-          ? `${currentMonthDueCount} due entries were marked this month. Review those customers before adding fresh loans.`
-          : "No due entries in the current month. This is a good window to strengthen customer documentation.",
-        activeCustomers.length !== activeLoans.length
-          ? "Some active customers do not have an active loan. Keep customer and loan records aligned for cleaner progress tracking."
-          : "Active customer count and active loan count are synced.",
+      const currentMonthDueRate = currentMonthPaymentCount > 0 ? currentMonthDueCount / currentMonthPaymentCount : 0;
+      const pendingDocumentCount = activeCustomers.filter(
+        (customer) => customer.aadharSubmitted !== true || customer.passportPhotoSubmitted !== true
+      ).length;
+      const activeCustomersWithoutLoans = activeCustomers.length - activeLoanCustomerIds.size;
+      const totalOutstanding = activeLoans.reduce((sum, loan) => sum + (Number(loan.balanceAmount) || 0), 0);
+      const averageOutstanding = activeLoans.length > 0 ? totalOutstanding / activeLoans.length : 0;
+      const collectionTrend = previousMonthCollection > 0
+        ? ((currentMonthCollection - previousMonthCollection) / previousMonthCollection) * 100
+        : growthRate;
+
+      const rankedSuggestions = [
+        {
+          score: currentMonthDueRate * 100,
+          text: currentMonthDueCount > 0
+            ? `${currentMonthDueCount} due marks this month (${Math.round(currentMonthDueRate * 100)}% of entries). Start tomorrow with those follow-ups before new distributions.`
+            : "No due marks this month. Keep routes strict and use the clean streak to collect missing documents.",
+        },
+        {
+          score: collectionRatio < 0.75 ? 90 - collectionRatio * 40 : 25,
+          text: collectionRatio < 0.75
+            ? `Collected ${Math.round(collectionRatio * 100)}% of net distributed amount. Slow down fresh lending until recovery crosses 75%.`
+            : `Collected ${Math.round(collectionRatio * 100)}% against net distributions. You can consider selective renewals for customers with clean payment history.`,
+        },
+        {
+          score: collectionTrend < 0 ? 80 + Math.abs(collectionTrend) : 20,
+          text: collectionTrend < 0
+            ? `Collections are down ${Math.abs(collectionTrend).toFixed(1)}% versus the previous month. Check which route or shift dropped first.`
+            : `Collections are up ${collectionTrend.toFixed(1)}% versus the previous month. Increase focus on repeatable routes, not broad expansion.`,
+        },
+        {
+          score: pendingDocumentCount > 0 ? 58 + pendingDocumentCount : 12,
+          text: pendingDocumentCount > 0
+            ? `${pendingDocumentCount} active customer${pendingDocumentCount === 1 ? "" : "s"} still need document completion. Finish those before approving higher amounts.`
+            : "All active customer documents are complete. This improves recovery confidence and makes audits cleaner.",
+        },
+        {
+          score: activeCustomersWithoutLoans > 0 ? 54 + activeCustomersWithoutLoans : 10,
+          text: activeCustomersWithoutLoans > 0
+            ? `${activeCustomersWithoutLoans} active customer${activeCustomersWithoutLoans === 1 ? "" : "s"} do not have active loans. Archive inactive records or add missing loan details.`
+            : "Active customers and active loans are aligned, so progress counts are clean.",
+        },
+        {
+          score: averageOutstanding > 9000 ? 65 : 18,
+          text: activeLoans.length > 0
+            ? `Average outstanding is ${formatAmountInKM(averageOutstanding, 1)} per active loan. Keep renewal offers lower for high-balance customers.`
+            : "No active loans found. Add loans only after customer documents and route schedule are ready.",
+        },
+        {
+          score: currentMonthDistribution > currentMonthCollection ? 50 : 16,
+          text: currentMonthDistribution > currentMonthCollection
+            ? `This month distribution is ahead of collection by ${formatAmountInKM(currentMonthDistribution - currentMonthCollection, 1)}. Tighten daily closing checks.`
+            : `This month collection is ahead of distribution by ${formatAmountInKM(currentMonthCollection - currentMonthDistribution, 1)}. Cash flow is improving.`,
+        },
       ];
+      const nextSuggestions = rankedSuggestions
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 4)
+        .map((item) => item.text);
 
       setMonthlyData({ collections, distributions, labels: months.map((month) => month.label) });
       setStats({

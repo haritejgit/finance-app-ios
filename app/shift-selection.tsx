@@ -7,6 +7,7 @@ import { useAuth } from "../src/auth-context";
 import { CustomerSearchResult, getAllActiveCustomersWithVillages, getTodayDashboardStats } from "../src/repository";
 import { colors, gradient } from "../src/theme";
 import Icon from "../src/Icon";
+import FinanceMotion from "../src/FinanceMotion";
 
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const shortDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -117,6 +118,9 @@ export default function ShiftSelectionScreen() {
             ]}
           >
             <View style={styles.hero}>
+              <View style={styles.dashboardMotion}>
+                <FinanceMotion compact />
+              </View>
               <View style={styles.heroTop}>
                 <View style={styles.avatar}>
                   <Icon name="wallet-outline" size={22} color={colors.white} />
@@ -300,7 +304,8 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   container: { paddingHorizontal: 16, paddingVertical: 12 },
   content: { width: "100%", maxWidth: Math.min(screenWidth - 32, 430), alignSelf: "center", gap: 12 },
-  hero: { paddingTop: 4, gap: 8 },
+  hero: { paddingTop: 4, gap: 8, overflow: "hidden", borderRadius: 22 },
+  dashboardMotion: { position: "absolute", top: -8, left: 120, right: -28, opacity: 0.82 },
   heroTop: { flexDirection: "row", alignItems: "center", gap: 12 },
   avatar: {
     width: 44,
