@@ -8,6 +8,8 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
+  type DocumentReference,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { Customer, Loan, Payment, PaymentMode, Village } from "./types";
@@ -170,6 +172,64 @@ export async function getNextNumericalId(userId: string, dayOfWeek: string, shif
     nextId += 1;
   }
   return nextId;
+}
+
+export async function normalizeCustomerNumericalIdsForAllShifts(userId: string) {
+  const [villagesSnap, customersSnap] = await Promise.all([
+    getDocs(query(coll.villages, where("userId", "==", userId))),
+    getDocs(query(coll.customers, where("userId", "==", userId))),
+  ]);
+
+  const villageRouteById = new Map<string, string>();
+  villagesSnap.docs.forEach((d) => {
+    const village = d.data() as Village;
+    villageRouteById.set(village.id, `${village.dayOfWeek}:${village.shift}`);
+  });
+
+  const customersByRoute = new Map<string, { ref: DocumentReference; customer: Customer }[]>();
+  customersSnap.docs.forEach((customerDoc) => {
+    const customer = customerDoc.data() as Customer;
+    if (customer.isActive === false) return;
+
+    const routeKey = villageRouteById.get(customer.villageId);
+    if (!routeKey) return;
+
+    const routeCustomers = customersByRoute.get(routeKey) ?? [];
+    routeCustomers.push({ ref: customerDoc.ref, customer });
+    customersByRoute.set(routeKey, routeCustomers);
+  });
+
+  const updates: { ref: DocumentReference; numericalId: number }[] = [];
+  customersByRoute.forEach((routeCustomers) => {
+    routeCustomers
+      .sort((a, b) => {
+        const idDelta = a.customer.numericalId - b.customer.numericalId;
+        if (idDelta !== 0) return idDelta;
+        const createdDelta = a.customer.createdAt - b.customer.createdAt;
+        if (createdDelta !== 0) return createdDelta;
+        return a.customer.name.localeCompare(b.customer.name);
+      })
+      .forEach(({ ref, customer }, index) => {
+        const nextNumericalId = index + 1;
+        if (customer.numericalId !== nextNumericalId) {
+          updates.push({ ref, numericalId: nextNumericalId });
+        }
+      });
+  });
+
+  for (let i = 0; i < updates.length; i += 450) {
+    const batch = writeBatch(db);
+    updates.slice(i, i + 450).forEach(({ ref, numericalId }) => {
+      batch.update(ref, { numericalId });
+    });
+    await batch.commit();
+  }
+
+  if (updates.length > 0) {
+    clearCache();
+  }
+
+  return updates.length;
 }
 
 export async function addCustomerWithLoan(

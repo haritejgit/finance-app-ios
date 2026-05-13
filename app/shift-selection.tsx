@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ActivityIndicator, Alert, Animated, Dimensions, Easing, FlatList, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../src/auth-context";
-import { CustomerSearchResult, getAllActiveCustomersWithVillages, getTodayDashboardStats } from "../src/repository";
+import { CustomerSearchResult, getAllActiveCustomersWithVillages, getTodayDashboardStats, normalizeCustomerNumericalIdsForAllShifts } from "../src/repository";
 import { colors, gradient } from "../src/theme";
 import Icon from "../src/Icon";
 
@@ -27,6 +27,7 @@ export default function ShiftSelectionScreen() {
   const [allCustomers, setAllCustomers] = useState<CustomerSearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const intro = useRef(new Animated.Value(0)).current;
+  const routeNumberRepairRun = useRef(false);
 
   useEffect(() => {
     Animated.timing(intro, {
@@ -41,6 +42,17 @@ export default function ShiftSelectionScreen() {
     if (!user) return;
     try {
       setLoading(true);
+      if (!routeNumberRepairRun.current) {
+        try {
+          const updatedCustomers = await normalizeCustomerNumericalIdsForAllShifts(user.uid);
+          routeNumberRepairRun.current = true;
+          if (updatedCustomers > 0) {
+            setAllCustomers([]);
+          }
+        } catch (repairError) {
+          console.warn("Failed to repair customer book number gaps", repairError);
+        }
+      }
       const stats = await getTodayDashboardStats(user.uid);
       setTodayStats(stats);
     } catch {
