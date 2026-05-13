@@ -47,6 +47,14 @@ interface FinanceDao {
     """)
     suspend fun getMaxNumericalIdForShift(userId: String, day: String, shift: String): Int?
 
+    @Query("""
+        SELECT c.numericalId
+        FROM customers c
+        JOIN villages v ON c.villageId = v.id
+        WHERE v.dayOfWeek = :day AND v.shift = :shift AND c.userId = :userId
+    """)
+    suspend fun getNumericalIdsForShift(userId: String, day: String, shift: String): List<Int>
+
     @Query("SELECT MAX(numericalId) FROM customers WHERE userId = :userId")
     suspend fun getMaxNumericalId(userId: String): Int?
 

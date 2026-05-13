@@ -145,15 +145,23 @@ export async function getAllActiveCustomersWithVillages(userId: string): Promise
 }
 
 export async function getNextNumericalId(userId: string, villageId: string) {
-  // Scope by specific village only - fresh serial numbers per village
+  // Scope by specific village only - fresh serial numbers per village.
+  // Reuse gaps left by deleted customers before appending a new number.
   const coll = collection(db, "customers");
   const snap = await getDocs(query(coll, where("userId", "==", userId), where("villageId", "==", villageId)));
-  let max = 0;
+  const assignedIds = new Set<number>();
   snap.docs.forEach((d) => {
     const c = d.data() as Customer;
-    max = Math.max(max, c.numericalId);
+    if (Number.isInteger(c.numericalId) && c.numericalId > 0) {
+      assignedIds.add(c.numericalId);
+    }
   });
-  return max + 1;
+
+  let nextId = 1;
+  while (assignedIds.has(nextId)) {
+    nextId += 1;
+  }
+  return nextId;
 }
 
 export async function addCustomerWithLoan(

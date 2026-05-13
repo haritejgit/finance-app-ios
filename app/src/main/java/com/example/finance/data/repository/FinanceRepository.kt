@@ -98,8 +98,12 @@ class FinanceRepository @Inject constructor(
         val userId = authManager.getCurrentUserId() ?: return@withContext 1
         val village = dao.getVillageById(villageId, userId) ?: return@withContext 1
         
-        val maxId = dao.getMaxNumericalIdForShift(userId, village.dayOfWeek, village.shift) ?: 0
-        return@withContext maxId + 1
+        val assignedIds = dao.getNumericalIdsForShift(userId, village.dayOfWeek, village.shift).toSet()
+        var nextId = 1
+        while (assignedIds.contains(nextId)) {
+            nextId += 1
+        }
+        return@withContext nextId
     }
 
     suspend fun getVillageById(villageId: String): Village? = withContext(Dispatchers.IO) {
