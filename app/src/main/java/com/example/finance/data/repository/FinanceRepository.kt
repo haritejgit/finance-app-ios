@@ -96,9 +96,8 @@ class FinanceRepository @Inject constructor(
 
     suspend fun getNextNumericalId(villageId: String): Int = withContext(Dispatchers.IO) {
         val userId = authManager.getCurrentUserId() ?: return@withContext 1
-        val village = dao.getVillageById(villageId, userId) ?: return@withContext 1
         
-        val assignedIds = dao.getNumericalIdsForShift(userId, village.dayOfWeek, village.shift).toSet()
+        val assignedIds = dao.getNumericalIdsForVillage(userId, villageId).toSet()
         var nextId = 1
         while (assignedIds.contains(nextId)) {
             nextId += 1

@@ -95,6 +95,7 @@ export async function updateVillageDayShift(villageId: string, dayOfWeek: string
 }
 
 export async function getCustomers(userId: string, villageId: string, useCache = true) {
+  await normalizeCustomerNumericalIdsForVillage(userId, villageId);
   const cacheKey = getCacheKey(userId, "customers", villageId);
   if (useCache) {
     const cached = getCached<Customer[]>(cacheKey);
@@ -146,23 +147,13 @@ export async function getAllActiveCustomersWithVillages(userId: string): Promise
     .sort((a, b) => a.numericalId - b.numericalId);
 }
 
-export async function getNextNumericalId(userId: string, dayOfWeek: string, shift: string) {
-  // Scope by route (day + shift), not by village, so all villages in a shift
-  // share one sequence and gaps from deleted customers are reused.
-  const [villagesSnap, customersSnap] = await Promise.all([
-    getDocs(query(coll.villages, where("userId", "==", userId), where("dayOfWeek", "==", dayOfWeek), where("shift", "==", shift))),
-    getDocs(query(coll.customers, where("userId", "==", userId))),
-  ]);
-  const routeVillageIds = new Set(
-    villagesSnap.docs.map((d) => {
-      const village = d.data() as Village;
-      return village.id;
-    })
-  );
+export async function getNextNumericalId(userId: string, villageId: string) {
+  // Scope by village so the visible customer list has consecutive book numbers.
+  const customersSnap = await getDocs(query(coll.customers, where("userId", "==", userId), where("villageId", "==", villageId)));
   const assignedIds = new Set<number>();
   customersSnap.docs.forEach((d) => {
     const c = d.data() as Customer;
-    if (routeVillageIds.has(c.villageId) && Number.isInteger(c.numericalId) && c.numericalId > 0) {
+    if (c.isActive !== false && Number.isInteger(c.numericalId) && c.numericalId > 0) {
       assignedIds.add(c.numericalId);
     }
   });
@@ -174,48 +165,22 @@ export async function getNextNumericalId(userId: string, dayOfWeek: string, shif
   return nextId;
 }
 
-export async function normalizeCustomerNumericalIdsForAllShifts(userId: string) {
-  const [villagesSnap, customersSnap] = await Promise.all([
-    getDocs(query(coll.villages, where("userId", "==", userId))),
-    getDocs(query(coll.customers, where("userId", "==", userId))),
-  ]);
-
-  const villageRouteById = new Map<string, string>();
-  villagesSnap.docs.forEach((d) => {
-    const village = d.data() as Village;
-    villageRouteById.set(village.id, `${village.dayOfWeek}:${village.shift}`);
-  });
-
-  const customersByRoute = new Map<string, { ref: DocumentReference; customer: Customer }[]>();
-  customersSnap.docs.forEach((customerDoc) => {
-    const customer = customerDoc.data() as Customer;
-    if (customer.isActive === false) return;
-
-    const routeKey = villageRouteById.get(customer.villageId);
-    if (!routeKey) return;
-
-    const routeCustomers = customersByRoute.get(routeKey) ?? [];
-    routeCustomers.push({ ref: customerDoc.ref, customer });
-    customersByRoute.set(routeKey, routeCustomers);
-  });
-
+async function normalizeCustomerGroup(customers: { ref: DocumentReference; customer: Customer }[]) {
   const updates: { ref: DocumentReference; numericalId: number }[] = [];
-  customersByRoute.forEach((routeCustomers) => {
-    routeCustomers
-      .sort((a, b) => {
-        const idDelta = a.customer.numericalId - b.customer.numericalId;
-        if (idDelta !== 0) return idDelta;
-        const createdDelta = a.customer.createdAt - b.customer.createdAt;
-        if (createdDelta !== 0) return createdDelta;
-        return a.customer.name.localeCompare(b.customer.name);
-      })
-      .forEach(({ ref, customer }, index) => {
-        const nextNumericalId = index + 1;
-        if (customer.numericalId !== nextNumericalId) {
-          updates.push({ ref, numericalId: nextNumericalId });
-        }
-      });
-  });
+  customers
+    .sort((a, b) => {
+      const idDelta = a.customer.numericalId - b.customer.numericalId;
+      if (idDelta !== 0) return idDelta;
+      const createdDelta = a.customer.createdAt - b.customer.createdAt;
+      if (createdDelta !== 0) return createdDelta;
+      return a.customer.name.localeCompare(b.customer.name);
+    })
+    .forEach(({ ref, customer }, index) => {
+      const nextNumericalId = index + 1;
+      if (customer.numericalId !== nextNumericalId) {
+        updates.push({ ref, numericalId: nextNumericalId });
+      }
+    });
 
   for (let i = 0; i < updates.length; i += 450) {
     const batch = writeBatch(db);
@@ -232,6 +197,36 @@ export async function normalizeCustomerNumericalIdsForAllShifts(userId: string) 
   return updates.length;
 }
 
+export async function normalizeCustomerNumericalIdsForVillage(userId: string, villageId: string) {
+  const customersSnap = await getDocs(query(coll.customers, where("userId", "==", userId), where("villageId", "==", villageId)));
+  return normalizeCustomerGroup(
+    customersSnap.docs
+      .map((customerDoc) => ({ ref: customerDoc.ref, customer: customerDoc.data() as Customer }))
+      .filter(({ customer }) => customer.isActive !== false)
+  );
+}
+
+export async function normalizeCustomerNumericalIdsForAllShifts(userId: string) {
+  const customersSnap = await getDocs(query(coll.customers, where("userId", "==", userId)));
+
+  const customersByVillage = new Map<string, { ref: DocumentReference; customer: Customer }[]>();
+  customersSnap.docs.forEach((customerDoc) => {
+    const customer = customerDoc.data() as Customer;
+    if (customer.isActive === false) return;
+
+    const villageCustomers = customersByVillage.get(customer.villageId) ?? [];
+    villageCustomers.push({ ref: customerDoc.ref, customer });
+    customersByVillage.set(customer.villageId, villageCustomers);
+  });
+
+  let updatedCount = 0;
+  for (const villageCustomers of customersByVillage.values()) {
+    updatedCount += await normalizeCustomerGroup(villageCustomers);
+  }
+
+  return updatedCount;
+}
+
 export async function addCustomerWithLoan(
   userId: string,
   villageId: string,
@@ -241,7 +236,7 @@ export async function addCustomerWithLoan(
   principalAmount: number,
   startDate: number
 ) {
-  const numericalId = await getNextNumericalId(userId, dayOfWeek, shift);
+  const numericalId = await getNextNumericalId(userId, villageId);
   const customer: Customer = {
     id: id(),
     numericalId,
