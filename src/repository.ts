@@ -144,15 +144,23 @@ export async function getAllActiveCustomersWithVillages(userId: string): Promise
     .sort((a, b) => a.numericalId - b.numericalId);
 }
 
-export async function getNextNumericalId(userId: string, villageId: string) {
-  // Scope by specific village only - fresh serial numbers per village.
-  // Reuse gaps left by deleted customers before appending a new number.
-  const coll = collection(db, "customers");
-  const snap = await getDocs(query(coll, where("userId", "==", userId), where("villageId", "==", villageId)));
+export async function getNextNumericalId(userId: string, dayOfWeek: string, shift: string) {
+  // Scope by route (day + shift), not by village, so all villages in a shift
+  // share one sequence and gaps from deleted customers are reused.
+  const [villagesSnap, customersSnap] = await Promise.all([
+    getDocs(query(coll.villages, where("userId", "==", userId), where("dayOfWeek", "==", dayOfWeek), where("shift", "==", shift))),
+    getDocs(query(coll.customers, where("userId", "==", userId))),
+  ]);
+  const routeVillageIds = new Set(
+    villagesSnap.docs.map((d) => {
+      const village = d.data() as Village;
+      return village.id;
+    })
+  );
   const assignedIds = new Set<number>();
-  snap.docs.forEach((d) => {
+  customersSnap.docs.forEach((d) => {
     const c = d.data() as Customer;
-    if (Number.isInteger(c.numericalId) && c.numericalId > 0) {
+    if (routeVillageIds.has(c.villageId) && Number.isInteger(c.numericalId) && c.numericalId > 0) {
       assignedIds.add(c.numericalId);
     }
   });
@@ -173,7 +181,7 @@ export async function addCustomerWithLoan(
   principalAmount: number,
   startDate: number
 ) {
-  const numericalId = await getNextNumericalId(userId, villageId);
+  const numericalId = await getNextNumericalId(userId, dayOfWeek, shift);
   const customer: Customer = {
     id: id(),
     numericalId,
