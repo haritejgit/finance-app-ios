@@ -175,11 +175,6 @@ export default function ShiftSelectionScreen() {
     };
   }, [analytics?.totals.collectionToday, analytics?.totals.distributedToday, dailyFocus]);
 
-  const savingsToday = useMemo(() => {
-    if (!analytics) return 0;
-    return analytics.totals.collectionToday - analytics.totals.distributedToday;
-  }, [analytics]);
-
   const monthlyNet = useMemo(() => {
     if (!analytics) return 0;
     return analytics.totals.monthlyRevenue - analytics.totals.distributedThisMonth;
@@ -275,12 +270,6 @@ export default function ShiftSelectionScreen() {
                     </Text>
                     <Text style={[styles.heroMetricHint, { color: colors.textMuted }]}>
                       Tap to see {dailyMetric.alternateLabel}: {loading ? "..." : formatMoney(dailyMetric.alternateValue)}
-                    </Text>
-                  </View>
-                  <View style={[styles.deltaPill, { backgroundColor: savingsToday >= 0 ? colors.successSoft : colors.destructiveSoft }]}>
-                    <Icon name={savingsToday >= 0 ? "arrow-up" : "arrow-down"} size={13} color={savingsToday >= 0 ? colors.success : colors.error} />
-                    <Text style={[styles.deltaPillText, { color: savingsToday >= 0 ? colors.success : colors.error }]}>
-                      {formatMoney(Math.abs(savingsToday))}
                     </Text>
                   </View>
                 </Animated.View>
@@ -656,8 +645,6 @@ const styles = StyleSheet.create({
   heroMetricLabel: { fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
   heroMetricValue: { fontSize: 34, fontWeight: "900", marginTop: 2 },
   heroMetricHint: { fontSize: 11, fontWeight: "800", marginTop: 3 },
-  deltaPill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999 },
-  deltaPillText: { fontWeight: "900", fontSize: 12 },
   metricsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   metricCard: { flexGrow: 1, flexBasis: "47%", minWidth: 156, borderRadius: 18, borderWidth: 1, padding: 14 },
   metricIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 10 },
