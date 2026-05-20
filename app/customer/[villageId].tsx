@@ -604,19 +604,19 @@ export default function CustomerListScreen() {
           </View>
           <View style={styles.routeSummary}>
             <View style={styles.routeSummaryCard}>
-              <Text style={styles.routeSummaryLabel}>Total Customers</Text>
+              <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Total Customers</Text>
               <Text style={styles.routeSummaryValue}>{customerStats.total}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
-              <Text style={styles.routeSummaryLabel}>Today Customers</Text>
+              <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Today Customers</Text>
               <Text style={styles.routeSummaryValue}>{customerStats.today}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
-              <Text style={styles.routeSummaryLabel}>Total Paid</Text>
+              <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Total Paid</Text>
               <Text style={styles.routeSummaryValue}>{customerStats.paid}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
-              <Text style={styles.routeSummaryLabel}>Total Dues</Text>
+              <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Total Dues</Text>
               <Text style={styles.routeSummaryValue}>{customerStats.dues}</Text>
             </View>
           </View>
@@ -992,10 +992,10 @@ const styles = StyleSheet.create({
   headerSub: { color: "rgba(255,255,255,0.7)", fontSize: 12 },
   searchShell: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "rgba(255,255,255,0.16)", borderColor: "rgba(255,255,255,0.35)", borderWidth: 1, borderRadius: 18, paddingHorizontal: 13, marginBottom: 10 },
   search: { flex: 1, paddingVertical: 13, fontSize: 14 },
-  routeSummary: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
-  routeSummaryCard: { flexBasis: "48%", flexGrow: 1, borderRadius: 16, padding: 12, backgroundColor: "rgba(255,255,255,0.14)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)" },
-  routeSummaryLabel: { color: "rgba(255,255,255,0.72)", fontSize: 10, fontWeight: "800", textTransform: "uppercase" },
-  routeSummaryValue: { color: colors.white, fontSize: 17, fontWeight: "900", marginTop: 2 },
+  routeSummary: { flexDirection: "row", gap: 6, marginBottom: 8 },
+  routeSummaryCard: { flex: 1, minHeight: 44, borderRadius: 10, paddingHorizontal: 5, paddingVertical: 6, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.14)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)" },
+  routeSummaryLabel: { color: "rgba(255,255,255,0.72)", fontSize: 8, fontWeight: "800", textTransform: "uppercase", textAlign: "center" },
+  routeSummaryValue: { color: colors.white, fontSize: 14, fontWeight: "900", marginTop: 1 },
   list: { flex: 1 },
   listContent: { paddingBottom: 20 },
   item: { backgroundColor: colors.white, borderRadius: 18, padding: 13, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 3 },
