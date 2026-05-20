@@ -3,7 +3,9 @@ import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
+  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -121,6 +123,19 @@ export default function GraphScreen() {
     return (analytics.totals.monthlyRevenue / analytics.totals.distributedThisMonth) * 100;
   }, [analytics]);
 
+  const sendRiskReminder = useCallback((alert: DashboardAnalytics["dueAlerts"][number]) => {
+    const digits = alert.phone.replace(/\D/g, "");
+    if (!digits) {
+      Alert.alert("Missing phone", "This customer does not have a valid phone number.");
+      return;
+    }
+    const normalized = digits.length === 10 ? `91${digits}` : digits;
+    const message = `Hi ${alert.customerName}, you have ${alert.dueCount} pending due${alert.dueCount === 1 ? "" : "s"}. Please pay due amount Rs.${Math.round(alert.dueAmount).toLocaleString("en-IN")} and this week's amount Rs.${Math.round(alert.weeklyAmount).toLocaleString("en-IN")} ASAP.`;
+    Linking.openURL(`https://wa.me/${normalized}?text=${encodeURIComponent(message)}`).catch(() => {
+      Alert.alert("WhatsApp unavailable", "Could not open WhatsApp reminder.");
+    });
+  }, []);
+
   if (loading && !analytics) {
     return (
       <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
@@ -187,18 +202,52 @@ export default function GraphScreen() {
                   </View>
                   {analytics.dueAlerts.length ? (
                     analytics.dueAlerts.map((alert) => (
-                      <Pressable key={alert.customerId} style={[styles.riskRow, { borderTopColor: colors.border }]} onPress={() => router.push(`/profile/${alert.customerId}`)}>
+                      <View key={alert.customerId} style={[styles.riskRow, { borderTopColor: colors.border }]}>
                         <View style={styles.riskCopy}>
                           <Text style={[styles.riskName, { color: colors.text }]}>{alert.customerName}</Text>
                           <Text style={[styles.riskMeta, { color: colors.textSecondary }]}>
-                            {alert.villageName} | {alert.dueCount} dues | {formatMoney(alert.balanceAmount)}
+                            {alert.villageName} | {alert.dueCount} dues | Due {formatMoney(alert.dueAmount)} | Week {formatMoney(alert.weeklyAmount)}
                           </Text>
                         </View>
-                        <Icon name="arrow-forward" size={16} color={colors.textMuted} />
-                      </Pressable>
+                        <Pressable style={[styles.whatsappBtn, { backgroundColor: colors.successSoft }]} onPress={() => sendRiskReminder(alert)}>
+                          <Icon name="logo-whatsapp" size={17} color={colors.success} />
+                        </Pressable>
+                        <Pressable style={[styles.openBtn, { backgroundColor: colors.primarySoft }]} onPress={() => router.push(`/profile/${alert.customerId}`)}>
+                          <Icon name="arrow-forward" size={16} color={colors.primary} />
+                        </Pressable>
+                      </View>
                     ))
                   ) : (
                     <Text style={[styles.empty, { color: colors.textSecondary }]}>No high-risk active loans right now.</Text>
+                  )}
+                </View>
+
+                <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <View style={styles.cardHeader}>
+                    <Text style={[styles.cardTitle, { color: colors.text }]}>Recent Collections</Text>
+                    <Text style={[styles.cardSub, { color: colors.textSecondary }]}>Latest successful payments</Text>
+                  </View>
+                  {analytics.recentTransactions.length ? (
+                    analytics.recentTransactions.map((item) => (
+                      <Pressable
+                        key={item.id}
+                        style={[styles.riskRow, { borderTopColor: colors.border }]}
+                        onPress={() => item.customerId && router.push(`/profile/${item.customerId}`)}
+                      >
+                        <View style={[styles.collectionIcon, { backgroundColor: colors.primarySoft }]}>
+                          <Icon name={item.paymentMode === "PHONE" ? "phone-portrait-outline" : "cash-outline"} size={16} color={colors.primary} />
+                        </View>
+                        <View style={styles.riskCopy}>
+                          <Text style={[styles.riskName, { color: colors.text }]}>{item.customerName}</Text>
+                          <Text style={[styles.riskMeta, { color: colors.textSecondary }]}>
+                            {item.villageName} | {new Date(item.paymentDate).toLocaleDateString()}
+                          </Text>
+                        </View>
+                        <Text style={[styles.collectionAmount, { color: colors.success }]}>{formatMoney(item.amountPaid)}</Text>
+                      </Pressable>
+                    ))
+                  ) : (
+                    <Text style={[styles.empty, { color: colors.textSecondary }]}>Collections will appear here after payments are recorded.</Text>
                   )}
                 </View>
               </>
@@ -253,5 +302,9 @@ const styles = StyleSheet.create({
   riskCopy: { flex: 1 },
   riskName: { fontSize: 14, fontWeight: "900" },
   riskMeta: { fontSize: 12, fontWeight: "700", marginTop: 2 },
+  whatsappBtn: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  openBtn: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  collectionIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  collectionAmount: { fontSize: 13, fontWeight: "900" },
   empty: { fontSize: 13, fontWeight: "800" },
 });

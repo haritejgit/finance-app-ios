@@ -38,6 +38,8 @@ export type DashboardAnalytics = {
     phone: string;
     villageName: string;
     balanceAmount: number;
+    weeklyAmount: number;
+    dueAmount: number;
     dueCount: number;
     lastDueDate: number;
   }[];
@@ -205,12 +207,16 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
       const customer = customerById.get(customerId);
       const village = customer ? villageById.get(customer.villageId) : undefined;
       const loan = activeLoanByCustomerId.get(customerId);
+      const weeklyAmount = loan ? Math.min(Math.max(1, Math.round(loan.principalAmount / 10)), loan.balanceAmount) : 0;
+      const dueAmount = loan ? Math.min(loan.balanceAmount, weeklyAmount * duePayments.length) : 0;
       return {
         customerId,
         customerName: customer?.name ?? "Unknown customer",
         phone: customer?.phone ?? "",
         villageName: village?.name ?? "No village",
         balanceAmount: loan?.balanceAmount ?? 0,
+        weeklyAmount,
+        dueAmount,
         dueCount: duePayments.length,
         lastDueDate: Math.max(...duePayments.map((payment) => toMillis(payment.paymentDate))),
       };

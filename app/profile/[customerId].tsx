@@ -366,8 +366,8 @@ export default function ProfileScreen() {
       return;
     }
     const normalized = digits.length === 10 ? `91${digits}` : digits;
-    const balance = loan?.balanceAmount ?? 0;
-    const message = `Hi ${customer.name}, this is a payment reminder. Outstanding balance: Rs.${Math.round(balance).toLocaleString("en-IN")}. Please clear it at the earliest.`;
+    const weeklyAmount = getSuggestedPaymentAmount(loan ?? undefined);
+    const message = `Hi ${customer.name}, this is a payment reminder. Please pay this week's amount Rs.${Math.round(weeklyAmount).toLocaleString("en-IN")} ASAP.`;
     Linking.openURL(`https://wa.me/${normalized}?text=${encodeURIComponent(message)}`).catch(() => {
       Alert.alert("WhatsApp unavailable", "Could not open WhatsApp reminder.");
     });

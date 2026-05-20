@@ -296,6 +296,7 @@ export default function CustomerListScreen() {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<CustomerFilter>("all");
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [village, setVillage] = useState<Village | null>(null);
   const [form, setForm] = useState<AddCustomerForm>(createEmptyCustomerForm);
@@ -504,6 +505,11 @@ export default function CustomerListScreen() {
     );
   }, [filtered, paymentStatuses]);
 
+  const activeFilterLabel = useMemo(
+    () => CUSTOMER_FILTERS.find((filter) => filter.key === statusFilter)?.label ?? "All",
+    [statusFilter]
+  );
+
   const openCustomer = useCallback((customerId: string) => {
     router.push(`/profile/${customerId}`);
   }, []);
@@ -644,20 +650,17 @@ export default function CustomerListScreen() {
               placeholderTextColor="rgba(255,255,255,0.62)"
             />
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRail}>
-            {CUSTOMER_FILTERS.map((filter) => {
-              const active = statusFilter === filter.key;
-              return (
-                <Pressable
-                  key={filter.key}
-                  style={[styles.filterChip, active && styles.filterChipOn]}
-                  onPress={() => setStatusFilter(filter.key)}
-                >
-                  <Text style={[styles.filterChipText, active && styles.filterChipTextOn]}>{filter.label}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+          <View style={styles.compactFilterRow}>
+            <Pressable style={styles.compactFilterBtn} onPress={() => setFilterMenuOpen(true)}>
+              <Icon name="filter-outline" size={16} color={colors.blue2} />
+              <Text style={styles.compactFilterText}>Filter: {activeFilterLabel}</Text>
+            </Pressable>
+            {statusFilter !== "all" && (
+              <Pressable style={styles.clearFilterBtn} onPress={() => setStatusFilter("all")}>
+                <Icon name="close" size={14} color={colors.white} />
+              </Pressable>
+            )}
+          </View>
           <View style={styles.routeSummary}>
             <View style={styles.routeSummaryCard}>
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Total Customers</Text>
@@ -715,6 +718,32 @@ export default function CustomerListScreen() {
           </Pressable>
         </View>
       </SafeAreaView>
+
+      <Modal visible={filterMenuOpen} transparent animationType="fade" onRequestClose={() => setFilterMenuOpen(false)}>
+        <View style={styles.filterOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setFilterMenuOpen(false)} />
+          <View style={styles.filterSheet}>
+            <Text style={styles.filterSheetTitle}>Filter customers</Text>
+            <View style={styles.filterSheetGrid}>
+              {CUSTOMER_FILTERS.map((filter) => {
+                const active = statusFilter === filter.key;
+                return (
+                  <Pressable
+                    key={filter.key}
+                    style={[styles.filterOption, active && styles.filterOptionOn]}
+                    onPress={() => {
+                      setStatusFilter(filter.key);
+                      setFilterMenuOpen(false);
+                    }}
+                  >
+                    <Text style={[styles.filterOptionText, active && styles.filterOptionTextOn]}>{filter.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={showAdd} animationType="slide" onRequestClose={closeAddCustomer}>
         <SafeAreaView style={[styles.modal, { paddingTop: insets.top, backgroundColor: colors.background }]} edges={['top']}>
@@ -1052,11 +1081,18 @@ const styles = StyleSheet.create({
   headerSub: { color: "rgba(255,255,255,0.7)", fontSize: 12 },
   searchShell: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "rgba(255,255,255,0.16)", borderColor: "rgba(255,255,255,0.35)", borderWidth: 1, borderRadius: 18, paddingHorizontal: 13, marginBottom: 10 },
   search: { flex: 1, paddingVertical: 13, fontSize: 14 },
-  filterRail: { gap: 8, paddingBottom: 10 },
-  filterChip: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "rgba(255,255,255,0.14)", borderWidth: 1, borderColor: "rgba(255,255,255,0.24)" },
-  filterChipOn: { backgroundColor: colors.white, borderColor: colors.white },
-  filterChipText: { color: "rgba(255,255,255,0.82)", fontSize: 12, fontWeight: "900" },
-  filterChipTextOn: { color: colors.blue2 },
+  compactFilterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  compactFilterBtn: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 7, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: colors.white, borderWidth: 1, borderColor: "rgba(255,255,255,0.55)" },
+  compactFilterText: { color: colors.blue2, fontSize: 12, fontWeight: "900" },
+  clearFilterBtn: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.18)", borderWidth: 1, borderColor: "rgba(255,255,255,0.3)" },
+  filterOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  filterSheet: { backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 18, gap: 12 },
+  filterSheetTitle: { color: colors.ink, fontSize: 18, fontWeight: "900" },
+  filterSheetGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  filterOption: { minWidth: "30%", flexGrow: 1, borderRadius: 14, borderWidth: 1, borderColor: colors.border, paddingVertical: 12, alignItems: "center", backgroundColor: colors.surfaceTint },
+  filterOptionOn: { backgroundColor: colors.blue2, borderColor: colors.blue2 },
+  filterOptionText: { color: colors.gray, fontSize: 13, fontWeight: "900" },
+  filterOptionTextOn: { color: colors.white },
   routeSummary: { flexDirection: "row", gap: 6, marginBottom: 8 },
   routeSummaryCard: { flex: 1, minHeight: 44, borderRadius: 10, paddingHorizontal: 5, paddingVertical: 6, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.14)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)" },
   routeSummaryLabel: { color: "rgba(255,255,255,0.72)", fontSize: 8, fontWeight: "800", textTransform: "uppercase", textAlign: "center" },

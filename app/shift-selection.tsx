@@ -8,7 +8,6 @@ import {
   Dimensions,
   Easing,
   FlatList,
-  Linking,
   Modal,
   Pressable,
   RefreshControl,
@@ -44,20 +43,6 @@ function formatMoney(value: number) {
   return `Rs.${Math.round(value || 0).toLocaleString("en-IN")}`;
 }
 
-function formatCompact(value: number) {
-  if (Math.abs(value) >= 100000) return `Rs.${(value / 100000).toFixed(1)}L`;
-  if (Math.abs(value) >= 1000) return `Rs.${(value / 1000).toFixed(1)}k`;
-  return formatMoney(value);
-}
-
-function getMonthlyDelta(analytics?: DashboardAnalytics | null) {
-  if (!analytics) return "0%";
-  const previous = analytics.totals.previousMonthlyRevenue;
-  if (previous <= 0) return analytics.totals.monthlyRevenue > 0 ? "New" : "0%";
-  const delta = ((analytics.totals.monthlyRevenue - previous) / previous) * 100;
-  return `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}%`;
-}
-
 function SkeletonLine({ width = "100%" }: { width?: number | `${number}%` }) {
   const { colors } = useTheme();
   return <View style={[styles.skeletonLine, { width, backgroundColor: colors.glassBorder }]} />;
@@ -74,91 +59,6 @@ function DashboardSkeleton() {
         <SkeletonLine width="48%" />
       </View>
       <ActivityIndicator color={colors.primary} />
-    </View>
-  );
-}
-
-function MetricCard({
-  title,
-  value,
-  detail,
-  icon,
-  tone,
-}: {
-  title: string;
-  value: string;
-  detail: string;
-  icon: string;
-  tone: "blue" | "green" | "orange" | "red";
-}) {
-  const { colors } = useTheme();
-  const toneColor =
-    tone === "green" ? colors.success : tone === "orange" ? colors.coral : tone === "red" ? colors.error : colors.primary;
-  const softColor =
-    tone === "green" ? colors.successSoft : tone === "orange" ? colors.warningSoft : tone === "red" ? colors.destructiveSoft : colors.primarySoft;
-  return (
-    <View style={[styles.metricCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={[styles.metricIcon, { backgroundColor: softColor }]}>
-        <Icon name={icon} size={18} color={toneColor} />
-      </View>
-      <Text style={[styles.metricTitle, { color: colors.textSecondary }]} numberOfLines={1}>
-        {title}
-      </Text>
-      <Text style={[styles.metricValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
-        {value}
-      </Text>
-      <Text style={[styles.metricDetail, { color: colors.textMuted }]} numberOfLines={1}>
-        {detail}
-      </Text>
-    </View>
-  );
-}
-
-function MiniBarChart({ data }: { data: DashboardAnalytics["weeklyTrend"] }) {
-  const { colors } = useTheme();
-  const maxValue = Math.max(...data.map((item) => Math.max(item.collection, item.distribution)), 1);
-  return (
-    <View style={styles.chartWrap}>
-      {data.map((item) => (
-        <View key={item.label} style={styles.chartColumn}>
-          <View style={styles.chartBars}>
-            <View
-              style={[
-                styles.chartBar,
-                { height: Math.max(6, (item.distribution / maxValue) * 102), backgroundColor: colors.warning },
-              ]}
-            />
-            <View
-              style={[
-                styles.chartBar,
-                styles.chartBarCollection,
-                { height: Math.max(6, (item.collection / maxValue) * 118), backgroundColor: colors.primary },
-              ]}
-            />
-          </View>
-          <Text style={[styles.chartLabel, { color: colors.textMuted }]}>{item.label}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-function InsightList({ title, icon, items }: { title: string; icon: string; items: string[] }) {
-  const { colors } = useTheme();
-  return (
-    <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={styles.sectionHeader}>
-        <View style={[styles.sectionIcon, { backgroundColor: colors.primarySoft }]}>
-          <Icon name={icon} size={18} color={colors.primary} />
-        </View>
-        <Text style={[styles.sectionTitleDark, { color: colors.text }]}>{title}</Text>
-      </View>
-      {items.map((item) => (
-        <View key={item} style={styles.insightRow}>
-          <View style={[styles.insightDot, { backgroundColor: colors.primary }]} />
-          <Text style={[styles.insightText, { color: colors.textSecondary }]}>{item}</Text>
-        </View>
-      ))}
     </View>
   );
 }
@@ -268,19 +168,6 @@ export default function ShiftSelectionScreen() {
       .slice(0, 80);
   }, [allCustomers, analytics?.customerStates, customerFilter, debouncedQuery]);
 
-  const sendReminder = useCallback((phone: string, customerName: string, balanceAmount: number) => {
-    const digits = phone.replace(/\D/g, "");
-    if (!digits) {
-      Alert.alert("Missing phone", "This customer does not have a valid phone number.");
-      return;
-    }
-    const text = `Hi ${customerName}, this is a payment reminder. Outstanding balance: ${formatMoney(balanceAmount)}. Please clear it at the earliest.`;
-    const normalized = digits.length === 10 ? `91${digits}` : digits;
-    Linking.openURL(`https://wa.me/${normalized}?text=${encodeURIComponent(text)}`).catch(() => {
-      Alert.alert("WhatsApp unavailable", "Could not open WhatsApp reminder.");
-    });
-  }, []);
-
   const gradient = getGradient(colors);
 
   return (
@@ -322,117 +209,67 @@ export default function ShiftSelectionScreen() {
                     {loading ? "..." : formatMoney(analytics?.totals.collectionToday ?? 0)}
                   </Text>
                 </View>
-                <View style={[styles.deltaPill, { backgroundColor: colors.successSoft }]}>
-                  <Icon name="trending-up" size={16} color={colors.success} />
-                  <Text style={[styles.deltaPillText, { color: colors.success }]}>{getMonthlyDelta(analytics)}</Text>
-                </View>
               </View>
+            </View>
+
+            <View style={[styles.panel, styles.routePanel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitleDark, { color: colors.text }]}>Collection Route</Text>
+                <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>
+                  {selectedDay} / {selectedShift}
+                </Text>
+              </View>
+              <Text style={[styles.controlLabel, { color: colors.textSecondary }]}>Day</Text>
+              <View style={styles.dayGrid}>
+                {days.map((day, index) => (
+                  <Pressable
+                    key={day}
+                    onPress={() => setSelectedDay(day)}
+                    style={[
+                      styles.dayChip,
+                      { backgroundColor: colors.surfaceTint, borderColor: colors.border },
+                      selectedDay === day && { backgroundColor: colors.primary, borderColor: colors.primary },
+                    ]}
+                  >
+                    <Text style={[styles.dayChipText, { color: selectedDay === day ? colors.white : colors.textSecondary }]}>
+                      {shortDays[index]}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={[styles.controlLabel, { color: colors.textSecondary }]}>Shift</Text>
+              <View style={styles.shiftRow}>
+                {(["Morning", "Evening"] as const).map((shift) => {
+                  const active = selectedShift === shift;
+                  return (
+                    <Pressable
+                      key={shift}
+                      onPress={() => setSelectedShift(shift)}
+                      style={[
+                        styles.shift,
+                        { backgroundColor: colors.surfaceTint, borderColor: colors.border },
+                        active && { backgroundColor: colors.primary, borderColor: colors.primary },
+                      ]}
+                    >
+                      <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={18} color={active ? colors.white : colors.primary} />
+                      <Text style={[styles.shiftText, { color: active ? colors.white : colors.primary }]}>{shift}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Pressable
+                style={[styles.primaryAction, { backgroundColor: colors.coral }]}
+                onPress={() => router.push({ pathname: "/village/[day]/[shift]", params: { day: selectedDay, shift: selectedShift } })}
+              >
+                <Text style={styles.primaryActionText}>Start Collection</Text>
+                <Icon name="arrow-forward" size={18} color={colors.white} />
+              </Pressable>
             </View>
 
             {loading && !analytics ? (
               <DashboardSkeleton />
             ) : (
               <>
-                <View style={styles.metricsGrid}>
-                  <MetricCard
-                    title="Total collection"
-                    value={formatMoney(analytics?.totals.totalCollection ?? 0)}
-                    detail="All-time regular payments"
-                    icon="cash-outline"
-                    tone="green"
-                  />
-                  <MetricCard
-                    title="Pending amount"
-                    value={formatMoney(analytics?.totals.pendingAmount ?? 0)}
-                    detail={`${analytics?.totals.activeLoanCount ?? 0} active loans`}
-                    icon="alert-circle-outline"
-                    tone="red"
-                  />
-                  <MetricCard
-                    title="Monthly revenue"
-                    value={formatMoney(analytics?.totals.monthlyRevenue ?? 0)}
-                    detail={`${getMonthlyDelta(analytics)} vs last month`}
-                    icon="trending-up-outline"
-                    tone="blue"
-                  />
-                  <MetricCard
-                    title="Customers"
-                    value={`${analytics?.totals.customerCount ?? 0}`}
-                    detail={`${analytics?.totals.dueMarksThisMonth ?? 0} dues this month`}
-                    icon="people"
-                    tone="orange"
-                  />
-                </View>
-
-                <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <View style={styles.sectionHeader}>
-                    <View>
-                      <Text style={[styles.sectionTitleDark, { color: colors.text }]}>Collection Trend</Text>
-                      <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>Collection and distribution across recent weeks</Text>
-                    </View>
-                    <View style={styles.legendRow}>
-                      <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
-                      <Text style={[styles.legendText, { color: colors.textMuted }]}>In</Text>
-                      <View style={[styles.legendDot, { backgroundColor: colors.warning }]} />
-                      <Text style={[styles.legendText, { color: colors.textMuted }]}>Out</Text>
-                    </View>
-                  </View>
-                  <MiniBarChart data={analytics?.weeklyTrend ?? []} />
-                </View>
-
-                <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <View style={styles.sectionHeader}>
-                    <Text style={[styles.sectionTitleDark, { color: colors.text }]}>Collection Route</Text>
-                    <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>
-                      {selectedDay} / {selectedShift}
-                    </Text>
-                  </View>
-                  <Text style={[styles.controlLabel, { color: colors.textSecondary }]}>Day</Text>
-                  <View style={styles.dayGrid}>
-                    {days.map((day, index) => (
-                      <Pressable
-                        key={day}
-                        onPress={() => setSelectedDay(day)}
-                        style={[
-                          styles.dayChip,
-                          { backgroundColor: colors.surfaceTint, borderColor: colors.border },
-                          selectedDay === day && { backgroundColor: colors.primary, borderColor: colors.primary },
-                        ]}
-                      >
-                        <Text style={[styles.dayChipText, { color: selectedDay === day ? colors.white : colors.textSecondary }]}>
-                          {shortDays[index]}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                  <Text style={[styles.controlLabel, { color: colors.textSecondary }]}>Shift</Text>
-                  <View style={styles.shiftRow}>
-                    {(["Morning", "Evening"] as const).map((shift) => {
-                      const active = selectedShift === shift;
-                      return (
-                        <Pressable
-                          key={shift}
-                          onPress={() => setSelectedShift(shift)}
-                          style={[
-                            styles.shift,
-                            { backgroundColor: colors.surfaceTint, borderColor: colors.border },
-                            active && { backgroundColor: colors.primary, borderColor: colors.primary },
-                          ]}
-                        >
-                          <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={18} color={active ? colors.white : colors.primary} />
-                          <Text style={[styles.shiftText, { color: active ? colors.white : colors.primary }]}>{shift}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                  <Pressable
-                    style={[styles.primaryAction, { backgroundColor: colors.coral }]}
-                    onPress={() => router.push({ pathname: "/village/[day]/[shift]", params: { day: selectedDay, shift: selectedShift } })}
-                  >
-                    <Text style={styles.primaryActionText}>Start Collection</Text>
-                    <Icon name="arrow-forward" size={18} color={colors.white} />
-                  </Pressable>
-                </View>
 
                 <View style={styles.quickGrid}>
                   {[
@@ -450,65 +287,6 @@ export default function ShiftSelectionScreen() {
                     </Pressable>
                   ))}
                 </View>
-
-                <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <View style={styles.sectionHeader}>
-                    <Text style={[styles.sectionTitleDark, { color: colors.text }]}>Due Payment Alerts</Text>
-                    <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>Priority follow-ups</Text>
-                  </View>
-                  {analytics?.dueAlerts.length ? (
-                    analytics.dueAlerts.slice(0, 4).map((alert) => (
-                      <View key={alert.customerId} style={[styles.alertRow, { borderColor: colors.border }]}>
-                        <View style={styles.alertCopy}>
-                          <Text style={[styles.alertName, { color: colors.text }]}>{alert.customerName}</Text>
-                          <Text style={[styles.alertMeta, { color: colors.textSecondary }]}>
-                            {alert.villageName} | {alert.dueCount} due mark{alert.dueCount === 1 ? "" : "s"} | {formatCompact(alert.balanceAmount)}
-                          </Text>
-                        </View>
-                        <Pressable
-                          style={[styles.reminderBtn, { backgroundColor: colors.successSoft }]}
-                          onPress={() => sendReminder(alert.phone, alert.customerName, alert.balanceAmount)}
-                        >
-                          <Icon name="logo-whatsapp" size={17} color={colors.success} />
-                        </Pressable>
-                      </View>
-                    ))
-                  ) : (
-                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No urgent dues in active loans.</Text>
-                  )}
-                </View>
-
-                <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <View style={styles.sectionHeader}>
-                    <Text style={[styles.sectionTitleDark, { color: colors.text }]}>Recent Transactions</Text>
-                    <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>Latest successful collections</Text>
-                  </View>
-                  {analytics?.recentTransactions.length ? (
-                    analytics.recentTransactions.slice(0, 5).map((item) => (
-                      <Pressable
-                        key={item.id}
-                        style={[styles.transactionRow, { borderColor: colors.border }]}
-                        onPress={() => item.customerId && router.push(`/profile/${item.customerId}`)}
-                      >
-                        <View style={[styles.transactionIcon, { backgroundColor: colors.primarySoft }]}>
-                          <Icon name={item.paymentMode === "PHONE" ? "phone-portrait-outline" : "cash-outline"} size={17} color={colors.primary} />
-                        </View>
-                        <View style={styles.alertCopy}>
-                          <Text style={[styles.alertName, { color: colors.text }]}>{item.customerName}</Text>
-                          <Text style={[styles.alertMeta, { color: colors.textSecondary }]}>
-                            {item.villageName} | {new Date(item.paymentDate).toLocaleDateString()}
-                          </Text>
-                        </View>
-                        <Text style={[styles.transactionAmount, { color: colors.success }]}>{formatCompact(item.amountPaid)}</Text>
-                      </Pressable>
-                    ))
-                  ) : (
-                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Transactions will appear after payments are recorded.</Text>
-                  )}
-                </View>
-
-                <InsightList title="Financial Insights" icon="sparkles-outline" items={analytics?.insights ?? []} />
-                <InsightList title="AI Financial Insights" icon="shield-checkmark-outline" items={analytics?.aiInsights ?? []} />
 
                 <Pressable
                   onPress={async () => {
