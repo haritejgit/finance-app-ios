@@ -38,6 +38,7 @@ import {
 import { Customer, Loan, PaymentMode, PaymentType } from "../../src/types";
 import { colors } from "../../src/theme";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { openCustomerLedgerPrint } from "../../src/exports";
 
 const noTextSelection = Platform.OS === "web" ? ({ userSelect: "none", WebkitUserSelect: "none" } as any) : undefined;
 
@@ -336,15 +337,69 @@ export default function ProfileScreen() {
     return Math.max(300, Math.min(900, score));
   }, [payments]);
 
+  const customerInsights = useMemo(() => {
+    const regular = payments.filter((payment) => payment.paymentType === "REGULAR");
+    const dues = payments.filter((payment) => payment.paymentType === "DUE");
+    const totalPaid = regular.reduce((sum, payment) => sum + Number(payment.amountPaid || 0), 0);
+    const averagePayment = regular.length ? totalPaid / regular.length : 0;
+    const lastPayment = regular[0]?.paymentDate ? new Date(regular[0].paymentDate).toLocaleDateString() : "No payments yet";
+    const dueRate = payments.length ? dues.length / payments.length : 0;
+    const behavior = dueRate >= 0.3
+      ? "Delays payments frequently"
+      : dueRate > 0
+        ? "Occasional delay pattern"
+        : "Clean payment behavior";
+    return {
+      totalPaid,
+      averagePayment,
+      dueCount: dues.length,
+      lastPayment,
+      behavior,
+    };
+  }, [payments]);
+
+  const sendWhatsAppReminder = useCallback(() => {
+    if (!customer) return;
+    const digits = customer.phone.replace(/\D/g, "");
+    if (!digits) {
+      Alert.alert("Missing phone", "This customer does not have a valid phone number.");
+      return;
+    }
+    const normalized = digits.length === 10 ? `91${digits}` : digits;
+    const balance = loan?.balanceAmount ?? 0;
+    const message = `Hi ${customer.name}, this is a payment reminder. Outstanding balance: Rs.${Math.round(balance).toLocaleString("en-IN")}. Please clear it at the earliest.`;
+    Linking.openURL(`https://wa.me/${normalized}?text=${encodeURIComponent(message)}`).catch(() => {
+      Alert.alert("WhatsApp unavailable", "Could not open WhatsApp reminder.");
+    });
+  }, [customer, loan]);
+
+  const exportLedger = useCallback(() => {
+    if (!customer) return;
+    const opened = openCustomerLedgerPrint(customer, loan, payments);
+    if (!opened) {
+      Alert.alert("PDF Export", "Printable ledger export is available from the web dashboard.");
+    }
+  }, [customer, loan, payments]);
+
   const confirmPayment = async () => {
     Keyboard.dismiss();
+    if (!loan) return;
     const parsedDate = parseDateInput(paymentDateInput);
     if (!parsedDate) {
       setPaymentDateError("Enter date as YYYY-MM-DD");
       return;
     }
+    const parsedAmount = Number(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setPaymentDateError("Enter a valid payment amount");
+      return;
+    }
+    if (parsedAmount > loan.balanceAmount) {
+      setPaymentDateError(`Amount cannot exceed outstanding balance of Rs.${Math.round(loan.balanceAmount)}`);
+      return;
+    }
     setPaymentDateError("");
-    await addPayment(loan, Number(amount || 0), toStartOfDay(parsedDate), mode);
+    await addPayment(loan, parsedAmount, toStartOfDay(parsedDate), mode);
     setPayOpen(false);
     setAmount("");
     await reload();
@@ -408,11 +463,16 @@ export default function ProfileScreen() {
       setEditPaymentError("Enter date as YYYY-MM-DD");
       return;
     }
+    const parsedAmount = Number(editPaymentAmount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+      setEditPaymentError("Enter a valid amount");
+      return;
+    }
     setEditPaymentError("");
     
     await updatePayment(
       editingPayment,
-      Number(editPaymentAmount || 0),
+      parsedAmount,
       toStartOfDay(parsedDate),
       editPaymentMode
     );
@@ -648,6 +708,14 @@ export default function ProfileScreen() {
                 <Icon name="person" size={21} color={colors.blue2} />
                 <Text selectable={false} style={styles.iconBtnLabel}>Edit</Text>
               </Pressable>
+              <Pressable style={[styles.iconBtn, noTextSelection]} onPress={sendWhatsAppReminder}>
+                <Icon name="logo-whatsapp" size={21} color={colors.paidGreen} />
+                <Text selectable={false} style={styles.iconBtnLabel}>Remind</Text>
+              </Pressable>
+              <Pressable style={[styles.iconBtn, noTextSelection]} onPress={exportLedger}>
+                <Icon name="download-outline" size={21} color={colors.blue2} />
+                <Text selectable={false} style={styles.iconBtnLabel}>Ledger</Text>
+              </Pressable>
               <Pressable
                 style={[styles.iconBtn, noTextSelection, !hasCustomerCoordinates(customer) && styles.iconBtnDisabled]}
                 onPress={openGoogleMaps}
@@ -660,6 +728,30 @@ export default function ProfileScreen() {
                 <Icon name="trash" size={21} color={colors.missedRed} />
                 <Text selectable={false} style={[styles.iconBtnLabel, styles.iconBtnLabelDanger]}>Delete</Text>
               </Pressable>
+            </View>
+            <View style={styles.customerAnalyticsCard}>
+              <View style={styles.customerAnalyticsHeader}>
+                <Text style={styles.customerAnalyticsTitle}>Customer Analytics</Text>
+                <Text style={styles.customerBehaviorPill}>{customerInsights.behavior}</Text>
+              </View>
+              <View style={styles.customerAnalyticsGrid}>
+                <View style={styles.customerAnalyticsMetric}>
+                  <Text style={styles.customerAnalyticsValue}>Rs.{Math.round(customerInsights.totalPaid).toLocaleString("en-IN")}</Text>
+                  <Text style={styles.customerAnalyticsLabel}>Total paid</Text>
+                </View>
+                <View style={styles.customerAnalyticsMetric}>
+                  <Text style={styles.customerAnalyticsValue}>Rs.{Math.round(customerInsights.averagePayment).toLocaleString("en-IN")}</Text>
+                  <Text style={styles.customerAnalyticsLabel}>Avg payment</Text>
+                </View>
+                <View style={styles.customerAnalyticsMetric}>
+                  <Text style={styles.customerAnalyticsValue}>{customerInsights.dueCount}</Text>
+                  <Text style={styles.customerAnalyticsLabel}>Due marks</Text>
+                </View>
+                <View style={styles.customerAnalyticsMetric}>
+                  <Text style={styles.customerAnalyticsValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{customerInsights.lastPayment}</Text>
+                  <Text style={styles.customerAnalyticsLabel}>Last paid</Text>
+                </View>
+              </View>
             </View>
             <Text style={styles.history}>Transaction History</Text>
             <PaymentHistory 
@@ -1307,6 +1399,14 @@ const styles = StyleSheet.create({
   iconBtnLabel: { color: colors.blue2, fontSize: 10, fontWeight: "800" },
   iconBtnLabelDanger: { color: colors.missedRed },
   iconBtnIcon: { fontSize: 18 },
+  customerAnalyticsCard: { backgroundColor: colors.white, borderRadius: 18, padding: 14, gap: 12, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  customerAnalyticsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  customerAnalyticsTitle: { color: colors.blue2, fontSize: 15, fontWeight: "900" },
+  customerBehaviorPill: { color: "#047857", backgroundColor: "#d1fae5", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4, overflow: "hidden", fontSize: 10, fontWeight: "900" },
+  customerAnalyticsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  customerAnalyticsMetric: { flex: 1, minWidth: "45%", backgroundColor: "#f8fafc", borderRadius: 12, padding: 10, borderWidth: 1, borderColor: "#e2e8f0" },
+  customerAnalyticsValue: { color: colors.ink, fontSize: 15, fontWeight: "900" },
+  customerAnalyticsLabel: { color: colors.gray, fontSize: 10, fontWeight: "800", textTransform: "uppercase", marginTop: 3 },
   
   // Old styles (keeping for compatibility)
   title: { color: colors.white, fontSize: 26, fontWeight: "700" },

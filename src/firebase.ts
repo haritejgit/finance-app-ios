@@ -11,6 +11,14 @@ const firebaseConfig = {
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
+const missingConfig = Object.entries(firebaseConfig)
+  .filter(([, value]) => !value)
+  .map(([key]) => key);
+
+if (missingConfig.length > 0) {
+  console.warn(`Missing Firebase configuration: ${missingConfig.join(", ")}. Check EXPO_PUBLIC_FIREBASE_* environment variables.`);
+}
+
 const app = initializeApp(firebaseConfig);
 
 // Note: Firebase v11 uses IndexedDB in React Native. Auth state persists automatically.

@@ -67,6 +67,16 @@ function isToday(timestamp: number): boolean {
 
 // Get customer payment status for today
 type PaymentStatus = 'paid' | 'due' | 'none';
+type CustomerFilter = "all" | "pending" | "paid" | "due" | "new" | "docs";
+
+const CUSTOMER_FILTERS: { key: CustomerFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "pending", label: "Pending" },
+  { key: "paid", label: "Paid" },
+  { key: "due", label: "Due" },
+  { key: "new", label: "New" },
+  { key: "docs", label: "Docs" },
+];
 
 function normalizeAadhar(aadhar?: string) {
   return (aadhar ?? "").replace(/\D/g, "").trim();
@@ -284,6 +294,8 @@ export default function CustomerListScreen() {
   const insets = useSafeAreaInsets();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<CustomerFilter>("all");
   const [showAdd, setShowAdd] = useState(false);
   const [village, setVillage] = useState<Village | null>(null);
   const [form, setForm] = useState<AddCustomerForm>(createEmptyCustomerForm);
@@ -337,6 +349,11 @@ export default function CustomerListScreen() {
     if (authLoading) return;
     reload({ fresh: true });
   }, [authLoading, reload]));
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedQuery(query.trim().toLowerCase()), 220);
+    return () => clearTimeout(timeout);
+  }, [query]);
 
   useEffect(() => {
     if (!showAdd || !user) {
@@ -446,33 +463,44 @@ export default function CustomerListScreen() {
   }, []);
 
   const filtered = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    const numericQuery = query.replace(/\D/g, "");
+    const numericQuery = debouncedQuery.replace(/\D/g, "");
     let result = customers;
-    if (normalizedQuery) {
-      result = customers.filter((c) => {
+    if (statusFilter !== "all") {
+      result = result.filter((customer) => {
+        const status = paymentStatuses[customer.id] || "none";
+        if (statusFilter === "paid") return status === "paid";
+        if (statusFilter === "due") return status === "due";
+        if (statusFilter === "pending") return status === "none" && !!activeLoans[customer.id]?.balanceAmount;
+        if (statusFilter === "new") return isToday(customer.createdAt);
+        if (statusFilter === "docs") return customer.aadharSubmitted !== true || customer.passportPhotoSubmitted !== true;
+        return true;
+      });
+    }
+    if (debouncedQuery) {
+      result = result.filter((c) => {
         const textMatch = [c.name, c.phone, c.numericalId.toString(), c.coName || "", c.coId?.toString() || ""]
           .join(" ")
           .toLowerCase()
-          .includes(normalizedQuery);
+          .includes(debouncedQuery);
         const phoneMatch = numericQuery.length > 0 && (c.phone || "").replace(/\D/g, "").includes(numericQuery);
         return textMatch || phoneMatch;
       });
     }
     return [...result].sort((a, b) => a.numericalId - b.numericalId);
-  }, [customers, query]);
+  }, [activeLoans, customers, debouncedQuery, paymentStatuses, statusFilter]);
 
   const customerStats = useMemo(() => {
     return filtered.reduce(
       (stats, customer) => {
         const status = paymentStatuses[customer.id] || "none";
         stats.total += 1;
-        if (!isToday(customer.createdAt)) stats.today += 1;
+        if (isToday(customer.createdAt)) stats.today += 1;
         if (status === "paid") stats.paid += 1;
         if (status === "due") stats.dues += 1;
+        if (customer.aadharSubmitted !== true || customer.passportPhotoSubmitted !== true) stats.docs += 1;
         return stats;
       },
-      { total: 0, today: 0, paid: 0, dues: 0 }
+      { total: 0, today: 0, paid: 0, dues: 0, docs: 0 }
     );
   }, [filtered, paymentStatuses]);
 
@@ -616,6 +644,20 @@ export default function CustomerListScreen() {
               placeholderTextColor="rgba(255,255,255,0.62)"
             />
           </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRail}>
+            {CUSTOMER_FILTERS.map((filter) => {
+              const active = statusFilter === filter.key;
+              return (
+                <Pressable
+                  key={filter.key}
+                  style={[styles.filterChip, active && styles.filterChipOn]}
+                  onPress={() => setStatusFilter(filter.key)}
+                >
+                  <Text style={[styles.filterChipText, active && styles.filterChipTextOn]}>{filter.label}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
           <View style={styles.routeSummary}>
             <View style={styles.routeSummaryCard}>
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Total Customers</Text>
@@ -632,6 +674,10 @@ export default function CustomerListScreen() {
             <View style={styles.routeSummaryCard}>
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Total Dues</Text>
               <Text style={styles.routeSummaryValue}>{customerStats.dues}</Text>
+            </View>
+            <View style={styles.routeSummaryCard}>
+              <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Docs Pending</Text>
+              <Text style={styles.routeSummaryValue}>{customerStats.docs}</Text>
             </View>
           </View>
           <FlatList
@@ -1006,6 +1052,11 @@ const styles = StyleSheet.create({
   headerSub: { color: "rgba(255,255,255,0.7)", fontSize: 12 },
   searchShell: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "rgba(255,255,255,0.16)", borderColor: "rgba(255,255,255,0.35)", borderWidth: 1, borderRadius: 18, paddingHorizontal: 13, marginBottom: 10 },
   search: { flex: 1, paddingVertical: 13, fontSize: 14 },
+  filterRail: { gap: 8, paddingBottom: 10 },
+  filterChip: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "rgba(255,255,255,0.14)", borderWidth: 1, borderColor: "rgba(255,255,255,0.24)" },
+  filterChipOn: { backgroundColor: colors.white, borderColor: colors.white },
+  filterChipText: { color: "rgba(255,255,255,0.82)", fontSize: 12, fontWeight: "900" },
+  filterChipTextOn: { color: colors.blue2 },
   routeSummary: { flexDirection: "row", gap: 6, marginBottom: 8 },
   routeSummaryCard: { flex: 1, minHeight: 44, borderRadius: 10, paddingHorizontal: 5, paddingVertical: 6, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.14)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)" },
   routeSummaryLabel: { color: "rgba(255,255,255,0.72)", fontSize: 8, fontWeight: "800", textTransform: "uppercase", textAlign: "center" },

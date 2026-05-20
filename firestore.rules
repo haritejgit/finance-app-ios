@@ -1,48 +1,70 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow a signed-in user to read/write only documents where userId matches auth.uid.
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isOwner() {
+    function ownsExistingDoc() {
       return isSignedIn() && resource.data.userId == request.auth.uid;
     }
 
-    function isCreatingOwnDoc() {
+    function createsOwnDoc() {
       return isSignedIn() && request.resource.data.userId == request.auth.uid;
     }
 
+    function keepsOwnerImmutable() {
+      return request.resource.data.userId == resource.data.userId;
+    }
+
+    function validNonNegative(field) {
+      return !request.resource.data.keys().hasAny([field]) ||
+        (request.resource.data[field] is number && request.resource.data[field] >= 0);
+    }
+
+    function validLoanAmounts() {
+      return validNonNegative('principalAmount') &&
+        validNonNegative('interestAmount') &&
+        validNonNegative('totalPayable') &&
+        validNonNegative('balanceAmount');
+    }
+
+    function validPaymentAmount() {
+      return validNonNegative('amountPaid');
+    }
+
     match /users/{uid} {
-      allow read, write: if isSignedIn() && request.auth.uid == uid;
+      allow read, create, update, delete: if isSignedIn() && request.auth.uid == uid;
     }
 
     match /villages/{docId} {
-      allow read, update, delete: if isOwner();
-      allow create: if isCreatingOwnDoc();
-      allow list: if isSignedIn() && query.where == 'userId' && query.value == request.auth.uid;
+      allow read: if ownsExistingDoc();
+      allow create: if createsOwnDoc();
+      allow update: if ownsExistingDoc() && keepsOwnerImmutable();
+      allow delete: if ownsExistingDoc();
     }
 
     match /customers/{docId} {
-      allow read, update, delete: if isOwner();
-      allow create: if isCreatingOwnDoc();
-      allow list: if isSignedIn() && query.where == 'userId' && query.value == request.auth.uid;
+      allow read: if ownsExistingDoc();
+      allow create: if createsOwnDoc();
+      allow update: if ownsExistingDoc() && keepsOwnerImmutable();
+      allow delete: if ownsExistingDoc();
     }
 
     match /loans/{docId} {
-      allow read, update, delete: if isOwner();
-      allow create: if isCreatingOwnDoc();
-      allow list: if isSignedIn() && query.where == 'userId' && query.value == request.auth.uid;
+      allow read: if ownsExistingDoc();
+      allow create: if createsOwnDoc() && validLoanAmounts();
+      allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validLoanAmounts();
+      allow delete: if ownsExistingDoc();
     }
 
     match /payments/{docId} {
-      allow read, update, delete: if isOwner();
-      allow create: if isCreatingOwnDoc();
-      allow list: if isSignedIn() && query.where == 'userId' && query.value == request.auth.uid;
+      allow read: if ownsExistingDoc();
+      allow create: if createsOwnDoc() && validPaymentAmount();
+      allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validPaymentAmount();
+      allow delete: if ownsExistingDoc();
     }
 
-    // Deny everything else by default.
     match /{document=**} {
       allow read, write: if false;
     }

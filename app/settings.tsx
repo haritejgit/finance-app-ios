@@ -8,10 +8,12 @@ import * as Sharing from "expo-sharing";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { useAuth } from "../src/auth-context";
 import { db } from "../src/firebase";
-import { colors, gradient } from "../src/theme";
+import { colors, getGradient } from "../src/theme";
 import { useTheme } from "../src/theme-context";
 import Icon from "../src/Icon";
 import { Customer, Loan, Payment, Village } from "../src/types";
+import { createBackupSnapshot, makeBackupFilename, parseBackupSnapshot, restoreBackupSnapshot } from "../src/backup";
+import { downloadTextFile } from "../src/exports";
 
 const BUSINESS_START_DATE = new Date(2026, 3, 1).getTime();
 
@@ -58,8 +60,10 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
 
 export default function SettingsScreen() {
   const { user, logout } = useAuth();
-  const { isDark, toggleDarkMode } = useTheme();
+  const { isDark, toggleDarkMode, colors: themeColors } = useTheme();
   const [isExporting, setIsExporting] = useState(false);
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   const exportWholeData = async () => {
     if (!user || isExporting) return;
@@ -294,8 +298,71 @@ export default function SettingsScreen() {
     }
   };
 
+  const exportJsonBackup = async () => {
+    if (!user || isBackingUp) return;
+    try {
+      setIsBackingUp(true);
+      const snapshot = await createBackupSnapshot(user.uid);
+      const exported = downloadTextFile(makeBackupFilename(), JSON.stringify(snapshot, null, 2));
+      if (exported) {
+        Alert.alert("Backup Ready", "Encrypted browser storage was not used for this backup. Keep the JSON file private.");
+      } else {
+        Alert.alert("Backup Ready", "JSON backup is only available on web in this release.");
+      }
+    } catch (error: any) {
+      Alert.alert("Backup Failed", error?.message ?? "Could not create backup.");
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
+
+  const restoreJsonBackup = async () => {
+    if (!user || isRestoring) return;
+    if (Platform.OS !== "web" || typeof document === "undefined") {
+      Alert.alert("Web Only", "Backup restore is available from the web dashboard.");
+      return;
+    }
+
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const raw = await file.text();
+        const snapshot = parseBackupSnapshot(raw, user.uid);
+        Alert.alert(
+          "Restore Backup",
+          "This will merge matching records into your account. It will not delete existing production records.",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Restore",
+              style: "default",
+              onPress: async () => {
+                try {
+                  setIsRestoring(true);
+                  const restored = await restoreBackupSnapshot(snapshot, user.uid);
+                  Alert.alert("Restore Complete", `${restored} records were safely merged.`);
+                } catch (error: any) {
+                  Alert.alert("Restore Failed", error?.message ?? "Could not restore backup.");
+                } finally {
+                  setIsRestoring(false);
+                }
+              },
+            },
+          ]
+        );
+      } catch (error: any) {
+        Alert.alert("Invalid Backup", error?.message ?? "This file is not a valid Finance Manager backup.");
+      }
+    };
+    input.click();
+  };
+
   return (
-    <LinearGradient colors={[...gradient]} style={styles.root}>
+    <LinearGradient colors={[...getGradient(themeColors)]} style={styles.root}>
       <SafeAreaView style={styles.safe}>
         <View style={styles.content}>
           <Pressable style={styles.backBtn} onPress={() => router.back()}>
@@ -342,8 +409,8 @@ export default function SettingsScreen() {
               <Switch
                 value={isDark}
                 onValueChange={toggleDarkMode}
-                trackColor={{ false: colors.border, true: colors.blue2 }}
-                thumbColor={colors.white}
+                trackColor={{ false: themeColors.border, true: themeColors.primary }}
+                thumbColor={themeColors.white}
               />
             </View>
 
@@ -359,6 +426,39 @@ export default function SettingsScreen() {
               )}
               <Text style={styles.exportText}>{isExporting ? "Exporting Whole Data..." : "Export Whole Data"}</Text>
             </Pressable>
+
+            <View style={styles.securityPanel}>
+              <View style={styles.securityHeader}>
+                <View style={styles.infoIcon}>
+                  <Icon name="shield-checkmark-outline" size={18} color={colors.teal} />
+                </View>
+                <View style={styles.infoCopy}>
+                  <Text style={styles.label}>Backup & restore</Text>
+                  <Text style={styles.value}>Safe merge backup tools</Text>
+                </View>
+              </View>
+              <Text style={styles.securityCopy}>
+                Backup exports include villages, customers, loans, and payments for this signed-in account only. Restore merges records and never deletes existing records.
+              </Text>
+              <View style={styles.backupRow}>
+                <Pressable
+                  style={[styles.backupBtn, isBackingUp && styles.exportBtnDisabled]}
+                  onPress={exportJsonBackup}
+                  disabled={isBackingUp}
+                >
+                  {isBackingUp ? <ActivityIndicator color={colors.white} /> : <Icon name="cloud-download-outline" size={17} color={colors.white} />}
+                  <Text style={styles.backupBtnText}>{isBackingUp ? "Backing up..." : "JSON Backup"}</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.restoreBtn, isRestoring && styles.exportBtnDisabled]}
+                  onPress={restoreJsonBackup}
+                  disabled={isRestoring}
+                >
+                  {isRestoring ? <ActivityIndicator color={colors.blue2} /> : <Icon name="database-outline" size={17} color={colors.blue2} />}
+                  <Text style={styles.restoreBtnText}>{isRestoring ? "Restoring..." : "Restore"}</Text>
+                </Pressable>
+              </View>
+            </View>
 
             <Pressable
               style={styles.logoutBtn}
@@ -400,4 +500,12 @@ const styles = StyleSheet.create({
   exportText: { color: colors.white, fontWeight: "800", fontSize: 15 },
   logoutBtn: { marginTop: 8, borderRadius: 14, backgroundColor: colors.coral, padding: 15, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
   logoutText: { color: colors.white, fontWeight: "800", fontSize: 15 },
+  securityPanel: { backgroundColor: colors.surfaceTint, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 14, gap: 10 },
+  securityHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  securityCopy: { color: colors.gray, fontSize: 12, lineHeight: 17, fontWeight: "700" },
+  backupRow: { flexDirection: "row", gap: 10 },
+  backupBtn: { flex: 1, borderRadius: 13, backgroundColor: colors.blue2, paddingVertical: 13, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7 },
+  backupBtnText: { color: colors.white, fontWeight: "900", fontSize: 13 },
+  restoreBtn: { flex: 1, borderRadius: 13, backgroundColor: colors.sky, paddingVertical: 13, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7, borderWidth: 1, borderColor: "#bfdbfe" },
+  restoreBtnText: { color: colors.blue2, fontWeight: "900", fontSize: 13 },
 });

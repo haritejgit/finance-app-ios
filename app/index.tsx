@@ -3,13 +3,15 @@ import { LinearGradient } from "expo-linear-gradient";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useAuth } from "../src/auth-context";
 import Icon from "../src/Icon";
-import { colors, gradient } from "../src/theme";
+import { getGradient } from "../src/theme";
+import { useTheme } from "../src/theme-context";
 
 export default function Index() {
   const { user, loading } = useAuth();
+  const { colors } = useTheme();
   if (loading) {
     return (
-      <LinearGradient colors={[...gradient]} style={styles.root}>
+      <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
         <View style={styles.loaderCard}>
           <View style={styles.logo}>
             <Icon name="wallet-outline" size={30} color={colors.white} />
@@ -36,5 +38,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  title: { color: colors.white, fontSize: 24, fontWeight: "800" },
+  title: { color: "#FFFFFF", fontSize: 24, fontWeight: "800" },
 });

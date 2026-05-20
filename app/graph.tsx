@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -11,253 +11,123 @@ import {
   Text,
   View,
 } from "react-native";
-import { useAuth } from "../src/auth-context";
-import { colors, gradient } from "../src/theme";
-import Icon from "../src/Icon";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { collection, query, where, getDocs } from "firebase/firestore";
-import { db } from "../src/firebase";
+import { useAuth } from "../src/auth-context";
+import { getDashboardAnalytics, type DashboardAnalytics } from "../src/finance-analytics";
+import { getGradient } from "../src/theme";
+import { useTheme } from "../src/theme-context";
 import { formatAmountInKM } from "../src/utils";
+import Icon from "../src/Icon";
 
-const screenWidth = Dimensions.get("window").width;
-const BUSINESS_START_DATE = new Date(2026, 3, 1).getTime();
-
-function getNetDistributedAmount(amount: number) {
-  return amount - Math.floor(amount / 1000) * 20;
+function formatMoney(value: number) {
+  return `Rs.${Math.round(value || 0).toLocaleString("en-IN")}`;
 }
 
-function toMillis(value: any) {
-  if (typeof value === "number") return value;
-  if (value instanceof Date) return value.getTime();
-  if (typeof value?.toMillis === "function") return value.toMillis();
-  if (typeof value?.seconds === "number") return value.seconds * 1000;
-  return 0;
+function Metric({
+  label,
+  value,
+  icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  icon: string;
+  tone: "blue" | "green" | "orange" | "red";
+}) {
+  const { colors } = useTheme();
+  const accent = tone === "green" ? colors.success : tone === "orange" ? colors.coral : tone === "red" ? colors.error : colors.primary;
+  const soft = tone === "green" ? colors.successSoft : tone === "orange" ? colors.warningSoft : tone === "red" ? colors.destructiveSoft : colors.primarySoft;
+  return (
+    <View style={[styles.metric, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={[styles.metricIcon, { backgroundColor: soft }]}>
+        <Icon name={icon} size={18} color={accent} />
+      </View>
+      <Text style={[styles.metricValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+        {value}
+      </Text>
+      <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>{label}</Text>
+    </View>
+  );
+}
+
+function TrendChart({ analytics }: { analytics: DashboardAnalytics }) {
+  const { colors } = useTheme();
+  const maxValue = Math.max(...analytics.weeklyTrend.map((item) => Math.max(item.collection, item.distribution)), 1);
+  return (
+    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={styles.cardHeader}>
+        <View>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>Weekly Money Movement</Text>
+          <Text style={[styles.cardSub, { color: colors.textSecondary }]}>Collections, distributions, and due marks</Text>
+        </View>
+        <View style={styles.legend}>
+          <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
+          <Text style={[styles.legendLabel, { color: colors.textMuted }]}>Collected</Text>
+          <View style={[styles.legendDot, { backgroundColor: colors.warning }]} />
+          <Text style={[styles.legendLabel, { color: colors.textMuted }]}>Distributed</Text>
+        </View>
+      </View>
+      <View style={styles.chart}>
+        {analytics.weeklyTrend.map((week) => (
+          <View key={week.label} style={styles.chartColumn}>
+            <View style={styles.chartBarWrap}>
+              <View style={[styles.chartBar, { height: Math.max(5, (week.distribution / maxValue) * 138), backgroundColor: colors.warning }]} />
+              <View style={[styles.chartBar, styles.chartBarWide, { height: Math.max(5, (week.collection / maxValue) * 154), backgroundColor: colors.primary }]} />
+            </View>
+            <Text style={[styles.chartAmount, { color: colors.textSecondary }]}>{formatAmountInKM(week.collection, 0)}</Text>
+            <Text style={[styles.chartLabel, { color: colors.textMuted }]}>{week.label}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
 }
 
 export default function GraphScreen() {
   const { user, loading: authLoading } = useAuth();
+  const { colors } = useTheme();
+  const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
-  const [monthlyData, setMonthlyData] = useState({
-    collections: [0, 0, 0, 0, 0, 0],
-    distributions: [0, 0, 0, 0, 0, 0],
-    labels: [] as string[],
-  });
-  const [stats, setStats] = useState({
-    totalCollection: 0,
-    totalDistributed: 0,
-    totalCustomers: 0,
-    totalLoans: 0,
-    growthRate: 0,
-  });
-  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchGraphData = useCallback(async (showInitialLoader = true) => {
+  const load = useCallback(async (showLoader = true) => {
     if (!user) {
       setLoading(false);
       return;
     }
-    if (showInitialLoader) setLoading(true);
-
+    if (showLoader) setLoading(true);
     try {
-      // Get business months from April 2026 onward.
-      const now = new Date();
-      const months = [];
-      const cursor = new Date(BUSINESS_START_DATE);
-      cursor.setDate(1);
-      const endMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      while (cursor <= endMonth) {
-        const d = new Date(cursor);
-        months.push({
-          start: new Date(d.getFullYear(), d.getMonth(), 1).getTime(),
-          end: new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59).getTime(),
-          label: d.toLocaleDateString("en-US", { month: "short" }),
-        });
-        cursor.setMonth(cursor.getMonth() + 1);
-      }
-
-      // Fetch payments
-      const paymentsQuery = query(
-        collection(db, "payments"),
-        where("userId", "==", user.uid)
-      );
-      const paymentsSnap = await getDocs(paymentsQuery);
-      const payments = paymentsSnap.docs.map((d) => d.data() as any);
-
-      // Fetch loans
-      const loansQuery = query(
-        collection(db, "loans"),
-        where("userId", "==", user.uid)
-      );
-      const loansSnap = await getDocs(loansQuery);
-      const loans = loansSnap.docs.map((d) => d.data() as any);
-
-      // Fetch customers
-      const customersQuery = query(
-        collection(db, "customers"),
-        where("userId", "==", user.uid)
-      );
-      const customersSnap = await getDocs(customersQuery);
-      const customers = customersSnap.docs.map((d) => d.data() as any);
-      const activeCustomers = customers.filter((customer) => customer.isActive !== false);
-      const activeCustomerIds = new Set(activeCustomers.map((customer) => customer.id));
-      const activeLoans = loans.filter((loan) => loan.status === "ACTIVE" && activeCustomerIds.has(loan.customerId));
-      const activeLoanCustomerIds = new Set(activeLoans.map((loan) => loan.customerId));
-      const loanCustomerById = new Map(loans.map((loan) => [loan.id, loan.customerId]));
-
-      // Calculate monthly collections and distributions
-      const collections = months.map((month) => {
-        return payments
-          .filter((p) => {
-            const date = toMillis(p.paymentDate);
-            const customerId = p.customerId ?? loanCustomerById.get(p.loanId);
-            return (
-              date >= BUSINESS_START_DATE &&
-              date >= month.start &&
-              date <= month.end &&
-              p.paymentType !== "DUE" &&
-              !!customerId &&
-              activeCustomerIds.has(customerId)
-            );
-          })
-          .reduce((sum, p) => sum + (p.amountPaid || 0), 0);
-      });
-
-      const distributions = months.map((month) => {
-        const rawDistributed = loans
-          .filter((loan) => {
-            const date = toMillis(loan.startDate);
-            return date >= BUSINESS_START_DATE && date >= month.start && date <= month.end && activeCustomerIds.has(loan.customerId);
-          })
-          .reduce((sum, loan) => sum + (loan.principalAmount || 0), 0);
-        return getNetDistributedAmount(rawDistributed);
-      });
-
-      // Calculate totals
-      const totalCollection = collections.reduce((a, b) => a + b, 0);
-      const totalDistributed = distributions.reduce((a, b) => a + b, 0);
-
-      // Calculate growth rate (compare last month to first month)
-      const growthRate = collections[0] > 0
-        ? ((collections[collections.length - 1] - collections[0]) / collections[0]) * 100
-        : 0;
-      const currentMonth = months[months.length - 1];
-      const previousMonth = months[months.length - 2];
-      const currentMonthCollection = collections[collections.length - 1] ?? 0;
-      const previousMonthCollection = previousMonth ? collections[collections.length - 2] ?? 0 : 0;
-      const currentMonthDistribution = distributions[distributions.length - 1] ?? 0;
-      const currentMonthDueCount = currentMonth
-        ? payments.filter((payment) => {
-            const date = toMillis(payment.paymentDate);
-            const customerId = payment.customerId ?? loanCustomerById.get(payment.loanId);
-            return date >= currentMonth.start && date <= currentMonth.end && payment.paymentType === "DUE" && !!customerId && activeCustomerIds.has(customerId);
-          }).length
-        : 0;
-      const currentMonthPaymentCount = currentMonth
-        ? payments.filter((payment) => {
-            const date = toMillis(payment.paymentDate);
-            const customerId = payment.customerId ?? loanCustomerById.get(payment.loanId);
-            return date >= currentMonth.start && date <= currentMonth.end && !!customerId && activeCustomerIds.has(customerId);
-          }).length
-        : 0;
-      const collectionRatio = totalDistributed > 0 ? totalCollection / totalDistributed : 0;
-      const currentMonthDueRate = currentMonthPaymentCount > 0 ? currentMonthDueCount / currentMonthPaymentCount : 0;
-      const pendingDocumentCount = activeCustomers.filter(
-        (customer) => customer.aadharSubmitted !== true || customer.passportPhotoSubmitted !== true
-      ).length;
-      const activeCustomersWithoutLoans = activeCustomers.length - activeLoanCustomerIds.size;
-      const totalOutstanding = activeLoans.reduce((sum, loan) => sum + (Number(loan.balanceAmount) || 0), 0);
-      const averageOutstanding = activeLoans.length > 0 ? totalOutstanding / activeLoans.length : 0;
-      const collectionTrend = previousMonthCollection > 0
-        ? ((currentMonthCollection - previousMonthCollection) / previousMonthCollection) * 100
-        : growthRate;
-
-      const rankedSuggestions = [
-        {
-          score: currentMonthDueRate * 100,
-          text: currentMonthDueCount > 0
-            ? `${currentMonthDueCount} due marks this month (${Math.round(currentMonthDueRate * 100)}% of entries). Start tomorrow with those follow-ups before new distributions.`
-            : "No due marks this month. Keep routes strict and use the clean streak to collect missing documents.",
-        },
-        {
-          score: collectionRatio < 0.75 ? 90 - collectionRatio * 40 : 25,
-          text: collectionRatio < 0.75
-            ? `Collected ${Math.round(collectionRatio * 100)}% of net distributed amount. Slow down fresh lending until recovery crosses 75%.`
-            : `Collected ${Math.round(collectionRatio * 100)}% against net distributions. You can consider selective renewals for customers with clean payment history.`,
-        },
-        {
-          score: collectionTrend < 0 ? 80 + Math.abs(collectionTrend) : 20,
-          text: collectionTrend < 0
-            ? `Collections are down ${Math.abs(collectionTrend).toFixed(1)}% versus the previous month. Check which route or shift dropped first.`
-            : `Collections are up ${collectionTrend.toFixed(1)}% versus the previous month. Increase focus on repeatable routes, not broad expansion.`,
-        },
-        {
-          score: pendingDocumentCount > 0 ? 58 + pendingDocumentCount : 12,
-          text: pendingDocumentCount > 0
-            ? `${pendingDocumentCount} active customer${pendingDocumentCount === 1 ? "" : "s"} still need document completion. Finish those before approving higher amounts.`
-            : "All active customer documents are complete. This improves recovery confidence and makes audits cleaner.",
-        },
-        {
-          score: activeCustomersWithoutLoans > 0 ? 54 + activeCustomersWithoutLoans : 10,
-          text: activeCustomersWithoutLoans > 0
-            ? `${activeCustomersWithoutLoans} active customer${activeCustomersWithoutLoans === 1 ? "" : "s"} do not have active loans. Archive inactive records or add missing loan details.`
-            : "Active customers and active loans are aligned, so progress counts are clean.",
-        },
-        {
-          score: averageOutstanding > 9000 ? 65 : 18,
-          text: activeLoans.length > 0
-            ? `Average outstanding is ${formatAmountInKM(averageOutstanding, 1)} per active loan. Keep renewal offers lower for high-balance customers.`
-            : "No active loans found. Add loans only after customer documents and route schedule are ready.",
-        },
-        {
-          score: currentMonthDistribution > currentMonthCollection ? 50 : 16,
-          text: currentMonthDistribution > currentMonthCollection
-            ? `This month distribution is ahead of collection by ${formatAmountInKM(currentMonthDistribution - currentMonthCollection, 1)}. Tighten daily closing checks.`
-            : `This month collection is ahead of distribution by ${formatAmountInKM(currentMonthCollection - currentMonthDistribution, 1)}. Cash flow is improving.`,
-        },
-      ];
-      const nextSuggestions = rankedSuggestions
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 4)
-        .map((item) => item.text);
-
-      setMonthlyData({ collections, distributions, labels: months.map((month) => month.label) });
-      setStats({
-        totalCollection,
-        totalDistributed,
-        totalCustomers: activeLoanCustomerIds.size,
-        totalLoans: activeLoans.length,
-        growthRate,
-      });
-      setSuggestions(nextSuggestions);
-    } catch {
-      // Error handled silently
+      setAnalytics(await getDashboardAnalytics(user.uid));
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [user]);
 
-  useEffect(() => {
-    // Wait for Firebase Auth to resolve before fetching
-    if (authLoading) return;
-    fetchGraphData();
-  }, [authLoading, fetchGraphData]);
+  useFocusEffect(
+    useCallback(() => {
+      if (authLoading) return;
+      load();
+    }, [authLoading, load])
+  );
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchGraphData(false).then(() => setRefreshing(false));
-  }, [fetchGraphData]);
+  const netPosition = useMemo(() => {
+    if (!analytics) return 0;
+    return analytics.totals.totalCollection - analytics.totals.pendingAmount;
+  }, [analytics]);
 
-  const maxCollection = Math.max(...monthlyData.collections, 1);
-  const maxDistribution = Math.max(...monthlyData.distributions, 1);
+  const recoveryRate = useMemo(() => {
+    if (!analytics || analytics.totals.distributedThisMonth <= 0) return 0;
+    return (analytics.totals.monthlyRevenue / analytics.totals.distributedThisMonth) * 100;
+  }, [analytics]);
 
-  if (loading) {
+  if (loading && !analytics) {
     return (
-      <LinearGradient colors={[...gradient]} style={styles.root}>
+      <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
         <SafeAreaView style={styles.safe}>
-          <View style={styles.loadingContainer}>
+          <View style={styles.loading}>
             <ActivityIndicator size="large" color={colors.white} />
-            <Text style={styles.loadingText}>Loading business insights...</Text>
+            <Text style={[styles.loadingText, { color: colors.white }]}>Loading business intelligence...</Text>
           </View>
         </SafeAreaView>
       </LinearGradient>
@@ -265,153 +135,74 @@ export default function GraphScreen() {
   }
 
   return (
-    <LinearGradient colors={[...gradient]} style={styles.root}>
+    <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
       <SafeAreaView style={styles.safe}>
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={styles.container}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.white} />
-          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(false); }} tintColor={colors.white} />}
         >
           <View style={styles.content}>
-            <View style={styles.heroCard}>
-              <View style={styles.heroTop}>
-                <View style={styles.heroIcon}>
-                  <Icon name="analytics-outline" size={24} color={colors.white} />
-                </View>
-                <View style={styles.heroCopy}>
-                  <Text style={styles.eyebrow}>Business Progress</Text>
-                  <Text style={styles.header}>Money movement</Text>
-                </View>
+            <View style={[styles.hero, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
+              <Pressable style={[styles.backBtn, { backgroundColor: colors.primarySoft }]} onPress={() => router.back()}>
+                <Icon name="arrow-back" size={18} color={colors.primary} />
+              </Pressable>
+              <View style={styles.heroCopy}>
+                <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>Business progress</Text>
+                <Text style={[styles.title, { color: colors.text }]}>Analytics Command Center</Text>
+                <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Cash flow, recovery quality, and route discipline in one view.</Text>
               </View>
-              <View style={styles.heroMetricRow}>
-                <View>
-                  <Text style={styles.heroMetricLabel}>Net position</Text>
-                  <Text style={[
-                    styles.heroMetricValue,
-                    stats.totalCollection >= stats.totalDistributed ? styles.heroPositive : styles.heroNegative,
-                  ]}>
-                    {formatAmountInKM(stats.totalCollection - stats.totalDistributed, 1)}
-                  </Text>
-                </View>
-                <View style={styles.heroPill}>
-                  <Icon name={stats.growthRate >= 0 ? "trending-up" : "trending-down"} size={18} color={stats.growthRate >= 0 ? colors.teal : colors.coral} />
-                  <Text style={styles.heroPillText}>{Math.abs(stats.growthRate).toFixed(1)}%</Text>
-                </View>
+              <View style={[styles.netPill, { backgroundColor: netPosition >= 0 ? colors.successSoft : colors.destructiveSoft }]}>
+                <Icon name={netPosition >= 0 ? "trending-up" : "trending-down"} size={18} color={netPosition >= 0 ? colors.success : colors.error} />
+                <Text style={[styles.netPillText, { color: netPosition >= 0 ? colors.success : colors.error }]}>
+                  {formatAmountInKM(netPosition, 1)}
+                </Text>
               </View>
             </View>
 
-            {/* Stats Cards */}
-            <View style={styles.statsGrid}>
-              <View style={styles.statCard}>
-                <View style={[styles.statIcon, styles.statIconGreen]}>
-                  <Icon name="cash-outline" size={18} color={colors.teal} />
+            {analytics && (
+              <>
+                <View style={styles.metrics}>
+                  <Metric label="Total collection" value={formatAmountInKM(analytics.totals.totalCollection, 1)} icon="cash-outline" tone="green" />
+                  <Metric label="Pending amount" value={formatAmountInKM(analytics.totals.pendingAmount, 1)} icon="alert-circle-outline" tone="red" />
+                  <Metric label="Monthly recovery" value={`${recoveryRate.toFixed(0)}%`} icon="analytics-outline" tone="blue" />
+                  <Metric label="Active loans" value={`${analytics.totals.activeLoanCount}`} icon="wallet-outline" tone="orange" />
                 </View>
-                <Text style={styles.statAmount}>{formatAmountInKM(stats.totalCollection, 1)}</Text>
-                <Text style={styles.statLabel}>Total Collection</Text>
-              </View>
-              <View style={styles.statCard}>
-                <View style={[styles.statIcon, styles.statIconOrange]}>
-                  <Icon name="trending-up-outline" size={18} color={colors.coral} />
-                </View>
-                <Text style={styles.statAmount}>{formatAmountInKM(stats.totalDistributed, 1)}</Text>
-                <Text style={styles.statLabel}>Net Distributed</Text>
-              </View>
-              <View style={styles.statCard}>
-                <View style={[styles.statIcon, styles.statIconBlue]}>
-                  <Icon name="people" size={18} color={colors.blue2} />
-                </View>
-                <Text style={styles.statNumber}>{stats.totalCustomers}</Text>
-                <Text style={styles.statLabel}>Loan Customers</Text>
-              </View>
-              <View style={styles.statCard}>
-                <View style={[styles.statIcon, styles.statIconPurple]}>
-                  <Icon name="wallet-outline" size={18} color="#7c3aed" />
-                </View>
-                <Text style={styles.statNumber}>{stats.totalLoans}</Text>
-                <Text style={styles.statLabel}>Active Loans</Text>
-              </View>
-            </View>
 
-            {/* Charts */}
-            <View style={styles.chartsSection}>
-              <Text style={styles.sectionTitle}>Monthly Trends</Text>
+                <TrendChart analytics={analytics} />
 
-              {/* Collection Bar Chart */}
-              <View style={styles.chartCard}>
-                <View style={styles.chartTitleRow}>
-                  <Text style={styles.chartTitle}>Collections</Text>
-                  <Text style={styles.chartTotal}>{formatAmountInKM(stats.totalCollection, 1)}</Text>
+                <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>Financial Insights</Text>
+                  {analytics.insights.concat(analytics.aiInsights).map((insight) => (
+                    <View key={insight} style={styles.insightRow}>
+                      <View style={[styles.insightDot, { backgroundColor: colors.primary }]} />
+                      <Text style={[styles.insightText, { color: colors.textSecondary }]}>{insight}</Text>
+                    </View>
+                  ))}
                 </View>
-                <View style={styles.barsRow}>
-                  {monthlyData.collections.map((value, index) => {
-                    const height = maxCollection > 0 ? (value / maxCollection) * 120 : 0;
-                    return (
-                      <View key={index} style={styles.barColumn}>
-                        <View style={[styles.barVisual, { height: Math.max(height, 4) }]} />
-                        <Text style={styles.barLabel}>{monthlyData.labels[index]}</Text>
-                        <Text style={styles.barAmount}>{formatAmountInKM(value, 0)}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
 
-              {/* Distribution Bar Chart */}
-              <View style={styles.chartCard}>
-                <View style={styles.chartTitleRow}>
-                  <Text style={styles.chartTitle}>Net Distributions</Text>
-                  <Text style={styles.chartTotal}>{formatAmountInKM(stats.totalDistributed, 1)}</Text>
-                </View>
-                <Text style={styles.deductionNote}>After Rs.20 reduction for every Rs.1000 distributed</Text>
-                <View style={styles.barsRow}>
-                  {monthlyData.distributions.map((value, index) => {
-                    const height = maxDistribution > 0 ? (value / maxDistribution) * 120 : 0;
-                    return (
-                      <View key={index} style={styles.barColumn}>
-                        <View style={[styles.barVisual, styles.barVisualOrange, { height: Math.max(height, 4) }]} />
-                        <Text style={styles.barLabel}>{monthlyData.labels[index]}</Text>
-                        <Text style={styles.barAmount}>{formatAmountInKM(value, 0)}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Summary */}
-              <View style={styles.summaryCard}>
-                <Text style={styles.summaryTitle}>Business Summary</Text>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Net Position:</Text>
-                  <Text style={[styles.summaryValue, stats.totalCollection >= stats.totalDistributed ? styles.positive : styles.negative]}>
-                    {formatAmountInKM((stats.totalCollection - stats.totalDistributed), 1)}
-                  </Text>
-                </View>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Collection vs Distribution:</Text>
-                  <Text style={styles.summaryValue}>
-                    {stats.totalDistributed > 0
-                      ? ((stats.totalCollection / stats.totalDistributed) * 100).toFixed(0)
-                      : 0}%
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.suggestionCard}>
-                <Text style={styles.summaryTitle}>Suggestions</Text>
-                {suggestions.map((suggestion) => (
-                  <View key={suggestion} style={styles.suggestionRow}>
-                    <View style={styles.suggestionDot} />
-                    <Text style={styles.suggestionText}>{suggestion}</Text>
+                <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <View style={styles.cardHeader}>
+                    <Text style={[styles.cardTitle, { color: colors.text }]}>Risk Queue</Text>
+                    <Text style={[styles.cardSub, { color: colors.textSecondary }]}>{analytics.dueAlerts.length} active follow-ups</Text>
                   </View>
-                ))}
-              </View>
-            </View>
-
-            {/* Back Button */}
-            <Pressable style={styles.backBtn} onPress={() => router.back()}>
-              <Text style={styles.backBtnText}>← Back to Dashboard</Text>
-            </Pressable>
+                  {analytics.dueAlerts.length ? (
+                    analytics.dueAlerts.map((alert) => (
+                      <Pressable key={alert.customerId} style={[styles.riskRow, { borderTopColor: colors.border }]} onPress={() => router.push(`/profile/${alert.customerId}`)}>
+                        <View style={styles.riskCopy}>
+                          <Text style={[styles.riskName, { color: colors.text }]}>{alert.customerName}</Text>
+                          <Text style={[styles.riskMeta, { color: colors.textSecondary }]}>
+                            {alert.villageName} | {alert.dueCount} dues | {formatMoney(alert.balanceAmount)}
+                          </Text>
+                        </View>
+                        <Icon name="arrow-forward" size={16} color={colors.textMuted} />
+                      </Pressable>
+                    ))
+                  ) : (
+                    <Text style={[styles.empty, { color: colors.textSecondary }]}>No high-risk active loans right now.</Text>
+                  )}
+                </View>
+              </>
+            )}
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -419,136 +210,48 @@ export default function GraphScreen() {
   );
 }
 
+const screenWidth = Dimensions.get("window").width;
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  container: { paddingHorizontal: 16, paddingVertical: 16 },
-  content: { width: "100%", maxWidth: Math.min(screenWidth - 32, 430), alignSelf: "center", gap: 16 },
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  loadingText: { color: colors.white, marginTop: 12, fontSize: 16 },
-  heroCard: { backgroundColor: "rgba(255,255,255,0.16)", borderWidth: 1, borderColor: "rgba(255,255,255,0.24)", borderRadius: 22, padding: 18, gap: 20 },
-  heroTop: { flexDirection: "row", alignItems: "center", gap: 12 },
-  heroIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" },
-  heroCopy: { flex: 1 },
-  eyebrow: { color: "rgba(255,255,255,0.76)", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
-  header: { color: colors.white, fontSize: 27, fontWeight: "900" },
-  heroMetricRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
-  heroMetricLabel: { color: "rgba(255,255,255,0.72)", fontSize: 12, fontWeight: "800", textTransform: "uppercase" },
-  heroMetricValue: { fontSize: 34, fontWeight: "900", marginTop: 3 },
-  heroPositive: { color: "#bbf7d0" },
-  heroNegative: { color: "#fed7aa" },
-  heroPill: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.white, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
-  heroPillText: { color: colors.ink, fontSize: 13, fontWeight: "900" },
-  statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  statCard: {
-    flex: 1,
-    minWidth: "45%",
-    backgroundColor: colors.white,
-    borderRadius: 18,
-    padding: 16,
-    alignItems: "flex-start",
-  },
-  statIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 10 },
-  statIconGreen: { backgroundColor: colors.mint },
-  statIconOrange: { backgroundColor: "#fff0df" },
-  statIconBlue: { backgroundColor: "#eaf2ff" },
-  statIconPurple: { backgroundColor: "#ede9fe" },
-  statAmount: { color: colors.ink, fontSize: 20, fontWeight: "900" },
-  statNumber: { color: colors.ink, fontSize: 24, fontWeight: "900" },
-  statLabel: { color: colors.gray, fontSize: 12, marginTop: 4, fontWeight: "800" },
-  growthCard: {
-    backgroundColor: "rgba(255,255,255,0.2)",
-    borderRadius: 16,
-    padding: 20,
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  growthLabel: { color: colors.white, fontSize: 16, fontWeight: "600" },
-  growthValue: { fontSize: 24, fontWeight: "700" },
-  growthPositive: { color: "#4CAF50" },
-  growthNegative: { color: "#FF5722" },
-  chartsSection: { gap: 16 },
-  sectionTitle: { color: colors.white, fontSize: 18, fontWeight: "900" },
-  chartCard: {
-    backgroundColor: colors.white,
-    borderRadius: 18,
-    padding: 16,
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  chartTitleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-  chartTitle: { color: colors.blue2, fontSize: 16, fontWeight: "900" },
-  chartTotal: { color: colors.ink, fontSize: 14, fontWeight: "900" },
-  deductionNote: { color: colors.gray, fontSize: 11, fontWeight: "700", marginBottom: 10 },
-  barsRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", height: 160 },
-  barColumn: { flex: 1, alignItems: "center" },
-  barVisual: {
-    width: 30,
-    backgroundColor: colors.blue2,
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
-  },
-  barVisualOrange: { backgroundColor: "#FF9800" },
-  barLabel: { fontSize: 10, color: "#666", marginTop: 8 },
-  barAmount: { fontSize: 10, color: colors.blue2, fontWeight: "600" },
-  chartContainer: { marginBottom: 20 },
-  chartLabel: { color: colors.blue2, fontSize: 14, fontWeight: "600", marginBottom: 10 },
-  barsContainer: { flexDirection: "row", justifyContent: "space-around", alignItems: "flex-end", height: 180 },
-  barWrapper: { alignItems: "center", flex: 1 },
-  bar: {
-    width: 40,
-    backgroundColor: colors.blue2,
-    borderRadius: 4,
-    marginBottom: 5,
-  },
-  barValue: { fontSize: 10, color: "#666" },
-  lineChartContainer: { height: 180, position: "relative" },
-  lineChartBackground: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    borderLeftWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: "#e0e0e0",
-  },
-  dataPoint: {
-    position: "absolute",
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.blue2,
-    marginLeft: -4,
-    marginBottom: -4,
-  },
-  lineChartLabels: { flexDirection: "row", justifyContent: "space-around", marginTop: 10 },
-  lineValue: { fontSize: 10, color: "#666" },
-  summaryCard: {
-    backgroundColor: "rgba(255,255,255,0.95)",
-    borderRadius: 16,
-    padding: 20,
-  },
-  suggestionCard: { backgroundColor: "rgba(255,255,255,0.95)", borderRadius: 16, padding: 18, gap: 10 },
-  suggestionRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  suggestionDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.teal, marginTop: 5 },
-  suggestionText: { flex: 1, color: colors.ink, fontSize: 13, lineHeight: 18, fontWeight: "700" },
-  summaryTitle: { color: colors.blue2, fontSize: 16, fontWeight: "700", marginBottom: 12 },
-  summaryRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
-  summaryLabel: { color: "#666", fontSize: 14 },
-  summaryValue: { fontSize: 14, fontWeight: "700" },
-  positive: { color: "#4CAF50" },
-  negative: { color: "#FF5722" },
-  backBtn: {
-    backgroundColor: colors.white,
-    borderRadius: 28,
-    padding: 16,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  backBtnText: { color: colors.blue3, fontWeight: "700" },
+  container: { padding: 16, paddingBottom: 34 },
+  content: { width: "100%", maxWidth: Math.min(screenWidth - 32, 1120), alignSelf: "center", gap: 14 },
+  loading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
+  loadingText: { fontSize: 15, fontWeight: "800" },
+  hero: { borderRadius: 24, borderWidth: 1, padding: 16, gap: 14 },
+  backBtn: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  heroCopy: { gap: 3 },
+  eyebrow: { fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
+  title: { fontSize: 30, fontWeight: "900" },
+  subtitle: { fontSize: 13, lineHeight: 19, fontWeight: "700" },
+  netPill: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  netPillText: { fontSize: 13, fontWeight: "900" },
+  metrics: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  metric: { flexGrow: 1, flexBasis: "47%", minWidth: 156, borderWidth: 1, borderRadius: 18, padding: 14 },
+  metricIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 10 },
+  metricValue: { fontSize: 23, fontWeight: "900" },
+  metricLabel: { fontSize: 11, fontWeight: "900", marginTop: 4, textTransform: "uppercase" },
+  card: { borderRadius: 20, borderWidth: 1, padding: 16, gap: 12 },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
+  cardTitle: { fontSize: 18, fontWeight: "900" },
+  cardSub: { fontSize: 11, fontWeight: "800" },
+  legend: { flexDirection: "row", alignItems: "center", gap: 5, flexWrap: "wrap", justifyContent: "flex-end", flex: 1 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendLabel: { fontSize: 10, fontWeight: "900" },
+  chart: { height: 190, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 7 },
+  chartColumn: { flex: 1, alignItems: "center", gap: 5 },
+  chartBarWrap: { height: 160, flexDirection: "row", alignItems: "flex-end", gap: 3 },
+  chartBar: { width: 10, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
+  chartBarWide: { width: 14 },
+  chartAmount: { fontSize: 9, fontWeight: "900" },
+  chartLabel: { fontSize: 9, fontWeight: "800" },
+  insightRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  insightDot: { width: 8, height: 8, borderRadius: 4, marginTop: 5 },
+  insightText: { flex: 1, fontSize: 13, lineHeight: 19, fontWeight: "700" },
+  riskRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 11, borderTopWidth: 1 },
+  riskCopy: { flex: 1 },
+  riskName: { fontSize: 14, fontWeight: "900" },
+  riskMeta: { fontSize: 12, fontWeight: "700", marginTop: 2 },
+  empty: { fontSize: 13, fontWeight: "800" },
 });
