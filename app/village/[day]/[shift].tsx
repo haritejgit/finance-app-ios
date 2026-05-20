@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { router, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
 import { Dimensions, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useAuth } from "../../../src/auth-context";
 import { useTheme } from "../../../src/theme-context";
@@ -31,25 +31,26 @@ export default function VillageListScreen() {
   const [moveSaving, setMoveSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const reload = async () => {
+  const reload = useCallback(async (options?: { fresh?: boolean }) => {
     if (!user) {
       setLoading(false);
       return;
     }
     try {
       setLoading(true);
-      setVillages(await getVillages(user.uid));
+      setVillages(await getVillages(user.uid, options?.fresh ? false : true));
     } catch (error) {
       console.error("Failed to load villages:", error);
     } finally {
       setLoading(false);
     }
-  };
-  useEffect(() => {
+  }, [user]);
+
+  useFocusEffect(useCallback(() => {
     // Wait for Firebase Auth to resolve before fetching
     if (authLoading) return;
-    reload();
-  }, [user, authLoading]);
+    reload({ fresh: true });
+  }, [authLoading, reload]));
 
   const filtered = useMemo(() => villages.filter((v) => v.dayOfWeek === day && v.shift === shift), [villages, day, shift]);
 

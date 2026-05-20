@@ -1,10 +1,6 @@
 import React from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { Platform, StyleSheet } from 'react-native';
-
-let Ionicons: any = null;
-if (Platform.OS !== 'web') {
-  Ionicons = require('@expo/vector-icons').Ionicons;
-}
 
 interface IconProps {
   name: string;

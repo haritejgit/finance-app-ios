@@ -1,6 +1,7 @@
 import * as Location from "expo-location";
 
 export const LOCATION_PERMISSION_DENIED = "LOCATION_PERMISSION_DENIED";
+export const LOCATION_TIMEOUT = "LOCATION_TIMEOUT";
 
 const FRESH_LOCATION_OPTIONS: Location.LocationOptions = {
   accuracy: Location.Accuracy.Highest,
@@ -47,13 +48,28 @@ function waitForFreshUpdate(timeoutMs: number) {
   });
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message = LOCATION_TIMEOUT) {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise
+      .then((value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+  });
+}
+
 export async function requestCurrentCoordinates() {
-  const { status } = await Location.requestForegroundPermissionsAsync();
+  const { status } = await withTimeout(Location.requestForegroundPermissionsAsync(), 10000);
   if (status !== "granted") {
     throw new Error(LOCATION_PERMISSION_DENIED);
   }
 
-  const location = await Location.getCurrentPositionAsync(FRESH_LOCATION_OPTIONS);
+  const location = await withTimeout(Location.getCurrentPositionAsync(FRESH_LOCATION_OPTIONS), 15000);
   if (Date.now() - location.timestamp <= 15000) {
     return toCoordinates(location);
   }

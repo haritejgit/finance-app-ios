@@ -52,23 +52,12 @@ export default function GraphScreen() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    // Wait for Firebase Auth to resolve before fetching
-    if (authLoading) return;
-    fetchGraphData();
-  }, [user, authLoading]);
-
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchGraphData().then(() => setRefreshing(false));
-  }, [user]);
-
-  const fetchGraphData = async () => {
+  const fetchGraphData = useCallback(async (showInitialLoader = true) => {
     if (!user) {
       setLoading(false);
       return;
     }
-    if (!refreshing) setLoading(true);
+    if (showInitialLoader) setLoading(true);
 
     try {
       // Get business months from April 2026 onward.
@@ -241,12 +230,23 @@ export default function GraphScreen() {
         growthRate,
       });
       setSuggestions(nextSuggestions);
-    } catch (error) {
+    } catch {
       // Error handled silently
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    // Wait for Firebase Auth to resolve before fetching
+    if (authLoading) return;
+    fetchGraphData();
+  }, [authLoading, fetchGraphData]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchGraphData(false).then(() => setRefreshing(false));
+  }, [fetchGraphData]);
 
   const maxCollection = Math.max(...monthlyData.collections, 1);
   const maxDistribution = Math.max(...monthlyData.distributions, 1);

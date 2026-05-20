@@ -46,9 +46,9 @@ export default function FinanceMotion({ compact = false }: FinanceMotionProps) {
 
   const packets = useMemo(
     () => [
-      { top: "24%", delay: 0, color: colors.teal, icon: "cash-outline" },
-      { top: "50%", delay: 0.22, color: colors.coral, icon: "card-outline" },
-      { top: "76%", delay: 0.46, color: "#7c3aed", icon: "phone-portrait-outline" },
+      { topRatio: 0.24, delay: 0, color: colors.teal, icon: "cash-outline" },
+      { topRatio: 0.5, delay: 0.22, color: colors.coral, icon: "card-outline" },
+      { topRatio: 0.76, delay: 0.46, color: "#7c3aed", icon: "phone-portrait-outline" },
     ],
     []
   );
@@ -80,6 +80,8 @@ export default function FinanceMotion({ compact = false }: FinanceMotionProps) {
         {packets.map((packet, index) => {
           const start = -36;
           const end = compact ? 238 : 286;
+          const packetSize = index === 1 ? 34 : 30;
+          const top = (compact ? 112 : 150) * packet.topRatio - packetSize / 2;
           const progress = loop.interpolate({
             inputRange: [0, packet.delay, Math.min(packet.delay + 0.52, 1), 1],
             outputRange: [start, start, end, end],
@@ -93,7 +95,7 @@ export default function FinanceMotion({ compact = false }: FinanceMotionProps) {
               key={packet.icon}
               style={[
                 styles.packet,
-                { top: packet.top, backgroundColor: packet.color, opacity, transform: [{ translateX: progress }] },
+                { top, backgroundColor: packet.color, opacity, transform: [{ translateX: progress }] },
                 index === 1 && styles.packetMiddle,
               ]}
             >

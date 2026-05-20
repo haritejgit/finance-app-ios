@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams, router } from "expo-router";
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
+import React, { memo, useCallback, useMemo, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   Alert,
@@ -20,7 +20,7 @@ import {
 } from "react-native";
 import { useAuth } from "../../src/auth-context";
 import Icon from "../../src/Icon";
-import { LOCATION_PERMISSION_DENIED, requestCurrentCoordinates } from "../../src/location";
+import { LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
 import {
   addPayment,
   deleteCustomer,
@@ -151,6 +151,28 @@ function toStartOfDay(ts: number) {
   return d.getTime();
 }
 
+function parseCoordinateInput(value: string, min: number, max: number) {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) return null;
+  return parsed;
+}
+
+function getLocationErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message === LOCATION_PERMISSION_DENIED) {
+    return "Permission to access location was denied";
+  }
+  if (error instanceof Error && error.message === LOCATION_TIMEOUT) {
+    return "Location is taking too long. You can enter coordinates manually.";
+  }
+  return "Failed to get location";
+}
+
+function hasCustomerCoordinates(customer?: Customer | null) {
+  return typeof customer?.latitude === "number" && typeof customer?.longitude === "number";
+}
+
 export default function ProfileScreen() {
   const { customerId } = useLocalSearchParams<{ customerId: string }>();
   const { user, loading: authLoading } = useAuth();
@@ -185,6 +207,7 @@ export default function ProfileScreen() {
   const [deleteCustomerConfirmOpen, setDeleteCustomerConfirmOpen] = useState(false);
   const [isDeletingCustomer, setIsDeletingCustomer] = useState(false);
   const [editLoanDateError, setEditLoanDateError] = useState("");
+  const [editCoordinateError, setEditCoordinateError] = useState("");
   const [showEditLoanDatePicker, setShowEditLoanDatePicker] = useState(false);
   const [tempEditLoanDate, setTempEditLoanDate] = useState<Date>(new Date());
   const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
@@ -198,8 +221,8 @@ export default function ProfileScreen() {
     locationDesc: "",
     coName: "",
     coId: "",
-    latitude: null as number | null,
-    longitude: null as number | null,
+    latitude: "",
+    longitude: "",
     aadharSubmitted: false,
     passportPhotoSubmitted: false,
     loanAmount: "",
@@ -222,19 +245,20 @@ export default function ProfileScreen() {
       locationDesc: customer.locationDesc || "",
       coName: customer.coName || "",
       coId: customer.coId?.toString() || "",
-      latitude: customer.latitude ?? null,
-      longitude: customer.longitude ?? null,
+      latitude: typeof customer.latitude === "number" ? String(customer.latitude) : "",
+      longitude: typeof customer.longitude === "number" ? String(customer.longitude) : "",
       aadharSubmitted: customer.aadharSubmitted === true,
       passportPhotoSubmitted: customer.passportPhotoSubmitted === true,
       loanAmount: loan ? loan.principalAmount.toString() : "",
       loanStartDate: loan ? formatDateInput(loan.startDate) : formatDateInput(Date.now()),
     });
+    setEditCoordinateError("");
     setEditOpen(true);
   };
 
   // Function to open Google Maps with customer location
   const openGoogleMaps = () => {
-    if (!customer?.latitude || !customer?.longitude) {
+    if (!hasCustomerCoordinates(customer)) {
       alert('Customer location not available');
       return;
     }
@@ -251,41 +275,15 @@ export default function ProfileScreen() {
       const coordinates = await requestCurrentCoordinates();
       setEditForm(prev => ({
         ...prev,
-        latitude: coordinates.latitude,
-        longitude: coordinates.longitude,
+        latitude: coordinates.latitude.toFixed(6),
+        longitude: coordinates.longitude.toFixed(6),
       }));
+      setEditCoordinateError("");
     } catch (error) {
-      alert(error instanceof Error && error.message === LOCATION_PERMISSION_DENIED ? 'Permission to access location was denied' : 'Failed to get location');
+      alert(getLocationErrorMessage(error));
     } finally {
       setIsUpdatingLocation(false);
     }
-  };
-
-  const updateCustomerDetails = async () => {
-    if (!customer || !user) return;
-    
-    const updatedCustomer: Customer = {
-      id: customer.id,
-      numericalId: customer.numericalId,
-      name: editForm.name,
-      phone: editForm.phone,
-      aadhar: editForm.aadhar,
-      locationDesc: editForm.locationDesc,
-      latitude: editForm.latitude ?? customer.latitude,
-      longitude: editForm.longitude ?? customer.longitude,
-      coName: editForm.coName || undefined,
-      coId: editForm.coId ? Number(editForm.coId) : undefined,
-      aadharSubmitted: editForm.aadharSubmitted,
-      passportPhotoSubmitted: editForm.passportPhotoSubmitted,
-      villageId: customer.villageId,
-      userId: customer.userId,
-      isActive: customer.isActive,
-      createdAt: customer.createdAt,
-    };
-    
-    await updateCustomer(updatedCustomer);
-    setEditOpen(false);
-    await reload();
   };
 
   const toggleDocumentSubmitted = async (field: "aadharSubmitted" | "passportPhotoSubmitted") => {
@@ -324,11 +322,11 @@ export default function ProfileScreen() {
     }
   }, [customerId, user]);
   
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     // Wait for Firebase Auth to resolve before fetching
     if (authLoading) return;
     reload();
-  }, [authLoading, reload]);
+  }, [authLoading, reload]));
 
   const civilScore = useMemo(() => {
     if (!payments.length) return 750;
@@ -439,6 +437,18 @@ export default function ProfileScreen() {
     if (!customer || !user) return;
 
     const normalizedAadhar = editForm.aadhar ? editForm.aadhar.replace(/\D/g, "").trim() : "";
+    const parsedLatitude = parseCoordinateInput(editForm.latitude, -90, 90);
+    const parsedLongitude = parseCoordinateInput(editForm.longitude, -180, 180);
+    if (parsedLatitude === null || parsedLongitude === null) {
+      setEditCoordinateError("Enter valid coordinates. Latitude must be -90 to 90 and longitude -180 to 180.");
+      return;
+    }
+    if ((parsedLatitude === undefined) !== (parsedLongitude === undefined)) {
+      setEditCoordinateError("Enter both latitude and longitude, or leave both empty.");
+      return;
+    }
+    setEditCoordinateError("");
+
     if (normalizedAadhar) {
       const existingCustomer = await getCustomerByAadhar(user.uid, normalizedAadhar, customer.id);
       if (existingCustomer && existingCustomer.id !== customer.id) {
@@ -459,8 +469,8 @@ export default function ProfileScreen() {
       locationDesc: editForm.locationDesc,
       coName: editForm.coName,
       coId: editForm.coId ? Number(editForm.coId) : undefined,
-      latitude: editForm.latitude ?? undefined,
-      longitude: editForm.longitude ?? undefined,
+      latitude: parsedLatitude,
+      longitude: parsedLongitude,
       aadharSubmitted: editForm.aadharSubmitted,
       passportPhotoSubmitted: editForm.passportPhotoSubmitted,
     });
@@ -639,11 +649,11 @@ export default function ProfileScreen() {
                 <Text selectable={false} style={styles.iconBtnLabel}>Edit</Text>
               </Pressable>
               <Pressable
-                style={[styles.iconBtn, noTextSelection, !customer?.latitude && styles.iconBtnDisabled]}
+                style={[styles.iconBtn, noTextSelection, !hasCustomerCoordinates(customer) && styles.iconBtnDisabled]}
                 onPress={openGoogleMaps}
-                disabled={!customer?.latitude}
+                disabled={!hasCustomerCoordinates(customer)}
               >
-                <Icon name="location" size={21} color={customer?.latitude ? colors.teal : colors.gray} />
+                <Icon name="location" size={21} color={hasCustomerCoordinates(customer) ? colors.teal : colors.gray} />
                 <Text selectable={false} style={styles.iconBtnLabel}>Map</Text>
               </Pressable>
               <Pressable style={[styles.iconBtn, noTextSelection]} onPress={() => setDeleteCustomerConfirmOpen(true)}>
@@ -924,21 +934,47 @@ export default function ProfileScreen() {
 
               {/* Location Update Section */}
               <View style={styles.locationUpdateSection}>
-                <Text style={styles.locationLabel}>Current Location:</Text>
-                {editForm.latitude && editForm.longitude ? (
+                <Text style={styles.locationLabel}>Customer Coordinates</Text>
+                {editForm.latitude.trim() && editForm.longitude.trim() ? (
                   <Text style={styles.locationCoords}>
-                    <Icon name="location" size={12} color="#666" /> {editForm.latitude.toFixed(6)}, {editForm.longitude.toFixed(6)}
+                    <Icon name="location" size={12} color="#666" /> {editForm.latitude.trim()}, {editForm.longitude.trim()}
                   </Text>
                 ) : (
                   <Text style={styles.locationNotSet}>No location set</Text>
                 )}
+                <View style={styles.coordinateRow}>
+                  <TextInput
+                    placeholder="Latitude"
+                    value={editForm.latitude}
+                    onChangeText={(text) => {
+                      setEditForm(prev => ({ ...prev, latitude: text }));
+                      setEditCoordinateError("");
+                    }}
+                    style={[styles.input, styles.coordinateInput]}
+                    keyboardType="numbers-and-punctuation"
+                    autoCapitalize="none"
+                  />
+                  <TextInput
+                    placeholder="Longitude"
+                    value={editForm.longitude}
+                    onChangeText={(text) => {
+                      setEditForm(prev => ({ ...prev, longitude: text }));
+                      setEditCoordinateError("");
+                    }}
+                    style={[styles.input, styles.coordinateInput]}
+                    keyboardType="numbers-and-punctuation"
+                    autoCapitalize="none"
+                  />
+                </View>
+                <Text style={styles.coordinateHint}>Enter coordinates manually, or use current device location.</Text>
+                {editCoordinateError ? <Text style={styles.errorText}>{editCoordinateError}</Text> : null}
                 <Pressable 
                   style={[styles.updateLocationBtn, isUpdatingLocation && styles.updateLocationBtnDisabled]} 
                   onPress={updateEditLocation}
                   disabled={isUpdatingLocation}
                 >
                   <Text style={styles.updateLocationBtnText}>
-                    {isUpdatingLocation ? 'Getting Location...' : editForm.latitude ? 'Update Location' : 'Set Location'}
+                    {isUpdatingLocation ? 'Getting Location...' : editForm.latitude.trim() ? 'Update Location' : 'Set Location'}
                   </Text>
                 </Pressable>
               </View>
@@ -1198,7 +1234,7 @@ export default function ProfileScreen() {
                     await deleteCustomer(user.uid, customer.id);
                     setDeleteCustomerConfirmOpen(false);
                     router.back();
-                  } catch (error) {
+                  } catch {
                     Alert.alert('Error', 'Failed to delete customer. Please try again.');
                   } finally {
                     setIsDeletingCustomer(false);
@@ -1366,6 +1402,9 @@ const styles = StyleSheet.create({
   locationLabel: { fontSize: 14, fontWeight: "600", color: "#333", marginBottom: 8 },
   locationCoords: { fontSize: 14, color: "#28a745", marginBottom: 12, fontFamily: Platform.OS === "ios" ? "Courier" : "monospace" },
   locationNotSet: { fontSize: 14, color: "#999", marginBottom: 12, fontStyle: "italic" },
+  coordinateRow: { flexDirection: "row", gap: 10 },
+  coordinateInput: { flex: 1 },
+  coordinateHint: { color: "#64748b", fontSize: 12, fontWeight: "600", marginTop: -2, marginBottom: 10 },
   updateLocationBtn: { backgroundColor: colors.blue2, borderRadius: 10, padding: 12, alignItems: "center" },
   updateLocationBtnDisabled: { backgroundColor: "#ccc" },
   updateLocationBtnText: { color: colors.white, fontWeight: "700", fontSize: 14 },

@@ -76,7 +76,7 @@ export default function ShiftSelectionScreen() {
 
   const openCustomerSearch = useCallback(async () => {
     setSearchOpen(true);
-    if (!user || allCustomers.length > 0) return;
+    if (!user) return;
     try {
       setSearchLoading(true);
       const customers = await getAllActiveCustomersWithVillages(user.uid);
@@ -86,7 +86,7 @@ export default function ShiftSelectionScreen() {
     } finally {
       setSearchLoading(false);
     }
-  }, [allCustomers.length, user]);
+  }, [user]);
 
   const searchResults = useMemo(() => {
     const normalized = searchQuery.trim().toLowerCase();

@@ -1,9 +1,9 @@
 import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
 import React, { useMemo, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   Alert,
-  Dimensions,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -14,17 +14,15 @@ import {
   Text,
   TextInput,
   View,
-  ActivityIndicator,
 } from "react-native";
 import { useAuth } from "../src/auth-context";
 import Icon from "../src/Icon";
 import { getPaymentsByDate } from "../src/repository";
 import { colors } from "../src/theme";
-import { Village, Customer, Loan, Payment } from "../src/types";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { collection, query, where, orderBy, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../src/firebase';
 
 // Lazy load heavy XLSX library
@@ -116,7 +114,6 @@ export default function ReportsScreen() {
   // Day Report state
   const [showDayReportModal, setShowDayReportModal] = useState(false);
   const [dayReportDate, setDayReportDate] = useState(formatDateInput(Date.now()));
-  const [dayReportDay, setDayReportDay] = useState("Monday");
   const [dayReportShift, setDayReportShift] = useState<"Morning" | "Evening">("Morning");
   const [showDayDatePicker, setShowDayDatePicker] = useState(false);
   const [tempDayDate, setTempDayDate] = useState(new Date());
@@ -140,8 +137,6 @@ export default function ReportsScreen() {
   const [tempTotalsToDate, setTempTotalsToDate] = useState(new Date());
   const [totalsData, setTotalsData] = useState<any[]>([]);
   const [totalsLoading, setTotalsLoading] = useState(false);
-
-  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
   const canGenerate = useMemo(() => {
     const from = parseDateInput(fromDate);
@@ -171,7 +166,7 @@ export default function ReportsScreen() {
       setReportSummary(summary);
       setReportData(data.sort((a, b) => b.paymentDate - a.paymentDate));
       setShowReportModal(true);
-    } catch (error) {
+    } catch {
       // Error handled by alert
     } finally {
       setIsGenerating(false);
@@ -256,7 +251,7 @@ export default function ReportsScreen() {
           });
           shareSuccess = true;
         }
-      } catch (fileShareError) {
+      } catch {
         // Silent fail - try next method
       }
       
@@ -272,7 +267,7 @@ export default function ReportsScreen() {
             });
             shareSuccess = true;
           }
-        } catch (dataUriError) {
+        } catch {
           // Silent fail
         }
       }
@@ -295,7 +290,7 @@ export default function ReportsScreen() {
         );
       }
       
-    } catch (error) {
+    } catch {
       // Error handled below
       
       Alert.alert(
@@ -316,15 +311,6 @@ export default function ReportsScreen() {
     }
     return btoa(binary);
   }
-
-  // Color definitions for styling (matching Android version)
-  const orangeColor = { rgb: "C55A11" };  // Disbursed/given to customer (Android: 0xC5, 0x5A, 0x11)
-  const blackColor = { rgb: "000000" };  // Normal payment
-  const redColor = { rgb: "FF0000" };    // Due (unpaid) - cell fill
-  const purpleColor = { rgb: "7030A0" }; // Closing/outstanding balance
-  const whiteColor = { rgb: "FFFFFF" };  // Due text
-  const lightGrayColor = { rgb: "F0F0F0" };
-  const mediumGrayColor = { rgb: "E0E0E0" };
 
   // Type definitions for data structures
 interface Village {
@@ -369,82 +355,15 @@ interface Payment {
   [key: string]: any; // Allow additional properties
 }
 
-// Helper functions for processing real payment data (simplified for current data structure)
-  const getPaymentTypeFromData = (payment: Payment) => {
-    if (!payment) return 'due';
-    
-    // Check payment type based on your data structure
-    if (payment.paymentType === 'DISBURSEMENT' || payment.type === 'disbursement') {
-      return 'disbursedOnly'; // Orange - new loan given
-    } else if (payment.paymentType === 'DUE' || payment.type === 'due') {
-      return 'due'; // Red fill + white text - not paid
-    } else if (payment.paymentType === 'RENEWAL' || payment.paymentType === 'RENEWAL_CLOSURE' || payment.type === 'renewal') {
-      return 'renewal'; // Purple + Orange - renewal
-    } else if (payment.paymentType === 'PAID' || payment.paymentType === 'PAYMENT' || payment.paymentType === 'REGULAR' || payment.type === 'paid' || payment.type === 'payment') {
-      return 'paid'; // Black - regular payment
-    } else {
-      return 'paid'; // Default to paid
-    }
-  };
-
-  const getPaymentCellValueFromData = (payment: any, paymentType: string) => {
-    if (paymentType === 'renewal') {
-      // Purple + Orange rich text (matching Android)
-      const prevBal = payment.previousBalance || payment.amountPaid || 0;
-      const newAmt = payment.newLoan || payment.amountPaid || payment.amount || 0;
-      return `${prevBal}\n${newAmt}`;
-    } else if (paymentType === 'disbursedOnly') {
-      // Orange - new loan amount
-      const displayedAmount = payment.amountPaid || payment.amount || 0;
-      return displayedAmount.toString();
-    } else if (paymentType === 'paid') {
-      // Black - regular payment
-      return (payment.amountPaid || payment.amount || 0).toString();
-    } else if (paymentType === 'due') {
-      return 'Due';
-    }
-    
-    return '';
-  };
-
-  const getPaymentCellStyleFromType = (paymentType: string) => {
-    switch (paymentType) {
-      case 'disbursedOnly':
-        // Orange text - new loan given
-        return {
-          font: { color: orangeColor, bold: true },
-          alignment: { horizontal: "center", vertical: "center", wrapText: true }
-        };
-      case 'paid':
-        // Black text - regular payment
-        return {
-          font: { color: blackColor },
-          alignment: { horizontal: "center", vertical: "center", wrapText: true }
-        };
-      case 'renewal':
-        // Purple + Orange - renewal (note: Excel doesn't support rich text easily)
-        // We'll use purple as primary color for now
-        return {
-          font: { color: purpleColor, bold: true },
-          alignment: { horizontal: "center", vertical: "center", wrapText: true }
-        };
-      case 'due':
-        // Red fill + white text - not paid
-        return {
-          font: { color: whiteColor, bold: true },
-          fill: { fgColor: redColor },
-          alignment: { horizontal: "center", vertical: "center", wrapText: true }
-        };
-      default:
-        return {
-          font: { color: blackColor },
-          alignment: { horizontal: "center", vertical: "center", wrapText: true }
-        };
-    }
-  };
+  const orangeColor = { rgb: "C55A11" };
+  const blackColor = { rgb: "000000" };
+  const redColor = { rgb: "FF0000" };
+  const purpleColor = { rgb: "7030A0" };
+  const whiteColor = { rgb: "FFFFFF" };
 
   const [isExporting, setIsExporting] = useState(false);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const exportLoanTracker = async () => {
     try {
       setIsExporting(true);
@@ -597,9 +516,6 @@ interface Payment {
       // Create worksheet with loan tracker data
       const wsLoanTracker = XLSX.utils.json_to_sheet(loanData);
       
-      // Apply styling to worksheet
-      const range = XLSX.utils.decode_range(wsLoanTracker['!ref']);
-      
       // Set column widths
       const colWidths = [
         { wch: 10 },  // A - Date
@@ -705,7 +621,7 @@ interface Payment {
           });
           shareSuccess = true;
         }
-      } catch (fileShareError) {
+      } catch {
         // Silent fail - try next method
       }
       
@@ -721,7 +637,7 @@ interface Payment {
             });
             shareSuccess = true;
           }
-        } catch (dataUriError) {
+        } catch {
           // Silent fail
         }
       }
@@ -744,7 +660,7 @@ interface Payment {
         );
       }
       
-    } catch (error) {
+    } catch {
       // Error handled below
       
       Alert.alert(
@@ -758,6 +674,7 @@ interface Payment {
   };
 
   // Helper functions
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const getPaymentCellValue = (payment: any) => {
     switch (payment.type) {
       case 'disbursement':
@@ -773,6 +690,7 @@ interface Payment {
     }
   };
   
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const getPaymentCellStyle = (payment: any) => {
     switch (payment.type) {
       case 'disbursement':
@@ -1008,7 +926,7 @@ interface Payment {
       setDayReportData(newData);
       setShowDayReportResult(true);
       
-    } catch (error) {
+    } catch {
       // Error will be shown in alert
       Alert.alert("Error", "Failed to generate day report. Please try again.");
     } finally {

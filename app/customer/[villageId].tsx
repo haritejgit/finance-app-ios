@@ -1,5 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
@@ -21,7 +21,7 @@ import {
 import { useAuth } from "../../src/auth-context";
 import Icon from "../../src/Icon";
 import { colors } from "../../src/theme";
-import { LOCATION_PERMISSION_DENIED, requestCurrentCoordinates } from "../../src/location";
+import { LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
 import { addCustomerWithLoan, addPayment, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary, updateCustomer } from "../../src/repository";
 import { Customer, Loan, Village } from "../../src/types";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -86,6 +86,16 @@ function toStartOfDay(ts: number) {
   const d = new Date(ts);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
+}
+
+function getLocationErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message === LOCATION_PERMISSION_DENIED) {
+    return "Permission to access location was denied.";
+  }
+  if (error instanceof Error && error.message === LOCATION_TIMEOUT) {
+    return "Location is taking too long. Please try again or enter coordinates from the customer edit screen.";
+  }
+  return "Failed to get location.";
 }
 
 const CustomerItem = React.memo(function CustomerItem({
@@ -199,6 +209,7 @@ const CustomerItem = React.memo(function CustomerItem({
       <View style={styles.itemActions}>
         <Pressable
           style={[styles.iconActionBtn, noTextSelection, !hasLocation && styles.iconActionBtnMuted]}
+          disabled={isUpdatingLocation}
           onPress={(e) => {
             e.stopPropagation();
             if (hasLocation) onOpenDirections();
@@ -293,14 +304,17 @@ export default function CustomerListScreen() {
   const [aadharWarning, setAadharWarning] = useState("");
   const [aadharChecking, setAadharChecking] = useState(false);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (options?: { fresh?: boolean }) => {
     if (!user || !villageId) {
       setIsLoading(false);
       return;
     }
     try {
       setIsLoading(true);
-      const [list, villageDetails] = await Promise.all([getCustomers(user.uid, villageId), getVillageById(villageId)]);
+      const [list, villageDetails] = await Promise.all([
+        getCustomers(user.uid, villageId, options?.fresh ? false : true),
+        getVillageById(villageId),
+      ]);
       const sortedList = [...list].sort((a, b) => a.numericalId - b.numericalId);
       setCustomers(sortedList);
       setVillage(villageDetails);
@@ -318,11 +332,11 @@ export default function CustomerListScreen() {
       setIsLoading(false);
     }
   }, [user, villageId]);
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     // Wait for Firebase Auth to resolve before fetching
     if (authLoading) return;
-    reload();
-  }, [authLoading, reload]);
+    reload({ fresh: true });
+  }, [authLoading, reload]));
 
   useEffect(() => {
     if (!showAdd || !user) {
@@ -397,7 +411,7 @@ export default function CustomerListScreen() {
         coordinates,
       }));
     } catch (error) {
-      alert(error instanceof Error && error.message === LOCATION_PERMISSION_DENIED ? 'Permission to access location was denied' : 'Failed to get location');
+      alert(getLocationErrorMessage(error));
     } finally {
       if (addLocationRequestRef.current === requestId) {
         setIsGettingLocation(false);
@@ -424,7 +438,7 @@ export default function CustomerListScreen() {
         error instanceof Error && error.message === LOCATION_PERMISSION_DENIED ? "Location denied" : "Location failed",
         error instanceof Error && error.message === LOCATION_PERMISSION_DENIED
           ? "Permission to access location was denied."
-          : "Could not register the current location. Please try again."
+          : getLocationErrorMessage(error)
       );
     } finally {
       setUpdatingLocationCustomerId(null);
@@ -916,7 +930,7 @@ export default function CustomerListScreen() {
                       );
                       setShowAdd(false);
                       resetAddCustomerForm();
-                      await reload();
+                      await reload({ fresh: true });
                       Alert.alert('✅ Success', `Customer "${createdCustomer.name}" has been created successfully!`);
                     }}
                     disabled={!form.name || !form.phone || !form.principal}
