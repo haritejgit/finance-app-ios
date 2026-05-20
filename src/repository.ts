@@ -95,12 +95,12 @@ export async function updateVillageDayShift(villageId: string, dayOfWeek: string
 }
 
 export async function getCustomers(userId: string, villageId: string, useCache = true) {
-  await normalizeCustomerNumericalIdsForVillage(userId, villageId);
   const cacheKey = getCacheKey(userId, "customers", villageId);
   if (useCache) {
     const cached = getCached<Customer[]>(cacheKey);
     if (cached) return cached;
   }
+  await normalizeCustomerNumericalIdsForVillage(userId, villageId);
   const q = query(
     coll.customers,
     where("userId", "==", userId),

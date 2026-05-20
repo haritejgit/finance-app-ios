@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, router } from "expo-router";
-import React, { memo, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   Alert,
@@ -18,9 +18,9 @@ import {
   View,
   ActivityIndicator,
 } from "react-native";
-import * as Location from "expo-location";
 import { useAuth } from "../../src/auth-context";
 import Icon from "../../src/Icon";
+import { LOCATION_PERMISSION_DENIED, requestCurrentCoordinates } from "../../src/location";
 import {
   addPayment,
   deleteCustomer,
@@ -38,6 +38,8 @@ import {
 import { Customer, Loan, PaymentMode, PaymentType } from "../../src/types";
 import { colors } from "../../src/theme";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+const noTextSelection = Platform.OS === "web" ? ({ userSelect: "none", WebkitUserSelect: "none" } as any) : undefined;
 
 const PaymentHistory = memo(function PaymentHistory({ 
   payments, 
@@ -246,20 +248,14 @@ export default function ProfileScreen() {
   const updateEditLocation = async () => {
     setIsUpdatingLocation(true);
     try {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        alert('Permission to access location was denied');
-        return;
-      }
-
-      let location = await Location.getCurrentPositionAsync({});
+      const coordinates = await requestCurrentCoordinates();
       setEditForm(prev => ({
         ...prev,
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
       }));
     } catch (error) {
-      alert('Failed to get location');
+      alert(error instanceof Error && error.message === LOCATION_PERMISSION_DENIED ? 'Permission to access location was denied' : 'Failed to get location');
     } finally {
       setIsUpdatingLocation(false);
     }
@@ -304,7 +300,7 @@ export default function ProfileScreen() {
 
   const [isLoading, setIsLoading] = useState(true);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     if (!user || !customerId) {
       console.log('Missing user or customerId:', { user: !!user, customerId });
       setIsLoading(false);
@@ -326,13 +322,13 @@ export default function ProfileScreen() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [customerId, user]);
   
   useEffect(() => {
     // Wait for Firebase Auth to resolve before fetching
     if (authLoading) return;
     reload();
-  }, [user, customerId, authLoading]);
+  }, [authLoading, reload]);
 
   const civilScore = useMemo(() => {
     if (!payments.length) return 750;
@@ -598,7 +594,7 @@ export default function ProfileScreen() {
             )}
             <View style={styles.actionGrid}>
               <Pressable
-                style={[styles.actionBtn, { backgroundColor: colors.paidGreen }]}
+                style={[styles.actionBtn, noTextSelection, { backgroundColor: colors.paidGreen }]}
                 onPress={() => {
                   setPaymentDateInput(formatDateInput(Date.now()));
                   setPaymentDateError("");
@@ -618,10 +614,10 @@ export default function ProfileScreen() {
                 }}
               >
                 <Icon name="cash" size={20} color={colors.white} style={{marginBottom: 4}} />
-                <Text style={styles.actionLabel}>Pay</Text>
+                <Text selectable={false} style={styles.actionLabel}>Pay</Text>
               </Pressable>
               <Pressable
-                style={[styles.actionBtn, { backgroundColor: colors.missedRed }]}
+                style={[styles.actionBtn, noTextSelection, { backgroundColor: colors.missedRed }]}
                 onPress={() => {
                   setDueDateInput(formatDateInput(Date.now()));
                   setDueDateError("");
@@ -629,30 +625,30 @@ export default function ProfileScreen() {
                 }}
               >
                 <Icon name="warning" size={20} color={colors.white} style={{marginBottom: 4}} />
-                <Text style={styles.actionLabel}>Due</Text>
+                <Text selectable={false} style={styles.actionLabel}>Due</Text>
               </Pressable>
-              <Pressable style={[styles.actionBtn, { backgroundColor: colors.amber }]} onPress={() => setRenewOpen(true)}>
+              <Pressable style={[styles.actionBtn, noTextSelection, { backgroundColor: colors.amber }]} onPress={() => setRenewOpen(true)}>
                 <Icon name="refresh" size={20} color={colors.white} style={{marginBottom: 4}} />
-                <Text style={styles.actionLabel}>Renew</Text>
+                <Text selectable={false} style={styles.actionLabel}>Renew</Text>
               </Pressable>
             </View>
             
             <View style={styles.iconBar}>
-              <Pressable style={styles.iconBtn} onPress={openEditModal}>
+              <Pressable style={[styles.iconBtn, noTextSelection]} onPress={openEditModal}>
                 <Icon name="person" size={21} color={colors.blue2} />
-                <Text style={styles.iconBtnLabel}>Edit</Text>
+                <Text selectable={false} style={styles.iconBtnLabel}>Edit</Text>
               </Pressable>
-              <Pressable 
-                style={[styles.iconBtn, !customer?.latitude && styles.iconBtnDisabled]} 
+              <Pressable
+                style={[styles.iconBtn, noTextSelection, !customer?.latitude && styles.iconBtnDisabled]}
                 onPress={openGoogleMaps}
                 disabled={!customer?.latitude}
               >
                 <Icon name="location" size={21} color={customer?.latitude ? colors.teal : colors.gray} />
-                <Text style={styles.iconBtnLabel}>Map</Text>
+                <Text selectable={false} style={styles.iconBtnLabel}>Map</Text>
               </Pressable>
-              <Pressable style={styles.iconBtn} onPress={() => setDeleteCustomerConfirmOpen(true)}>
+              <Pressable style={[styles.iconBtn, noTextSelection]} onPress={() => setDeleteCustomerConfirmOpen(true)}>
                 <Icon name="trash" size={21} color={colors.missedRed} />
-                <Text style={[styles.iconBtnLabel, styles.iconBtnLabelDanger]}>Delete</Text>
+                <Text selectable={false} style={[styles.iconBtnLabel, styles.iconBtnLabelDanger]}>Delete</Text>
               </Pressable>
             </View>
             <Text style={styles.history}>Transaction History</Text>

@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   ActivityIndicator,
@@ -18,13 +18,43 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Location from "expo-location";
 import { useAuth } from "../../src/auth-context";
 import Icon from "../../src/Icon";
 import { colors } from "../../src/theme";
+import { LOCATION_PERMISSION_DENIED, requestCurrentCoordinates } from "../../src/location";
 import { addCustomerWithLoan, addPayment, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary, updateCustomer } from "../../src/repository";
 import { Customer, Loan, Village } from "../../src/types";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+
+const noTextSelection = Platform.OS === "web" ? ({ userSelect: "none", WebkitUserSelect: "none" } as any) : undefined;
+
+type AddCustomerForm = {
+  name: string;
+  phone: string;
+  aadhar: string;
+  locationDesc: string;
+  coName: string;
+  coId: string;
+  principal: string;
+  coordinates: { latitude: number; longitude: number } | null;
+  aadharSubmitted: boolean;
+  passportPhotoSubmitted: boolean;
+};
+
+function createEmptyCustomerForm(): AddCustomerForm {
+  return {
+    name: "",
+    phone: "",
+    aadhar: "",
+    locationDesc: "",
+    coName: "",
+    coId: "",
+    principal: "",
+    coordinates: null,
+    aadharSubmitted: false,
+    passportPhotoSubmitted: false,
+  };
+}
 
 // Helper to check if date is today
 function isToday(timestamp: number): boolean {
@@ -130,8 +160,8 @@ const CustomerItem = React.memo(function CustomerItem({
   }, [status, isNew]);
 
   return (
-    <Pressable 
-      style={[styles.item, { backgroundColor: getBackgroundColor(), borderColor: getBorderColor(), borderWidth: status !== 'none' || isNew ? 2 : 0 }]} 
+    <Pressable
+      style={[styles.item, noTextSelection, { backgroundColor: getBackgroundColor(), borderColor: getBorderColor(), borderWidth: status !== 'none' || isNew ? 2 : 0 }]}
       onPress={onPress}
     >
       <View style={styles.idContainer}>
@@ -168,7 +198,7 @@ const CustomerItem = React.memo(function CustomerItem({
       </View>
       <View style={styles.itemActions}>
         <Pressable
-          style={[styles.iconActionBtn, !hasLocation && styles.iconActionBtnMuted]}
+          style={[styles.iconActionBtn, noTextSelection, !hasLocation && styles.iconActionBtnMuted]}
           onPress={(e) => {
             e.stopPropagation();
             if (hasLocation) onOpenDirections();
@@ -185,7 +215,7 @@ const CustomerItem = React.memo(function CustomerItem({
           )}
         </Pressable>
         <Pressable
-          style={[styles.quickPayBtn, !canPay && styles.quickPayBtnDisabled]}
+          style={[styles.quickPayBtn, noTextSelection, !canPay && styles.quickPayBtnDisabled]}
           disabled={!canPay}
           onPress={(e) => {
             e.stopPropagation();
@@ -196,7 +226,7 @@ const CustomerItem = React.memo(function CustomerItem({
             onManualPay();
           }}
         >
-          <Text style={styles.quickPayText}>{isPaying ? "..." : "Pay"}</Text>
+          <Text selectable={false} style={styles.quickPayText}>{isPaying ? "..." : "Pay"}</Text>
         </Pressable>
       </View>
     </Pressable>
@@ -245,19 +275,9 @@ export default function CustomerListScreen() {
   const [query, setQuery] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [village, setVillage] = useState<Village | null>(null);
-  const [form, setForm] = useState({
-    name: "",
-    phone: "",
-    aadhar: "",
-    locationDesc: "",
-    coName: "",
-    coId: "",
-    principal: "",
-    coordinates: null as { latitude: number; longitude: number } | null,
-    aadharSubmitted: false,
-    passportPhotoSubmitted: false,
-  });
+  const [form, setForm] = useState<AddCustomerForm>(createEmptyCustomerForm);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const addLocationRequestRef = useRef(0);
   const [updatingLocationCustomerId, setUpdatingLocationCustomerId] = useState<string | null>(null);
   const [registrationDate, setRegistrationDate] = useState(formatDateInput(Date.now()));
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -273,7 +293,7 @@ export default function CustomerListScreen() {
   const [aadharWarning, setAadharWarning] = useState("");
   const [aadharChecking, setAadharChecking] = useState(false);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     if (!user || !villageId) {
       setIsLoading(false);
       return;
@@ -281,7 +301,7 @@ export default function CustomerListScreen() {
     try {
       setIsLoading(true);
       const [list, villageDetails] = await Promise.all([getCustomers(user.uid, villageId), getVillageById(villageId)]);
-      const sortedList = list.sort((a, b) => a.numericalId - b.numericalId);
+      const sortedList = [...list].sort((a, b) => a.numericalId - b.numericalId);
       setCustomers(sortedList);
       setVillage(villageDetails);
 
@@ -297,12 +317,12 @@ export default function CustomerListScreen() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user, villageId]);
   useEffect(() => {
     // Wait for Firebase Auth to resolve before fetching
     if (authLoading) return;
     reload();
-  }, [user, villageId, authLoading]);
+  }, [authLoading, reload]);
 
   useEffect(() => {
     if (!showAdd || !user) {
@@ -344,44 +364,54 @@ export default function CustomerListScreen() {
     };
   }, [form.aadhar, showAdd, user]);
 
+  const resetAddCustomerForm = useCallback(() => {
+    addLocationRequestRef.current += 1;
+    setForm(createEmptyCustomerForm());
+    setRegistrationDate(formatDateInput(Date.now()));
+    setTempRegistrationDate(new Date());
+    setShowDatePicker(false);
+    setIsGettingLocation(false);
+    setAadharWarning("");
+    setAadharChecking(false);
+  }, []);
+
+  const openAddCustomer = useCallback(() => {
+    resetAddCustomerForm();
+    setShowAdd(true);
+  }, [resetAddCustomerForm]);
+
+  const closeAddCustomer = useCallback(() => {
+    setShowAdd(false);
+    resetAddCustomerForm();
+  }, [resetAddCustomerForm]);
+
   const getCurrentLocation = async () => {
+    const requestId = addLocationRequestRef.current + 1;
+    addLocationRequestRef.current = requestId;
     setIsGettingLocation(true);
     try {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        alert('Permission to access location was denied');
-        return;
-      }
-
-      let location = await Location.getCurrentPositionAsync({});
+      const coordinates = await requestCurrentCoordinates();
+      if (addLocationRequestRef.current !== requestId) return;
       setForm(prev => ({
         ...prev,
-        coordinates: {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude
-        }
+        coordinates,
       }));
-    } catch {
-      alert('Failed to get location');
+    } catch (error) {
+      alert(error instanceof Error && error.message === LOCATION_PERMISSION_DENIED ? 'Permission to access location was denied' : 'Failed to get location');
     } finally {
-      setIsGettingLocation(false);
+      if (addLocationRequestRef.current === requestId) {
+        setIsGettingLocation(false);
+      }
     }
   };
 
   const saveCurrentLocationForCustomer = useCallback(async (customer: Customer) => {
     try {
       setUpdatingLocationCustomerId(customer.id);
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Location denied", "Permission to access location was denied.");
-        return;
-      }
-
-      const location = await Location.getCurrentPositionAsync({});
+      const coordinates = await requestCurrentCoordinates();
       const updatedCustomer: Customer = {
         ...customer,
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
+        ...coordinates,
       };
 
       await updateCustomer(updatedCustomer);
@@ -389,8 +419,13 @@ export default function CustomerListScreen() {
         current.map((item) => (item.id === customer.id ? updatedCustomer : item))
       );
       Alert.alert("Location saved", `${customer.name}'s current location has been registered.`);
-    } catch {
-      Alert.alert("Location failed", "Could not register the current location. Please try again.");
+    } catch (error) {
+      Alert.alert(
+        error instanceof Error && error.message === LOCATION_PERMISSION_DENIED ? "Location denied" : "Location failed",
+        error instanceof Error && error.message === LOCATION_PERMISSION_DENIED
+          ? "Permission to access location was denied."
+          : "Could not register the current location. Please try again."
+      );
     } finally {
       setUpdatingLocationCustomerId(null);
     }
@@ -412,6 +447,20 @@ export default function CustomerListScreen() {
     }
     return [...result].sort((a, b) => a.numericalId - b.numericalId);
   }, [customers, query]);
+
+  const customerStats = useMemo(() => {
+    return filtered.reduce(
+      (stats, customer) => {
+        const status = paymentStatuses[customer.id] || "none";
+        stats.total += 1;
+        if (!isToday(customer.createdAt)) stats.today += 1;
+        if (status === "paid") stats.paid += 1;
+        if (status === "due") stats.dues += 1;
+        return stats;
+      },
+      { total: 0, today: 0, paid: 0, dues: 0 }
+    );
+  }, [filtered, paymentStatuses]);
 
   const openCustomer = useCallback((customerId: string) => {
     router.push(`/profile/${customerId}`);
@@ -555,16 +604,20 @@ export default function CustomerListScreen() {
           </View>
           <View style={styles.routeSummary}>
             <View style={styles.routeSummaryCard}>
-              <Text style={styles.routeSummaryLabel}>Route total</Text>
-              <Text style={styles.routeSummaryValue}>{filtered.length}</Text>
+              <Text style={styles.routeSummaryLabel}>Total Customers</Text>
+              <Text style={styles.routeSummaryValue}>{customerStats.total}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
-              <Text style={styles.routeSummaryLabel}>Paid today</Text>
-              <Text style={styles.routeSummaryValue}>{Object.values(paymentStatuses).filter((value) => value === "paid").length}</Text>
+              <Text style={styles.routeSummaryLabel}>Today Customers</Text>
+              <Text style={styles.routeSummaryValue}>{customerStats.today}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
-              <Text style={styles.routeSummaryLabel}>Due today</Text>
-              <Text style={styles.routeSummaryValue}>{Object.values(paymentStatuses).filter((value) => value === "due").length}</Text>
+              <Text style={styles.routeSummaryLabel}>Total Paid</Text>
+              <Text style={styles.routeSummaryValue}>{customerStats.paid}</Text>
+            </View>
+            <View style={styles.routeSummaryCard}>
+              <Text style={styles.routeSummaryLabel}>Total Dues</Text>
+              <Text style={styles.routeSummaryValue}>{customerStats.dues}</Text>
             </View>
           </View>
           <FlatList
@@ -597,18 +650,18 @@ export default function CustomerListScreen() {
             }
           />
           
-          <Pressable style={styles.fab} onPress={() => setShowAdd(true)}>
+          <Pressable style={styles.fab} onPress={openAddCustomer}>
             <Icon name="add" size={26} color={colors.white} />
           </Pressable>
         </View>
       </SafeAreaView>
 
-      <Modal visible={showAdd} animationType="slide" onRequestClose={() => setShowAdd(false)}>
+      <Modal visible={showAdd} animationType="slide" onRequestClose={closeAddCustomer}>
         <SafeAreaView style={[styles.modal, { paddingTop: insets.top, backgroundColor: colors.background }]} edges={['top']}>
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
             <View style={[styles.modalHeader, { backgroundColor: colors.white, borderBottomColor: colors.border }]}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>New Customer Registration</Text>
-              <Pressable onPress={() => setShowAdd(false)} style={styles.closeBtn}>
+              <Pressable onPress={closeAddCustomer} style={styles.closeBtn}>
                 <Text style={[styles.closeBtnText, { color: colors.gray }]}>✕</Text>
               </Pressable>
             </View>
@@ -862,8 +915,7 @@ export default function CustomerListScreen() {
                         parsedDate
                       );
                       setShowAdd(false);
-                      setForm({ name: "", phone: "", aadhar: "", locationDesc: "", coName: "", coId: "", principal: "", coordinates: null, aadharSubmitted: false, passportPhotoSubmitted: false });
-                      setRegistrationDate(formatDateInput(Date.now()));
+                      resetAddCustomerForm();
                       await reload();
                       Alert.alert('✅ Success', `Customer "${createdCustomer.name}" has been created successfully!`);
                     }}
@@ -872,7 +924,7 @@ export default function CustomerListScreen() {
                     <Text style={styles.saveTxt}>Register Customer</Text>
                   </Pressable>
                   
-                  <Pressable onPress={() => setShowAdd(false)} style={styles.cancelBtn}>
+                  <Pressable onPress={closeAddCustomer} style={styles.cancelBtn}>
                     <Text style={styles.cancelTxt}>Cancel</Text>
                   </Pressable>
                 </View>
@@ -940,8 +992,8 @@ const styles = StyleSheet.create({
   headerSub: { color: "rgba(255,255,255,0.7)", fontSize: 12 },
   searchShell: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "rgba(255,255,255,0.16)", borderColor: "rgba(255,255,255,0.35)", borderWidth: 1, borderRadius: 18, paddingHorizontal: 13, marginBottom: 10 },
   search: { flex: 1, paddingVertical: 13, fontSize: 14 },
-  routeSummary: { flexDirection: "row", gap: 8, marginBottom: 12 },
-  routeSummaryCard: { flex: 1, borderRadius: 16, padding: 12, backgroundColor: "rgba(255,255,255,0.14)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)" },
+  routeSummary: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
+  routeSummaryCard: { flexBasis: "48%", flexGrow: 1, borderRadius: 16, padding: 12, backgroundColor: "rgba(255,255,255,0.14)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)" },
   routeSummaryLabel: { color: "rgba(255,255,255,0.72)", fontSize: 10, fontWeight: "800", textTransform: "uppercase" },
   routeSummaryValue: { color: colors.white, fontSize: 17, fontWeight: "900", marginTop: 2 },
   list: { flex: 1 },
