@@ -13,6 +13,7 @@ export type DashboardAnalytics = {
     customerCount: number;
     activeLoanCount: number;
     distributedThisMonth: number;
+    distributedToday: number;
     collectionToday: number;
     dueMarksThisMonth: number;
   };
@@ -61,6 +62,11 @@ function toMillis(value: any) {
 function money(value: any) {
   const amount = Number(value);
   return Number.isFinite(amount) ? amount : 0;
+}
+
+function netDistributedAmount(value: number) {
+  const amount = money(value);
+  return Math.max(0, amount - Math.floor(amount / 1000) * 20);
 }
 
 function startOfDay(ts: number) {
@@ -156,7 +162,10 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
   const pendingAmount = activeLoans.reduce((sum, loan) => sum + loan.balanceAmount, 0);
   const distributedThisMonth = activeLoans
     .filter((loan) => loan.startDate >= monthStart && loan.startDate <= monthEnd)
-    .reduce((sum, loan) => sum + loan.principalAmount, 0);
+    .reduce((sum, loan) => sum + netDistributedAmount(loan.principalAmount), 0);
+  const distributedToday = activeLoans
+    .filter((loan) => loan.startDate >= todayStart && loan.startDate <= todayEnd)
+    .reduce((sum, loan) => sum + netDistributedAmount(loan.principalAmount), 0);
 
   const currentWeekStart = weekStart(Date.now());
   const weeklyTrend = Array.from({ length: 8 }, (_, index) => {
@@ -170,7 +179,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
         .reduce((sum, payment) => sum + payment.amountPaid, 0),
       distribution: loans
         .filter((loan) => loan.startDate >= start && loan.startDate <= end && customerById.has(loan.customerId))
-        .reduce((sum, loan) => sum + loan.principalAmount, 0),
+        .reduce((sum, loan) => sum + netDistributedAmount(loan.principalAmount), 0),
       dues: payments.filter((payment) => payment.paymentType === "DUE" && payment.paymentDate >= start && payment.paymentDate <= end).length,
     };
   });
@@ -275,6 +284,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
       customerCount: customers.length,
       activeLoanCount: activeLoans.length,
       distributedThisMonth,
+      distributedToday,
       collectionToday,
       dueMarksThisMonth,
     },

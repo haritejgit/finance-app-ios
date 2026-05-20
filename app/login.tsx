@@ -5,7 +5,8 @@ import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, Dimensions, Easing, StyleSheet, Text, TextInput, View, ActivityIndicator, Pressable, ScrollView } from "react-native";
 import { useAuth } from "../src/auth-context";
-import { colors, gradient } from "../src/theme";
+import { colors as baseColors, getGradient } from "../src/theme";
+import { useTheme } from "../src/theme-context";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "../src/Icon";
 import FinanceMotion from "../src/FinanceMotion";
@@ -14,6 +15,7 @@ WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const { signInEmail, signUpEmail, resetPassword, signInGoogleWithIdToken } = useAuth();
+  const { colors } = useTheme();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -80,7 +82,7 @@ export default function LoginScreen() {
   const title = forgot ? "Reset password" : isSignUp ? "Create account" : "Welcome back";
 
   return (
-    <LinearGradient colors={[...gradient]} style={styles.root}>
+    <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
       <SafeAreaView style={styles.safe}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <View style={styles.content}>
@@ -106,36 +108,37 @@ export default function LoginScreen() {
             <Animated.View
               style={[
                 styles.card,
+                { backgroundColor: colors.card, borderColor: colors.border },
                 {
                   opacity: intro,
                   transform: [{ translateY: intro.interpolate({ inputRange: [0, 1], outputRange: [28, 0] }) }],
                 },
               ]}
             >
-              <Text style={styles.formTitle}>{title}</Text>
-              <Text style={styles.formSub}>{forgot ? "Enter your email to receive a reset link." : "Sign in to manage your daily finance flow."}</Text>
+              <Text style={[styles.formTitle, { color: colors.text }]}>{title}</Text>
+              <Text style={[styles.formSub, { color: colors.textSecondary }]}>{forgot ? "Enter your email to receive a reset link." : "Sign in to manage your daily finance flow."}</Text>
 
               {!!error && <Text style={styles.error}>{error}</Text>}
               {!!message && <Text style={styles.success}>{message}</Text>}
 
               {isSignUp && (
-                <View style={styles.inputShell}>
+                <View style={[styles.inputShell, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
                   <Icon name="person-outline" size={18} color={colors.gray} />
-                  <TextInput value={name} onChangeText={setName} placeholder="Full Name" style={styles.input} placeholderTextColor={colors.gray} />
+                  <TextInput value={name} onChangeText={setName} placeholder="Full Name" style={[styles.input, { color: colors.text }]} placeholderTextColor={colors.gray} />
                 </View>
               )}
-              <View style={styles.inputShell}>
+              <View style={[styles.inputShell, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
                 <Icon name="mail-outline" size={18} color={colors.gray} />
-                <TextInput value={email} onChangeText={setEmail} placeholder="Email Address" style={styles.input} placeholderTextColor={colors.gray} autoCapitalize="none" />
+                <TextInput value={email} onChangeText={setEmail} placeholder="Email Address" style={[styles.input, { color: colors.text }]} placeholderTextColor={colors.gray} autoCapitalize="none" />
               </View>
               {!forgot && (
-                <View style={styles.inputShell}>
+                <View style={[styles.inputShell, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
                   <Icon name="lock-closed-outline" size={18} color={colors.gray} />
                   <TextInput
                     value={password}
                     onChangeText={setPassword}
                     placeholder="Password"
-                    style={styles.input}
+                    style={[styles.input, { color: colors.text }]}
                     placeholderTextColor={colors.gray}
                     secureTextEntry
                     autoCapitalize="none"
@@ -145,7 +148,7 @@ export default function LoginScreen() {
 
               {!isSignUp && !forgot && (
                 <Pressable onPress={() => setForgot(true)}>
-                  <Text style={styles.link}>Forgot Password?</Text>
+                  <Text style={[styles.link, { color: colors.primary }]}>Forgot Password?</Text>
                 </Pressable>
               )}
 
@@ -159,18 +162,18 @@ export default function LoginScreen() {
 
               {forgot ? (
                 <Pressable onPress={() => setForgot(false)}>
-                  <Text style={styles.switch}>Back to Login</Text>
+                  <Text style={[styles.switch, { color: colors.primary }]}>Back to Login</Text>
                 </Pressable>
               ) : (
                 <Pressable onPress={() => setSignUp((value) => !value)}>
-                  <Text style={styles.switch}>{isSignUp ? "Already have an account? Login" : "New User? Create Account"}</Text>
+                  <Text style={[styles.switch, { color: colors.primary }]}>{isSignUp ? "Already have an account? Login" : "New User? Create Account"}</Text>
                 </Pressable>
               )}
 
               {!isSignUp && !forgot && (
-                <Pressable style={styles.googleBtn} onPress={() => promptAsync()}>
+                <Pressable style={[styles.googleBtn, { backgroundColor: colors.primarySoft, borderColor: colors.border }]} onPress={() => promptAsync()}>
                   <Icon name="logo-google" size={18} color={colors.blue2} />
-                  <Text style={styles.googleText}>Continue with Google</Text>
+                  <Text style={[styles.googleText, { color: colors.primary }]}>Continue with Google</Text>
                 </Pressable>
               )}
             </Animated.View>
@@ -201,20 +204,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.28)",
   },
-  title: { fontSize: 30, fontWeight: "800", color: colors.white, textAlign: "center" },
+  title: { fontSize: 30, fontWeight: "800", color: baseColors.white, textAlign: "center" },
   subtitle: { fontSize: 14, color: "rgba(255,255,255,0.78)", textAlign: "center" },
-  card: { backgroundColor: colors.white, borderRadius: 20, padding: 18, gap: 12, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 16, elevation: 6 },
-  formTitle: { color: colors.ink, fontSize: 22, fontWeight: "800" },
-  formSub: { color: colors.gray, fontSize: 13, lineHeight: 18, marginTop: -6 },
-  inputShell: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.surfaceTint, borderRadius: 14, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border },
-  input: { flex: 1, paddingVertical: 14, color: colors.ink, fontSize: 15 },
-  button: { backgroundColor: colors.coral, borderRadius: 14, paddingVertical: 15, alignItems: "center", marginTop: 2 },
+  card: { backgroundColor: baseColors.white, borderRadius: 20, padding: 18, gap: 12, borderWidth: 1, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 16, elevation: 6 },
+  formTitle: { color: baseColors.ink, fontSize: 22, fontWeight: "800" },
+  formSub: { color: baseColors.gray, fontSize: 13, lineHeight: 18, marginTop: -6 },
+  inputShell: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: baseColors.surfaceTint, borderRadius: 14, paddingHorizontal: 12, borderWidth: 1, borderColor: baseColors.border },
+  input: { flex: 1, paddingVertical: 14, color: baseColors.ink, fontSize: 15 },
+  button: { backgroundColor: baseColors.coral, borderRadius: 14, paddingVertical: 15, alignItems: "center", marginTop: 2 },
   buttonDisabled: { opacity: 0.55 },
-  buttonText: { color: colors.white, fontWeight: "800", fontSize: 15 },
-  link: { color: colors.blue2, alignSelf: "flex-end", marginBottom: 2, fontWeight: "700" },
-  switch: { color: colors.blue2, textAlign: "center", marginTop: 2, fontWeight: "700" },
-  googleBtn: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8, backgroundColor: colors.sky, borderRadius: 14, paddingVertical: 14, borderWidth: 1, borderColor: "#bfdbfe" },
-  googleText: { color: colors.blue2, fontWeight: "800" },
+  buttonText: { color: baseColors.white, fontWeight: "800", fontSize: 15 },
+  link: { color: baseColors.blue2, alignSelf: "flex-end", marginBottom: 2, fontWeight: "700" },
+  switch: { color: baseColors.blue2, textAlign: "center", marginTop: 2, fontWeight: "700" },
+  googleBtn: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8, backgroundColor: baseColors.sky, borderRadius: 14, paddingVertical: 14, borderWidth: 1, borderColor: "#bfdbfe" },
+  googleText: { color: baseColors.blue2, fontWeight: "800" },
   error: { color: "#B91C1C", backgroundColor: "#FEE2E2", borderRadius: 10, padding: 10, textAlign: "center", fontWeight: "600" },
   success: { color: "#047857", backgroundColor: "#D1FAE5", borderRadius: 10, padding: 10, textAlign: "center", fontWeight: "600" },
 });

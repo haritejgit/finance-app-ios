@@ -19,6 +19,7 @@ import { useAuth } from "../src/auth-context";
 import Icon from "../src/Icon";
 import { getPaymentsByDate } from "../src/repository";
 import { colors } from "../src/theme";
+import { useTheme } from "../src/theme-context";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -93,6 +94,7 @@ function getNetDistributedAmount(amount: number) {
 
 export default function ReportsScreen() {
   const { user } = useAuth();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [fromDate, setFromDate] = useState(formatDateInput(Date.now() - 7 * 24 * 60 * 60 * 1000)); // 7 days ago
   const [toDate, setToDate] = useState(formatDateInput(Date.now())); // Today

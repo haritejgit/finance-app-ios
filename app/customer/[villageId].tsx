@@ -21,6 +21,7 @@ import {
 import { useAuth } from "../../src/auth-context";
 import Icon from "../../src/Icon";
 import { colors } from "../../src/theme";
+import { useTheme } from "../../src/theme-context";
 import { LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
 import { addCustomerWithLoan, addPayment, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary, updateCustomer } from "../../src/repository";
 import { Customer, Loan, Village } from "../../src/types";
@@ -291,6 +292,7 @@ function parseDateInput(value: string) {
 export default function CustomerListScreen() {
   const { villageId } = useLocalSearchParams<{ villageId: string }>();
   const { user, loading: authLoading } = useAuth();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [query, setQuery] = useState("");

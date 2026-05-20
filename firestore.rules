@@ -22,15 +22,73 @@ service cloud.firestore {
         (request.resource.data[field] is number && request.resource.data[field] >= 0);
     }
 
+    function validString(field, maxLength) {
+      return !request.resource.data.keys().hasAny([field]) ||
+        (request.resource.data[field] is string && request.resource.data[field].size() <= maxLength);
+    }
+
+    function validOptionalBoolean(field) {
+      return !request.resource.data.keys().hasAny([field]) ||
+        request.resource.data[field] is bool;
+    }
+
+    function validEnum(field, allowed) {
+      return !request.resource.data.keys().hasAny([field]) ||
+        request.resource.data[field] in allowed;
+    }
+
+    function validCoordinates() {
+      return (!request.resource.data.keys().hasAny(['latitude']) ||
+        (request.resource.data.latitude is number && request.resource.data.latitude >= -90 && request.resource.data.latitude <= 90)) &&
+        (!request.resource.data.keys().hasAny(['longitude']) ||
+        (request.resource.data.longitude is number && request.resource.data.longitude >= -180 && request.resource.data.longitude <= 180));
+    }
+
+    function validVillageFields() {
+      return validString('id', 80) &&
+        validString('name', 120) &&
+        validString('dayOfWeek', 20) &&
+        validEnum('shift', ['Morning', 'Evening']);
+    }
+
+    function validCustomerFields() {
+      return validString('id', 80) &&
+        validString('name', 160) &&
+        validString('phone', 24) &&
+        validString('aadhar', 20) &&
+        validString('locationDesc', 300) &&
+        validString('villageId', 80) &&
+        validString('coName', 160) &&
+        validNonNegative('coId') &&
+        validNonNegative('numericalId') &&
+        validNonNegative('createdAt') &&
+        validOptionalBoolean('isActive') &&
+        validOptionalBoolean('aadharSubmitted') &&
+        validOptionalBoolean('passportPhotoSubmitted') &&
+        validCoordinates();
+    }
+
     function validLoanAmounts() {
       return validNonNegative('principalAmount') &&
         validNonNegative('interestAmount') &&
         validNonNegative('totalPayable') &&
-        validNonNegative('balanceAmount');
+        validNonNegative('balanceAmount') &&
+        validNonNegative('startDate') &&
+        validString('id', 80) &&
+        validString('customerId', 80) &&
+        validEnum('status', ['ACTIVE', 'CLOSED', 'RENEWED']);
     }
 
     function validPaymentAmount() {
-      return validNonNegative('amountPaid');
+      return validNonNegative('amountPaid') &&
+        validNonNegative('paymentDate') &&
+        validNonNegative('weekNumber') &&
+        validString('id', 80) &&
+        validString('loanId', 80) &&
+        validString('customerId', 80) &&
+        validString('notes', 500) &&
+        validEnum('paymentType', ['REGULAR', 'DUE', 'RENEWAL_CLOSURE']) &&
+        validEnum('paymentMode', ['CASH', 'PHONE']);
     }
 
     match /users/{uid} {
@@ -39,15 +97,15 @@ service cloud.firestore {
 
     match /villages/{docId} {
       allow read: if ownsExistingDoc();
-      allow create: if createsOwnDoc();
-      allow update: if ownsExistingDoc() && keepsOwnerImmutable();
+      allow create: if createsOwnDoc() && validVillageFields();
+      allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validVillageFields();
       allow delete: if ownsExistingDoc();
     }
 
     match /customers/{docId} {
       allow read: if ownsExistingDoc();
-      allow create: if createsOwnDoc();
-      allow update: if ownsExistingDoc() && keepsOwnerImmutable();
+      allow create: if createsOwnDoc() && validCustomerFields();
+      allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validCustomerFields();
       allow delete: if ownsExistingDoc();
     }
 

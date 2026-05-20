@@ -53,6 +53,31 @@ function normalizeAadhar(aadhar?: string) {
   return (aadhar ?? "").replace(/\D/g, "").trim();
 }
 
+function cleanText(value?: string) {
+  return (value ?? "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim();
+}
+
+function cleanPhone(value?: string) {
+  return (value ?? "").replace(/[^\d+]/g, "").trim();
+}
+
+function assertPositiveAmount(value: number, label: string) {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${label} must be greater than zero.`);
+  }
+}
+
+function sanitizeCustomerInput<T extends Partial<Customer>>(input: T): T {
+  return {
+    ...input,
+    name: cleanText(input.name),
+    phone: cleanPhone(input.phone),
+    aadhar: normalizeAadhar(input.aadhar),
+    locationDesc: cleanText(input.locationDesc),
+    coName: cleanText(input.coName),
+  } as T;
+}
+
 function id() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
@@ -76,7 +101,9 @@ export async function getVillageById(villageId: string) {
 }
 
 export async function addVillage(userId: string, name: string, dayOfWeek: string, shift: string) {
-  const village: Village = { id: id(), name, dayOfWeek, shift: shift as any, userId };
+  const villageName = cleanText(name);
+  if (!villageName) throw new Error("Village name is required.");
+  const village: Village = { id: id(), name: villageName, dayOfWeek, shift: shift as any, userId };
   await setDoc(doc(db, "villages", village.id), stripUndefined(village));
   clearCache();
 }
@@ -236,6 +263,10 @@ export async function addCustomerWithLoan(
   principalAmount: number,
   startDate: number
 ) {
+  assertPositiveAmount(principalAmount, "Loan amount");
+  const sanitizedInput = sanitizeCustomerInput(input);
+  if (!sanitizedInput.name) throw new Error("Customer name is required.");
+  if (!sanitizedInput.phone) throw new Error("Customer phone is required.");
   const numericalId = await getNextNumericalId(userId, villageId);
   const customer: Customer = {
     id: id(),
@@ -244,7 +275,7 @@ export async function addCustomerWithLoan(
     userId,
     isActive: true,
     createdAt: Date.now(),
-    ...input,
+    ...sanitizedInput,
   };
   await setDoc(doc(db, "customers", customer.id), stripUndefined(customer));
   const interestAmount = principalAmount * 0.2;
@@ -301,6 +332,7 @@ export async function getActiveLoansByCustomerIds(userId: string, customerIds: s
 }
 
 export async function updateLoan(loan: Loan, newPrincipalAmount: number, newStartDate: number) {
+  assertPositiveAmount(newPrincipalAmount, "Loan amount");
   // Recalculate interest and totals based on new principal
   const interestAmount = newPrincipalAmount * 0.2;
   const totalPayable = newPrincipalAmount + interestAmount;
@@ -398,6 +430,7 @@ export async function getPaymentStatusesForCustomersToday(userId: string, custom
 }
 
 export async function addPayment(loan: Loan, amountPaid: number, paymentDate: number, mode: PaymentMode) {
+  assertPositiveAmount(amountPaid, "Payment amount");
   const payment: Payment = {
     id: id(),
     loanId: loan.id,
@@ -419,6 +452,7 @@ export async function addPayment(loan: Loan, amountPaid: number, paymentDate: nu
 }
 
 export async function updatePayment(payment: Payment, newAmount: number, newDate: number, newMode: PaymentMode) {
+  assertPositiveAmount(newAmount, "Payment amount");
   const oldAmount = payment.amountPaid;
   const updatedPayment: Payment = {
     ...payment,
@@ -475,6 +509,7 @@ export async function markDue(loan: Loan, paymentDate: number) {
 }
 
 export async function renewLoan(loan: Loan, newPrincipal: number, date: number) {
+  assertPositiveAmount(newPrincipal, "Renewal amount");
   if (loan.balanceAmount > 0) {
     const closure: Payment = {
       id: id(),
@@ -597,7 +632,7 @@ export async function getPaymentsByDate(userId: string, startDate: number, endDa
 }
 
 export async function updateCustomer(customer: Customer) {
-  await setDoc(doc(db, "customers", customer.id), stripUndefined(customer));
+  await setDoc(doc(db, "customers", customer.id), stripUndefined(sanitizeCustomerInput(customer)));
   clearCache();
 }
 

@@ -30,9 +30,17 @@ function getInitialTheme(): ColorScheme {
 
 function applyWebTheme(isDark: boolean, colors: AppColors) {
   if (Platform.OS !== "web" || typeof document === "undefined") return;
-  document.documentElement.dataset.theme = isDark ? "dark" : "light";
-  document.documentElement.style.backgroundColor = colors.background;
+  const root = document.documentElement;
+  root.dataset.theme = isDark ? "dark" : "light";
+  Object.entries(colors).forEach(([key, value]) => {
+    root.style.setProperty(`--color-${key.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`)}`, value);
+  });
+  root.style.setProperty("--app-bg", colors.background);
+  root.style.setProperty("--app-text", colors.text);
+  root.style.setProperty("color-scheme", isDark ? "dark" : "light");
+  root.style.backgroundColor = colors.background;
   document.body.style.backgroundColor = colors.background;
+  document.body.style.color = colors.text;
   document.querySelector("meta[name='theme-color']")?.setAttribute("content", colors.background);
 }
 

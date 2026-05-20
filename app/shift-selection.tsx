@@ -22,12 +22,12 @@ import { useAuth } from "../src/auth-context";
 import {
   CustomerSearchResult,
   getAllActiveCustomersWithVillages,
-  normalizeCustomerNumericalIdsForAllShifts,
 } from "../src/repository";
 import { getDashboardAnalytics, type CustomerState, type DashboardAnalytics } from "../src/finance-analytics";
 import { getGradient } from "../src/theme";
 import { useTheme } from "../src/theme-context";
 import Icon from "../src/Icon";
+import { downloadTextFile } from "../src/exports";
 
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const shortDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -77,8 +77,9 @@ export default function ShiftSelectionScreen() {
   const [customerFilter, setCustomerFilter] = useState<"all" | CustomerState>("all");
   const [allCustomers, setAllCustomers] = useState<CustomerSearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [dailyFocus, setDailyFocus] = useState<"collection" | "distribution">("collection");
   const intro = useRef(new Animated.Value(0)).current;
-  const routeNumberRepairRun = useRef(false);
+  const dailyPulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.timing(intro, {
@@ -98,14 +99,6 @@ export default function ShiftSelectionScreen() {
     if (!user) return;
     try {
       setLoading(true);
-      if (!routeNumberRepairRun.current) {
-        try {
-          await normalizeCustomerNumericalIdsForAllShifts(user.uid);
-          routeNumberRepairRun.current = true;
-        } catch (repairError) {
-          console.warn("Failed to repair customer book number gaps", repairError);
-        }
-      }
       const nextAnalytics = await getDashboardAnalytics(user.uid);
       setAnalytics(nextAnalytics);
     } catch (error) {
@@ -168,6 +161,65 @@ export default function ShiftSelectionScreen() {
       .slice(0, 80);
   }, [allCustomers, analytics?.customerStates, customerFilter, debouncedQuery]);
 
+  const dailyMetric = useMemo(() => {
+    const collection = analytics?.totals.collectionToday ?? 0;
+    const distribution = analytics?.totals.distributedToday ?? 0;
+    const current = dailyFocus === "collection" ? collection : distribution;
+    const alternate = dailyFocus === "collection" ? distribution : collection;
+    return {
+      label: dailyFocus === "collection" ? "Collected today" : "Distributed today",
+      value: current,
+      alternateLabel: dailyFocus === "collection" ? "distributed today" : "collected today",
+      alternateValue: alternate,
+      icon: dailyFocus === "collection" ? "cash-outline" : "trending-up-outline",
+    };
+  }, [analytics?.totals.collectionToday, analytics?.totals.distributedToday, dailyFocus]);
+
+  const savingsToday = useMemo(() => {
+    if (!analytics) return 0;
+    return analytics.totals.collectionToday - analytics.totals.distributedToday;
+  }, [analytics]);
+
+  const monthlyNet = useMemo(() => {
+    if (!analytics) return 0;
+    return analytics.totals.monthlyRevenue - analytics.totals.distributedThisMonth;
+  }, [analytics]);
+
+  const toggleDailyFocus = useCallback(() => {
+    setDailyFocus((value) => (value === "collection" ? "distribution" : "collection"));
+    dailyPulse.setValue(0.96);
+    Animated.spring(dailyPulse, {
+      toValue: 1,
+      useNativeDriver: true,
+      friction: 6,
+      tension: 140,
+    }).start();
+  }, [dailyPulse]);
+
+  const exportRecentCsv = useCallback(() => {
+    const recentTransactions = analytics?.recentTransactions ?? [];
+    if (!recentTransactions.length) {
+      Alert.alert("No transactions", "Recent transactions will be available to export after payments are recorded.");
+      return;
+    }
+    const rows = [
+      ["Date", "Customer", "Village", "Amount", "Mode", "Type"],
+      ...recentTransactions.map((item) => [
+        new Date(item.paymentDate).toLocaleDateString(),
+        item.customerName,
+        item.villageName,
+        String(item.amountPaid),
+        item.paymentMode,
+        item.paymentType,
+      ]),
+    ];
+    const csv = rows
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const exported = downloadTextFile(`recent-transactions-${Date.now()}.csv`, csv, "text/csv");
+    if (!exported) Alert.alert("Web only", "CSV export is available from the web dashboard.");
+  }, [analytics?.recentTransactions]);
+
   const gradient = getGradient(colors);
 
   return (
@@ -202,14 +254,37 @@ export default function ShiftSelectionScreen() {
                   <Icon name="search" size={19} color={colors.white} />
                 </Pressable>
               </View>
-              <View style={styles.heroMetricRow}>
-                <View>
-                  <Text style={[styles.heroMetricLabel, { color: colors.textSecondary }]}>Today collection</Text>
-                  <Text style={[styles.heroMetricValue, { color: colors.text }]}>
-                    {loading ? "..." : formatMoney(analytics?.totals.collectionToday ?? 0)}
-                  </Text>
-                </View>
-              </View>
+              <Pressable onPress={toggleDailyFocus} disabled={loading} accessibilityRole="button" accessibilityLabel={`Show ${dailyMetric.alternateLabel}`}>
+                <Animated.View
+                  style={[
+                    styles.heroMetricPanel,
+                    {
+                      backgroundColor: colors.card,
+                      borderColor: colors.border,
+                      transform: [{ scale: dailyPulse }],
+                    },
+                  ]}
+                >
+                  <View style={[styles.heroMetricIcon, { backgroundColor: colors.primarySoft }]}>
+                    <Icon name={dailyMetric.icon} size={20} color={colors.primary} />
+                  </View>
+                  <View style={styles.heroMetricCopy}>
+                    <Text style={[styles.heroMetricLabel, { color: colors.textSecondary }]}>{dailyMetric.label}</Text>
+                    <Text style={[styles.heroMetricValue, { color: colors.text }]}>
+                      {loading ? "..." : formatMoney(dailyMetric.value)}
+                    </Text>
+                    <Text style={[styles.heroMetricHint, { color: colors.textMuted }]}>
+                      Tap to see {dailyMetric.alternateLabel}: {loading ? "..." : formatMoney(dailyMetric.alternateValue)}
+                    </Text>
+                  </View>
+                  <View style={[styles.deltaPill, { backgroundColor: savingsToday >= 0 ? colors.successSoft : colors.destructiveSoft }]}>
+                    <Icon name={savingsToday >= 0 ? "arrow-up" : "arrow-down"} size={13} color={savingsToday >= 0 ? colors.success : colors.error} />
+                    <Text style={[styles.deltaPillText, { color: savingsToday >= 0 ? colors.success : colors.error }]}>
+                      {formatMoney(Math.abs(savingsToday))}
+                    </Text>
+                  </View>
+                </Animated.View>
+              </Pressable>
             </View>
 
             <View style={[styles.panel, styles.routePanel, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -270,6 +345,172 @@ export default function ShiftSelectionScreen() {
               <DashboardSkeleton />
             ) : (
               <>
+                <View style={styles.metricsGrid}>
+                  {[
+                    {
+                      title: "Balance",
+                      value: formatMoney((analytics?.totals.totalCollection ?? 0) - (analytics?.totals.pendingAmount ?? 0)),
+                      detail: "Collected minus pending",
+                      icon: "wallet-outline",
+                      tone: colors.primary,
+                      soft: colors.primarySoft,
+                    },
+                    {
+                      title: "Income",
+                      value: formatMoney(analytics?.totals.monthlyRevenue ?? 0),
+                      detail: "Collected this month",
+                      icon: "cash-outline",
+                      tone: colors.success,
+                      soft: colors.successSoft,
+                    },
+                    {
+                      title: "Expense",
+                      value: formatMoney(analytics?.totals.distributedThisMonth ?? 0),
+                      detail: "Distributed this month",
+                      icon: "trending-up-outline",
+                      tone: colors.warning,
+                      soft: colors.warningSoft,
+                    },
+                    {
+                      title: "Savings",
+                      value: formatMoney(monthlyNet),
+                      detail: monthlyNet >= 0 ? "Positive monthly net" : "Needs recovery focus",
+                      icon: monthlyNet >= 0 ? "shield-checkmark-outline" : "alert-circle-outline",
+                      tone: monthlyNet >= 0 ? colors.teal : colors.error,
+                      soft: monthlyNet >= 0 ? colors.successSoft : colors.destructiveSoft,
+                    },
+                  ].map((metric) => (
+                    <View key={metric.title} style={[styles.metricCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                      <View style={[styles.metricIcon, { backgroundColor: metric.soft }]}>
+                        <Icon name={metric.icon} size={18} color={metric.tone} />
+                      </View>
+                      <Text style={[styles.metricTitle, { color: colors.textSecondary }]}>{metric.title}</Text>
+                      <Text style={[styles.metricValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
+                        {metric.value}
+                      </Text>
+                      <Text style={[styles.metricDetail, { color: colors.textMuted }]}>{metric.detail}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <View style={styles.sectionHeader}>
+                    <View>
+                      <Text style={[styles.sectionTitleDark, { color: colors.text }]}>Monthly Overview</Text>
+                      <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>Collected vs distributed by week</Text>
+                    </View>
+                    <View style={styles.legendRow}>
+                      <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
+                      <Text style={[styles.legendText, { color: colors.textMuted }]}>In</Text>
+                      <View style={[styles.legendDot, { backgroundColor: colors.warning }]} />
+                      <Text style={[styles.legendText, { color: colors.textMuted }]}>Out</Text>
+                    </View>
+                  </View>
+                  <View style={styles.chartWrap}>
+                    {(analytics?.weeklyTrend ?? []).slice(-6).map((week) => {
+                      const maxValue = Math.max(
+                        ...(analytics?.weeklyTrend ?? []).map((item) => Math.max(item.collection, item.distribution)),
+                        1
+                      );
+                      return (
+                        <View key={week.label} style={styles.chartColumn}>
+                          <View style={styles.chartBars}>
+                            <View style={[styles.chartBar, { height: Math.max(6, (week.distribution / maxValue) * 112), backgroundColor: colors.warning }]} />
+                            <View style={[styles.chartBar, styles.chartBarCollection, { height: Math.max(6, (week.collection / maxValue) * 124), backgroundColor: colors.primary }]} />
+                          </View>
+                          <Text style={[styles.chartLabel, { color: colors.textMuted }]}>{week.label}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <View style={styles.sectionHeader}>
+                    <View>
+                      <Text style={[styles.sectionTitleDark, { color: colors.text }]}>Smart Insights</Text>
+                      <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>Alerts generated from existing transactions</Text>
+                    </View>
+                    <View style={[styles.sectionIcon, { backgroundColor: colors.primarySoft }]}>
+                      <Icon name="sparkles-outline" size={17} color={colors.primary} />
+                    </View>
+                  </View>
+                  {(analytics?.insights ?? []).concat(analytics?.aiInsights ?? []).slice(0, 4).map((insight) => (
+                    <View key={insight} style={styles.insightRow}>
+                      <View style={[styles.insightDot, { backgroundColor: colors.primary }]} />
+                      <Text style={[styles.insightText, { color: colors.textSecondary }]}>{insight}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <View style={styles.sectionHeader}>
+                    <View>
+                      <Text style={[styles.sectionTitleDark, { color: colors.text }]}>Recent Transactions</Text>
+                      <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>Latest collections across routes</Text>
+                    </View>
+                    <Pressable style={[styles.exportCsvBtn, { backgroundColor: colors.primarySoft }]} onPress={exportRecentCsv}>
+                      <Icon name="download-outline" size={16} color={colors.primary} />
+                      <Text style={[styles.exportCsvText, { color: colors.primary }]}>CSV</Text>
+                    </Pressable>
+                  </View>
+                  {analytics?.recentTransactions.length ? (
+                    analytics.recentTransactions.slice(0, 5).map((item) => (
+                      <Pressable
+                        key={item.id}
+                        style={[styles.transactionRow, { borderTopColor: colors.border }]}
+                        onPress={() => item.customerId && router.push(`/profile/${item.customerId}`)}
+                      >
+                        <View style={[styles.transactionIcon, { backgroundColor: colors.successSoft }]}>
+                          <Icon name={item.paymentMode === "PHONE" ? "phone-portrait-outline" : "cash-outline"} size={16} color={colors.success} />
+                        </View>
+                        <View style={styles.alertCopy}>
+                          <Text style={[styles.alertName, { color: colors.text }]}>{item.customerName}</Text>
+                          <Text style={[styles.alertMeta, { color: colors.textSecondary }]}>
+                            {item.villageName} / {new Date(item.paymentDate).toLocaleDateString()}
+                          </Text>
+                        </View>
+                        <Text style={[styles.transactionAmount, { color: colors.success }]}>{formatMoney(item.amountPaid)}</Text>
+                      </Pressable>
+                    ))
+                  ) : (
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>New collections will appear here automatically.</Text>
+                  )}
+                </View>
+
+                <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <View style={styles.sectionHeader}>
+                    <View>
+                      <Text style={[styles.sectionTitleDark, { color: colors.text }]}>Budget Alerts</Text>
+                      <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>Customers needing follow-up</Text>
+                    </View>
+                    <Text style={[styles.statePill, { color: colors.error, backgroundColor: colors.destructiveSoft }]}>
+                      {analytics?.dueAlerts.length ?? 0} active
+                    </Text>
+                  </View>
+                  {analytics?.dueAlerts.length ? (
+                    analytics.dueAlerts.slice(0, 4).map((alert) => (
+                      <Pressable
+                        key={alert.customerId}
+                        style={[styles.alertRow, { borderTopColor: colors.border }]}
+                        onPress={() => router.push(`/profile/${alert.customerId}`)}
+                      >
+                        <View style={[styles.transactionIcon, { backgroundColor: colors.destructiveSoft }]}>
+                          <Icon name="alert-circle-outline" size={16} color={colors.error} />
+                        </View>
+                        <View style={styles.alertCopy}>
+                          <Text style={[styles.alertName, { color: colors.text }]}>{alert.customerName}</Text>
+                          <Text style={[styles.alertMeta, { color: colors.textSecondary }]}>
+                            {alert.villageName} / {alert.dueCount} due / {formatMoney(alert.dueAmount)}
+                          </Text>
+                        </View>
+                        <Icon name="chevron-forward" size={16} color={colors.textMuted} />
+                      </Pressable>
+                    ))
+                  ) : (
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No overdue pattern is visible right now.</Text>
+                  )}
+                </View>
 
                 <View style={styles.quickGrid}>
                   {[
@@ -409,8 +650,12 @@ const styles = StyleSheet.create({
   header: { fontSize: 29, fontWeight: "900" },
   welcome: { fontSize: 13, marginTop: 2, fontWeight: "700" },
   heroMetricRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 16 },
+  heroMetricPanel: { flexDirection: "row", alignItems: "center", borderRadius: 18, borderWidth: 1, padding: 14, gap: 12 },
+  heroMetricIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  heroMetricCopy: { flex: 1, minWidth: 0 },
   heroMetricLabel: { fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
   heroMetricValue: { fontSize: 34, fontWeight: "900", marginTop: 2 },
+  heroMetricHint: { fontSize: 11, fontWeight: "800", marginTop: 3 },
   deltaPill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999 },
   deltaPillText: { fontWeight: "900", fontSize: 12 },
   metricsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
@@ -450,6 +695,8 @@ const styles = StyleSheet.create({
   alertName: { fontSize: 14, fontWeight: "900" },
   alertMeta: { fontSize: 12, marginTop: 2, fontWeight: "700" },
   reminderBtn: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  exportCsvBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
+  exportCsvText: { fontSize: 11, fontWeight: "900" },
   transactionRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, borderTopWidth: 1 },
   transactionIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   transactionAmount: { fontSize: 13, fontWeight: "900" },

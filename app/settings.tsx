@@ -8,7 +8,7 @@ import * as Sharing from "expo-sharing";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { useAuth } from "../src/auth-context";
 import { db } from "../src/firebase";
-import { colors, getGradient } from "../src/theme";
+import { colors as baseColors, getGradient } from "../src/theme";
 import { useTheme } from "../src/theme-context";
 import Icon from "../src/Icon";
 import { Customer, Loan, Payment, Village } from "../src/types";
@@ -60,7 +60,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
 
 export default function SettingsScreen() {
   const { user, logout } = useAuth();
-  const { isDark, toggleDarkMode, colors: themeColors } = useTheme();
+  const { isDark, toggleDarkMode, colorScheme, setColorScheme, colors } = useTheme();
   const [isExporting, setIsExporting] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -362,7 +362,7 @@ export default function SettingsScreen() {
   };
 
   return (
-    <LinearGradient colors={[...getGradient(themeColors)]} style={styles.root}>
+    <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
       <SafeAreaView style={styles.safe}>
         <View style={styles.content}>
           <Pressable style={styles.backBtn} onPress={() => router.back()}>
@@ -377,41 +377,63 @@ export default function SettingsScreen() {
             <Text style={styles.subtitle}>Account and session details</Text>
           </View>
 
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.infoRow}>
-              <View style={styles.infoIcon}>
+              <View style={[styles.infoIcon, { backgroundColor: colors.primarySoft }]}>
                 <Icon name="mail-outline" size={18} color={colors.blue2} />
               </View>
               <View style={styles.infoCopy}>
-                <Text style={styles.label}>Signed in as</Text>
-                <Text style={styles.value}>{user?.email || "Unknown user"}</Text>
+                <Text style={[styles.label, { color: colors.textSecondary }]}>Signed in as</Text>
+                <Text style={[styles.value, { color: colors.text }]}>{user?.email || "Unknown user"}</Text>
               </View>
             </View>
 
             <View style={styles.infoRow}>
-              <View style={styles.infoIcon}>
+              <View style={[styles.infoIcon, { backgroundColor: colors.successSoft }]}>
                 <Icon name="id-card-outline" size={18} color={colors.teal} />
               </View>
               <View style={styles.infoCopy}>
-                <Text style={styles.label}>Display name</Text>
-                <Text style={styles.value}>{user?.displayName || "User"}</Text>
+                <Text style={[styles.label, { color: colors.textSecondary }]}>Display name</Text>
+                <Text style={[styles.value, { color: colors.text }]}>{user?.displayName || "User"}</Text>
               </View>
             </View>
 
-            <View style={styles.themeRow}>
-              <View style={styles.infoIcon}>
+            <View style={[styles.themeRow, { borderColor: colors.border }]}>
+              <View style={[styles.infoIcon, { backgroundColor: colors.warningSoft }]}>
                 <Icon name={isDark ? "moon-outline" : "sunny-outline"} size={18} color={colors.coral} />
               </View>
               <View style={styles.infoCopy}>
-                <Text style={styles.label}>Theme</Text>
-                <Text style={styles.value}>{isDark ? "Dark mode" : "Light mode"}</Text>
+                <Text style={[styles.label, { color: colors.textSecondary }]}>Theme</Text>
+                <Text style={[styles.value, { color: colors.text }]}>
+                  {colorScheme === "system" ? `System (${isDark ? "dark" : "light"})` : isDark ? "Dark mode" : "Light mode"}
+                </Text>
               </View>
               <Switch
                 value={isDark}
                 onValueChange={toggleDarkMode}
-                trackColor={{ false: themeColors.border, true: themeColors.primary }}
-                thumbColor={themeColors.white}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={colors.white}
               />
+            </View>
+            <View style={styles.themeModeRow}>
+              {(["system", "light", "dark"] as const).map((scheme) => {
+                const active = colorScheme === scheme;
+                return (
+                  <Pressable
+                    key={scheme}
+                    style={[
+                      styles.themeModeChip,
+                      { backgroundColor: colors.surfaceTint, borderColor: colors.border },
+                      active && { backgroundColor: colors.primary, borderColor: colors.primary },
+                    ]}
+                    onPress={() => setColorScheme(scheme)}
+                  >
+                    <Text style={[styles.themeModeText, { color: active ? colors.white : colors.textSecondary }]}>
+                      {scheme[0].toUpperCase() + scheme.slice(1)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
 
             <Pressable
@@ -427,17 +449,17 @@ export default function SettingsScreen() {
               <Text style={styles.exportText}>{isExporting ? "Exporting Whole Data..." : "Export Whole Data"}</Text>
             </Pressable>
 
-            <View style={styles.securityPanel}>
+            <View style={[styles.securityPanel, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
               <View style={styles.securityHeader}>
-                <View style={styles.infoIcon}>
+                <View style={[styles.infoIcon, { backgroundColor: colors.successSoft }]}>
                   <Icon name="shield-checkmark-outline" size={18} color={colors.teal} />
                 </View>
                 <View style={styles.infoCopy}>
-                  <Text style={styles.label}>Backup & restore</Text>
-                  <Text style={styles.value}>Safe merge backup tools</Text>
+                  <Text style={[styles.label, { color: colors.textSecondary }]}>Backup & restore</Text>
+                  <Text style={[styles.value, { color: colors.text }]}>Safe merge backup tools</Text>
                 </View>
               </View>
-              <Text style={styles.securityCopy}>
+              <Text style={[styles.securityCopy, { color: colors.textSecondary }]}>
                 Backup exports include villages, customers, loans, and payments for this signed-in account only. Restore merges records and never deletes existing records.
               </Text>
               <View style={styles.backupRow}>
@@ -455,7 +477,7 @@ export default function SettingsScreen() {
                   disabled={isRestoring}
                 >
                   {isRestoring ? <ActivityIndicator color={colors.blue2} /> : <Icon name="database-outline" size={17} color={colors.blue2} />}
-                  <Text style={styles.restoreBtnText}>{isRestoring ? "Restoring..." : "Restore"}</Text>
+                  <Text style={[styles.restoreBtnText, { color: colors.blue2 }]}>{isRestoring ? "Restoring..." : "Restore"}</Text>
                 </Pressable>
               </View>
             </View>
@@ -486,26 +508,29 @@ const styles = StyleSheet.create({
   backBtn: { position: "absolute", top: 16, left: 16, width: 40, height: 40, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.16)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.24)" },
   header: { alignItems: "center", gap: 8 },
   avatar: { width: 64, height: 64, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.28)" },
-  title: { fontSize: 28, fontWeight: "800", color: colors.white },
+  title: { fontSize: 28, fontWeight: "800", color: baseColors.white },
   subtitle: { color: "rgba(255,255,255,0.78)", fontSize: 14 },
-  card: { backgroundColor: colors.white, borderRadius: 22, padding: 20, gap: 14, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.18, shadowRadius: 18, elevation: 6 },
+  card: { backgroundColor: baseColors.white, borderRadius: 22, padding: 20, gap: 14, borderWidth: 1, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.18, shadowRadius: 18, elevation: 6 },
   infoRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 4 },
-  themeRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
-  infoIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: colors.sky },
+  themeRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8, borderTopWidth: 1, borderBottomWidth: 1, borderColor: baseColors.border },
+  themeModeRow: { flexDirection: "row", gap: 8 },
+  themeModeChip: { flex: 1, borderRadius: 999, borderWidth: 1, paddingVertical: 9, alignItems: "center" },
+  themeModeText: { fontSize: 12, fontWeight: "900" },
+  infoIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: baseColors.sky },
   infoCopy: { flex: 1 },
-  label: { color: colors.gray, fontWeight: "800", fontSize: 11, textTransform: "uppercase" },
-  value: { color: colors.ink, fontWeight: "800", fontSize: 15, marginTop: 2 },
-  exportBtn: { marginTop: 8, borderRadius: 14, backgroundColor: colors.blue2, padding: 15, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
+  label: { color: baseColors.gray, fontWeight: "800", fontSize: 11, textTransform: "uppercase" },
+  value: { color: baseColors.ink, fontWeight: "800", fontSize: 15, marginTop: 2 },
+  exportBtn: { marginTop: 8, borderRadius: 14, backgroundColor: baseColors.blue2, padding: 15, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
   exportBtnDisabled: { opacity: 0.65 },
-  exportText: { color: colors.white, fontWeight: "800", fontSize: 15 },
-  logoutBtn: { marginTop: 8, borderRadius: 14, backgroundColor: colors.coral, padding: 15, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
-  logoutText: { color: colors.white, fontWeight: "800", fontSize: 15 },
-  securityPanel: { backgroundColor: colors.surfaceTint, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 14, gap: 10 },
+  exportText: { color: baseColors.white, fontWeight: "800", fontSize: 15 },
+  logoutBtn: { marginTop: 8, borderRadius: 14, backgroundColor: baseColors.coral, padding: 15, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
+  logoutText: { color: baseColors.white, fontWeight: "800", fontSize: 15 },
+  securityPanel: { backgroundColor: baseColors.surfaceTint, borderRadius: 16, borderWidth: 1, borderColor: baseColors.border, padding: 14, gap: 10 },
   securityHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
-  securityCopy: { color: colors.gray, fontSize: 12, lineHeight: 17, fontWeight: "700" },
+  securityCopy: { color: baseColors.gray, fontSize: 12, lineHeight: 17, fontWeight: "700" },
   backupRow: { flexDirection: "row", gap: 10 },
-  backupBtn: { flex: 1, borderRadius: 13, backgroundColor: colors.blue2, paddingVertical: 13, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7 },
-  backupBtnText: { color: colors.white, fontWeight: "900", fontSize: 13 },
-  restoreBtn: { flex: 1, borderRadius: 13, backgroundColor: colors.sky, paddingVertical: 13, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7, borderWidth: 1, borderColor: "#bfdbfe" },
-  restoreBtnText: { color: colors.blue2, fontWeight: "900", fontSize: 13 },
+  backupBtn: { flex: 1, borderRadius: 13, backgroundColor: baseColors.blue2, paddingVertical: 13, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7 },
+  backupBtnText: { color: baseColors.white, fontWeight: "900", fontSize: 13 },
+  restoreBtn: { flex: 1, borderRadius: 13, backgroundColor: baseColors.sky, paddingVertical: 13, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7, borderWidth: 1, borderColor: "#bfdbfe" },
+  restoreBtnText: { color: baseColors.blue2, fontWeight: "900", fontSize: 13 },
 });

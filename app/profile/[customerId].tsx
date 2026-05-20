@@ -37,8 +37,10 @@ import {
 } from "../../src/repository";
 import { Customer, Loan, PaymentMode, PaymentType } from "../../src/types";
 import { colors } from "../../src/theme";
+import { useTheme } from "../../src/theme-context";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { openCustomerLedgerPrint } from "../../src/exports";
+import { calculateCreditScore } from "../../src/credit-score";
 
 const noTextSelection = Platform.OS === "web" ? ({ userSelect: "none", WebkitUserSelect: "none" } as any) : undefined;
 
@@ -177,6 +179,7 @@ function hasCustomerCoordinates(customer?: Customer | null) {
 export default function ProfileScreen() {
   const { customerId } = useLocalSearchParams<{ customerId: string }>();
   const { user, loading: authLoading } = useAuth();
+  const { colors } = useTheme();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [loan, setLoan] = useState<Loan | null>(null);
   const [payments, setPayments] = useState<any[]>([]);
@@ -329,13 +332,7 @@ export default function ProfileScreen() {
     reload();
   }, [authLoading, reload]));
 
-  const civilScore = useMemo(() => {
-    if (!payments.length) return 750;
-    const regular = payments.filter((p) => p.paymentType === "REGULAR");
-    const good = regular.filter((p) => p.amountPaid > 0).length;
-    const score = 300 + Math.round(600 * (good / Math.max(regular.length, 1)));
-    return Math.max(300, Math.min(900, score));
-  }, [payments]);
+  const creditSummary = useMemo(() => calculateCreditScore(payments, loan), [loan, payments]);
 
   const customerInsights = useMemo(() => {
     const regular = payments.filter((payment) => payment.paymentType === "REGULAR");
@@ -581,25 +578,25 @@ export default function ProfileScreen() {
           <ScrollView contentContainerStyle={styles.scrollContent}>
             <View style={styles.content}>
             {/* Header Card */}
-            <View style={styles.headerCard}>
-              <Text style={styles.headerName}>{customer?.name || "Profile"}</Text>
+            <View style={[styles.headerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.headerName, { color: colors.primary }]}>{customer?.name || "Profile"}</Text>
               {!!customer && (
                 <View style={styles.headerInfo}>
                   <View style={styles.headerInfoRow}>
                     <Icon name="person" size={18} color={colors.blue2} style={{marginRight: 8}} />
-                    <Text style={styles.headerText}>Book No: {customer.numericalId}</Text>
+                    <Text style={[styles.headerText, { color: colors.textSecondary }]}>Book No: {customer.numericalId}</Text>
                   </View>
                   <Pressable onPress={() => makePhoneCall(customer.phone)} style={styles.headerInfoRow}>
                     <Icon name="call" size={18} color={colors.blue2} style={{marginRight: 8}} />
-                    <Text style={[styles.headerText, styles.phoneLink]}>{customer.phone}</Text>
+                    <Text style={[styles.headerText, styles.phoneLink, { color: colors.primary }]}>{customer.phone}</Text>
                   </Pressable>
                   <View style={styles.headerInfoRow}>
                     <Icon name="id-card" size={18} color={colors.blue2} style={{marginRight: 8}} />
-                    <Text style={styles.headerText}>Aadhar: {customer.aadhar}</Text>
+                    <Text style={[styles.headerText, { color: colors.textSecondary }]}>Aadhar: {customer.aadhar}</Text>
                   </View>
                   <View style={styles.headerInfoRow}>
                     <Icon name="checkmark" size={18} color={colors.blue2} style={{marginRight: 8}} />
-                    <Text style={styles.headerText}>
+                    <Text style={[styles.headerText, { color: colors.textSecondary }]}>
                       Docs: {customer.aadharSubmitted ? "Aadhar" : "Aadhar pending"} | {customer.passportPhotoSubmitted ? "Photo" : "Photo pending"}
                     </Text>
                   </View>
@@ -607,49 +604,49 @@ export default function ProfileScreen() {
               )}
             </View>
 
-            <View style={styles.docsCard}>
+            <View style={[styles.docsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.docsHeaderRow}>
-                <Text style={styles.docsTitle}>Customer Documents</Text>
+                <Text style={[styles.docsTitle, { color: colors.primary }]}>Customer Documents</Text>
                 <Text style={[styles.docsStatusText, customer.aadharSubmitted && customer.passportPhotoSubmitted ? styles.docsStatusComplete : styles.docsStatusPending]}>
                   {customer.aadharSubmitted && customer.passportPhotoSubmitted ? "Complete" : "Pending"}
                 </Text>
               </View>
-              <Pressable style={styles.docsDetailRow} onPress={() => toggleDocumentSubmitted("aadharSubmitted")}>
-                <View style={[styles.docsDetailCheckbox, customer.aadharSubmitted && styles.docsDetailCheckboxOn]}>
+              <Pressable style={[styles.docsDetailRow, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={() => toggleDocumentSubmitted("aadharSubmitted")}>
+                <View style={[styles.docsDetailCheckbox, { backgroundColor: colors.card, borderColor: colors.border }, customer.aadharSubmitted && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
                   {customer.aadharSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
                 </View>
-                <Text style={styles.docsDetailText}>Aadhar submitted</Text>
+                <Text style={[styles.docsDetailText, { color: colors.text }]}>Aadhar submitted</Text>
               </Pressable>
-              <Pressable style={styles.docsDetailRow} onPress={() => toggleDocumentSubmitted("passportPhotoSubmitted")}>
-                <View style={[styles.docsDetailCheckbox, customer.passportPhotoSubmitted && styles.docsDetailCheckboxOn]}>
+              <Pressable style={[styles.docsDetailRow, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={() => toggleDocumentSubmitted("passportPhotoSubmitted")}>
+                <View style={[styles.docsDetailCheckbox, { backgroundColor: colors.card, borderColor: colors.border }, customer.passportPhotoSubmitted && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
                   {customer.passportPhotoSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
                 </View>
-                <Text style={styles.docsDetailText}>Passport photo submitted</Text>
+                <Text style={[styles.docsDetailText, { color: colors.text }]}>Passport photo submitted</Text>
               </Pressable>
             </View>
 
             {/* Stats Cards */}
             <View style={styles.statsRow}>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>CREDIT SCORE</Text>
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>CIBIL SCORE</Text>
                 <View style={styles.scoreContainer}>
-                  <Text style={styles.scoreValue}>{civilScore}</Text>
-                  <Text style={styles.scoreRating}>{Number(civilScore) >= 800 ? 'excellent' : Number(civilScore) >= 600 ? 'good' : 'fair'}</Text>
+                  <Text style={[styles.scoreValue, { color: colors.primary }]}>{creditSummary.score}</Text>
+                  <Text style={[styles.scoreRating, { color: creditSummary.score >= 700 ? colors.success : colors.warning }]}>{creditSummary.band}</Text>
                 </View>
               </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>CURRENT BALANCE</Text>
-                <Text style={styles.balanceValue}>Rs.{loan?.balanceAmount?.toFixed(2) ?? "0.00"}</Text>
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>CURRENT BALANCE</Text>
+                <Text style={[styles.balanceValue, { color: colors.primary }]}>Rs.{loan?.balanceAmount?.toFixed(2) ?? "0.00"}</Text>
               </View>
             </View>
 
             {/* Additional Info */}
             {!!customer && (
-              <View style={styles.infoContainer}>
+              <View style={[styles.infoContainer, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
                 {(customer.coName || customer.coId) && (
                   <View style={styles.infoRow}>
                     <Icon name="people" size={18} color={colors.blue2} style={{marginRight: 8}} />
-                    <Text style={styles.infoText}>
+                    <Text style={[styles.infoText, { color: colors.text }]}>
                       C/O: {customer.coName || 'N/A'} {customer.coId ? `(ID: ${customer.coId})` : ''}
                     </Text>
                   </View>
@@ -657,7 +654,7 @@ export default function ProfileScreen() {
                 {customer.locationDesc && (
                   <View style={styles.infoRow}>
                     <Icon name="location" size={18} color={colors.blue2} style={{marginRight: 8}} />
-                    <Text style={styles.infoText}>{customer.locationDesc}</Text>
+                    <Text style={[styles.infoText, { color: colors.text }]}>{customer.locationDesc}</Text>
                   </View>
                 )}
               </View>
@@ -703,57 +700,58 @@ export default function ProfileScreen() {
               </Pressable>
             </View>
             
-            <View style={styles.iconBar}>
-              <Pressable style={[styles.iconBtn, noTextSelection]} onPress={openEditModal}>
+            <View style={[styles.iconBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Pressable style={[styles.iconBtn, noTextSelection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={openEditModal}>
                 <Icon name="person" size={21} color={colors.blue2} />
-                <Text selectable={false} style={styles.iconBtnLabel}>Edit</Text>
+                <Text selectable={false} style={[styles.iconBtnLabel, { color: colors.primary }]}>Edit</Text>
               </Pressable>
-              <Pressable style={[styles.iconBtn, noTextSelection]} onPress={sendWhatsAppReminder}>
+              <Pressable style={[styles.iconBtn, noTextSelection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={sendWhatsAppReminder}>
                 <Icon name="logo-whatsapp" size={21} color={colors.paidGreen} />
-                <Text selectable={false} style={styles.iconBtnLabel}>Remind</Text>
+                <Text selectable={false} style={[styles.iconBtnLabel, { color: colors.primary }]}>Remind</Text>
               </Pressable>
-              <Pressable style={[styles.iconBtn, noTextSelection]} onPress={exportLedger}>
+              <Pressable style={[styles.iconBtn, noTextSelection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={exportLedger}>
                 <Icon name="download-outline" size={21} color={colors.blue2} />
-                <Text selectable={false} style={styles.iconBtnLabel}>Ledger</Text>
+                <Text selectable={false} style={[styles.iconBtnLabel, { color: colors.primary }]}>Ledger</Text>
               </Pressable>
               <Pressable
-                style={[styles.iconBtn, noTextSelection, !hasCustomerCoordinates(customer) && styles.iconBtnDisabled]}
+                style={[styles.iconBtn, noTextSelection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }, !hasCustomerCoordinates(customer) && styles.iconBtnDisabled]}
                 onPress={openGoogleMaps}
                 disabled={!hasCustomerCoordinates(customer)}
               >
                 <Icon name="location" size={21} color={hasCustomerCoordinates(customer) ? colors.teal : colors.gray} />
-                <Text selectable={false} style={styles.iconBtnLabel}>Map</Text>
+                <Text selectable={false} style={[styles.iconBtnLabel, { color: colors.primary }]}>Map</Text>
               </Pressable>
-              <Pressable style={[styles.iconBtn, noTextSelection]} onPress={() => setDeleteCustomerConfirmOpen(true)}>
+              <Pressable style={[styles.iconBtn, noTextSelection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={() => setDeleteCustomerConfirmOpen(true)}>
                 <Icon name="trash" size={21} color={colors.missedRed} />
                 <Text selectable={false} style={[styles.iconBtnLabel, styles.iconBtnLabelDanger]}>Delete</Text>
               </Pressable>
             </View>
-            <View style={styles.customerAnalyticsCard}>
+            <View style={[styles.customerAnalyticsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.customerAnalyticsHeader}>
-                <Text style={styles.customerAnalyticsTitle}>Customer Analytics</Text>
+                <Text style={[styles.customerAnalyticsTitle, { color: colors.primary }]}>Customer Analytics</Text>
                 <Text style={styles.customerBehaviorPill}>{customerInsights.behavior}</Text>
               </View>
+              <Text style={[styles.creditScoreSummary, { color: colors.textSecondary }]}>{creditSummary.summary}</Text>
               <View style={styles.customerAnalyticsGrid}>
-                <View style={styles.customerAnalyticsMetric}>
-                  <Text style={styles.customerAnalyticsValue}>Rs.{Math.round(customerInsights.totalPaid).toLocaleString("en-IN")}</Text>
-                  <Text style={styles.customerAnalyticsLabel}>Total paid</Text>
+                <View style={[styles.customerAnalyticsMetric, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
+                  <Text style={[styles.customerAnalyticsValue, { color: colors.text }]}>Rs.{Math.round(customerInsights.totalPaid).toLocaleString("en-IN")}</Text>
+                  <Text style={[styles.customerAnalyticsLabel, { color: colors.textSecondary }]}>Total paid</Text>
                 </View>
-                <View style={styles.customerAnalyticsMetric}>
-                  <Text style={styles.customerAnalyticsValue}>Rs.{Math.round(customerInsights.averagePayment).toLocaleString("en-IN")}</Text>
-                  <Text style={styles.customerAnalyticsLabel}>Avg payment</Text>
+                <View style={[styles.customerAnalyticsMetric, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
+                  <Text style={[styles.customerAnalyticsValue, { color: colors.text }]}>Rs.{Math.round(customerInsights.averagePayment).toLocaleString("en-IN")}</Text>
+                  <Text style={[styles.customerAnalyticsLabel, { color: colors.textSecondary }]}>Avg payment</Text>
                 </View>
-                <View style={styles.customerAnalyticsMetric}>
-                  <Text style={styles.customerAnalyticsValue}>{customerInsights.dueCount}</Text>
-                  <Text style={styles.customerAnalyticsLabel}>Due marks</Text>
+                <View style={[styles.customerAnalyticsMetric, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
+                  <Text style={[styles.customerAnalyticsValue, { color: colors.text }]}>{customerInsights.dueCount}</Text>
+                  <Text style={[styles.customerAnalyticsLabel, { color: colors.textSecondary }]}>Due marks</Text>
                 </View>
-                <View style={styles.customerAnalyticsMetric}>
-                  <Text style={styles.customerAnalyticsValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{customerInsights.lastPayment}</Text>
-                  <Text style={styles.customerAnalyticsLabel}>Last paid</Text>
+                <View style={[styles.customerAnalyticsMetric, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
+                  <Text style={[styles.customerAnalyticsValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{customerInsights.lastPayment}</Text>
+                  <Text style={[styles.customerAnalyticsLabel, { color: colors.textSecondary }]}>Last paid</Text>
                 </View>
               </View>
             </View>
-            <Text style={styles.history}>Transaction History</Text>
+            <Text style={[styles.history, { color: colors.white }]}>Transaction History</Text>
             <PaymentHistory 
               payments={payments} 
               onEdit={openEditPaymentModal}
@@ -1353,7 +1351,7 @@ const styles = StyleSheet.create({
   content: { width: "100%", maxWidth: Math.min(Dimensions.get("window").width - 32, 430), alignSelf: "center", gap: 12 },
   
   // Header Card Styles
-  headerCard: { backgroundColor: colors.white, borderRadius: 18, padding: 16, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 4 },
+  headerCard: { backgroundColor: colors.white, borderRadius: 18, padding: 16, borderWidth: 1, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 4 },
   headerName: { color: colors.blue2, fontSize: 20, fontWeight: '700', marginBottom: 10 },
   headerInfo: { gap: 8 },
   headerInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -1363,7 +1361,7 @@ const styles = StyleSheet.create({
   
   // Stats Row Styles
   statsRow: { flexDirection: 'row', gap: 10 },
-  statCard: { flex: 1, backgroundColor: colors.white, borderRadius: 16, padding: 14, alignItems: 'center', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  statCard: { flex: 1, backgroundColor: colors.white, borderRadius: 16, padding: 14, alignItems: 'center', borderWidth: 1, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
   statLabel: { color: '#888', fontSize: 10, fontWeight: '600', marginBottom: 6, letterSpacing: 0.5 },
   scoreContainer: { alignItems: 'center' },
   scoreValue: { color: colors.blue2, fontSize: 24, fontWeight: '700' },
@@ -1375,7 +1373,7 @@ const styles = StyleSheet.create({
   infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 3 },
   infoIcon: { fontSize: 14, width: 20 },
   infoText: { color: colors.white, fontSize: 13, flex: 1 },
-  docsCard: { backgroundColor: colors.white, borderRadius: 16, padding: 14, gap: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  docsCard: { backgroundColor: colors.white, borderRadius: 16, padding: 14, gap: 10, borderWidth: 1, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
   docsHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   docsTitle: { color: colors.blue2, fontSize: 14, fontWeight: "900" },
   docsStatusText: { fontSize: 11, fontWeight: "900", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, overflow: "hidden" },
@@ -1393,16 +1391,17 @@ const styles = StyleSheet.create({
   actionLabel: { color: colors.white, fontSize: 13, fontWeight: '600' },
   
   // Icon Bar Styles
-  iconBar: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: colors.white, borderRadius: 18, padding: 8, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  iconBar: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: colors.white, borderRadius: 18, padding: 8, borderWidth: 1, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
   iconBtn: { flex: 1, minHeight: 52, borderRadius: 14, backgroundColor: '#eef4ff', alignItems: 'center', justifyContent: 'center', marginHorizontal: 3, gap: 3, borderWidth: 1, borderColor: '#dbeafe' },
   iconBtnDisabled: { backgroundColor: '#f0f0f0', opacity: 0.5 },
   iconBtnLabel: { color: colors.blue2, fontSize: 10, fontWeight: "800" },
   iconBtnLabelDanger: { color: colors.missedRed },
   iconBtnIcon: { fontSize: 18 },
-  customerAnalyticsCard: { backgroundColor: colors.white, borderRadius: 18, padding: 14, gap: 12, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  customerAnalyticsCard: { backgroundColor: colors.white, borderRadius: 18, padding: 14, gap: 12, borderWidth: 1, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
   customerAnalyticsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   customerAnalyticsTitle: { color: colors.blue2, fontSize: 15, fontWeight: "900" },
   customerBehaviorPill: { color: "#047857", backgroundColor: "#d1fae5", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4, overflow: "hidden", fontSize: 10, fontWeight: "900" },
+  creditScoreSummary: { fontSize: 12, lineHeight: 17, fontWeight: "700" },
   customerAnalyticsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   customerAnalyticsMetric: { flex: 1, minWidth: "45%", backgroundColor: "#f8fafc", borderRadius: 12, padding: 10, borderWidth: 1, borderColor: "#e2e8f0" },
   customerAnalyticsValue: { color: colors.ink, fontSize: 15, fontWeight: "900" },
