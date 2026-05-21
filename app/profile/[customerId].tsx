@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
-import React, { memo, useCallback, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   Alert,
@@ -176,10 +176,36 @@ function hasCustomerCoordinates(customer?: Customer | null) {
   return typeof customer?.latitude === "number" && typeof customer?.longitude === "number";
 }
 
+function getSuggestedPaymentAmount(loan?: Loan | null) {
+  if (!loan) return 0;
+  const standardAmount = Math.max(1, Math.round(loan.principalAmount / 10));
+  return Math.min(standardAmount, loan.balanceAmount);
+}
+
+function createEmptyEditForm() {
+  return {
+    name: "",
+    phone: "",
+    aadhar: "",
+    locationDesc: "",
+    coName: "",
+    coId: "",
+    latitude: "",
+    longitude: "",
+    aadharSubmitted: false,
+    passportPhotoSubmitted: false,
+    loanAmount: "",
+    loanStartDate: formatDateInput(Date.now()),
+  };
+}
+
 export default function ProfileScreen() {
   const { customerId } = useLocalSearchParams<{ customerId: string }>();
+  const activeCustomerId = Array.isArray(customerId) ? customerId[0] : customerId;
   const { user, loading: authLoading } = useAuth();
   const { colors } = useTheme();
+  const loadRequestRef = useRef(0);
+  const locationRequestRef = useRef(0);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [loan, setLoan] = useState<Loan | null>(null);
   const [payments, setPayments] = useState<any[]>([]);
@@ -212,26 +238,14 @@ export default function ProfileScreen() {
   const [isDeletingCustomer, setIsDeletingCustomer] = useState(false);
   const [editLoanDateError, setEditLoanDateError] = useState("");
   const [editCoordinateError, setEditCoordinateError] = useState("");
+  const [editLocationStatus, setEditLocationStatus] = useState("");
   const [showEditLoanDatePicker, setShowEditLoanDatePicker] = useState(false);
   const [tempEditLoanDate, setTempEditLoanDate] = useState<Date>(new Date());
   const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
   
   // Combined customer & loan edit state
   const [editOpen, setEditOpen] = useState(false);
-  const [editForm, setEditForm] = useState({
-    name: "",
-    phone: "",
-    aadhar: "",
-    locationDesc: "",
-    coName: "",
-    coId: "",
-    latitude: "",
-    longitude: "",
-    aadharSubmitted: false,
-    passportPhotoSubmitted: false,
-    loanAmount: "",
-    loanStartDate: formatDateInput(Date.now()),
-  });
+  const [editForm, setEditForm] = useState(createEmptyEditForm);
 
   const makePhoneCall = (phoneNumber: string) => {
     const phoneUrl = `tel:${phoneNumber}`;
@@ -257,6 +271,7 @@ export default function ProfileScreen() {
       loanStartDate: loan ? formatDateInput(loan.startDate) : formatDateInput(Date.now()),
     });
     setEditCoordinateError("");
+    setEditLocationStatus("");
     setEditOpen(true);
   };
 
@@ -274,19 +289,40 @@ export default function ProfileScreen() {
 
   // Function to update customer location in edit modal
   const updateEditLocation = async () => {
+    if (!customer || customer.id !== activeCustomerId) {
+      setEditCoordinateError("Customer is still loading. Try again in a moment.");
+      return;
+    }
+    const requestId = locationRequestRef.current + 1;
+    const requestCustomerId = customer.id;
+    locationRequestRef.current = requestId;
     setIsUpdatingLocation(true);
+    setEditCoordinateError("");
+    setEditLocationStatus("");
     try {
       const coordinates = await requestCurrentCoordinates();
+      if (
+        locationRequestRef.current !== requestId ||
+        requestCustomerId !== activeCustomerId ||
+        customer.id !== requestCustomerId
+      ) {
+        return;
+      }
       setEditForm(prev => ({
         ...prev,
         latitude: coordinates.latitude.toFixed(6),
         longitude: coordinates.longitude.toFixed(6),
       }));
       setEditCoordinateError("");
+      setEditLocationStatus("Current location ready. Save changes to update this customer.");
     } catch (error) {
-      alert(getLocationErrorMessage(error));
+      const message = getLocationErrorMessage(error);
+      setEditCoordinateError(`${message}. Retry or enter coordinates manually.`);
+      setEditLocationStatus("");
     } finally {
-      setIsUpdatingLocation(false);
+      if (locationRequestRef.current === requestId) {
+        setIsUpdatingLocation(false);
+      }
     }
   };
 
@@ -303,28 +339,57 @@ export default function ProfileScreen() {
   const [isLoading, setIsLoading] = useState(true);
 
   const reload = useCallback(async () => {
-    if (!user || !customerId) {
-      console.log('Missing user or customerId:', { user: !!user, customerId });
+    const requestId = loadRequestRef.current + 1;
+    loadRequestRef.current = requestId;
+    if (!user || !activeCustomerId) {
+      console.log('Missing user or customerId:', { user: !!user, customerId: activeCustomerId });
+      setCustomer(null);
+      setLoan(null);
+      setPayments([]);
       setIsLoading(false);
       return;
     }
     try {
       setIsLoading(true);
       const [c, l, p] = await Promise.all([
-        getCustomerById(customerId),
-        getActiveLoan(user.uid, customerId),
-        getPaymentsForCustomer(user.uid, customerId),
+        getCustomerById(activeCustomerId),
+        getActiveLoan(user.uid, activeCustomerId),
+        getPaymentsForCustomer(user.uid, activeCustomerId),
       ]);
+      if (loadRequestRef.current !== requestId || (c && activeCustomerId !== c.id)) return;
+      if (c && c.userId !== user.uid) {
+        throw new Error("Customer does not belong to the active user.");
+      }
       setCustomer(c);
       setLoan(l || null);
       setPayments(p);
     } catch (error) {
+      if (loadRequestRef.current !== requestId) return;
       console.error('Error loading customer details:', error);
       Alert.alert('Error', 'Failed to load customer details. Please try again.');
+      setCustomer(null);
+      setLoan(null);
+      setPayments([]);
     } finally {
-      setIsLoading(false);
+      if (loadRequestRef.current === requestId) {
+        setIsLoading(false);
+      }
     }
-  }, [customerId, user]);
+  }, [activeCustomerId, user]);
+
+  useEffect(() => {
+    loadRequestRef.current += 1;
+    locationRequestRef.current += 1;
+    setCustomer(null);
+    setLoan(null);
+    setPayments([]);
+    setEditOpen(false);
+    setEditForm(createEmptyEditForm());
+    setEditCoordinateError("");
+    setEditLocationStatus("");
+    setIsUpdatingLocation(false);
+    setIsLoading(true);
+  }, [activeCustomerId]);
   
   useFocusEffect(useCallback(() => {
     // Wait for Firebase Auth to resolve before fetching
@@ -492,6 +557,10 @@ export default function ProfileScreen() {
   // Combined edit confirm handler
   const confirmEdit = async () => {
     if (!customer || !user) return;
+    if (customer.id !== activeCustomerId) {
+      setEditCoordinateError("Customer changed while editing. Reopen this customer and try again.");
+      return;
+    }
 
     const normalizedAadhar = editForm.aadhar ? editForm.aadhar.replace(/\D/g, "").trim() : "";
     const parsedLatitude = parseCoordinateInput(editForm.latitude, -90, 90);
@@ -505,6 +574,7 @@ export default function ProfileScreen() {
       return;
     }
     setEditCoordinateError("");
+    setEditLocationStatus("");
 
     if (normalizedAadhar) {
       const existingCustomer = await getCustomerByAadhar(user.uid, normalizedAadhar, customer.id);
@@ -518,7 +588,7 @@ export default function ProfileScreen() {
       }
     }
     
-    await updateCustomer({
+    const updatedCustomer = {
       ...customer,
       name: editForm.name,
       phone: editForm.phone,
@@ -530,7 +600,11 @@ export default function ProfileScreen() {
       longitude: parsedLongitude,
       aadharSubmitted: editForm.aadharSubmitted,
       passportPhotoSubmitted: editForm.passportPhotoSubmitted,
-    });
+    };
+
+    await updateCustomer(updatedCustomer);
+    setCustomer(updatedCustomer);
+    Alert.alert("Saved", "Customer location and details were updated.");
     
     // Update loan if exists
     if (loan) {
@@ -1039,6 +1113,7 @@ export default function ProfileScreen() {
                     onChangeText={(text) => {
                       setEditForm(prev => ({ ...prev, latitude: text }));
                       setEditCoordinateError("");
+                      setEditLocationStatus("");
                     }}
                     style={[styles.input, styles.coordinateInput]}
                     keyboardType="numbers-and-punctuation"
@@ -1050,6 +1125,7 @@ export default function ProfileScreen() {
                     onChangeText={(text) => {
                       setEditForm(prev => ({ ...prev, longitude: text }));
                       setEditCoordinateError("");
+                      setEditLocationStatus("");
                     }}
                     style={[styles.input, styles.coordinateInput]}
                     keyboardType="numbers-and-punctuation"
@@ -1058,11 +1134,13 @@ export default function ProfileScreen() {
                 </View>
                 <Text style={styles.coordinateHint}>Enter coordinates manually, or use current device location.</Text>
                 {editCoordinateError ? <Text style={styles.errorText}>{editCoordinateError}</Text> : null}
+                {editLocationStatus ? <Text style={styles.successText}>{editLocationStatus}</Text> : null}
                 <Pressable 
                   style={[styles.updateLocationBtn, isUpdatingLocation && styles.updateLocationBtnDisabled]} 
                   onPress={updateEditLocation}
                   disabled={isUpdatingLocation}
                 >
+                  {isUpdatingLocation ? <ActivityIndicator size="small" color={colors.white} /> : null}
                   <Text style={styles.updateLocationBtnText}>
                     {isUpdatingLocation ? 'Getting Location...' : editForm.latitude.trim() ? 'Update Location' : 'Set Location'}
                   </Text>
@@ -1462,6 +1540,7 @@ const styles = StyleSheet.create({
   primary: { backgroundColor: colors.blue2, borderRadius: 12, padding: 14, alignItems: "center" },
   primaryText: { color: colors.white, fontWeight: "700" },
   errorText: { color: "#b91c1c", fontSize: 12, marginTop: -4 },
+  successText: { color: "#047857", fontSize: 12, fontWeight: "700", marginTop: -4 },
   dateBtn: { borderWidth: 1, borderColor: "#d2d8e1", borderRadius: 10, padding: 10, alignItems: "center" },
   dateBtnText: { color: colors.blue2, fontWeight: "600" },
   dayDisplay: { 
@@ -1504,7 +1583,7 @@ const styles = StyleSheet.create({
   coordinateRow: { flexDirection: "row", gap: 10 },
   coordinateInput: { flex: 1 },
   coordinateHint: { color: "#64748b", fontSize: 12, fontWeight: "600", marginTop: -2, marginBottom: 10 },
-  updateLocationBtn: { backgroundColor: colors.blue2, borderRadius: 10, padding: 12, alignItems: "center" },
+  updateLocationBtn: { backgroundColor: colors.blue2, borderRadius: 10, padding: 12, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
   updateLocationBtnDisabled: { backgroundColor: "#ccc" },
   updateLocationBtnText: { color: colors.white, fontWeight: "700", fontSize: 14 },
   

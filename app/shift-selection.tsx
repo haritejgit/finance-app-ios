@@ -652,6 +652,7 @@ const styles = StyleSheet.create({
   metricValue: { fontSize: 22, fontWeight: "900", marginTop: 4 },
   metricDetail: { fontSize: 11, fontWeight: "700", marginTop: 3 },
   panel: { borderRadius: 20, borderWidth: 1, padding: 16, gap: 12 },
+  routePanel: { gap: 12 },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
   sectionIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   sectionTitleDark: { fontSize: 18, fontWeight: "900" },

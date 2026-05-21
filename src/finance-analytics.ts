@@ -234,7 +234,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
     .sort((a, b) => b.lastDueDate - a.lastDueDate)
     .slice(0, 8);
 
-  const customerStates = Object.fromEntries(
+  const customerStates: Record<string, CustomerState> = Object.fromEntries(
     customers.map((customer) => {
       const loan = activeLoanByCustomerId.get(customer.id);
       const dueList = duePaymentsByCustomer.get(customer.id) ?? [];

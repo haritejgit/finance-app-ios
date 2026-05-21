@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteField,
   deleteDoc,
   doc,
   getDoc,
@@ -632,7 +633,12 @@ export async function getPaymentsByDate(userId: string, startDate: number, endDa
 }
 
 export async function updateCustomer(customer: Customer) {
-  await setDoc(doc(db, "customers", customer.id), stripUndefined(sanitizeCustomerInput(customer)));
+  const sanitized = sanitizeCustomerInput(customer);
+  await updateDoc(doc(db, "customers", customer.id), {
+    ...stripUndefined(sanitized),
+    latitude: sanitized.latitude === undefined ? deleteField() : sanitized.latitude,
+    longitude: sanitized.longitude === undefined ? deleteField() : sanitized.longitude,
+  });
   clearCache();
 }
 

@@ -304,6 +304,7 @@ export default function CustomerListScreen() {
   const [form, setForm] = useState<AddCustomerForm>(createEmptyCustomerForm);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const addLocationRequestRef = useRef(0);
+  const saveLocationRequestRef = useRef(0);
   const [updatingLocationCustomerId, setUpdatingLocationCustomerId] = useState<string | null>(null);
   const [registrationDate, setRegistrationDate] = useState(formatDateInput(Date.now()));
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -440,15 +441,19 @@ export default function CustomerListScreen() {
   };
 
   const saveCurrentLocationForCustomer = useCallback(async (customer: Customer) => {
+    const requestId = saveLocationRequestRef.current + 1;
+    saveLocationRequestRef.current = requestId;
     try {
       setUpdatingLocationCustomerId(customer.id);
       const coordinates = await requestCurrentCoordinates();
+      if (saveLocationRequestRef.current !== requestId) return;
       const updatedCustomer: Customer = {
         ...customer,
         ...coordinates,
       };
 
       await updateCustomer(updatedCustomer);
+      if (saveLocationRequestRef.current !== requestId) return;
       setCustomers((current) =>
         current.map((item) => (item.id === customer.id ? updatedCustomer : item))
       );
@@ -461,7 +466,9 @@ export default function CustomerListScreen() {
           : getLocationErrorMessage(error)
       );
     } finally {
-      setUpdatingLocationCustomerId(null);
+      if (saveLocationRequestRef.current === requestId) {
+        setUpdatingLocationCustomerId(null);
+      }
     }
   }, []);
 
