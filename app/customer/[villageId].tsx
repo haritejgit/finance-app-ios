@@ -134,6 +134,7 @@ const CustomerItem = React.memo(function CustomerItem({
   isPaying?: boolean;
   isUpdatingLocation?: boolean;
 }) {
+  const lastActionPressAtRef = useRef(0);
   const hasLocation = hasCoordinates(customer);
   const canPay = !!loan && loan.balanceAmount > 0 && status !== "paid" && !isPaying;
   const missingDocs = [
@@ -180,10 +181,23 @@ const CustomerItem = React.memo(function CustomerItem({
     }
   }, [status, isNew]);
 
+  const markActionPress = useCallback((event?: { stopPropagation?: () => void }) => {
+    event?.stopPropagation?.();
+    lastActionPressAtRef.current = Date.now();
+  }, []);
+
+  const openCustomer = useCallback((event?: { stopPropagation?: () => void }) => {
+    if (Date.now() - lastActionPressAtRef.current < 900) {
+      event?.stopPropagation?.();
+      return;
+    }
+    onPress();
+  }, [onPress]);
+
   return (
     <Pressable
       style={[styles.item, noTextSelection, { backgroundColor: getBackgroundColor(), borderColor: getBorderColor(), borderWidth: status !== 'none' || isNew ? 2 : 0 }]}
-      onPress={onPress}
+      onPress={openCustomer}
     >
       <View style={styles.idContainer}>
         <Text style={styles.badge}>{customer.numericalId}</Text>
@@ -221,12 +235,14 @@ const CustomerItem = React.memo(function CustomerItem({
         <Pressable
           style={[styles.iconActionBtn, noTextSelection, !hasLocation && styles.iconActionBtnMuted]}
           disabled={isUpdatingLocation}
+          onPressIn={markActionPress}
+          onPressOut={markActionPress}
           onPress={(e) => {
-            e.stopPropagation();
+            markActionPress(e);
             if (hasLocation) onOpenDirections();
           }}
           onLongPress={(e) => {
-            e.stopPropagation();
+            markActionPress(e);
             if (!hasLocation) onSaveCurrentLocation();
           }}
         >
@@ -239,12 +255,14 @@ const CustomerItem = React.memo(function CustomerItem({
         <Pressable
           style={[styles.quickPayBtn, noTextSelection, !canPay && styles.quickPayBtnDisabled]}
           disabled={!canPay}
+          onPressIn={markActionPress}
+          onPressOut={markActionPress}
           onPress={(e) => {
-            e.stopPropagation();
+            markActionPress(e);
             onQuickPay();
           }}
           onLongPress={(e) => {
-            e.stopPropagation();
+            markActionPress(e);
             onManualPay();
           }}
         >
