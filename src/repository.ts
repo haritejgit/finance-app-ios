@@ -7,7 +7,6 @@ import {
   getDoc,
   getDocs,
   limit,
-  orderBy,
   query,
   startAfter,
   serverTimestamp,
@@ -164,7 +163,6 @@ export async function getCustomersPage(
     where("userId", "==", userId),
     where("villageId", "==", villageId),
     where("isActive", "==", true),
-    orderBy("numericalId", "asc"),
   ];
   const pageQuery = cursor
     ? query(coll.customers, ...constraints, startAfter(cursor), limit(pageSize + 1))
