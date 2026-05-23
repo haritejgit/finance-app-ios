@@ -25,6 +25,7 @@
         "ITSAppUsesNonExemptEncryption": false
       }
     },
+    "jsEngine": "hermes",
     "android": {
       "package": "com.haritej.financeapp",
       "versionCode": 1,
@@ -35,6 +36,8 @@
       ]
     },
     "web": {
+      "bundler": "metro",
+      "output": "static",
       "favicon": "./app/src/main/ic_launcher-playstore.png",
       "fonts": [
         "node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf",

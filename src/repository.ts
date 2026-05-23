@@ -7,13 +7,16 @@ import {
   getDoc,
   getDocs,
   limit,
+  orderBy,
   query,
+  startAfter,
   serverTimestamp,
   setDoc,
   updateDoc,
   where,
   writeBatch,
   type DocumentReference,
+  type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { BlockedAadhaar, Customer, Loan, Payment, PaymentMode, Village } from "./types";
@@ -143,6 +146,36 @@ export async function getCustomers(userId: string, villageId: string, useCache =
   const customers = snap.docs.map((d) => d.data() as Customer);
   setCache(cacheKey, customers);
   return customers;
+}
+
+export type CustomerPage = {
+  customers: Customer[];
+  cursor: QueryDocumentSnapshot | null;
+  hasMore: boolean;
+};
+
+export async function getCustomersPage(
+  userId: string,
+  villageId: string,
+  pageSize = 20,
+  cursor?: QueryDocumentSnapshot | null
+): Promise<CustomerPage> {
+  const constraints = [
+    where("userId", "==", userId),
+    where("villageId", "==", villageId),
+    where("isActive", "==", true),
+    orderBy("numericalId", "asc"),
+  ];
+  const pageQuery = cursor
+    ? query(coll.customers, ...constraints, startAfter(cursor), limit(pageSize + 1))
+    : query(coll.customers, ...constraints, limit(pageSize + 1));
+  const snap = await getDocs(pageQuery);
+  const docs = snap.docs.slice(0, pageSize);
+  return {
+    customers: docs.map((d) => d.data() as Customer),
+    cursor: docs[docs.length - 1] ?? null,
+    hasMore: snap.docs.length > pageSize,
+  };
 }
 
 export type CustomerSearchResult = Customer & {

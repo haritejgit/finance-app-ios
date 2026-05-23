@@ -2,6 +2,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import type { QueryDocumentSnapshot } from "firebase/firestore";
 import {
   ActivityIndicator,
   Alert,
@@ -24,9 +25,10 @@ import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import Icon from "../../src/Icon";
 import { colors } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
-import { scanAadhaarCard } from "../../src/utils/aadhaarScanner";
+import { lightImpact } from "../../src/interactions";
+import { scanAadhaarCard, type AadhaarScanResult } from "../../src/utils/aadhaarScanner";
 import { LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
-import { addCustomerWithLoan, addPayment, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary, isAadhaarBlocked, updateCustomer } from "../../src/repository";
+import { addCustomerWithLoan, addPayment, getActiveLoansByCustomerIds, getCustomersPage, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary, isAadhaarBlocked, updateCustomer } from "../../src/repository";
 import { Customer, Loan, Village } from "../../src/types";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -86,6 +88,15 @@ function normalizeAadhar(aadhar?: string) {
   return (aadhar ?? "").replace(/\D/g, "").trim();
 }
 
+function getInitials(name: string) {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "?";
+}
+
 function hasCoordinates(customer: Customer) {
   return typeof customer.latitude === "number" && typeof customer.longitude === "number";
 }
@@ -140,6 +151,7 @@ const CustomerItem = React.memo(function CustomerItem({
   const lastActionPressAtRef = useRef(0);
   const hasLocation = hasCoordinates(customer);
   const canPay = !!loan && loan.balanceAmount > 0 && status !== "paid" && !isPaying;
+  const paidRatio = loan?.totalPayable ? Math.max(0, Math.min(1, 1 - loan.balanceAmount / loan.totalPayable)) : 0;
   const missingDocs = [
     customer.aadharSubmitted === false ? "Aadhar not submitted" : "",
     customer.passportPhotoSubmitted === false ? "Passport photo not submitted" : "",
@@ -194,16 +206,29 @@ const CustomerItem = React.memo(function CustomerItem({
       event?.stopPropagation?.();
       return;
     }
+    lightImpact();
     onPress();
   }, [onPress]);
 
   return (
     <Pressable
-      style={[styles.item, noTextSelection, { backgroundColor: getBackgroundColor(), borderColor: getBorderColor(), borderWidth: status !== 'none' || isNew ? 2 : 0 }]}
+      style={[
+        styles.item,
+        noTextSelection,
+        {
+          backgroundColor: getBackgroundColor(),
+          borderColor: getBorderColor() === "transparent" ? "#E5E7EB" : getBorderColor(),
+          borderWidth: 1,
+          borderLeftWidth: 4,
+        },
+      ]}
       onPress={openCustomer}
     >
       <View style={styles.idContainer}>
-        <Text style={styles.badge}>{customer.numericalId}</Text>
+        <View style={styles.avatarCircle}>
+          <Text style={styles.avatarText}>{getInitials(customer.name)}</Text>
+        </View>
+        <Text style={styles.badge}>#{customer.numericalId}</Text>
         {customer.coId && (
           <Text style={styles.coIdBadge}>C/O: {customer.coId}</Text>
         )}
@@ -220,8 +245,13 @@ const CustomerItem = React.memo(function CustomerItem({
           >
             {customer.name}
           </Text>
-          {loan ? <Text style={styles.balancePill}>Rs.{Math.round(loan.balanceAmount)}</Text> : null}
+        {loan ? <Text style={styles.balancePill}>Rs.{Math.round(loan.balanceAmount)}</Text> : null}
         </View>
+        {loan ? (
+          <View style={styles.balanceTrack}>
+            <View style={[styles.balanceFill, { width: `${paidRatio * 100}%` }]} />
+          </View>
+        ) : null}
         <Text style={styles.phone}>{customer.phone}</Text>
         {customer.coName && (
           <Text style={styles.coName}>{customer.coName}</Text>
@@ -242,6 +272,7 @@ const CustomerItem = React.memo(function CustomerItem({
           onPressOut={markActionPress}
           onPress={(e) => {
             markActionPress(e);
+            lightImpact();
             if (hasLocation) onOpenDirections();
           }}
           onLongPress={(e) => {
@@ -262,6 +293,7 @@ const CustomerItem = React.memo(function CustomerItem({
           onPressOut={markActionPress}
           onPress={(e) => {
             markActionPress(e);
+            lightImpact();
             onQuickPay();
           }}
           onLongPress={(e) => {
@@ -338,25 +370,32 @@ export default function CustomerListScreen() {
   const [manualPaymentMode, setManualPaymentMode] = useState<"CASH" | "PHONE">("CASH");
   const [manualPaymentError, setManualPaymentError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [pageCursor, setPageCursor] = useState<QueryDocumentSnapshot | null>(null);
+  const [hasMoreCustomers, setHasMoreCustomers] = useState(true);
+  const [loadingMoreCustomers, setLoadingMoreCustomers] = useState(false);
   const [aadharWarning, setAadharWarning] = useState("");
   const [aadharChecking, setAadharChecking] = useState(false);
   const [aadharBlocked, setAadharBlocked] = useState(false);
   const [scanningAadhaar, setScanningAadhaar] = useState(false);
+  const [aadhaarInfoDismissed, setAadhaarInfoDismissed] = useState(false);
+  const [aadhaarReview, setAadhaarReview] = useState<AadhaarScanResult | null>(null);
 
-  const reload = useCallback(async (options?: { fresh?: boolean }) => {
+  const reload = useCallback(async () => {
     if (!user || !villageId) {
       setIsLoading(false);
       return;
     }
     try {
       setIsLoading(true);
-      const [list, villageDetails] = await Promise.all([
-        getCustomers(user.uid, villageId, options?.fresh ? false : true),
+      const [page, villageDetails] = await Promise.all([
+        getCustomersPage(user.uid, villageId, 20, null),
         getVillageById(villageId),
       ]);
-      const sortedList = [...list].sort((a, b) => a.numericalId - b.numericalId);
+      const sortedList = [...page.customers].sort((a, b) => a.numericalId - b.numericalId);
       setCustomers(sortedList);
       setVillage(villageDetails);
+      setPageCursor(page.cursor);
+      setHasMoreCustomers(page.hasMore);
 
       const customerIds = sortedList.map((customer) => customer.id);
       const [statuses, loansByCustomer] = await Promise.all([
@@ -371,10 +410,33 @@ export default function CustomerListScreen() {
       setIsLoading(false);
     }
   }, [user, villageId]);
+
+  const loadMoreCustomers = useCallback(async () => {
+    if (!user || !villageId || !hasMoreCustomers || loadingMoreCustomers || isLoading) return;
+    try {
+      setLoadingMoreCustomers(true);
+      const page = await getCustomersPage(user.uid, villageId, 20, pageCursor);
+      const nextCustomers = [...customers, ...page.customers].sort((a, b) => a.numericalId - b.numericalId);
+      setCustomers(nextCustomers);
+      setPageCursor(page.cursor);
+      setHasMoreCustomers(page.hasMore);
+      const customerIds = nextCustomers.map((customer) => customer.id);
+      const [statuses, loansByCustomer] = await Promise.all([
+        getPaymentStatusesForCustomersToday(user.uid, customerIds),
+        getActiveLoansByCustomerIds(user.uid, customerIds),
+      ]);
+      setPaymentStatuses(statuses);
+      setActiveLoans(loansByCustomer);
+    } catch {
+      Alert.alert("Load failed", "Could not load more customers. Please try again.");
+    } finally {
+      setLoadingMoreCustomers(false);
+    }
+  }, [customers, hasMoreCustomers, isLoading, loadingMoreCustomers, pageCursor, user, villageId]);
   useFocusEffect(useCallback(() => {
     // Wait for Firebase Auth to resolve before fetching
     if (authLoading) return;
-    reload({ fresh: true });
+    reload();
   }, [authLoading, reload]));
 
   useEffect(() => {
@@ -445,6 +507,7 @@ export default function CustomerListScreen() {
     setAadharChecking(false);
     setAadharBlocked(false);
     setScanningAadhaar(false);
+    setAadhaarReview(null);
   }, []);
 
   const openAddCustomer = useCallback(() => {
@@ -459,10 +522,11 @@ export default function CustomerListScreen() {
 
   const handleAadhaarScan = useCallback(async () => {
     try {
+      lightImpact();
       setScanningAadhaar(true);
       const result = await scanAadhaarCard();
       if (!result) {
-        Alert.alert("Scan Failed", "Could not read Aadhaar card. Please fill details manually.");
+        Alert.alert("Scan failed", "Could not read card clearly. Please fill manually.");
         return;
       }
       const scannedAadhaar = normalizeAadhar(result.aadhaar ?? "");
@@ -470,14 +534,15 @@ export default function CustomerListScreen() {
         ...current,
         name: result.name || current.name,
         aadhar: scannedAadhaar || current.aadhar,
+        phone: result.phone || current.phone,
         locationDesc: result.location_desc || current.locationDesc,
       }));
+      setAadhaarReview(result);
       if (scannedAadhaar.length === 12) {
         const blocked = await isAadhaarBlocked(scannedAadhaar);
         setAadharBlocked(blocked);
         setAadharWarning(blocked ? "This Aadhaar is blocked. Cannot register." : "");
       }
-      Alert.alert("Scan Successful", "Aadhaar details have been filled automatically. Please verify before submitting.");
     } finally {
       setScanningAadhaar(false);
     }
@@ -773,6 +838,16 @@ export default function CustomerListScreen() {
             updateCellsBatchingPeriod={50}
             disableVirtualization={false}
             legacyImplementation={false}
+            onEndReached={loadMoreCustomers}
+            onEndReachedThreshold={0.45}
+            ListFooterComponent={
+              loadingMoreCustomers ? (
+                <View style={styles.loadingMore}>
+                  <ActivityIndicator size="small" color={colors.white} />
+                  <Text style={styles.loadingText}>Loading more...</Text>
+                </View>
+              ) : null
+            }
             ListEmptyComponent={
               isLoading ? (
                 <View style={styles.loadingContainer}>
@@ -826,6 +901,21 @@ export default function CustomerListScreen() {
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
             <View style={[styles.modalHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>New Customer Registration</Text>
+              <Pressable
+                accessibilityLabel="Scan Aadhaar"
+                onPress={handleAadhaarScan}
+                disabled={scanningAadhaar}
+                style={[styles.scanHeaderBtn, scanningAadhaar && styles.saveDisabled]}
+              >
+                {scanningAadhaar ? (
+                  <ActivityIndicator size="small" color={colors.white} />
+                ) : (
+                  <>
+                    <Icon name="id-card-outline" size={15} color={colors.white} />
+                    <Text style={styles.scanHeaderText}>Scan Aadhaar</Text>
+                  </>
+                )}
+              </Pressable>
               <Pressable onPress={closeAddCustomer} style={styles.closeBtn}>
                 <Text style={[styles.closeBtnText, { color: colors.gray }]}>✕</Text>
               </Pressable>
@@ -833,6 +923,24 @@ export default function CustomerListScreen() {
             
             <View style={styles.formContainer}>
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.formScrollContent}>
+                {!aadhaarInfoDismissed ? (
+                  <View style={styles.privacyBanner}>
+                    <Icon name="shield-checkmark-outline" size={18} color={colors.primary} />
+                    <Text style={styles.privacyText}>Scanning only reads Name, Aadhaar number, and address. No data is sent to any server.</Text>
+                    <Pressable onPress={() => setAadhaarInfoDismissed(true)} style={styles.privacyOkBtn}>
+                      <Text style={styles.privacyOkText}>OK</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+                {aadhaarReview ? (
+                  <View style={styles.reviewCard}>
+                    <Text style={styles.reviewTitle}>Review scanned details before saving</Text>
+                    <Text style={styles.reviewText}>Name: {aadhaarReview.name || "Not detected"}</Text>
+                    <Text style={styles.reviewText}>Aadhaar: {aadhaarReview.aadhaar || "Not detected"}</Text>
+                    <Text style={styles.reviewText}>Phone: {aadhaarReview.phone || "Not detected"}</Text>
+                    <Text style={styles.reviewText}>Address: {aadhaarReview.location_desc || "Not detected"}</Text>
+                  </View>
+                ) : null}
                 <View style={styles.formRow}>
                   <View style={styles.formColumn}>
                     <Text style={[styles.label, { color: colors.text }]}>Name *</Text>
@@ -1098,7 +1206,7 @@ export default function CustomerListScreen() {
                       );
                       setShowAdd(false);
                       resetAddCustomerForm();
-                      await reload({ fresh: true });
+                      await reload();
                       Alert.alert('✅ Success', `Customer "${createdCustomer.name}" has been created successfully!`);
                     }}
                     disabled={!form.name || !form.phone || !form.principal || aadharBlocked}
@@ -1193,8 +1301,10 @@ const styles = StyleSheet.create({
   routeSummaryValue: { color: colors.white, fontSize: 14, fontWeight: "900", marginTop: 1 },
   list: { flex: 1 },
   listContent: { paddingBottom: 20 },
-  item: { backgroundColor: colors.white, borderRadius: 18, padding: 13, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 3 },
-  badge: { width: 34, height: 34, textAlign: "center", textAlignVertical: "center", borderRadius: 12, backgroundColor: "#eaf2ff", color: colors.blue2, fontSize: 13, fontWeight: "800" },
+  item: { backgroundColor: colors.white, borderRadius: 16, padding: 13, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4, borderLeftWidth: 4, borderLeftColor: colors.teal },
+  avatarCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.mint, alignItems: "center", justifyContent: "center" },
+  avatarText: { color: colors.teal, fontSize: 13, fontWeight: "900" },
+  badge: { textAlign: "center", color: colors.blue2, fontSize: 11, fontWeight: "900" },
   idContainer: { alignItems: "center", gap: 4 },
   coIdBadge: { fontSize: 10, textAlign: "center", backgroundColor: "#fff3e0", color: "#f57c00", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, fontWeight: "600" },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -1202,6 +1312,8 @@ const styles = StyleSheet.create({
   namePaid: { color: "#16803a" },
   nameDue: { color: "#dc3545" },
   balancePill: { color: colors.teal, backgroundColor: colors.mint, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, fontSize: 10, fontWeight: "900", overflow: "hidden" },
+  balanceTrack: { height: 5, borderRadius: 999, backgroundColor: "#E5E7EB", overflow: "hidden", marginTop: 6, marginBottom: 5 },
+  balanceFill: { height: "100%", borderRadius: 999, backgroundColor: colors.teal },
   phone: { color: "#777", fontSize: 13 },
   coName: { color: "#666", fontSize: 11, fontStyle: "italic", marginTop: 1 },
   missingDocs: { color: "#8b8f97", fontSize: 11, fontWeight: "600", marginTop: 2 },
@@ -1222,6 +1334,7 @@ const styles = StyleSheet.create({
   emptySubText: { color: "rgba(255,255,255,0.7)", fontSize: 14 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60, gap: 12 },
   loadingText: { color: colors.white, fontSize: 14, opacity: 0.8 },
+  loadingMore: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12 },
   fab: { 
     position: 'absolute', 
     right: 16, 
@@ -1240,12 +1353,21 @@ const styles = StyleSheet.create({
   },
   fabIcon: { color: colors.white, fontSize: 24, fontWeight: '300' },
   modal: { flex: 1, backgroundColor: "#f7f9fc" },
-  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10, backgroundColor: colors.white, borderBottomWidth: 1, borderBottomColor: "#e0e0e0" },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10, backgroundColor: colors.white, borderBottomWidth: 1, borderBottomColor: "#e0e0e0", gap: 8 },
   modalTitle: { fontSize: 24, fontWeight: "700", color: "#333", flex: 1 },
+  scanHeaderBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.blue1, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 9 },
+  scanHeaderText: { color: colors.white, fontSize: 12, fontWeight: "900" },
   closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#f0f0f0", justifyContent: "center", alignItems: "center" },
   closeBtnText: { fontSize: 18, color: "#666", fontWeight: "600" },
   formContainer: { flex: 1, padding: 20 },
   formScrollContent: { paddingBottom: 20 },
+  privacyBanner: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#EFF6FF", borderColor: "#BFDBFE", borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 14 },
+  privacyText: { flex: 1, color: colors.ink, fontSize: 12, lineHeight: 17, fontWeight: "600" },
+  privacyOkBtn: { borderRadius: 999, backgroundColor: colors.blue1, paddingHorizontal: 12, paddingVertical: 7 },
+  privacyOkText: { color: colors.white, fontSize: 11, fontWeight: "900" },
+  reviewCard: { backgroundColor: "#ECFDF5", borderColor: "#A7F3D0", borderLeftColor: colors.teal, borderLeftWidth: 4, borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 14, gap: 4 },
+  reviewTitle: { color: colors.ink, fontSize: 13, fontWeight: "900", marginBottom: 2 },
+  reviewText: { color: colors.gray, fontSize: 12, fontWeight: "600" },
   formRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
   formColumn: { flex: 1 },
   label: { fontSize: 14, fontWeight: "600", color: "#333", marginBottom: 6 },

@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "./firebase";
 import { Customer, Loan, Payment, Village } from "./types";
@@ -50,6 +51,7 @@ export type DashboardAnalytics = {
 };
 
 const DAY = 24 * 60 * 60 * 1000;
+const DASHBOARD_CACHE_PREFIX = "dashboardAnalytics:";
 
 function toMillis(value: any) {
   if (typeof value === "number") return value;
@@ -112,12 +114,30 @@ async function getUserCollection<T>(userId: string, name: string): Promise<T[]> 
 }
 
 export async function getDashboardAnalytics(userId: string): Promise<DashboardAnalytics> {
-  const [villages, customersRaw, loansRaw, paymentsRaw] = await Promise.all([
-    getUserCollection<Village>(userId, "villages"),
-    getUserCollection<Customer>(userId, "customers"),
-    getUserCollection<Loan>(userId, "loans"),
-    getUserCollection<Payment>(userId, "payments"),
-  ]);
+  const cacheKey = `${DASHBOARD_CACHE_PREFIX}${userId}:${startOfDay(Date.now())}`;
+  let cached: DashboardAnalytics | null = null;
+  try {
+    const cachedValue = await AsyncStorage.getItem(cacheKey);
+    cached = cachedValue ? (JSON.parse(cachedValue) as DashboardAnalytics) : null;
+  } catch {
+    cached = null;
+  }
+
+  let villages: Village[];
+  let customersRaw: Customer[];
+  let loansRaw: Loan[];
+  let paymentsRaw: Payment[];
+  try {
+    [villages, customersRaw, loansRaw, paymentsRaw] = await Promise.all([
+      getUserCollection<Village>(userId, "villages"),
+      getUserCollection<Customer>(userId, "customers"),
+      getUserCollection<Loan>(userId, "loans"),
+      getUserCollection<Payment>(userId, "payments"),
+    ]);
+  } catch (error) {
+    if (cached) return cached;
+    throw error;
+  }
 
   const customers = customersRaw.filter((customer) => customer.isActive !== false);
   const customerById = new Map(customers.map((customer) => [customer.id, customer]));
@@ -275,7 +295,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
       : "AI insight: no urgent overdue pattern is visible in current active loans.",
   ];
 
-  return {
+  const dashboardAnalytics: DashboardAnalytics = {
     totals: {
       totalCollection,
       pendingAmount,
@@ -295,4 +315,10 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
     insights,
     aiInsights,
   };
+  try {
+    await AsyncStorage.setItem(cacheKey, JSON.stringify(dashboardAnalytics));
+  } catch {
+    // Cache failures should not block live dashboard data.
+  }
+  return dashboardAnalytics;
 }
