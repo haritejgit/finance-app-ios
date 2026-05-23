@@ -1,11 +1,14 @@
 import {
+  addDoc,
   collection,
   deleteField,
   deleteDoc,
   doc,
   getDoc,
   getDocs,
+  limit,
   query,
+  serverTimestamp,
   setDoc,
   updateDoc,
   where,
@@ -13,13 +16,14 @@ import {
   type DocumentReference,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { Customer, Loan, Payment, PaymentMode, Village } from "./types";
+import { BlockedAadhaar, Customer, Loan, Payment, PaymentMode, Village } from "./types";
 
 const coll = {
   villages: collection(db, "villages"),
   customers: collection(db, "customers"),
   loans: collection(db, "loans"),
   payments: collection(db, "payments"),
+  blockedAadhaar: collection(db, "blocked_aadhaar"),
 };
 
 // Simple in-memory cache for better performance
@@ -149,8 +153,8 @@ export type CustomerSearchResult = Customer & {
 
 export async function getAllActiveCustomersWithVillages(userId: string): Promise<CustomerSearchResult[]> {
   const [customersSnap, villagesSnap] = await Promise.all([
-    getDocs(query(coll.customers, where("userId", "==", userId))),
-    getDocs(query(coll.villages, where("userId", "==", userId))),
+    getDocs(query(coll.customers, where("userId", "==", userId), limit(1500))),
+    getDocs(query(coll.villages, where("userId", "==", userId), limit(500))),
   ]);
 
   const villagesById = new Map(
@@ -320,7 +324,8 @@ export async function getActiveLoansByCustomerIds(userId: string, customerIds: s
   const q = query(
     coll.loans,
     where("userId", "==", userId),
-    where("status", "==", "ACTIVE")
+    where("status", "==", "ACTIVE"),
+    limit(1500)
   );
   const snap = await getDocs(q);
   return snap.docs
@@ -361,7 +366,8 @@ export async function getPaymentsForCustomer(userId: string, customerId: string)
   const fastQ = query(
     coll.payments,
     where("userId", "==", userId),
-    where("customerId", "==", customerId)
+    where("customerId", "==", customerId),
+    limit(500)
   );
   const fastSnap = await getDocs(fastQ);
   if (!fastSnap.empty) {
@@ -375,7 +381,7 @@ export async function getPaymentsForCustomer(userId: string, customerId: string)
   const loansSnap = await getDocs(loansQ);
   const loanIds = new Set(loansSnap.docs.map((d) => (d.data() as Loan).id));
   if (loanIds.size === 0) return [] as Payment[];
-  const legacyQ = query(coll.payments, where("userId", "==", userId));
+  const legacyQ = query(coll.payments, where("userId", "==", userId), limit(1500));
   const legacySnap = await getDocs(legacyQ);
   return legacySnap.docs
     .map((d) => d.data() as Payment)
@@ -678,7 +684,7 @@ export async function getCustomerByAadhar(userId: string, aadhar: string, exclud
   const normalizedAadhar = normalizeAadhar(aadhar);
   if (!normalizedAadhar) return null;
 
-  const q = query(coll.customers, where("userId", "==", userId));
+  const q = query(coll.customers, where("userId", "==", userId), limit(1500));
   const snap = await getDocs(q);
   return snap.docs
     .map((d) => d.data() as Customer)
@@ -697,4 +703,32 @@ export async function getCustomerLoanSummary(userId: string, aadhar: string): Pr
   
   const activeLoan = await getActiveLoan(userId, customer.id);
   return { customer, hasActiveLoan: !!activeLoan };
+}
+
+export async function blockAadhaar(aadhaar: string, reason: string, userId: string): Promise<void> {
+  const normalizedAadhaar = normalizeAadhar(aadhaar);
+  if (normalizedAadhaar.length !== 12) throw new Error("Aadhaar must be exactly 12 digits.");
+  await addDoc(coll.blockedAadhaar, {
+    aadhaar: normalizedAadhaar,
+    reason: cleanText(reason),
+    blocked_at: serverTimestamp(),
+    blocked_by: userId,
+  });
+}
+
+export async function isAadhaarBlocked(aadhaar: string): Promise<boolean> {
+  const normalizedAadhaar = normalizeAadhar(aadhaar);
+  if (normalizedAadhaar.length !== 12) return false;
+  const q = query(coll.blockedAadhaar, where("aadhaar", "==", normalizedAadhaar), limit(1));
+  const snap = await getDocs(q);
+  return !snap.empty;
+}
+
+export async function getBlockedAadhaars(): Promise<BlockedAadhaar[]> {
+  const snap = await getDocs(query(coll.blockedAadhaar, limit(500)));
+  return snap.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as Omit<BlockedAadhaar, "id">) }));
+}
+
+export async function unblockAadhaar(docId: string): Promise<void> {
+  await deleteDoc(doc(db, "blocked_aadhaar", docId));
 }

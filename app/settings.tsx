@@ -7,6 +7,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { useAuth } from "../src/auth-context";
+import { AnimatedScreen } from "../src/components/AnimatedScreen";
 import { db } from "../src/firebase";
 import { colors as baseColors, getGradient } from "../src/theme";
 import { useTheme } from "../src/theme-context";
@@ -362,6 +363,7 @@ export default function SettingsScreen() {
   };
 
   return (
+    <AnimatedScreen style={styles.root}>
     <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
       <SafeAreaView style={styles.safe}>
         <View style={styles.content}>
@@ -440,6 +442,7 @@ export default function SettingsScreen() {
               style={[styles.exportBtn, isExporting && styles.exportBtnDisabled]}
               onPress={exportWholeData}
               disabled={isExporting}
+              accessibilityLabel="Export whole data"
             >
               {isExporting ? (
                 <ActivityIndicator color={colors.white} />
@@ -448,6 +451,37 @@ export default function SettingsScreen() {
               )}
               <Text style={styles.exportText}>{isExporting ? "Exporting Whole Data..." : "Export Whole Data"}</Text>
             </Pressable>
+
+            <View style={[styles.securityPanel, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
+              <Pressable
+                accessibilityLabel="Open Finance AI Assistant"
+                style={styles.settingsLink}
+                onPress={() => router.push("/ai" as any)}
+              >
+                <View style={[styles.infoIcon, { backgroundColor: colors.primarySoft }]}>
+                  <Icon name="sparkles-outline" size={18} color={colors.primary} />
+                </View>
+                <View style={styles.infoCopy}>
+                  <Text style={[styles.label, { color: colors.textSecondary }]}>Finance AI Assistant</Text>
+                  <Text style={[styles.value, { color: colors.text }]}>Ask about collections and dues</Text>
+                </View>
+                <Icon name="arrow-forward" size={18} color={colors.textMuted} />
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Open Block Aadhaar"
+                style={[styles.settingsLink, { borderTopColor: colors.border }]}
+                onPress={() => router.push("/block-aadhaar" as any)}
+              >
+                <View style={[styles.infoIcon, { backgroundColor: colors.destructiveSoft }]}>
+                  <Icon name="lock-closed-outline" size={18} color={colors.error} />
+                </View>
+                <View style={styles.infoCopy}>
+                  <Text style={[styles.label, { color: colors.textSecondary }]}>Block Aadhaar</Text>
+                  <Text style={[styles.value, { color: colors.text }]}>Prevent fraudulent registrations</Text>
+                </View>
+                <Icon name="arrow-forward" size={18} color={colors.textMuted} />
+              </Pressable>
+            </View>
 
             <View style={[styles.securityPanel, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
               <View style={styles.securityHeader}>
@@ -496,6 +530,7 @@ export default function SettingsScreen() {
         </View>
       </SafeAreaView>
     </LinearGradient>
+    </AnimatedScreen>
   );
 }
 
@@ -526,6 +561,7 @@ const styles = StyleSheet.create({
   logoutBtn: { marginTop: 8, borderRadius: 14, backgroundColor: baseColors.coral, padding: 15, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
   logoutText: { color: baseColors.white, fontWeight: "800", fontSize: 15 },
   securityPanel: { backgroundColor: baseColors.surfaceTint, borderRadius: 16, borderWidth: 1, borderColor: baseColors.border, padding: 14, gap: 10 },
+  settingsLink: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8, borderTopWidth: 0 },
   securityHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
   securityCopy: { color: baseColors.gray, fontSize: 12, lineHeight: 17, fontWeight: "700" },
   backupRow: { flexDirection: "row", gap: 10 },

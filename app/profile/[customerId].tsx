@@ -19,6 +19,8 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useAuth } from "../../src/auth-context";
+import { AnimatedListItem } from "../../src/components/AnimatedListItem";
+import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import Icon from "../../src/Icon";
 import { LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
 import {
@@ -29,6 +31,7 @@ import {
   getCustomerByAadhar,
   getCustomerById,
   getPaymentsForCustomer,
+  isAadhaarBlocked,
   markDue,
   renewLoan,
   updateCustomer,
@@ -53,35 +56,37 @@ const PaymentHistory = memo(function PaymentHistory({
   onEdit?: (payment: any) => void;
   onDelete?: (payment: any) => void;
 }) {
+  const { colors } = useTheme();
   if (payments.length === 0) {
     return (
       <View style={styles.emptyHistoryContainer}>
-        <Icon name="document-text-outline" size={48} color="rgba(255,255,255,0.7)" />
-        <Text style={styles.emptyHistoryTitle}>No Transactions</Text>
-        <Text style={styles.emptyHistorySubtitle}>Payment history will appear here</Text>
+        <Icon name="document-text-outline" size={48} color={colors.textMuted} />
+        <Text style={[styles.emptyHistoryTitle, { color: colors.text }]}>No Transactions</Text>
+        <Text style={[styles.emptyHistorySubtitle, { color: colors.textSecondary }]}>Payment history will appear here</Text>
       </View>
     );
   }
 
   return (
     <>
-      {payments.map((p) => (
-        <View key={p.id} style={styles.paymentCard}>
+      {payments.map((p, index) => (
+        <AnimatedListItem key={p.id} index={index}>
+        <View style={[styles.paymentCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.paymentHeader}>
             <View style={styles.paymentDateContainer}>
-              <Text style={styles.paymentDate}>
+              <Text style={[styles.paymentDate, { color: colors.text }]}>
                 {new Date(p.paymentDate).toLocaleDateString('en-US', {
                   weekday: 'short',
                   month: 'short',
                   day: 'numeric',
                 })}
               </Text>
-              <Text style={styles.paymentYear}>
+              <Text style={[styles.paymentYear, { color: colors.textSecondary }]}>
                 {new Date(p.paymentDate).getFullYear()}
               </Text>
             </View>
             <View style={styles.paymentAmountContainer}>
-              <Text style={styles.paymentAmount}>Rs.{p.amountPaid.toFixed(2)}</Text>
+              <Text style={[styles.paymentAmount, { color: colors.text }]}>Rs.{p.amountPaid.toFixed(2)}</Text>
               <View style={[styles.paymentTypeBadge, {
                 backgroundColor: (p.paymentType as PaymentType) === "DUE" ? colors.missedRed : colors.paidGreen,
               }]}>
@@ -92,10 +97,10 @@ const PaymentHistory = memo(function PaymentHistory({
             </View>
           </View>
           {p.paymentMode === "CASH" && (
-            <Text style={styles.paymentMode}>Cash Payment</Text>
+            <Text style={[styles.paymentMode, { color: colors.textSecondary }]}>Cash Payment</Text>
           )}
           {p.paymentMode === "PHONE" && (
-            <Text style={styles.paymentMode}>Phone Payment</Text>
+            <Text style={[styles.paymentMode, { color: colors.textSecondary }]}>Phone Payment</Text>
           )}
           {/* Edit/Delete buttons for regular payments only */}
           {p.paymentType === "REGULAR" && onEdit && onDelete && (
@@ -109,6 +114,7 @@ const PaymentHistory = memo(function PaymentHistory({
             </View>
           )}
         </View>
+        </AnimatedListItem>
       ))}
     </>
   );
@@ -246,6 +252,8 @@ export default function ProfileScreen() {
   // Combined customer & loan edit state
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState(createEmptyEditForm);
+  const [editAadhaarBlocked, setEditAadhaarBlocked] = useState(false);
+  const [editAadhaarWarning, setEditAadhaarWarning] = useState("");
 
   const makePhoneCall = (phoneNumber: string) => {
     const phoneUrl = `tel:${phoneNumber}`;
@@ -272,8 +280,22 @@ export default function ProfileScreen() {
     });
     setEditCoordinateError("");
     setEditLocationStatus("");
+    setEditAadhaarBlocked(false);
+    setEditAadhaarWarning("");
     setEditOpen(true);
   };
+
+  const updateEditAadhaar = useCallback(async (text: string) => {
+    const normalized = text.replace(/\D/g, "").slice(0, 12);
+    setEditForm(prev => ({ ...prev, aadhar: normalized }));
+    setEditAadhaarBlocked(false);
+    setEditAadhaarWarning("");
+    if (normalized.length === 12) {
+      const blocked = await isAadhaarBlocked(normalized);
+      setEditAadhaarBlocked(blocked);
+      setEditAadhaarWarning(blocked ? "This Aadhaar is blocked. Customer edits cannot be saved with this number." : "");
+    }
+  }, []);
 
   // Function to open Google Maps with customer location
   const openGoogleMaps = () => {
@@ -577,6 +599,12 @@ export default function ProfileScreen() {
     setEditLocationStatus("");
 
     if (normalizedAadhar) {
+      if (await isAadhaarBlocked(normalizedAadhar)) {
+        setEditAadhaarBlocked(true);
+        setEditAadhaarWarning("This Aadhaar is blocked. Customer edits cannot be saved with this number.");
+        Alert.alert("Aadhaar Blocked", "This Aadhaar card has been blocked. Customer registration cannot proceed.");
+        return;
+      }
       const existingCustomer = await getCustomerByAadhar(user.uid, normalizedAadhar, customer.id);
       if (existingCustomer && existingCustomer.id !== customer.id) {
         Alert.alert(
@@ -630,6 +658,7 @@ export default function ProfileScreen() {
   };
 
   return (
+    <AnimatedScreen style={styles.root}>
     <LinearGradient colors={[colors.blue1, colors.blue2]} style={styles.root}>
       <SafeAreaView style={styles.safe}>
         {isLoading && (
@@ -838,9 +867,9 @@ export default function ProfileScreen() {
 
       <Modal visible={payOpen} transparent animationType="slide">
         <KeyboardAvoidingView style={styles.modalWrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Record Payment</Text>
-            <TextInput placeholder="Amount" value={amount} onChangeText={setAmount} style={styles.input} keyboardType="numeric" />
+          <View style={[styles.modal, { backgroundColor: colors.card }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Record Payment</Text>
+            <TextInput placeholder="Amount" placeholderTextColor={colors.textMuted} value={amount} onChangeText={setAmount} style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]} keyboardType="numeric" />
             {Platform.OS === 'web' ? (
               <input
                 type="date"
@@ -862,9 +891,10 @@ export default function ProfileScreen() {
               <>
                 <TextInput
                   placeholder="Payment Date (YYYY-MM-DD)"
+                  placeholderTextColor={colors.textMuted}
                   value={paymentDateInput}
                   onChangeText={setPaymentDateInput}
-                  style={styles.input}
+                  style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
                   autoCapitalize="none"
                 />
                 {parseDateInput(paymentDateInput) && (
@@ -942,8 +972,8 @@ export default function ProfileScreen() {
 
       <Modal visible={dueOpen} transparent animationType="slide">
         <View style={styles.modalWrap}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Mark as Due</Text>
+          <View style={[styles.modal, { backgroundColor: colors.card }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Mark as Due</Text>
             {Platform.OS === 'web' ? (
               <input
                 type="date"
@@ -965,9 +995,10 @@ export default function ProfileScreen() {
               <>
                 <TextInput
                   placeholder="Due Date (YYYY-MM-DD)"
+                  placeholderTextColor={colors.textMuted}
                   value={dueDateInput}
                   onChangeText={setDueDateInput}
-                  style={styles.input}
+                  style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
                   autoCapitalize="none"
                 />
                 {parseDateInput(dueDateInput) && (
@@ -1038,9 +1069,9 @@ export default function ProfileScreen() {
 
       <Modal visible={renewOpen} transparent animationType="slide">
         <KeyboardAvoidingView style={styles.modalWrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Renew Loan</Text>
-            <TextInput placeholder="New Principal Amount" value={renewAmount} onChangeText={setRenewAmount} style={styles.input} keyboardType="numeric" />
+          <View style={[styles.modal, { backgroundColor: colors.card }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Renew Loan</Text>
+            <TextInput placeholder="New Principal Amount" placeholderTextColor={colors.textMuted} value={renewAmount} onChangeText={setRenewAmount} style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]} keyboardType="numeric" />
             <Pressable
               style={styles.primary}
               onPress={async () => {
@@ -1060,79 +1091,88 @@ export default function ProfileScreen() {
 
       <Modal visible={editOpen} transparent animationType="slide">
         <KeyboardAvoidingView style={styles.modalWrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Edit Customer & Loan</Text>
+          <View style={[styles.modal, { backgroundColor: colors.card }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Customer & Loan</Text>
             
             <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
               {/* Customer Section */}
-              <Text style={styles.sectionLabel}>Customer Details</Text>
+              <Text style={[styles.sectionLabel, { color: colors.primary }]}>Customer Details</Text>
               
               <TextInput
                 placeholder="Customer Name"
+                placeholderTextColor={colors.textMuted}
                 value={editForm.name}
                 onChangeText={(text) => setEditForm(prev => ({ ...prev, name: text }))}
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
               />
               
               <TextInput
                 placeholder="Phone Number"
+                placeholderTextColor={colors.textMuted}
                 value={editForm.phone}
                 onChangeText={(text) => setEditForm(prev => ({ ...prev, phone: text }))}
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
                 keyboardType="phone-pad"
               />
               
               <TextInput
                 placeholder="Aadhar Number"
+                placeholderTextColor={colors.textMuted}
                 value={editForm.aadhar}
-                onChangeText={(text) => setEditForm(prev => ({ ...prev, aadhar: text }))}
-                style={styles.input}
+                onChangeText={updateEditAadhaar}
+                style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: editAadhaarBlocked ? colors.error : colors.border, color: colors.text }]}
+                keyboardType="numeric"
+                maxLength={12}
               />
+              {editAadhaarWarning ? <Text style={[styles.errorText, { color: colors.error }]}>{editAadhaarWarning}</Text> : null}
 
               <TextInput
                 placeholder="Location Description"
+                placeholderTextColor={colors.textMuted}
                 value={editForm.locationDesc}
                 onChangeText={(text) => setEditForm(prev => ({ ...prev, locationDesc: text }))}
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
               />
 
               {/* Location Update Section */}
-              <View style={styles.locationUpdateSection}>
-                <Text style={styles.locationLabel}>Customer Coordinates</Text>
+              <View style={[styles.locationUpdateSection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
+                <Text style={[styles.locationLabel, { color: colors.text }]}>Customer Coordinates</Text>
                 {editForm.latitude.trim() && editForm.longitude.trim() ? (
-                  <Text style={styles.locationCoords}>
-                    <Icon name="location" size={12} color="#666" /> {editForm.latitude.trim()}, {editForm.longitude.trim()}
+                  <Text style={[styles.locationCoords, { color: colors.success }]}>
+                    <Icon name="location" size={12} color={colors.textSecondary} /> {editForm.latitude.trim()}, {editForm.longitude.trim()}
                   </Text>
                 ) : (
-                  <Text style={styles.locationNotSet}>No location set</Text>
+                  <Text style={[styles.locationNotSet, { color: colors.textMuted }]}>No location set</Text>
                 )}
                 <View style={styles.coordinateRow}>
                   <TextInput
                     placeholder="Latitude"
+                    placeholderTextColor={colors.textMuted}
                     value={editForm.latitude}
                     onChangeText={(text) => {
                       setEditForm(prev => ({ ...prev, latitude: text }));
                       setEditCoordinateError("");
                       setEditLocationStatus("");
                     }}
-                    style={[styles.input, styles.coordinateInput]}
+                    style={[styles.input, styles.coordinateInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
                     keyboardType="numbers-and-punctuation"
                     autoCapitalize="none"
                   />
                   <TextInput
                     placeholder="Longitude"
+                    placeholderTextColor={colors.textMuted}
                     value={editForm.longitude}
                     onChangeText={(text) => {
                       setEditForm(prev => ({ ...prev, longitude: text }));
                       setEditCoordinateError("");
                       setEditLocationStatus("");
                     }}
-                    style={[styles.input, styles.coordinateInput]}
+                    style={[styles.input, styles.coordinateInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
                     keyboardType="numbers-and-punctuation"
                     autoCapitalize="none"
                   />
                 </View>
-                <Text style={styles.coordinateHint}>Enter coordinates manually, or use current device location.</Text>
+                <Text style={[styles.coordinateHint, { color: colors.textSecondary }]}>Enter coordinates manually, or use current device location.</Text>
                 {editCoordinateError ? <Text style={styles.errorText}>{editCoordinateError}</Text> : null}
                 {editLocationStatus ? <Text style={styles.successText}>{editLocationStatus}</Text> : null}
                 <Pressable 
@@ -1149,34 +1189,37 @@ export default function ProfileScreen() {
               
               <TextInput
                 placeholder="C/O Name"
+                placeholderTextColor={colors.textMuted}
                 value={editForm.coName}
                 onChangeText={(text) => setEditForm(prev => ({ ...prev, coName: text }))}
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
               />
               
               <TextInput
                 placeholder="C/O ID"
+                placeholderTextColor={colors.textMuted}
                 value={editForm.coId}
                 onChangeText={(text) => setEditForm(prev => ({ ...prev, coId: text }))}
-                style={styles.input}
+                style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
                 keyboardType="numeric"
               />
 
               {/* Loan Section */}
               {loan && (
                 <>
-                  <Text style={styles.sectionLabel}>Loan Details</Text>
+                  <Text style={[styles.sectionLabel, { color: colors.primary }]}>Loan Details</Text>
                   
                   <TextInput
                     placeholder="Loan Amount (Principal)"
+                    placeholderTextColor={colors.textMuted}
                     value={editForm.loanAmount}
                     onChangeText={(text) => setEditForm(prev => ({ ...prev, loanAmount: text }))}
-                    style={styles.input}
+                    style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
                     keyboardType="numeric"
                   />
                   
                   {/* Date Picker Section */}
-                  <Text style={styles.inputLabel}>Loan Start Date</Text>
+                  <Text style={[styles.inputLabel, { color: colors.text }]}>Loan Start Date</Text>
                   {Platform.OS === "web" ? (
                     <input
                       type="date"
@@ -1236,7 +1279,7 @@ export default function ProfileScreen() {
                 <Pressable style={styles.cancelModalBtn} onPress={() => setEditOpen(false)}>
                   <Text style={styles.cancelModalBtnText}>Cancel</Text>
                 </Pressable>
-                <Pressable style={styles.primary} onPress={confirmEdit}>
+                <Pressable style={[styles.primary, editAadhaarBlocked && { opacity: 0.55 }]} onPress={confirmEdit} disabled={editAadhaarBlocked}>
                   <Text style={styles.primaryText}>Save Changes</Text>
                 </Pressable>
               </View>
@@ -1248,13 +1291,14 @@ export default function ProfileScreen() {
       {/* Edit Payment Modal */}
       <Modal visible={editPaymentOpen} transparent animationType="slide">
         <KeyboardAvoidingView style={styles.modalWrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Edit Payment</Text>
+          <View style={[styles.modal, { backgroundColor: colors.card }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Payment</Text>
             <TextInput 
               placeholder="Amount" 
+              placeholderTextColor={colors.textMuted}
               value={editPaymentAmount} 
               onChangeText={setEditPaymentAmount} 
-              style={styles.input} 
+              style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
               keyboardType="numeric" 
             />
             {Platform.OS === 'web' ? (
@@ -1419,6 +1463,7 @@ export default function ProfileScreen() {
         </View>
       </Modal>
     </LinearGradient>
+    </AnimatedScreen>
   );
 }
 
@@ -1516,7 +1561,7 @@ const styles = StyleSheet.create({
   emptyHistoryIcon: { fontSize: 48, marginBottom: 16 },
   emptyHistoryTitle: { fontSize: 18, fontWeight: "700", color: colors.white, marginBottom: 8 },
   emptyHistorySubtitle: { fontSize: 14, color: "rgba(255,255,255,0.8)", textAlign: "center" },
-  paymentCard: { backgroundColor: colors.white, borderRadius: 16, padding: 16, marginBottom: 12 },
+  paymentCard: { backgroundColor: colors.white, borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1 },
   paymentHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 },
   paymentDateContainer: { alignItems: "flex-start" },
   paymentDate: { fontSize: 16, fontWeight: "700", color: "#333" },

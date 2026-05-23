@@ -5,6 +5,7 @@ import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, Dimensions, Easing, StyleSheet, Text, TextInput, View, ActivityIndicator, Pressable, ScrollView } from "react-native";
 import { useAuth } from "../src/auth-context";
+import { AnimatedScreen } from "../src/components/AnimatedScreen";
 import { colors as baseColors, getGradient } from "../src/theme";
 import { useTheme } from "../src/theme-context";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -25,6 +26,7 @@ export default function LoginScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const intro = useRef(new Animated.Value(0)).current;
+  const buttonScale = useRef(new Animated.Value(0.8)).current;
   const [, response, promptAsync] = Google.useIdTokenAuthRequest({
     iosClientId: process.env.EXPO_PUBLIC_FIREBASE_IOS_GOOGLE_CLIENT_ID,
     webClientId: process.env.EXPO_PUBLIC_FIREBASE_WEB_GOOGLE_CLIENT_ID,
@@ -55,7 +57,13 @@ export default function LoginScreen() {
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-  }, [intro]);
+    Animated.spring(buttonScale, {
+      toValue: 1,
+      friction: 6,
+      tension: 90,
+      useNativeDriver: true,
+    }).start();
+  }, [buttonScale, intro]);
 
   const onSubmit = async () => {
     try {
@@ -82,6 +90,7 @@ export default function LoginScreen() {
   const title = forgot ? "Reset password" : isSignUp ? "Create account" : "Welcome back";
 
   return (
+    <AnimatedScreen style={styles.root}>
     <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
       <SafeAreaView style={styles.safe}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
@@ -152,13 +161,15 @@ export default function LoginScreen() {
                 </Pressable>
               )}
 
-              <Pressable style={[styles.button, loading || !email ? styles.buttonDisabled : null]} onPress={onSubmit} disabled={loading || !email}>
+              <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
+              <Pressable style={[styles.button, loading || !email ? styles.buttonDisabled : null]} onPress={onSubmit} disabled={loading || !email} accessibilityLabel={forgot ? "Reset password" : isSignUp ? "Create account" : "Login"}>
                 {loading ? (
                   <ActivityIndicator color={colors.white} />
                 ) : (
                   <Text style={styles.buttonText}>{forgot ? "Reset Password" : isSignUp ? "Create Account" : "Login"}</Text>
                 )}
               </Pressable>
+              </Animated.View>
 
               {forgot ? (
                 <Pressable onPress={() => setForgot(false)}>
@@ -181,6 +192,7 @@ export default function LoginScreen() {
         </ScrollView>
       </SafeAreaView>
     </LinearGradient>
+    </AnimatedScreen>
   );
 }
 

@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../src/auth-context";
+import { AnimatedScreen } from "../src/components/AnimatedScreen";
 import { getDashboardAnalytics, type DashboardAnalytics } from "../src/finance-analytics";
 import { getGradient } from "../src/theme";
 import { useTheme } from "../src/theme-context";
@@ -138,6 +139,7 @@ export default function GraphScreen() {
 
   if (loading && !analytics) {
     return (
+      <AnimatedScreen style={styles.root}>
       <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
         <SafeAreaView style={styles.safe}>
           <View style={styles.loading}>
@@ -146,10 +148,12 @@ export default function GraphScreen() {
           </View>
         </SafeAreaView>
       </LinearGradient>
+      </AnimatedScreen>
     );
   }
 
   return (
+    <AnimatedScreen style={styles.root}>
     <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
       <SafeAreaView style={styles.safe}>
         <ScrollView
@@ -256,6 +260,7 @@ export default function GraphScreen() {
         </ScrollView>
       </SafeAreaView>
     </LinearGradient>
+    </AnimatedScreen>
   );
 }
 

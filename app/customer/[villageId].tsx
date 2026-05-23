@@ -19,11 +19,14 @@ import {
   View,
 } from "react-native";
 import { useAuth } from "../../src/auth-context";
+import { AnimatedListItem } from "../../src/components/AnimatedListItem";
+import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import Icon from "../../src/Icon";
 import { colors } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
+import { scanAadhaarCard } from "../../src/utils/aadhaarScanner";
 import { LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
-import { addCustomerWithLoan, addPayment, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary, updateCustomer } from "../../src/repository";
+import { addCustomerWithLoan, addPayment, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary, isAadhaarBlocked, updateCustomer } from "../../src/repository";
 import { Customer, Loan, Village } from "../../src/types";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -337,6 +340,8 @@ export default function CustomerListScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [aadharWarning, setAadharWarning] = useState("");
   const [aadharChecking, setAadharChecking] = useState(false);
+  const [aadharBlocked, setAadharBlocked] = useState(false);
+  const [scanningAadhaar, setScanningAadhaar] = useState(false);
 
   const reload = useCallback(async (options?: { fresh?: boolean }) => {
     if (!user || !villageId) {
@@ -381,6 +386,7 @@ export default function CustomerListScreen() {
     if (!showAdd || !user) {
       setAadharWarning("");
       setAadharChecking(false);
+      setAadharBlocked(false);
       return;
     }
 
@@ -388,6 +394,7 @@ export default function CustomerListScreen() {
     if (normalizedAadhar.length < 4) {
       setAadharWarning("");
       setAadharChecking(false);
+      setAadharBlocked(false);
       return;
     }
 
@@ -395,6 +402,16 @@ export default function CustomerListScreen() {
     setAadharChecking(true);
     const timeout = setTimeout(async () => {
       try {
+        if (normalizedAadhar.length === 12) {
+          const blocked = await isAadhaarBlocked(normalizedAadhar);
+          if (cancelled) return;
+          if (blocked) {
+            setAadharBlocked(true);
+            setAadharWarning("This Aadhaar is blocked. Cannot register.");
+            return;
+          }
+        }
+        setAadharBlocked(false);
         const existingCustomer = await getCustomerLoanSummary(user.uid, normalizedAadhar);
         if (cancelled) return;
         if (existingCustomer.customer) {
@@ -426,6 +443,8 @@ export default function CustomerListScreen() {
     setIsGettingLocation(false);
     setAadharWarning("");
     setAadharChecking(false);
+    setAadharBlocked(false);
+    setScanningAadhaar(false);
   }, []);
 
   const openAddCustomer = useCallback(() => {
@@ -437,6 +456,32 @@ export default function CustomerListScreen() {
     setShowAdd(false);
     resetAddCustomerForm();
   }, [resetAddCustomerForm]);
+
+  const handleAadhaarScan = useCallback(async () => {
+    try {
+      setScanningAadhaar(true);
+      const result = await scanAadhaarCard();
+      if (!result) {
+        Alert.alert("Scan Failed", "Could not read Aadhaar card. Please fill details manually.");
+        return;
+      }
+      const scannedAadhaar = normalizeAadhar(result.aadhaar ?? "");
+      setForm((current) => ({
+        ...current,
+        name: result.name || current.name,
+        aadhar: scannedAadhaar || current.aadhar,
+        locationDesc: result.location_desc || current.locationDesc,
+      }));
+      if (scannedAadhaar.length === 12) {
+        const blocked = await isAadhaarBlocked(scannedAadhaar);
+        setAadharBlocked(blocked);
+        setAadharWarning(blocked ? "This Aadhaar is blocked. Cannot register." : "");
+      }
+      Alert.alert("Scan Successful", "Aadhaar details have been filled automatically. Please verify before submitting.");
+    } finally {
+      setScanningAadhaar(false);
+    }
+  }, []);
 
   const getCurrentLocation = async () => {
     const requestId = addLocationRequestRef.current + 1;
@@ -634,7 +679,8 @@ export default function CustomerListScreen() {
   }, [activeLoans, closeManualPayment, manualPaymentAmount, manualPaymentCustomer, manualPaymentMode, user]);
 
   const renderCustomer = useCallback(
-    ({ item }: { item: Customer }) => (
+    ({ item, index }: { item: Customer; index: number }) => (
+      <AnimatedListItem index={index}>
       <CustomerItem 
         customer={item} 
         onPress={() => openCustomer(item.id)} 
@@ -648,11 +694,13 @@ export default function CustomerListScreen() {
         isPaying={payingCustomerId === item.id}
         isUpdatingLocation={updatingLocationCustomerId === item.id}
       />
+      </AnimatedListItem>
     ),
     [activeLoans, openCustomer, openDirections, openManualPayment, paymentStatuses, payingCustomerId, quickPay, saveCurrentLocationForCustomer, updatingLocationCustomerId]
   );
 
   return (
+    <AnimatedScreen style={styles.root}>
     <LinearGradient colors={[colors.blue1, colors.blue2]} style={styles.root}>
       <SafeAreaView style={[styles.safe, { paddingTop: insets.top }]} edges={['top']}>
         <View style={styles.content}>
@@ -718,8 +766,9 @@ export default function CustomerListScreen() {
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             initialNumToRender={15}
-            maxToRenderPerBatch={15}
-            windowSize={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            getItemLayout={(_, index) => ({ length: 82, offset: 82 * index, index })}
             removeClippedSubviews={true}
             updateCellsBatchingPeriod={50}
             disableVirtualization={false}
@@ -775,7 +824,7 @@ export default function CustomerListScreen() {
       <Modal visible={showAdd} animationType="slide" onRequestClose={closeAddCustomer}>
         <SafeAreaView style={[styles.modal, { paddingTop: insets.top, backgroundColor: colors.background }]} edges={['top']}>
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-            <View style={[styles.modalHeader, { backgroundColor: colors.white, borderBottomColor: colors.border }]}>
+            <View style={[styles.modalHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>New Customer Registration</Text>
               <Pressable onPress={closeAddCustomer} style={styles.closeBtn}>
                 <Text style={[styles.closeBtnText, { color: colors.gray }]}>✕</Text>
@@ -786,13 +835,13 @@ export default function CustomerListScreen() {
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.formScrollContent}>
                 <View style={styles.formRow}>
                   <View style={styles.formColumn}>
-                    <Text style={styles.label}>Name *</Text>
+                    <Text style={[styles.label, { color: colors.text }]}>Name *</Text>
                     <TextInput
                       placeholder="Enter customer name"
-                      placeholderTextColor="#999"
+                      placeholderTextColor={colors.textMuted}
                       value={form.name}
                       onChangeText={(t) => setForm((f) => ({ ...f, name: t }))}
-                      style={styles.input}
+                      style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
                     />
                   </View>
                   <View style={styles.formColumn}>
@@ -810,15 +859,26 @@ export default function CustomerListScreen() {
 
                 <View style={styles.formRow}>
                   <View style={styles.formColumn}>
-                    <Text style={styles.label}>Aadhar Number</Text>
-                    <TextInput
-                      placeholder="Aadhar ID"
-                      placeholderTextColor="#999"
-                      value={form.aadhar}
-                      onChangeText={(t) => setForm((f) => ({ ...f, aadhar: t }))}
-                      style={styles.input}
-                      keyboardType="numeric"
-                    />
+                    <Text style={[styles.label, { color: colors.text }]}>Aadhar Number</Text>
+                    <View style={styles.scanInputRow}>
+                      <TextInput
+                        placeholder="Aadhar ID"
+                        placeholderTextColor={colors.textMuted}
+                        value={form.aadhar}
+                        onChangeText={(t) => setForm((f) => ({ ...f, aadhar: normalizeAadhar(t).slice(0, 12) }))}
+                        style={[styles.input, styles.scanInput, { backgroundColor: colors.surfaceTint, borderColor: aadharBlocked ? colors.error : colors.border, color: colors.text }]}
+                        keyboardType="numeric"
+                        maxLength={12}
+                      />
+                      <Pressable
+                        accessibilityLabel="Scan Aadhaar card"
+                        style={[styles.scanBtn, scanningAadhaar && styles.saveDisabled]}
+                        onPress={handleAadhaarScan}
+                        disabled={scanningAadhaar}
+                      >
+                        {scanningAadhaar ? <ActivityIndicator size="small" color={colors.white} /> : <Text style={styles.scanBtnText}>Scan</Text>}
+                      </Pressable>
+                    </View>
                     {aadharChecking ? (
                       <Text style={styles.aadharHint}>Checking Aadhar...</Text>
                     ) : aadharWarning ? (
@@ -826,26 +886,26 @@ export default function CustomerListScreen() {
                     ) : null}
                   </View>
                   <View style={styles.formColumn}>
-                    <Text style={styles.label}>Co-Applicant ID</Text>
+                    <Text style={[styles.label, { color: colors.text }]}>Co-Applicant ID</Text>
                     <TextInput
                       placeholder="Co-applicant ID"
-                      placeholderTextColor="#999"
+                      placeholderTextColor={colors.textMuted}
                       value={form.coId}
                       onChangeText={(t) => setForm((f) => ({ ...f, coId: t }))}
-                      style={styles.input}
+                      style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
                       keyboardType="numeric"
                     />
                   </View>
                 </View>
 
-                <Text style={styles.label}>Location Description</Text>
+                <Text style={[styles.label, { color: colors.text }]}>Location Description</Text>
                 <View style={styles.locationRow}>
                   <TextInput
                     placeholder="Enter address/location"
-                    placeholderTextColor="#999"
+                    placeholderTextColor={colors.textMuted}
                     value={form.locationDesc}
                     onChangeText={(t) => setForm((f) => ({ ...f, locationDesc: t }))}
-                    style={[styles.input, styles.textArea, { flex: 1 }]}
+                    style={[styles.input, styles.textArea, { flex: 1, backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
                     multiline
                     numberOfLines={2}
                   />
@@ -865,29 +925,29 @@ export default function CustomerListScreen() {
 
                 <View style={styles.formRow}>
                   <View style={styles.formColumn}>
-                    <Text style={styles.label}>Co-Applicant Name</Text>
+                    <Text style={[styles.label, { color: colors.text }]}>Co-Applicant Name</Text>
                     <TextInput
                       placeholder="Co-applicant name (optional)"
-                      placeholderTextColor="#999"
+                      placeholderTextColor={colors.textMuted}
                       value={form.coName}
                       onChangeText={(t) => setForm((f) => ({ ...f, coName: t }))}
-                      style={styles.input}
+                      style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
                     />
                   </View>
                   <View style={styles.formColumn}>
-                    <Text style={styles.label}>Principal Amount *</Text>
+                    <Text style={[styles.label, { color: colors.text }]}>Principal Amount *</Text>
                     <TextInput
                       placeholder="Enter loan amount"
-                      placeholderTextColor="#999"
+                      placeholderTextColor={colors.textMuted}
                       value={form.principal}
                       onChangeText={(t) => setForm((f) => ({ ...f, principal: t }))}
-                      style={styles.input}
+                      style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
                       keyboardType="numeric"
                     />
                   </View>
                 </View>
 
-                <Text style={styles.label}>Submitted Documents</Text>
+                <Text style={[styles.label, { color: colors.text }]}>Submitted Documents</Text>
                 <Pressable
                   style={styles.checkRow}
                   onPress={() => setForm((f) => ({ ...f, aadharSubmitted: !f.aadharSubmitted }))}
@@ -895,7 +955,7 @@ export default function CustomerListScreen() {
                   <View style={[styles.checkbox, form.aadharSubmitted && styles.checkboxOn]}>
                     {form.aadharSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
                   </View>
-                  <Text style={styles.checkLabel}>Did the customer submit the Aadhar?</Text>
+                  <Text style={[styles.checkLabel, { color: colors.text }]}>Did the customer submit the Aadhar?</Text>
                 </Pressable>
                 <Pressable
                   style={styles.checkRow}
@@ -904,10 +964,10 @@ export default function CustomerListScreen() {
                   <View style={[styles.checkbox, form.passportPhotoSubmitted && styles.checkboxOn]}>
                     {form.passportPhotoSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
                   </View>
-                  <Text style={styles.checkLabel}>Did customer submit passport size photo?</Text>
+                  <Text style={[styles.checkLabel, { color: colors.text }]}>Did customer submit passport size photo?</Text>
                 </Pressable>
 
-                <Text style={styles.label}>Registration Date *</Text>
+                <Text style={[styles.label, { color: colors.text }]}>Registration Date *</Text>
                 {Platform.OS === 'web' ? (
                   <input
                     type="date"
@@ -987,9 +1047,9 @@ export default function CustomerListScreen() {
 
                 <View style={styles.buttonContainer}>
                   <Pressable
-                    style={[styles.save, !form.name || !form.phone || !form.principal ? styles.saveDisabled : null]}
+                    style={[styles.save, (!form.name || !form.phone || !form.principal || aadharBlocked) ? styles.saveDisabled : null]}
                     onPress={async () => {
-                      if (!user || !village || !form.name || !form.phone || !form.principal) return;
+                      if (!user || !village || !form.name || !form.phone || !form.principal || aadharBlocked) return;
                       const parsedDate = parseDateInput(registrationDate);
                       if (!parsedDate) {
                         alert('Please enter a valid registration date');
@@ -999,6 +1059,12 @@ export default function CustomerListScreen() {
                       // Check if customer already exists by Aadhar
                       const normalizedAadhar = normalizeAadhar(form.aadhar);
                       if (normalizedAadhar) {
+                        if (await isAadhaarBlocked(normalizedAadhar)) {
+                          setAadharBlocked(true);
+                          setAadharWarning("This Aadhaar is blocked. Cannot register.");
+                          Alert.alert("Aadhaar Blocked", "This Aadhaar card has been blocked. Registration cannot proceed.");
+                          return;
+                        }
                         const existingCustomer = await getCustomerLoanSummary(user.uid, normalizedAadhar);
                         if (existingCustomer.customer) {
                           Alert.alert(
@@ -1035,7 +1101,7 @@ export default function CustomerListScreen() {
                       await reload({ fresh: true });
                       Alert.alert('✅ Success', `Customer "${createdCustomer.name}" has been created successfully!`);
                     }}
-                    disabled={!form.name || !form.phone || !form.principal}
+                    disabled={!form.name || !form.phone || !form.principal || aadharBlocked}
                   >
                     <Text style={styles.saveTxt}>Register Customer</Text>
                   </Pressable>
@@ -1052,18 +1118,18 @@ export default function CustomerListScreen() {
 
       <Modal visible={!!manualPaymentCustomer} transparent animationType="slide" onRequestClose={closeManualPayment}>
         <KeyboardAvoidingView style={styles.modalWrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <View style={styles.manualPayModal}>
-            <Text style={styles.manualPayTitle}>Manual Payment</Text>
-            <Text style={styles.manualPaySubtitle}>{manualPaymentCustomer?.name}</Text>
+            <View style={[styles.manualPayModal, { backgroundColor: colors.card }]}>
+            <Text style={[styles.manualPayTitle, { color: colors.text }]}>Manual Payment</Text>
+            <Text style={[styles.manualPaySubtitle, { color: colors.textSecondary }]}>{manualPaymentCustomer?.name}</Text>
             <TextInput
               placeholder="Enter amount"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.textMuted}
               value={manualPaymentAmount}
               onChangeText={(value) => {
                 setManualPaymentAmount(value);
                 setManualPaymentError("");
               }}
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
               keyboardType="numeric"
               autoFocus
             />
@@ -1093,6 +1159,7 @@ export default function CustomerListScreen() {
         </KeyboardAvoidingView>
       </Modal>
     </LinearGradient>
+    </AnimatedScreen>
   );
 }
 
@@ -1185,6 +1252,10 @@ const styles = StyleSheet.create({
   aadharHint: { color: "#666", fontSize: 12, marginTop: -4, marginBottom: 8 },
   aadharWarning: { color: "#b91c1c", fontSize: 12, fontWeight: "600", marginTop: -4, marginBottom: 8 },
   input: { backgroundColor: colors.white, borderRadius: 12, padding: 14, fontSize: 16, borderWidth: 1, borderColor: "#e0e0e0", marginBottom: 8 },
+  scanInputRow: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
+  scanInput: { flex: 1 },
+  scanBtn: { minWidth: 70, minHeight: 50, borderRadius: 12, backgroundColor: "#6C63FF", alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
+  scanBtnText: { color: colors.white, fontSize: 13, fontWeight: "900" },
   dateInputContainer: { flexDirection: "row", gap: 8, alignItems: "center" },
   dateInput: { flex: 1 },
   datePickerBtn: { 

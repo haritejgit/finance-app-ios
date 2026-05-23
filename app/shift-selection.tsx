@@ -19,12 +19,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../src/auth-context";
+import { AnimatedListItem } from "../src/components/AnimatedListItem";
+import { AnimatedScreen } from "../src/components/AnimatedScreen";
 import {
   CustomerSearchResult,
   getAllActiveCustomersWithVillages,
 } from "../src/repository";
 import { getDashboardAnalytics, type CustomerState, type DashboardAnalytics } from "../src/finance-analytics";
-import { getGradient } from "../src/theme";
 import { useTheme } from "../src/theme-context";
 import Icon from "../src/Icon";
 import { downloadTextFile } from "../src/exports";
@@ -41,6 +42,13 @@ const filters: { key: "all" | CustomerState; label: string }[] = [
 
 function formatMoney(value: number) {
   return `Rs.${Math.round(value || 0).toLocaleString("en-IN")}`;
+}
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good Morning";
+  if (hour < 17) return "Good Afternoon";
+  return "Good Evening";
 }
 
 function SkeletonLine({ width = "100%" }: { width?: number | `${number}%` }) {
@@ -77,9 +85,7 @@ export default function ShiftSelectionScreen() {
   const [customerFilter, setCustomerFilter] = useState<"all" | CustomerState>("all");
   const [allCustomers, setAllCustomers] = useState<CustomerSearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [dailyFocus, setDailyFocus] = useState<"collection" | "distribution">("collection");
   const intro = useRef(new Animated.Value(0)).current;
-  const dailyPulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.timing(intro, {
@@ -161,36 +167,6 @@ export default function ShiftSelectionScreen() {
       .slice(0, 80);
   }, [allCustomers, analytics?.customerStates, customerFilter, debouncedQuery]);
 
-  const dailyMetric = useMemo(() => {
-    const collection = analytics?.totals.collectionToday ?? 0;
-    const distribution = analytics?.totals.distributedToday ?? 0;
-    const current = dailyFocus === "collection" ? collection : distribution;
-    const alternate = dailyFocus === "collection" ? distribution : collection;
-    return {
-      label: dailyFocus === "collection" ? "Collected today" : "Distributed today",
-      value: current,
-      alternateLabel: dailyFocus === "collection" ? "distributed today" : "collected today",
-      alternateValue: alternate,
-      icon: dailyFocus === "collection" ? "cash-outline" : "trending-up-outline",
-    };
-  }, [analytics?.totals.collectionToday, analytics?.totals.distributedToday, dailyFocus]);
-
-  const monthlyNet = useMemo(() => {
-    if (!analytics) return 0;
-    return analytics.totals.monthlyRevenue - analytics.totals.distributedThisMonth;
-  }, [analytics]);
-
-  const toggleDailyFocus = useCallback(() => {
-    setDailyFocus((value) => (value === "collection" ? "distribution" : "collection"));
-    dailyPulse.setValue(0.96);
-    Animated.spring(dailyPulse, {
-      toValue: 1,
-      useNativeDriver: true,
-      friction: 6,
-      tension: 140,
-    }).start();
-  }, [dailyPulse]);
-
   const exportRecentCsv = useCallback(() => {
     const recentTransactions = analytics?.recentTransactions ?? [];
     if (!recentTransactions.length) {
@@ -215,14 +191,45 @@ export default function ShiftSelectionScreen() {
     if (!exported) Alert.alert("Web only", "CSV export is available from the web dashboard.");
   }, [analytics?.recentTransactions]);
 
-  const gradient = getGradient(colors);
+  const displayName = useMemo(() => (user?.displayName || user?.email || "User").split(/[ @]/)[0], [user?.displayName, user?.email]);
+  const todayLabel = useMemo(
+    () => new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" }),
+    []
+  );
+  const statCards = useMemo(
+    () => [
+      {
+        title: "Collected Today",
+        value: formatMoney(analytics?.totals.collectionToday ?? 0),
+        icon: "cash-outline",
+        tone: colors.success,
+        soft: colors.successSoft,
+      },
+      {
+        title: "Active Loans",
+        value: `${analytics?.totals.activeLoanCount ?? 0}`,
+        icon: "wallet-outline",
+        tone: "#6C63FF",
+        soft: colors.primarySoft,
+      },
+      {
+        title: "Distributed",
+        value: formatMoney(analytics?.totals.distributedThisMonth ?? 0),
+        icon: "trending-up-outline",
+        tone: colors.warning,
+        soft: colors.warningSoft,
+      },
+    ],
+    [analytics?.totals.activeLoanCount, analytics?.totals.collectionToday, analytics?.totals.distributedThisMonth, colors.primarySoft, colors.success, colors.successSoft, colors.warning, colors.warningSoft]
+  );
 
   return (
-    <LinearGradient colors={[...gradient]} style={styles.root}>
+    <AnimatedScreen style={styles.root}>
+    <LinearGradient colors={[colors.background, colors.backgroundSecondary]} style={styles.root}>
       <SafeAreaView style={styles.safe}>
         <ScrollView
           contentContainerStyle={styles.container}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.white} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6C63FF" />}
         >
           <Animated.View
             style={[
@@ -233,100 +240,13 @@ export default function ShiftSelectionScreen() {
               },
             ]}
           >
-            <View style={[styles.heroCard, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
-              <View style={styles.heroTop}>
-                <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
-                  <Icon name="wallet-outline" size={22} color={colors.primary} />
-                </View>
-                <View style={styles.heroCopy}>
-                  <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>Premium finance workspace</Text>
-                  <Text style={[styles.header, { color: colors.text }]}>Finance Dashboard</Text>
-                  <Text style={[styles.welcome, { color: colors.textSecondary }]}>
-                    Welcome back, {user?.displayName || user?.email || "User"}
-                  </Text>
-                </View>
-                <Pressable style={[styles.heroIconBtn, { backgroundColor: colors.primary }]} onPress={openCustomerSearch}>
-                  <Icon name="search" size={19} color={colors.white} />
-                </Pressable>
+            <View style={styles.dashboardHeader}>
+              <View style={styles.heroCopy}>
+                <Text style={[styles.header, { color: colors.text }]}>{getGreeting()}, {displayName}</Text>
+                <Text style={[styles.welcome, { color: colors.textSecondary }]}>{todayLabel}</Text>
               </View>
-              <Pressable onPress={toggleDailyFocus} disabled={loading} accessibilityRole="button" accessibilityLabel={`Show ${dailyMetric.alternateLabel}`}>
-                <Animated.View
-                  style={[
-                    styles.heroMetricPanel,
-                    {
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                      transform: [{ scale: dailyPulse }],
-                    },
-                  ]}
-                >
-                  <View style={[styles.heroMetricIcon, { backgroundColor: colors.primarySoft }]}>
-                    <Icon name={dailyMetric.icon} size={20} color={colors.primary} />
-                  </View>
-                  <View style={styles.heroMetricCopy}>
-                    <Text style={[styles.heroMetricLabel, { color: colors.textSecondary }]}>{dailyMetric.label}</Text>
-                    <Text style={[styles.heroMetricValue, { color: colors.text }]}>
-                      {loading ? "..." : formatMoney(dailyMetric.value)}
-                    </Text>
-                    <Text style={[styles.heroMetricHint, { color: colors.textMuted }]}>
-                      Tap to see {dailyMetric.alternateLabel}: {loading ? "..." : formatMoney(dailyMetric.alternateValue)}
-                    </Text>
-                  </View>
-                </Animated.View>
-              </Pressable>
-            </View>
-
-            <View style={[styles.panel, styles.routePanel, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitleDark, { color: colors.text }]}>Collection Route</Text>
-                <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>
-                  {selectedDay} / {selectedShift}
-                </Text>
-              </View>
-              <Text style={[styles.controlLabel, { color: colors.textSecondary }]}>Day</Text>
-              <View style={styles.dayGrid}>
-                {days.map((day, index) => (
-                  <Pressable
-                    key={day}
-                    onPress={() => setSelectedDay(day)}
-                    style={[
-                      styles.dayChip,
-                      { backgroundColor: colors.surfaceTint, borderColor: colors.border },
-                      selectedDay === day && { backgroundColor: colors.primary, borderColor: colors.primary },
-                    ]}
-                  >
-                    <Text style={[styles.dayChipText, { color: selectedDay === day ? colors.white : colors.textSecondary }]}>
-                      {shortDays[index]}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-              <Text style={[styles.controlLabel, { color: colors.textSecondary }]}>Shift</Text>
-              <View style={styles.shiftRow}>
-                {(["Morning", "Evening"] as const).map((shift) => {
-                  const active = selectedShift === shift;
-                  return (
-                    <Pressable
-                      key={shift}
-                      onPress={() => setSelectedShift(shift)}
-                      style={[
-                        styles.shift,
-                        { backgroundColor: colors.surfaceTint, borderColor: colors.border },
-                        active && { backgroundColor: colors.primary, borderColor: colors.primary },
-                      ]}
-                    >
-                      <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={18} color={active ? colors.white : colors.primary} />
-                      <Text style={[styles.shiftText, { color: active ? colors.white : colors.primary }]}>{shift}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              <Pressable
-                style={[styles.primaryAction, { backgroundColor: colors.coral }]}
-                onPress={() => router.push({ pathname: "/village/[day]/[shift]", params: { day: selectedDay, shift: selectedShift } })}
-              >
-                <Text style={styles.primaryActionText}>Start Collection</Text>
-                <Icon name="arrow-forward" size={18} color={colors.white} />
+              <Pressable accessibilityLabel="Search customers" style={[styles.heroIconBtn, { backgroundColor: "#6C63FF" }]} onPress={openCustomerSearch}>
+                <Icon name="search" size={19} color={colors.white} />
               </Pressable>
             </View>
 
@@ -335,132 +255,112 @@ export default function ShiftSelectionScreen() {
             ) : (
               <>
                 <View style={styles.metricsGrid}>
-                  {[
-                    {
-                      title: "Balance",
-                      value: formatMoney((analytics?.totals.totalCollection ?? 0) - (analytics?.totals.pendingAmount ?? 0)),
-                      detail: "Collected minus pending",
-                      icon: "wallet-outline",
-                      tone: colors.primary,
-                      soft: colors.primarySoft,
-                    },
-                    {
-                      title: "Income",
-                      value: formatMoney(analytics?.totals.monthlyRevenue ?? 0),
-                      detail: "Collected this month",
-                      icon: "cash-outline",
-                      tone: colors.success,
-                      soft: colors.successSoft,
-                    },
-                    {
-                      title: "Expense",
-                      value: formatMoney(analytics?.totals.distributedThisMonth ?? 0),
-                      detail: "Distributed this month",
-                      icon: "trending-up-outline",
-                      tone: colors.warning,
-                      soft: colors.warningSoft,
-                    },
-                    {
-                      title: "Savings",
-                      value: formatMoney(monthlyNet),
-                      detail: monthlyNet >= 0 ? "Positive monthly net" : "Needs recovery focus",
-                      icon: monthlyNet >= 0 ? "shield-checkmark-outline" : "alert-circle-outline",
-                      tone: monthlyNet >= 0 ? colors.teal : colors.error,
-                      soft: monthlyNet >= 0 ? colors.successSoft : colors.destructiveSoft,
-                    },
-                  ].map((metric) => (
-                    <View key={metric.title} style={[styles.metricCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                      <View style={[styles.metricIcon, { backgroundColor: metric.soft }]}>
-                        <Icon name={metric.icon} size={18} color={metric.tone} />
+                  {statCards.map((metric, index) => (
+                    <AnimatedListItem key={metric.title} index={index} style={styles.statCardWrap}>
+                      <View style={[styles.metricCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <View style={[styles.metricIcon, { backgroundColor: metric.soft }]}>
+                          <Icon name={metric.icon} size={18} color={metric.tone} />
+                        </View>
+                        <Text style={[styles.metricValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                          {metric.value}
+                        </Text>
+                        <Text style={[styles.metricTitle, { color: colors.textSecondary }]}>{metric.title}</Text>
                       </View>
-                      <Text style={[styles.metricTitle, { color: colors.textSecondary }]}>{metric.title}</Text>
-                      <Text style={[styles.metricValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
-                        {metric.value}
-                      </Text>
-                      <Text style={[styles.metricDetail, { color: colors.textMuted }]}>{metric.detail}</Text>
-                    </View>
+                    </AnimatedListItem>
                   ))}
                 </View>
 
-                <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={[styles.panel, styles.routePanel, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   <View style={styles.sectionHeader}>
-                    <View>
-                      <Text style={[styles.sectionTitleDark, { color: colors.text }]}>Monthly Overview</Text>
-                      <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>Collected vs distributed by week</Text>
-                    </View>
-                    <View style={styles.legendRow}>
-                      <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
-                      <Text style={[styles.legendText, { color: colors.textMuted }]}>In</Text>
-                      <View style={[styles.legendDot, { backgroundColor: colors.warning }]} />
-                      <Text style={[styles.legendText, { color: colors.textMuted }]}>Out</Text>
-                    </View>
+                    <Text style={[styles.sectionTitleDark, { color: colors.text }]}>Village Collection</Text>
+                    <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>{selectedDay} / {selectedShift}</Text>
                   </View>
-                  <View style={styles.chartWrap}>
-                    {(analytics?.weeklyTrend ?? []).slice(-6).map((week) => {
-                      const maxValue = Math.max(
-                        ...(analytics?.weeklyTrend ?? []).map((item) => Math.max(item.collection, item.distribution)),
-                        1
-                      );
+                  <View style={styles.dayGrid}>
+                    {days.map((day, index) => (
+                      <Pressable
+                        key={day}
+                        accessibilityLabel={`Select ${day}`}
+                        onPress={() => setSelectedDay(day)}
+                        style={[
+                          styles.dayChip,
+                          { backgroundColor: colors.surfaceTint, borderColor: colors.border },
+                          selectedDay === day && { backgroundColor: "#6C63FF", borderColor: "#6C63FF" },
+                        ]}
+                      >
+                        <Text style={[styles.dayChipText, { color: selectedDay === day ? colors.white : colors.textSecondary }]}>
+                          {shortDays[index]}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <View style={styles.shiftRow}>
+                    {(["Morning", "Evening"] as const).map((shift) => {
+                      const active = selectedShift === shift;
                       return (
-                        <View key={week.label} style={styles.chartColumn}>
-                          <View style={styles.chartBars}>
-                            <View style={[styles.chartBar, { height: Math.max(6, (week.distribution / maxValue) * 112), backgroundColor: colors.warning }]} />
-                            <View style={[styles.chartBar, styles.chartBarCollection, { height: Math.max(6, (week.collection / maxValue) * 124), backgroundColor: colors.primary }]} />
-                          </View>
-                          <Text style={[styles.chartLabel, { color: colors.textMuted }]}>{week.label}</Text>
-                        </View>
+                        <Pressable
+                          key={shift}
+                          accessibilityLabel={`Select ${shift} shift`}
+                          onPress={() => setSelectedShift(shift)}
+                          style={[
+                            styles.shift,
+                            { backgroundColor: colors.surfaceTint, borderColor: colors.border },
+                            active && { backgroundColor: "#6C63FF", borderColor: "#6C63FF" },
+                          ]}
+                        >
+                          <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={18} color={active ? colors.white : "#6C63FF"} />
+                          <Text style={[styles.shiftText, { color: active ? colors.white : "#6C63FF" }]}>{shift}</Text>
+                        </Pressable>
                       );
                     })}
                   </View>
                 </View>
 
-                <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <View style={styles.sectionHeader}>
-                    <View>
-                      <Text style={[styles.sectionTitleDark, { color: colors.text }]}>Smart Insights</Text>
-                      <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>Alerts generated from existing transactions</Text>
-                    </View>
-                    <View style={[styles.sectionIcon, { backgroundColor: colors.primarySoft }]}>
-                      <Icon name="sparkles-outline" size={17} color={colors.primary} />
-                    </View>
-                  </View>
-                  {(analytics?.insights ?? []).concat(analytics?.aiInsights ?? []).slice(0, 4).map((insight) => (
-                    <View key={insight} style={styles.insightRow}>
-                      <View style={[styles.insightDot, { backgroundColor: colors.primary }]} />
-                      <Text style={[styles.insightText, { color: colors.textSecondary }]}>{insight}</Text>
-                    </View>
+                <View style={styles.quickGridModern}>
+                  {[
+                    { label: "Village Collection", icon: "location", onPress: () => router.push({ pathname: "/village/[day]/[shift]", params: { day: selectedDay, shift: selectedShift } }) },
+                    { label: "Register Customer", icon: "person-outline", onPress: () => router.push({ pathname: "/village/[day]/[shift]", params: { day: selectedDay, shift: selectedShift } }) },
+                    { label: "Reports", icon: "document-text-outline", onPress: () => router.push("/reports" as any) },
+                    { label: "Progress", icon: "analytics-outline", onPress: () => router.push("/graph" as any) },
+                  ].map((item) => (
+                    <Pressable
+                      key={item.label}
+                      accessibilityLabel={item.label}
+                      style={[styles.actionTile, { backgroundColor: colors.card, borderColor: colors.border }]}
+                      onPress={item.onPress}
+                    >
+                      <View style={[styles.actionIcon, { backgroundColor: colors.primarySoft }]}>
+                        <Icon name={item.icon} size={20} color="#6C63FF" />
+                      </View>
+                      <Text style={[styles.actionLabel, { color: colors.text }]}>{item.label}</Text>
+                    </Pressable>
                   ))}
                 </View>
 
                 <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   <View style={styles.sectionHeader}>
-                    <View>
-                      <Text style={[styles.sectionTitleDark, { color: colors.text }]}>Recent Transactions</Text>
-                      <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>Latest collections across routes</Text>
-                    </View>
-                    <Pressable style={[styles.exportCsvBtn, { backgroundColor: colors.primarySoft }]} onPress={exportRecentCsv}>
-                      <Icon name="download-outline" size={16} color={colors.primary} />
-                      <Text style={[styles.exportCsvText, { color: colors.primary }]}>CSV</Text>
+                    <Text style={[styles.sectionTitleDark, { color: colors.text }]}>Recent Activity</Text>
+                    <Pressable accessibilityLabel="Export recent CSV" style={[styles.exportCsvBtn, { backgroundColor: colors.primarySoft }]} onPress={exportRecentCsv}>
+                      <Icon name="download-outline" size={16} color="#6C63FF" />
+                      <Text style={[styles.exportCsvText, { color: "#6C63FF" }]}>CSV</Text>
                     </Pressable>
                   </View>
                   {analytics?.recentTransactions.length ? (
-                    analytics.recentTransactions.slice(0, 5).map((item) => (
+                    analytics.recentTransactions.slice(0, 5).map((item, index) => (
+                      <AnimatedListItem key={item.id} index={index}>
                       <Pressable
-                        key={item.id}
                         style={[styles.transactionRow, { borderTopColor: colors.border }]}
                         onPress={() => item.customerId && router.push(`/profile/${item.customerId}`)}
+                        accessibilityLabel={`Open ${item.customerName}`}
                       >
-                        <View style={[styles.transactionIcon, { backgroundColor: colors.successSoft }]}>
-                          <Icon name={item.paymentMode === "PHONE" ? "phone-portrait-outline" : "cash-outline"} size={16} color={colors.success} />
-                        </View>
                         <View style={styles.alertCopy}>
                           <Text style={[styles.alertName, { color: colors.text }]}>{item.customerName}</Text>
                           <Text style={[styles.alertMeta, { color: colors.textSecondary }]}>
-                            {item.villageName} / {new Date(item.paymentDate).toLocaleDateString()}
+                            {formatMoney(item.amountPaid)} / {new Date(item.paymentDate).toLocaleDateString()}
                           </Text>
                         </View>
-                        <Text style={[styles.transactionAmount, { color: colors.success }]}>{formatMoney(item.amountPaid)}</Text>
+                        <Icon name="arrow-forward" size={16} color={colors.textMuted} />
                       </Pressable>
+                      </AnimatedListItem>
                     ))
                   ) : (
                     <Text style={[styles.emptyText, { color: colors.textSecondary }]}>New collections will appear here automatically.</Text>
@@ -469,56 +369,29 @@ export default function ShiftSelectionScreen() {
 
                 <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   <View style={styles.sectionHeader}>
-                    <View>
-                      <Text style={[styles.sectionTitleDark, { color: colors.text }]}>Budget Alerts</Text>
-                      <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>Customers needing follow-up</Text>
-                    </View>
-                    <Text style={[styles.statePill, { color: colors.error, backgroundColor: colors.destructiveSoft }]}>
-                      {analytics?.dueAlerts.length ?? 0} active
-                    </Text>
+                    <Text style={[styles.sectionTitleDark, { color: colors.text }]}>More</Text>
+                    <Text style={[styles.statePill, { color: colors.error, backgroundColor: colors.destructiveSoft }]}>{analytics?.dueAlerts.length ?? 0} alerts</Text>
                   </View>
-                  {analytics?.dueAlerts.length ? (
-                    analytics.dueAlerts.slice(0, 4).map((alert) => (
-                      <Pressable
-                        key={alert.customerId}
-                        style={[styles.alertRow, { borderTopColor: colors.border }]}
-                        onPress={() => router.push(`/profile/${alert.customerId}`)}
-                      >
-                        <View style={[styles.transactionIcon, { backgroundColor: colors.destructiveSoft }]}>
-                          <Icon name="alert-circle-outline" size={16} color={colors.error} />
-                        </View>
-                        <View style={styles.alertCopy}>
-                          <Text style={[styles.alertName, { color: colors.text }]}>{alert.customerName}</Text>
-                          <Text style={[styles.alertMeta, { color: colors.textSecondary }]}>
-                            {alert.villageName} / {alert.dueCount} due / {formatMoney(alert.dueAmount)}
-                          </Text>
-                        </View>
-                        <Icon name="chevron-forward" size={16} color={colors.textMuted} />
-                      </Pressable>
-                    ))
-                  ) : (
-                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No overdue pattern is visible right now.</Text>
-                  )}
-                </View>
-
-                <View style={styles.quickGrid}>
                   {[
-                    { label: "Reports", icon: "document-text-outline", href: "/reports" },
-                    { label: "Analytics", icon: "analytics-outline", href: "/graph" },
+                    { label: "Finance AI", icon: "sparkles-outline", href: "/ai" },
+                    { label: "Search Customers", icon: "search", action: openCustomerSearch },
                     { label: "Settings", icon: "settings-outline", href: "/settings" },
                   ].map((item) => (
                     <Pressable
                       key={item.label}
-                      style={[styles.quickBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-                      onPress={() => router.push(item.href as any)}
+                      accessibilityLabel={item.label}
+                      style={[styles.moreRow, { borderTopColor: colors.border }]}
+                      onPress={() => item.action ? item.action() : router.push(item.href as any)}
                     >
-                      <Icon name={item.icon} size={18} color={colors.primary} />
+                      <Icon name={item.icon} size={18} color="#6C63FF" />
                       <Text style={[styles.quickText, { color: colors.text }]}>{item.label}</Text>
+                      <Icon name="arrow-forward" size={16} color={colors.textMuted} />
                     </Pressable>
                   ))}
                 </View>
 
                 <Pressable
+                  accessibilityLabel="Logout"
                   onPress={async () => {
                     await logout();
                     router.replace("/login");
@@ -620,6 +493,7 @@ export default function ShiftSelectionScreen() {
         </SafeAreaView>
       </Modal>
     </LinearGradient>
+    </AnimatedScreen>
   );
 }
 
@@ -628,16 +502,17 @@ const screenWidth = Dimensions.get("window").width;
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  container: { paddingHorizontal: 16, paddingVertical: 12, paddingBottom: 32 },
-  content: { width: "100%", maxWidth: Math.min(screenWidth - 32, 1120), alignSelf: "center", gap: 14 },
+  container: { paddingHorizontal: 20, paddingVertical: 12, paddingBottom: 32 },
+  content: { width: "100%", maxWidth: Math.min(screenWidth - 40, 920), alignSelf: "center", gap: 14 },
+  dashboardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, paddingVertical: 8 },
   heroCard: { borderRadius: 20, padding: 14, borderWidth: 1, gap: 14 },
   heroTop: { flexDirection: "row", alignItems: "center", gap: 8 },
   avatar: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   heroCopy: { flex: 1 },
   heroIconBtn: { width: 36, height: 36, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   eyebrow: { fontSize: 9, fontWeight: "900", textTransform: "uppercase" },
-  header: { fontSize: 22, lineHeight: 26, fontWeight: "900" },
-  welcome: { fontSize: 12, marginTop: 0, fontWeight: "700" },
+  header: { fontSize: 26, lineHeight: 31, fontWeight: "900" },
+  welcome: { fontSize: 13, marginTop: 2, fontWeight: "700" },
   heroMetricRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 16 },
   heroMetricPanel: { flexDirection: "row", alignItems: "center", borderRadius: 16, borderWidth: 1, padding: 12, gap: 10 },
   heroMetricIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
@@ -646,10 +521,11 @@ const styles = StyleSheet.create({
   heroMetricValue: { fontSize: 29, lineHeight: 34, fontWeight: "900", marginTop: 1 },
   heroMetricHint: { fontSize: 10, fontWeight: "800", marginTop: 2 },
   metricsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  metricCard: { flexGrow: 1, flexBasis: "47%", minWidth: 156, borderRadius: 18, borderWidth: 1, padding: 14 },
+  statCardWrap: { flexGrow: 1, flexBasis: "30%", minWidth: 156 },
+  metricCard: { minHeight: 116, borderRadius: 16, borderWidth: 1, padding: 14, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 2 },
   metricIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 10 },
-  metricTitle: { fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
-  metricValue: { fontSize: 22, fontWeight: "900", marginTop: 4 },
+  metricTitle: { fontSize: 11, fontWeight: "900", textTransform: "uppercase", marginTop: 4 },
+  metricValue: { fontSize: 24, fontWeight: "900", marginTop: 4 },
   metricDetail: { fontSize: 11, fontWeight: "700", marginTop: 3 },
   panel: { borderRadius: 20, borderWidth: 1, padding: 16, gap: 12 },
   routePanel: { gap: 12 },
@@ -675,9 +551,14 @@ const styles = StyleSheet.create({
   shiftText: { fontWeight: "900", fontSize: 14 },
   primaryAction: { borderRadius: 15, padding: 15, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
   primaryActionText: { color: "#FFFFFF", fontWeight: "900", fontSize: 15 },
+  quickGridModern: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  actionTile: { flexGrow: 1, flexBasis: "47%", minHeight: 104, borderRadius: 16, borderWidth: 1, padding: 14, justifyContent: "space-between", shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 2 },
+  actionIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  actionLabel: { fontSize: 14, fontWeight: "900" },
   quickGrid: { flexDirection: "row", gap: 10 },
   quickBtn: { flex: 1, borderRadius: 16, paddingVertical: 13, alignItems: "center", gap: 5, borderWidth: 1 },
   quickText: { fontWeight: "900", fontSize: 12 },
+  moreRow: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 11, borderTopWidth: 1 },
   alertRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 11, borderTopWidth: 1 },
   alertCopy: { flex: 1 },
   alertName: { fontSize: 14, fontWeight: "900" },

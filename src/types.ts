@@ -55,3 +55,11 @@ export type Payment = {
   userId: string;
 };
 
+export type BlockedAadhaar = {
+  id: string;
+  aadhaar: string;
+  reason: string;
+  blocked_at?: unknown;
+  blocked_by: string;
+};
+

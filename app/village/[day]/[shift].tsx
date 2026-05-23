@@ -3,6 +3,8 @@ import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import { Dimensions, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useAuth } from "../../../src/auth-context";
+import { AnimatedListItem } from "../../../src/components/AnimatedListItem";
+import { AnimatedScreen } from "../../../src/components/AnimatedScreen";
 import { useTheme } from "../../../src/theme-context";
 import { addVillage, deleteVillage, getVillages, updateVillageDayShift } from "../../../src/repository";
 import { Village } from "../../../src/types";
@@ -112,6 +114,7 @@ export default function VillageListScreen() {
   };
 
   return (
+    <AnimatedScreen style={styles.root}>
     <LinearGradient colors={[colors.blue1, colors.blue2]} style={styles.root}>
       <SafeAreaView style={[styles.safe, { paddingTop: insets.top }]} edges={['top']}>
         <View style={styles.content}>
@@ -144,7 +147,13 @@ export default function VillageListScreen() {
                 keyExtractor={(i) => i.id}
                 contentContainerStyle={styles.listContainer}
                 showsVerticalScrollIndicator={false}
+                removeClippedSubviews
+                maxToRenderPerBatch={10}
+                windowSize={5}
+                initialNumToRender={8}
+                getItemLayout={(_, index) => ({ length: 84, offset: 84 * index, index })}
                 renderItem={({ item, index }) => (
+                  <AnimatedListItem index={index}>
                   <Pressable
                     onPress={() => router.push(`/customer/${item.id}`)}
                     onLongPress={() => openMoveModal(item)}
@@ -164,6 +173,7 @@ export default function VillageListScreen() {
                       </View>
                     </View>
                   </Pressable>
+                  </AnimatedListItem>
                 )}
                 ListEmptyComponent={
                   <View style={styles.emptyContainer}>
@@ -304,6 +314,7 @@ export default function VillageListScreen() {
         </View>
       </Modal>
     </LinearGradient>
+    </AnimatedScreen>
   );
 }
 

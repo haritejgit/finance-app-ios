@@ -19,6 +19,7 @@ web-dist
 .expo
 .env
 .env.*
+!.env.example
 .firebase
 firebase-debug.log
 firestore-debug.log

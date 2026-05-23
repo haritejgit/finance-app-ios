@@ -16,6 +16,7 @@ import {
   View,
 } from "react-native";
 import { useAuth } from "../src/auth-context";
+import { AnimatedScreen } from "../src/components/AnimatedScreen";
 import Icon from "../src/Icon";
 import { getPaymentsByDate } from "../src/repository";
 import { colors } from "../src/theme";
@@ -1299,6 +1300,7 @@ interface Payment {
   };
 
   return (
+    <AnimatedScreen style={styles.root}>
     <LinearGradient colors={[colors.blue1, colors.blue2]} style={styles.root}>
       <SafeAreaView style={[styles.safe, { paddingTop: insets.top }]} edges={['top']}>
         <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer}>
@@ -2113,6 +2115,7 @@ interface Payment {
         </View>
       )}
     </LinearGradient>
+    </AnimatedScreen>
   );
 }
 
