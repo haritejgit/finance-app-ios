@@ -42,6 +42,15 @@ export default function Root({ children }: PropsWithChildren) {
               * { box-sizing: border-box; }
               body { margin: 0; overscroll-behavior-y: none; }
               input, button, textarea { font: inherit; }
+              @media (max-width: 414px) {
+                html, body, #root { width: 100%; overflow-x: hidden; }
+              }
+              @media (max-width: 390px) {
+                input, textarea, button { min-height: 44px; }
+              }
+              @media (max-width: 375px) {
+                body { -webkit-text-size-adjust: 100%; }
+              }
             `,
           }}
         />

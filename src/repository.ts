@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   addDoc,
   collection,
@@ -31,6 +32,7 @@ const coll = {
 // Simple in-memory cache for better performance
 const cache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CUSTOMER_PAGE_CACHE_PREFIX = "customerPage:";
 
 function getCacheKey(userId: string, type: string, id?: string) {
   return id ? `${userId}:${type}:${id}` : `${userId}:${type}`;
@@ -159,6 +161,7 @@ export async function getCustomersPage(
   pageSize = 20,
   cursor?: QueryDocumentSnapshot | null
 ): Promise<CustomerPage> {
+  const storageKey = `${CUSTOMER_PAGE_CACHE_PREFIX}${userId}:${villageId}:first`;
   const constraints = [
     where("userId", "==", userId),
     where("villageId", "==", villageId),
@@ -167,13 +170,27 @@ export async function getCustomersPage(
   const pageQuery = cursor
     ? query(coll.customers, ...constraints, startAfter(cursor), limit(pageSize + 1))
     : query(coll.customers, ...constraints, limit(pageSize + 1));
-  const snap = await getDocs(pageQuery);
-  const docs = snap.docs.slice(0, pageSize);
-  return {
-    customers: docs.map((d) => d.data() as Customer),
-    cursor: docs[docs.length - 1] ?? null,
-    hasMore: snap.docs.length > pageSize,
-  };
+  try {
+    const snap = await getDocs(pageQuery);
+    const docs = snap.docs.slice(0, pageSize);
+    const customers = docs.map((d) => d.data() as Customer);
+    if (!cursor) {
+      await AsyncStorage.setItem(storageKey, JSON.stringify(customers)).catch(() => undefined);
+    }
+    return {
+      customers,
+      cursor: docs[docs.length - 1] ?? null,
+      hasMore: snap.docs.length > pageSize,
+    };
+  } catch (error) {
+    if (!cursor) {
+      const cached = await AsyncStorage.getItem(storageKey).catch(() => null);
+      if (cached) {
+        return { customers: JSON.parse(cached) as Customer[], cursor: null, hasMore: false };
+      }
+    }
+    throw error;
+  }
 }
 
 export type CustomerSearchResult = Customer & {

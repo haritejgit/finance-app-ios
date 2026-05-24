@@ -20,11 +20,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../src/auth-context";
 import { AnimatedListItem } from "../src/components/AnimatedListItem";
 import { AnimatedScreen } from "../src/components/AnimatedScreen";
+import { CustomerIdBadge } from "../src/components/CustomerIdBadge";
 import { getDashboardAnalytics, type CustomerState, type DashboardAnalytics } from "../src/finance-analytics";
 import Icon from "../src/Icon";
 import { lightImpact } from "../src/interactions";
-import { CustomerSearchResult, getAllActiveCustomersWithVillages } from "../src/repository";
+import { CustomerSearchResult, getAllActiveCustomersWithVillages, getVillages } from "../src/repository";
 import { useTheme } from "../src/theme-context";
+import { Village } from "../src/types";
 
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const shortDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -142,6 +144,7 @@ export default function ShiftSelectionScreen() {
   const [selectedDay, setSelectedDay] = useState("Monday");
   const [selectedShift, setSelectedShift] = useState<Shift | null>(null);
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
+  const [villages, setVillages] = useState<Village[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [todayToggle, setTodayToggle] = useState(false);
@@ -172,7 +175,12 @@ export default function ShiftSelectionScreen() {
     if (!user) return;
     try {
       setLoading(true);
-      setAnalytics(await getDashboardAnalytics(user.uid));
+      const [nextAnalytics, nextVillages] = await Promise.all([
+        getDashboardAnalytics(user.uid),
+        getVillages(user.uid),
+      ]);
+      setAnalytics(nextAnalytics);
+      setVillages(nextVillages);
     } catch (error) {
       console.error("Dashboard load failed", error);
       Alert.alert("Dashboard unavailable", "Could not load finance analytics. Please try again.");
@@ -242,6 +250,35 @@ export default function ShiftSelectionScreen() {
     lightImpact();
     router.push({ pathname: "/village/[day]/[shift]", params: { day: selectedDay, shift: selectedShift } });
   }, [selectedDay, selectedShift]);
+
+  const selectedVillageForRoute = useMemo(() => {
+    const dayVillages = villages.filter((village) => village.dayOfWeek === selectedDay);
+    if (selectedShift && selectedShift !== "Full Day") {
+      return dayVillages.find((village) => village.shift === selectedShift) ?? null;
+    }
+    return dayVillages[0] ?? null;
+  }, [selectedDay, selectedShift, villages]);
+
+  const openCustomerList = useCallback(() => {
+    lightImpact();
+    if (!selectedVillageForRoute) {
+      Alert.alert("No village selected", "Choose a day and shift with at least one village before opening customers.");
+      return;
+    }
+    router.push(`/customer/${selectedVillageForRoute.id}`);
+  }, [selectedVillageForRoute]);
+
+  const menuItems = useMemo(
+    () => [
+      { label: "Settings", icon: "settings-outline", action: () => router.push("/settings") },
+      { label: "Reports", icon: "document-text-outline", action: () => router.push("/reports") },
+      { label: "Progress", icon: "analytics-outline", action: () => router.push("/graph") },
+      { label: "Day Report", icon: "calendar-outline", action: () => router.push("/reports") },
+      { label: "Route", icon: "location", action: startCollection, disabled: !selectedShift },
+      { label: "Customers", icon: "people", action: openCustomerList, disabled: !selectedVillageForRoute },
+    ],
+    [openCustomerList, selectedShift, selectedVillageForRoute, startCollection]
+  );
 
   return (
     <AnimatedScreen style={styles.root}>
@@ -367,6 +404,34 @@ export default function ShiftSelectionScreen() {
                       </Pressable>
                     ) : null}
                   </View>
+
+                  <View style={styles.menuPanel}>
+                    <View style={styles.sectionHeader}>
+                      <Text style={styles.sectionTitle}>Menu</Text>
+                      <Text style={styles.sectionSub}>Quick navigation</Text>
+                    </View>
+                    <View style={styles.menuGrid}>
+                      {menuItems.map((item) => (
+                        <Pressable
+                          key={item.label}
+                          accessibilityLabel={item.label}
+                          disabled={item.disabled}
+                          onPress={() => {
+                            lightImpact();
+                            item.action();
+                          }}
+                          style={({ pressed }) => [
+                            styles.menuTile,
+                            pressed && !item.disabled && styles.menuTilePressed,
+                            item.disabled && styles.menuTileDisabled,
+                          ]}
+                        >
+                          <Icon name={item.icon} size={21} color={item.disabled ? "#9CA3AF" : "#1E40AF"} />
+                          <Text style={[styles.menuTileText, item.disabled && styles.menuTileTextDisabled]}>{item.label}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
                 </>
               )}
             </Animated.View>
@@ -443,9 +508,7 @@ export default function ShiftSelectionScreen() {
                             router.push(`/profile/${item.id}`);
                           }}
                         >
-                          <View style={styles.searchCustomerBadge}>
-                            <Text style={styles.searchCustomerBadgeText}>{item.numericalId}</Text>
-                          </View>
+                          <CustomerIdBadge numericalId={item.numericalId} id={item.id} />
                           <View style={styles.searchCustomerInfo}>
                             <Text style={styles.searchCustomerName}>{item.name}</Text>
                             <Text style={styles.searchCustomerMeta}>
@@ -488,6 +551,13 @@ const styles = StyleSheet.create({
   metricValue: { color: "#111827", fontSize: 20, fontWeight: "700" },
   metricTitle: { color: "#6B7280", fontSize: 11, lineHeight: 14, fontWeight: "500", marginTop: 4 },
   panel: { backgroundColor: "#FFFFFF", borderRadius: 16, borderWidth: 1, borderColor: "#DCE6F7", padding: 16, gap: 13, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4 },
+  menuPanel: { backgroundColor: "#FFFFFF", borderRadius: 16, borderWidth: 1, borderColor: "#DCE6F7", padding: 16, gap: 13, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4 },
+  menuGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  menuTile: { width: "31%", minWidth: 96, flexGrow: 1, minHeight: 84, borderRadius: 14, borderWidth: 1, borderColor: "#DCE6F7", backgroundColor: "#F8FAFC", alignItems: "center", justifyContent: "center", gap: 8 },
+  menuTilePressed: { transform: [{ scale: 0.97 }], backgroundColor: "#EFF6FF" },
+  menuTileDisabled: { opacity: 0.48 },
+  menuTileText: { color: "#111827", fontSize: 12, fontWeight: "800", textAlign: "center" },
+  menuTileTextDisabled: { color: "#9CA3AF" },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
   sectionTitle: { color: "#111827", fontSize: 20, fontWeight: "700" },
   sectionSub: { color: "#6B7280", fontSize: 12, fontWeight: "500" },

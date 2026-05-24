@@ -1,4 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
+import { CameraView, useCameraPermissions, type BarcodeScanningResult } from "expo-camera";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -22,14 +23,17 @@ import {
 import { useAuth } from "../../src/auth-context";
 import { AnimatedListItem } from "../../src/components/AnimatedListItem";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
+import { CustomerIdBadge } from "../../src/components/CustomerIdBadge";
 import Icon from "../../src/Icon";
 import { colors } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
 import { lightImpact } from "../../src/interactions";
-import { scanAadhaarCard, type AadhaarScanResult } from "../../src/utils/aadhaarScanner";
+import { parseAadhaarScanData, type AadhaarScanResult } from "../../src/utils/aadhaarScanner";
+import { showToast } from "../../src/notify";
 import { LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
 import { addCustomerWithLoan, addPayment, getActiveLoansByCustomerIds, getCustomersPage, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary, isAadhaarBlocked, updateCustomer } from "../../src/repository";
 import { Customer, Loan, Village } from "../../src/types";
+import { validateAadhaar, validateIndianPhone, validatePositiveAmount } from "../../src/validation";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 const noTextSelection = Platform.OS === "web" ? ({ userSelect: "none", WebkitUserSelect: "none" } as any) : undefined;
@@ -86,15 +90,6 @@ const CUSTOMER_FILTERS: { key: CustomerFilter; label: string }[] = [
 
 function normalizeAadhar(aadhar?: string) {
   return (aadhar ?? "").replace(/\D/g, "").trim();
-}
-
-function getInitials(name: string) {
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("") || "?";
 }
 
 function hasCoordinates(customer: Customer) {
@@ -225,10 +220,7 @@ const CustomerItem = React.memo(function CustomerItem({
       onPress={openCustomer}
     >
       <View style={styles.idContainer}>
-        <View style={styles.avatarCircle}>
-          <Text style={styles.avatarText}>{getInitials(customer.name)}</Text>
-        </View>
-        <Text style={styles.badge}>#{customer.numericalId}</Text>
+        <CustomerIdBadge numericalId={customer.numericalId} id={customer.id} />
         {customer.coId && (
           <Text style={styles.coIdBadge}>C/O: {customer.coId}</Text>
         )}
@@ -347,6 +339,7 @@ export default function CustomerListScreen() {
   const { user, loading: authLoading } = useAuth();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -377,8 +370,11 @@ export default function CustomerListScreen() {
   const [aadharChecking, setAadharChecking] = useState(false);
   const [aadharBlocked, setAadharBlocked] = useState(false);
   const [scanningAadhaar, setScanningAadhaar] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanLocked, setScanLocked] = useState(false);
   const [aadhaarInfoDismissed, setAadhaarInfoDismissed] = useState(false);
   const [aadhaarReview, setAadhaarReview] = useState<AadhaarScanResult | null>(null);
+  const [formErrors, setFormErrors] = useState<{ phone?: string; aadhar?: string; principal?: string }>({});
 
   const reload = useCallback(async () => {
     if (!user || !villageId) {
@@ -507,7 +503,10 @@ export default function CustomerListScreen() {
     setAadharChecking(false);
     setAadharBlocked(false);
     setScanningAadhaar(false);
+    setScannerOpen(false);
+    setScanLocked(false);
     setAadhaarReview(null);
+    setFormErrors({});
   }, []);
 
   const openAddCustomer = useCallback(() => {
@@ -520,33 +519,62 @@ export default function CustomerListScreen() {
     resetAddCustomerForm();
   }, [resetAddCustomerForm]);
 
+  const applyAadhaarResult = useCallback(async (result: AadhaarScanResult) => {
+    const scannedAadhaar = normalizeAadhar(result.aadhaar ?? "");
+    if (scannedAadhaar && scannedAadhaar.length !== 12) {
+      showToast("error", "Invalid Aadhaar QR", "Please enter the 12-digit number manually.");
+      return;
+    }
+    setForm((current) => ({
+      ...current,
+      name: result.name || current.name,
+      aadhar: scannedAadhaar || current.aadhar,
+      phone: result.phone || current.phone,
+      locationDesc: result.location_desc || current.locationDesc,
+    }));
+    setAadhaarReview(result);
+    if (scannedAadhaar.length === 12) {
+      const blocked = await isAadhaarBlocked(scannedAadhaar);
+      setAadharBlocked(blocked);
+      setAadharWarning(blocked ? "This Aadhaar is blocked. Cannot register." : "");
+    }
+    showToast("success", "Aadhaar scanned", "Review the filled details before saving.");
+  }, []);
+
   const handleAadhaarScan = useCallback(async () => {
     try {
       lightImpact();
-      setScanningAadhaar(true);
-      const result = await scanAadhaarCard();
-      if (!result) {
-        Alert.alert("Scan failed", "Could not read card clearly. Please fill manually.");
+      if (Platform.OS === "web") {
+        showToast("info", "Scanner unavailable on web", "Please enter the 12-digit Aadhaar number manually.");
         return;
       }
-      const scannedAadhaar = normalizeAadhar(result.aadhaar ?? "");
-      setForm((current) => ({
-        ...current,
-        name: result.name || current.name,
-        aadhar: scannedAadhaar || current.aadhar,
-        phone: result.phone || current.phone,
-        locationDesc: result.location_desc || current.locationDesc,
-      }));
-      setAadhaarReview(result);
-      if (scannedAadhaar.length === 12) {
-        const blocked = await isAadhaarBlocked(scannedAadhaar);
-        setAadharBlocked(blocked);
-        setAadharWarning(blocked ? "This Aadhaar is blocked. Cannot register." : "");
+      if (!cameraPermission?.granted) {
+        const permission = await requestCameraPermission();
+        if (!permission.granted) {
+          showToast("error", "Camera permission denied", "Allow camera access to scan Aadhaar QR codes.");
+          return;
+        }
       }
+      setScanningAadhaar(true);
+      setScanLocked(false);
+      setScannerOpen(true);
     } finally {
       setScanningAadhaar(false);
     }
-  }, []);
+  }, [cameraPermission?.granted, requestCameraPermission]);
+
+  const handleAadhaarQrScanned = useCallback(async ({ data }: BarcodeScanningResult) => {
+    if (scanLocked) return;
+    setScanLocked(true);
+    const result = parseAadhaarScanData(data);
+    if (!result?.aadhaar) {
+      setScanLocked(false);
+      showToast("error", "Scan failed", "The QR data did not match Aadhaar format. Try again or enter manually.");
+      return;
+    }
+    setScannerOpen(false);
+    await applyAadhaarResult(result);
+  }, [applyAadhaarResult, scanLocked]);
 
   const getCurrentLocation = async () => {
     const requestId = addLocationRequestRef.current + 1;
@@ -719,8 +747,13 @@ export default function CustomerListScreen() {
       setManualPaymentError("No active loan found.");
       return;
     }
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setManualPaymentError("Enter a valid amount.");
+    const amountError = validatePositiveAmount(manualPaymentAmount, "Payment amount");
+    if (amountError) {
+      setManualPaymentError(amountError);
+      return;
+    }
+    if (amount > loan.balanceAmount) {
+      setManualPaymentError(`Amount cannot exceed Rs.${Math.round(loan.balanceAmount)}.`);
       return;
     }
 
@@ -896,6 +929,36 @@ export default function CustomerListScreen() {
         </View>
       </Modal>
 
+      <Modal visible={scannerOpen} animationType="slide" onRequestClose={() => setScannerOpen(false)}>
+        <SafeAreaView style={styles.scannerModal}>
+          <View style={styles.scannerHeader}>
+            <Text style={styles.scannerTitle}>Scan Aadhaar QR</Text>
+            <Pressable style={styles.scannerCloseBtn} onPress={() => setScannerOpen(false)}>
+              <Icon name="close" size={18} color={colors.text} />
+            </Pressable>
+          </View>
+          {Platform.OS !== "web" ? (
+            <CameraView
+              style={styles.cameraView}
+              facing="back"
+              barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+              onBarcodeScanned={handleAadhaarQrScanned}
+            >
+              <View style={styles.scanFrame}>
+                <Text style={styles.scanFrameText}>Place the QR code inside the frame</Text>
+              </View>
+            </CameraView>
+          ) : (
+            <View style={styles.scannerFallback}>
+              <Text style={styles.scannerFallbackText}>Camera scanning is unavailable on web. Please enter Aadhaar manually.</Text>
+            </View>
+          )}
+          <Pressable style={styles.manualFallbackBtn} onPress={() => setScannerOpen(false)}>
+            <Text style={styles.manualFallbackText}>Enter manually</Text>
+          </Pressable>
+        </SafeAreaView>
+      </Modal>
+
       <Modal visible={showAdd} animationType="slide" onRequestClose={closeAddCustomer}>
         <SafeAreaView style={[styles.modal, { paddingTop: insets.top, backgroundColor: colors.background }]} edges={['top']}>
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -958,10 +1021,14 @@ export default function CustomerListScreen() {
                       placeholder="Phone number"
                       placeholderTextColor={colors.gray}
                       value={form.phone}
-                      onChangeText={(t) => setForm((f) => ({ ...f, phone: t }))}
+                      onChangeText={(t) => {
+                        setForm((f) => ({ ...f, phone: t.replace(/\D/g, "").slice(0, 10) }));
+                        setFormErrors((current) => ({ ...current, phone: validateIndianPhone(t) }));
+                      }}
                       style={[styles.input, { backgroundColor: colors.white, borderColor: colors.border, color: colors.text }]}
                       keyboardType="phone-pad"
                     />
+                    {formErrors.phone ? <Text style={styles.aadharWarning}>{formErrors.phone}</Text> : null}
                   </View>
                 </View>
 
@@ -973,7 +1040,11 @@ export default function CustomerListScreen() {
                         placeholder="Aadhar ID"
                         placeholderTextColor={colors.textMuted}
                         value={form.aadhar}
-                        onChangeText={(t) => setForm((f) => ({ ...f, aadhar: normalizeAadhar(t).slice(0, 12) }))}
+                        onChangeText={(t) => {
+                          const normalized = normalizeAadhar(t).slice(0, 12);
+                          setForm((f) => ({ ...f, aadhar: normalized }));
+                          setFormErrors((current) => ({ ...current, aadhar: validateAadhaar(normalized) }));
+                        }}
                         style={[styles.input, styles.scanInput, { backgroundColor: colors.surfaceTint, borderColor: aadharBlocked ? colors.error : colors.border, color: colors.text }]}
                         keyboardType="numeric"
                         maxLength={12}
@@ -989,6 +1060,8 @@ export default function CustomerListScreen() {
                     </View>
                     {aadharChecking ? (
                       <Text style={styles.aadharHint}>Checking Aadhar...</Text>
+                    ) : formErrors.aadhar ? (
+                      <Text style={styles.aadharWarning}>{formErrors.aadhar}</Text>
                     ) : aadharWarning ? (
                       <Text style={styles.aadharWarning}>{aadharWarning}</Text>
                     ) : null}
@@ -1048,10 +1121,14 @@ export default function CustomerListScreen() {
                       placeholder="Enter loan amount"
                       placeholderTextColor={colors.textMuted}
                       value={form.principal}
-                      onChangeText={(t) => setForm((f) => ({ ...f, principal: t }))}
+                      onChangeText={(t) => {
+                        setForm((f) => ({ ...f, principal: t }));
+                        setFormErrors((current) => ({ ...current, principal: validatePositiveAmount(t, "Loan amount") }));
+                      }}
                       style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
                       keyboardType="numeric"
                     />
+                    {formErrors.principal ? <Text style={styles.aadharWarning}>{formErrors.principal}</Text> : null}
                   </View>
                 </View>
 
@@ -1158,9 +1235,19 @@ export default function CustomerListScreen() {
                     style={[styles.save, (!form.name || !form.phone || !form.principal || aadharBlocked) ? styles.saveDisabled : null]}
                     onPress={async () => {
                       if (!user || !village || !form.name || !form.phone || !form.principal || aadharBlocked) return;
+                      const nextErrors = {
+                        phone: validateIndianPhone(form.phone),
+                        aadhar: validateAadhaar(form.aadhar),
+                        principal: validatePositiveAmount(form.principal, "Loan amount"),
+                      };
+                      setFormErrors(nextErrors);
+                      if (nextErrors.phone || nextErrors.aadhar || nextErrors.principal) {
+                        showToast("error", "Check customer details", "Fix the highlighted fields before saving.");
+                        return;
+                      }
                       const parsedDate = parseDateInput(registrationDate);
                       if (!parsedDate) {
-                        alert('Please enter a valid registration date');
+                        showToast("error", "Invalid date", "Please enter a valid registration date.");
                         return;
                       }
                       
@@ -1207,7 +1294,7 @@ export default function CustomerListScreen() {
                       setShowAdd(false);
                       resetAddCustomerForm();
                       await reload();
-                      Alert.alert('✅ Success', `Customer "${createdCustomer.name}" has been created successfully!`);
+                      showToast("success", "Customer registered", `${createdCustomer.name} has been created successfully.`);
                     }}
                     disabled={!form.name || !form.phone || !form.principal || aadharBlocked}
                   >
@@ -1295,6 +1382,17 @@ const styles = StyleSheet.create({
   filterOptionOn: { backgroundColor: colors.blue2, borderColor: colors.blue2 },
   filterOptionText: { color: colors.gray, fontSize: 13, fontWeight: "900" },
   filterOptionTextOn: { color: colors.white },
+  scannerModal: { flex: 1, backgroundColor: colors.ink },
+  scannerHeader: { minHeight: 64, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.white },
+  scannerTitle: { color: colors.ink, fontSize: 20, fontWeight: "800" },
+  scannerCloseBtn: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: colors.grayLighter },
+  cameraView: { flex: 1, alignItems: "center", justifyContent: "center" },
+  scanFrame: { width: "72%", aspectRatio: 1, borderRadius: 24, borderWidth: 3, borderColor: colors.teal, alignItems: "center", justifyContent: "flex-end", padding: 14, backgroundColor: "rgba(0,0,0,0.18)" },
+  scanFrameText: { color: colors.white, fontSize: 14, fontWeight: "800", textAlign: "center" },
+  scannerFallback: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
+  scannerFallbackText: { color: colors.white, fontSize: 16, lineHeight: 22, textAlign: "center", fontWeight: "700" },
+  manualFallbackBtn: { minHeight: 52, margin: 16, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: colors.white },
+  manualFallbackText: { color: colors.blue1, fontSize: 15, fontWeight: "900" },
   routeSummary: { flexDirection: "row", gap: 6, marginBottom: 8 },
   routeSummaryCard: { flex: 1, minHeight: 44, borderRadius: 10, paddingHorizontal: 5, paddingVertical: 6, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.14)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)" },
   routeSummaryLabel: { color: "rgba(255,255,255,0.72)", fontSize: 8, fontWeight: "800", textTransform: "uppercase", textAlign: "center" },
@@ -1302,9 +1400,6 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   listContent: { paddingBottom: 20 },
   item: { backgroundColor: colors.white, borderRadius: 16, padding: 13, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4, borderLeftWidth: 4, borderLeftColor: colors.teal },
-  avatarCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.mint, alignItems: "center", justifyContent: "center" },
-  avatarText: { color: colors.teal, fontSize: 13, fontWeight: "900" },
-  badge: { textAlign: "center", color: colors.blue2, fontSize: 11, fontWeight: "900" },
   idContainer: { alignItems: "center", gap: 4 },
   coIdBadge: { fontSize: 10, textAlign: "center", backgroundColor: "#fff3e0", color: "#f57c00", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, fontWeight: "600" },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 8 },

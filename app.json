@@ -16,11 +16,14 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "bundleIdentifier": "com.haritej.financeapp",
       "buildNumber": "1",
       "icon": "./app/src/main/ic_launcher-playstore.png",
       "infoPlist": {
+        "NSCameraUsageDescription": "We use the camera to scan Aadhaar QR codes during customer registration.",
+        "NSPhotoLibraryUsageDescription": "We use photo access only when you choose an Aadhaar image manually.",
+        "NSFaceIDUsageDescription": "Face ID can be used by the device to protect app access when enabled.",
         "NSLocationWhenInUseUsageDescription": "We use your location to tag customer home addresses.",
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -31,9 +34,14 @@
       "versionCode": 1,
       "permissions": [
         "INTERNET",
+        "CAMERA",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
-      ]
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./app/src/main/ic_launcher-playstore.png",
+        "backgroundColor": "#1E40AF"
+      }
     },
     "web": {
       "bundler": "metro",
@@ -47,6 +55,8 @@
     },
     "plugins": [
       "expo-router",
+      "expo-camera",
+      "expo-splash-screen",
       "@react-native-community/datetimepicker",
       [
         "expo-location",

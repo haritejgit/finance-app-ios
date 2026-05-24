@@ -1,5 +1,6 @@
 import { Redirect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef } from "react";
 import { ActivityIndicator, Animated, StyleSheet, Text, View } from "react-native";
 import { useAuth } from "../src/auth-context";
@@ -20,6 +21,12 @@ export default function Index() {
       useNativeDriver: true,
     }).start();
   }, [intro]);
+
+  useEffect(() => {
+    if (!loading) {
+      void SplashScreen.hideAsync().catch(() => undefined);
+    }
+  }, [loading]);
 
   if (loading) {
     return (

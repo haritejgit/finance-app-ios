@@ -23,7 +23,18 @@ const AADHAAR_WORDS = new Set([
   "address",
 ]);
 
-function parseAadhaarText(text: string): AadhaarScanResult | null {
+export function parseAadhaarScanData(text: string): AadhaarScanResult | null {
+  const xmlAadhaar = text.match(/\b\d{12}\b/)?.[0] ?? null;
+  const xmlName = text.match(/\bname=["']([^"']+)["']/i)?.[1] ?? text.match(/\bn=["']([^"']+)["']/i)?.[1] ?? null;
+  const xmlPhone = text.match(/\b(?:phone|mobile|m)=["']([^"']+)["']/i)?.[1]?.replace(/[^\d+]/g, "") ?? null;
+  const xmlAddress = ["co", "house", "street", "loc", "vtc", "dist", "state", "pc"]
+    .map((key) => text.match(new RegExp(`\\b${key}=["']([^"']+)["']`, "i"))?.[1])
+    .filter(Boolean)
+    .join(", ");
+  if (xmlAadhaar) {
+    return { name: xmlName, aadhaar: xmlAadhaar, phone: xmlPhone, location_desc: xmlAddress || null };
+  }
+
   const lines = text
     .split(/\r?\n/)
     .map((line) => line.replace(/\s+/g, " ").trim())
@@ -63,7 +74,6 @@ function parseAadhaarText(text: string): AadhaarScanResult | null {
 export async function scanAadhaarCard(): Promise<AadhaarScanResult | null> {
   const { status } = await ImagePicker.requestCameraPermissionsAsync();
   if (status !== "granted") {
-    alert("Camera permission is required to scan Aadhaar card.");
     return null;
   }
 
@@ -76,7 +86,7 @@ export async function scanAadhaarCard(): Promise<AadhaarScanResult | null> {
 
   try {
     const recognized = await TextRecognition.recognize(result.assets[0].uri);
-    return parseAadhaarText(recognized.text);
+    return parseAadhaarScanData(recognized.text);
   } catch (error) {
     console.error("Aadhaar scan error:", error);
     return null;
