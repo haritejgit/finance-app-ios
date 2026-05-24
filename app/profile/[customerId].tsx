@@ -44,6 +44,7 @@ import { useTheme } from "../../src/theme-context";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { openCustomerLedgerPrint } from "../../src/exports";
 import { calculateCreditScore } from "../../src/credit-score";
+import { showToast } from "../../src/notify";
 
 const noTextSelection = Platform.OS === "web" ? ({ userSelect: "none", WebkitUserSelect: "none" } as any) : undefined;
 
@@ -258,7 +259,7 @@ export default function ProfileScreen() {
   const makePhoneCall = (phoneNumber: string) => {
     const phoneUrl = `tel:${phoneNumber}`;
     Linking.openURL(phoneUrl).catch(() => {
-      alert('Unable to make phone call');
+      showToast("error", "Call unavailable", "Unable to make phone call.");
     });
   };
 
@@ -300,12 +301,12 @@ export default function ProfileScreen() {
   // Function to open Google Maps with customer location
   const openGoogleMaps = () => {
     if (!hasCustomerCoordinates(customer)) {
-      alert('Customer location not available');
+      showToast("info", "Location missing", "Customer location is not available.");
       return;
     }
     const url = `https://www.google.com/maps/dir/?api=1&destination=${customer.latitude},${customer.longitude}`;
     Linking.openURL(url).catch(() => {
-      alert('Unable to open maps');
+      showToast("error", "Maps unavailable", "Unable to open maps.");
     });
   };
 

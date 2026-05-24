@@ -588,7 +588,7 @@ export default function CustomerListScreen() {
         coordinates,
       }));
     } catch (error) {
-      alert(getLocationErrorMessage(error));
+      showToast("error", "Location unavailable", getLocationErrorMessage(error));
     } finally {
       if (addLocationRequestRef.current === requestId) {
         setIsGettingLocation(false);
