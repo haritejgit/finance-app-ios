@@ -125,7 +125,11 @@ service cloud.firestore {
 
     match /blocked_aadhaar/{docId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.blocked_by == request.auth.uid;
+      allow update: if isSignedIn() &&
+        resource.data.blocked_by == request.auth.uid &&
+        request.resource.data.blocked_by == resource.data.blocked_by;
+      allow delete: if isSignedIn() && resource.data.blocked_by == request.auth.uid;
     }
 
     match /{document=**} {
