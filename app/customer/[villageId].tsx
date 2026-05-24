@@ -21,7 +21,6 @@ import {
   View,
 } from "react-native";
 import { useAuth } from "../../src/auth-context";
-import { AnimatedListItem } from "../../src/components/AnimatedListItem";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import { CustomerIdBadge } from "../../src/components/CustomerIdBadge";
 import Icon from "../../src/Icon";
@@ -861,8 +860,7 @@ export default function CustomerListScreen() {
   }, [activeLoans, closeManualPayment, manualPaymentAmount, manualPaymentCustomer, manualPaymentMode, user]);
 
   const renderCustomer = useCallback(
-    ({ item, index }: { item: Customer; index: number }) => (
-      <AnimatedListItem index={index}>
+    ({ item }: { item: Customer }) => (
       <CustomerItem 
         customer={item} 
         onPress={() => openCustomer(item.id)} 
@@ -876,7 +874,6 @@ export default function CustomerListScreen() {
         isPaying={payingCustomerId === item.id}
         isUpdatingLocation={updatingLocationCustomerId === item.id}
       />
-      </AnimatedListItem>
     ),
     [activeLoans, openCustomer, openDirections, openManualPayment, paymentStatuses, payingCustomerId, quickPay, saveCurrentLocationForCustomer, updatingLocationCustomerId]
   );
@@ -950,7 +947,6 @@ export default function CustomerListScreen() {
             initialNumToRender={15}
             maxToRenderPerBatch={10}
             windowSize={5}
-            getItemLayout={(_, index) => ({ length: 82, offset: 82 * index, index })}
             removeClippedSubviews={true}
             updateCellsBatchingPeriod={50}
             disableVirtualization={false}
