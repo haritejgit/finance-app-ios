@@ -21,6 +21,7 @@ import {
 import { useAuth } from "../../src/auth-context";
 import { AnimatedListItem } from "../../src/components/AnimatedListItem";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
+import { CustomerIdBadge } from "../../src/components/CustomerIdBadge";
 import Icon from "../../src/Icon";
 import { LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
 import {
@@ -683,12 +684,15 @@ export default function ProfileScreen() {
             <View style={styles.content}>
             {/* Header Card */}
             <View style={[styles.headerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={[styles.headerName, { color: colors.primary }]}>{customer?.name || "Profile"}</Text>
+              <View style={styles.profileHeaderTop}>
+                <CustomerIdBadge numericalId={customer.numericalId} id={customer.id} />
+                <Text style={[styles.headerName, { color: colors.primary }]}>{customer?.name || "Profile"}</Text>
+              </View>
               {!!customer && (
                 <View style={styles.headerInfo}>
                   <View style={styles.headerInfoRow}>
                     <Icon name="person" size={18} color={colors.blue2} style={{marginRight: 8}} />
-                    <Text style={[styles.headerText, { color: colors.textSecondary }]}>Book No: {customer.numericalId}</Text>
+                    <Text style={[styles.headerText, { color: colors.textSecondary }]}>Book No: {String(customer.numericalId).padStart(2, "0")}</Text>
                   </View>
                   <Pressable onPress={() => makePhoneCall(customer.phone)} style={styles.headerInfoRow}>
                     <Icon name="call" size={18} color={colors.blue2} style={{marginRight: 8}} />
@@ -1476,7 +1480,8 @@ const styles = StyleSheet.create({
   
   // Header Card Styles
   headerCard: { backgroundColor: colors.white, borderRadius: 18, padding: 16, borderWidth: 1, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 4 },
-  headerName: { color: colors.blue2, fontSize: 20, fontWeight: '700', marginBottom: 10 },
+  profileHeaderTop: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 10 },
+  headerName: { color: colors.blue2, fontSize: 20, fontWeight: '700', flex: 1 },
   headerInfo: { gap: 8 },
   headerInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerIcon: { fontSize: 14, width: 20 },

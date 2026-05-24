@@ -1,5 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { CameraView, useCameraPermissions, type BarcodeScanningResult } from "expo-camera";
+import { CameraView, useCameraPermissions } from "expo-camera";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -28,7 +28,6 @@ import Icon from "../../src/Icon";
 import { colors } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
 import { lightImpact } from "../../src/interactions";
-import { parseAadhaarScanData, type AadhaarScanResult } from "../../src/utils/aadhaarScanner";
 import { showToast } from "../../src/notify";
 import { LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
 import { addCustomerWithLoan, addPayment, getActiveLoansByCustomerIds, getCustomersPage, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary, isAadhaarBlocked, updateCustomer } from "../../src/repository";
@@ -78,6 +77,12 @@ function isToday(timestamp: number): boolean {
 // Get customer payment status for today
 type PaymentStatus = 'paid' | 'due' | 'none';
 type CustomerFilter = "all" | "pending" | "paid" | "due" | "new" | "docs";
+type AadhaarScanResult = {
+  name?: string | null;
+  aadhaar?: string | null;
+  phone?: string | null;
+  location_desc?: string | null;
+};
 
 const CUSTOMER_FILTERS: { key: CustomerFilter; label: string }[] = [
   { key: "all", label: "All" },
@@ -116,6 +121,47 @@ function getLocationErrorMessage(error: unknown) {
     return "Location is taking too long. Please try again or enter coordinates from the customer edit screen.";
   }
   return "Failed to get location.";
+}
+
+function formatAadhaarDisplay(value?: string | null) {
+  const digits = normalizeAadhar(value ?? "");
+  return digits.replace(/(\d{4})(?=\d)/g, "$1 ").trim();
+}
+
+function AadhaarManualInput({ onSubmit, inline = false }: { onSubmit: (data: AadhaarScanResult) => void; inline?: boolean }) {
+  const [value, setValue] = useState("");
+  const [error, setError] = useState("");
+
+  const confirm = useCallback(() => {
+    if (!/^\d{12}$/.test(value)) {
+      setError("Aadhaar must be exactly 12 digits");
+      return;
+    }
+    setError("");
+    onSubmit({ aadhaar: value });
+  }, [onSubmit, value]);
+
+  return (
+    <View style={inline ? styles.manualInputPanelInline : styles.manualInputPanel}>
+      <Text style={styles.scannerTitle}>Enter Aadhaar Manually</Text>
+      <TextInput
+        value={value}
+        onChangeText={(text) => {
+          setValue(text.replace(/\D/g, "").slice(0, 12));
+          setError("");
+        }}
+        placeholder="12-digit Aadhaar"
+        placeholderTextColor="#6B7280"
+        keyboardType="numeric"
+        maxLength={12}
+        style={styles.manualAadhaarInput}
+      />
+      {error ? <Text style={styles.manualInputError}>{error}</Text> : null}
+      <Pressable style={styles.confirmScanBtn} onPress={confirm}>
+        <Text style={styles.confirmScanText}>Confirm</Text>
+      </Pressable>
+    </View>
+  );
 }
 
 const CustomerItem = React.memo(function CustomerItem({
@@ -340,6 +386,7 @@ export default function CustomerListScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const cameraRef = useRef<any>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -371,9 +418,12 @@ export default function CustomerListScreen() {
   const [aadharBlocked, setAadharBlocked] = useState(false);
   const [scanningAadhaar, setScanningAadhaar] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [scanLocked, setScanLocked] = useState(false);
+  const [showManualInput, setShowManualInput] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [cameraActive, setCameraActive] = useState(true);
   const [aadhaarInfoDismissed, setAadhaarInfoDismissed] = useState(false);
   const [aadhaarReview, setAadhaarReview] = useState<AadhaarScanResult | null>(null);
+  const [scannedData, setScannedData] = useState<AadhaarScanResult | null>(null);
   const [formErrors, setFormErrors] = useState<{ phone?: string; aadhar?: string; principal?: string }>({});
 
   const reload = useCallback(async () => {
@@ -504,8 +554,11 @@ export default function CustomerListScreen() {
     setAadharBlocked(false);
     setScanningAadhaar(false);
     setScannerOpen(false);
-    setScanLocked(false);
+    setShowManualInput(false);
+    setShowConfirmation(false);
+    setCameraActive(true);
     setAadhaarReview(null);
+    setScannedData(null);
     setFormErrors({});
   }, []);
 
@@ -522,7 +575,7 @@ export default function CustomerListScreen() {
   const applyAadhaarResult = useCallback(async (result: AadhaarScanResult) => {
     const scannedAadhaar = normalizeAadhar(result.aadhaar ?? "");
     if (scannedAadhaar && scannedAadhaar.length !== 12) {
-      showToast("error", "Invalid Aadhaar QR", "Please enter the 12-digit number manually.");
+      showToast("error", "Invalid Aadhaar", "Please enter the 12-digit number manually.");
       return;
     }
     setForm((current) => ({
@@ -541,40 +594,71 @@ export default function CustomerListScreen() {
     showToast("success", "Aadhaar scanned", "Review the filled details before saving.");
   }, []);
 
+  useEffect(() => {
+    if (scannerOpen && Platform.OS !== "web" && !cameraPermission?.granted) {
+      void requestCameraPermission();
+    }
+  }, [cameraPermission?.granted, requestCameraPermission, scannerOpen]);
+
   const handleAadhaarScan = useCallback(async () => {
+    lightImpact();
+    setShowManualInput(Platform.OS === "web");
+    setShowConfirmation(false);
+    setCameraActive(true);
+    setScannedData(null);
+    setScannerOpen(true);
+  }, []);
+
+  const closeScanner = useCallback(() => {
+    setScannerOpen(false);
+    setShowManualInput(false);
+    setShowConfirmation(false);
+    setCameraActive(true);
+    setScannedData(null);
+    setScanningAadhaar(false);
+  }, []);
+
+  const handleCapture = useCallback(async (photo: { uri: string }) => {
     try {
-      lightImpact();
-      if (Platform.OS === "web") {
-        showToast("info", "Scanner unavailable on web", "Please enter the 12-digit Aadhaar number manually.");
-        return;
-      }
-      if (!cameraPermission?.granted) {
-        const permission = await requestCameraPermission();
-        if (!permission.granted) {
-          showToast("error", "Camera permission denied", "Allow camera access to scan Aadhaar QR codes.");
-          return;
-        }
-      }
       setScanningAadhaar(true);
-      setScanLocked(false);
-      setScannerOpen(true);
+      const { default: TextRecognition } = await import("@react-native-ml-kit/text-recognition");
+      const result = await TextRecognition.recognize(photo.uri);
+      const fullText = result.text;
+      const aadhaarMatch = fullText.match(/\d{4}\s\d{4}\s\d{4}/) ?? fullText.match(/(?:\d[ -]?){12}/);
+      const aadhaarNumber = aadhaarMatch ? aadhaarMatch[0].replace(/\s/g, "").replace(/-/g, "") : null;
+      const nameMatch = fullText.match(/([A-Z][a-z]+ [A-Z][a-z]+)(?=\s*\n|DOB|Year)/);
+      const name = nameMatch ? nameMatch[1] : null;
+
+      if (aadhaarNumber && aadhaarNumber.length === 12) {
+        setScannedData({ aadhaar: aadhaarNumber, name });
+        setShowConfirmation(true);
+        setCameraActive(false);
+      } else {
+        showToast("error", "Could not read Aadhaar number", "Try again or enter manually.");
+        setCameraActive(true);
+      }
+    } catch (err) {
+      console.error("OCR Error:", err);
+      showToast("error", "Scan failed", "Please enter Aadhaar manually.");
+      setShowManualInput(true);
     } finally {
       setScanningAadhaar(false);
     }
-  }, [cameraPermission?.granted, requestCameraPermission]);
+  }, []);
 
-  const handleAadhaarQrScanned = useCallback(async ({ data }: BarcodeScanningResult) => {
-    if (scanLocked) return;
-    setScanLocked(true);
-    const result = parseAadhaarScanData(data);
-    if (!result?.aadhaar) {
-      setScanLocked(false);
-      showToast("error", "Scan failed", "The QR data did not match Aadhaar format. Try again or enter manually.");
-      return;
+  const takeAadhaarPhoto = useCallback(async () => {
+    if (!cameraRef.current || scanningAadhaar) return;
+    const photo = await cameraRef.current.takePictureAsync({ quality: 0.82, skipProcessing: true });
+    if (photo?.uri) {
+      await handleCapture(photo);
     }
-    setScannerOpen(false);
-    await applyAadhaarResult(result);
-  }, [applyAadhaarResult, scanLocked]);
+  }, [handleCapture, scanningAadhaar]);
+
+  const confirmScannedAadhaar = useCallback(async () => {
+    if (!scannedData) return;
+    await applyAadhaarResult(scannedData);
+    closeScanner();
+  }, [applyAadhaarResult, closeScanner, scannedData]);
 
   const getCurrentLocation = async () => {
     const requestId = addLocationRequestRef.current + 1;
@@ -929,33 +1013,82 @@ export default function CustomerListScreen() {
         </View>
       </Modal>
 
-      <Modal visible={scannerOpen} animationType="slide" onRequestClose={() => setScannerOpen(false)}>
+      <Modal visible={scannerOpen && Platform.OS !== "web"} animationType="slide" onRequestClose={closeScanner}>
         <SafeAreaView style={styles.scannerModal}>
           <View style={styles.scannerHeader}>
-            <Text style={styles.scannerTitle}>Scan Aadhaar QR</Text>
-            <Pressable style={styles.scannerCloseBtn} onPress={() => setScannerOpen(false)}>
+            <Text style={styles.scannerTitle}>Scan Aadhaar</Text>
+            <Pressable style={styles.scannerCloseBtn} onPress={closeScanner}>
               <Icon name="close" size={18} color={colors.text} />
             </Pressable>
           </View>
-          {Platform.OS !== "web" ? (
+
+          {Platform.OS === "web" ? (
+            <AadhaarManualInput
+              onSubmit={async (data) => {
+                await applyAadhaarResult(data);
+                closeScanner();
+              }}
+            />
+          ) : showManualInput ? (
+            <AadhaarManualInput
+              onSubmit={async (data) => {
+                await applyAadhaarResult(data);
+                closeScanner();
+              }}
+            />
+          ) : showConfirmation && scannedData ? (
+            <View style={styles.scanConfirmation}>
+              <Icon name="checkmark-circle-outline" size={42} color="#1B4332" />
+              <Text style={styles.scanConfirmationTitle}>Confirm Aadhaar Details</Text>
+              <Text style={styles.scanConfirmationValue}>{formatAadhaarDisplay(scannedData.aadhaar)}</Text>
+              {scannedData.name ? <Text style={styles.scanConfirmationName}>{scannedData.name}</Text> : null}
+              <Pressable style={styles.confirmScanBtn} onPress={confirmScannedAadhaar}>
+                <Text style={styles.confirmScanText}>Confirm & Use This</Text>
+              </Pressable>
+              <Pressable
+                style={styles.scanAgainBtn}
+                onPress={() => {
+                  setShowConfirmation(false);
+                  setScannedData(null);
+                  setCameraActive(true);
+                }}
+              >
+                <Text style={styles.scanAgainText}>Scan Again</Text>
+              </Pressable>
+            </View>
+          ) : !cameraPermission?.granted ? (
+            <View style={styles.scannerCenter}>
+              <Text style={styles.scannerFallbackText}>Camera access is needed to scan Aadhaar.</Text>
+              <Pressable style={styles.confirmScanBtn} onPress={requestCameraPermission}>
+                <Text style={styles.confirmScanText}>Grant Permission</Text>
+              </Pressable>
+              <Pressable style={styles.scanAgainBtn} onPress={() => setShowManualInput(true)}>
+                <Text style={styles.scanAgainText}>Enter Manually Instead</Text>
+              </Pressable>
+            </View>
+          ) : cameraActive ? (
             <CameraView
+              ref={cameraRef}
               style={styles.cameraView}
               facing="back"
-              barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-              onBarcodeScanned={handleAadhaarQrScanned}
             >
               <View style={styles.scanFrame}>
-                <Text style={styles.scanFrameText}>Place the QR code inside the frame</Text>
+                <Text style={styles.scanFrameText}>Place the Aadhaar card inside the frame</Text>
               </View>
+              <Pressable style={[styles.captureBtn, scanningAadhaar && styles.saveDisabled]} onPress={takeAadhaarPhoto} disabled={scanningAadhaar}>
+                {scanningAadhaar ? <ActivityIndicator size="small" color={colors.white} /> : <Text style={styles.captureBtnText}>Capture</Text>}
+              </Pressable>
             </CameraView>
           ) : (
-            <View style={styles.scannerFallback}>
-              <Text style={styles.scannerFallbackText}>Camera scanning is unavailable on web. Please enter Aadhaar manually.</Text>
+            <View style={styles.scannerCenter}>
+              <ActivityIndicator size="large" color={colors.white} />
             </View>
           )}
-          <Pressable style={styles.manualFallbackBtn} onPress={() => setScannerOpen(false)}>
+          {Platform.OS !== "web" && !showManualInput && !showConfirmation ? (
+          <Pressable style={styles.manualFallbackBtn} onPress={() => setShowManualInput(true)}>
             <Text style={styles.manualFallbackText}>Enter manually</Text>
           </Pressable>
+          ) : null}
         </SafeAreaView>
       </Modal>
 
@@ -983,6 +1116,20 @@ export default function CustomerListScreen() {
                 <Text style={[styles.closeBtnText, { color: colors.gray }]}>✕</Text>
               </Pressable>
             </View>
+            {scannerOpen && Platform.OS === "web" ? (
+              <View style={styles.webScannerSheet}>
+                <AadhaarManualInput
+                  inline
+                  onSubmit={async (data) => {
+                    await applyAadhaarResult(data);
+                    closeScanner();
+                  }}
+                />
+                <Pressable style={styles.scanAgainBtn} onPress={closeScanner}>
+                  <Text style={styles.scanAgainText}>Cancel</Text>
+                </Pressable>
+              </View>
+            ) : null}
             
             <View style={styles.formContainer}>
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.formScrollContent}>
@@ -1389,10 +1536,26 @@ const styles = StyleSheet.create({
   cameraView: { flex: 1, alignItems: "center", justifyContent: "center" },
   scanFrame: { width: "72%", aspectRatio: 1, borderRadius: 24, borderWidth: 3, borderColor: colors.teal, alignItems: "center", justifyContent: "flex-end", padding: 14, backgroundColor: "rgba(0,0,0,0.18)" },
   scanFrameText: { color: colors.white, fontSize: 14, fontWeight: "800", textAlign: "center" },
+  scannerCenter: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 14 },
   scannerFallback: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   scannerFallbackText: { color: colors.white, fontSize: 16, lineHeight: 22, textAlign: "center", fontWeight: "700" },
   manualFallbackBtn: { minHeight: 52, margin: 16, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: colors.white },
   manualFallbackText: { color: colors.blue1, fontSize: 15, fontWeight: "900" },
+  captureBtn: { position: "absolute", bottom: 26, minWidth: 130, minHeight: 52, borderRadius: 999, backgroundColor: "#1B4332", alignItems: "center", justifyContent: "center", paddingHorizontal: 18 },
+  captureBtnText: { color: colors.white, fontSize: 16, fontWeight: "900" },
+  scanConfirmation: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 12, backgroundColor: colors.white },
+  scanConfirmationTitle: { color: colors.ink, fontSize: 20, fontWeight: "900", textAlign: "center" },
+  scanConfirmationValue: { color: "#1B4332", fontSize: 22, fontWeight: "900", letterSpacing: 1 },
+  scanConfirmationName: { color: colors.gray, fontSize: 15, fontWeight: "700", textAlign: "center" },
+  confirmScanBtn: { minWidth: 190, minHeight: 48, borderRadius: 14, backgroundColor: "#1B4332", alignItems: "center", justifyContent: "center", paddingHorizontal: 16, marginTop: 8 },
+  confirmScanText: { color: colors.white, fontSize: 15, fontWeight: "900" },
+  scanAgainBtn: { minWidth: 190, minHeight: 48, borderRadius: 14, backgroundColor: colors.white, alignItems: "center", justifyContent: "center", paddingHorizontal: 16, borderWidth: 1, borderColor: "#D1D5DB" },
+  scanAgainText: { color: "#1B4332", fontSize: 15, fontWeight: "900" },
+  manualInputPanel: { flex: 1, backgroundColor: colors.white, padding: 22, justifyContent: "center", gap: 12 },
+  manualInputPanelInline: { backgroundColor: colors.white, padding: 16, gap: 12 },
+  webScannerSheet: { margin: 16, borderRadius: 16, overflow: "hidden", backgroundColor: colors.white, borderWidth: 1, borderColor: "#D1D5DB", paddingBottom: 14, gap: 2 },
+  manualAadhaarInput: { minHeight: 50, borderRadius: 12, borderWidth: 1, borderColor: "#D1D5DB", paddingHorizontal: 14, fontSize: 16, color: colors.ink },
+  manualInputError: { color: "#b91c1c", fontSize: 12, fontWeight: "700" },
   routeSummary: { flexDirection: "row", gap: 6, marginBottom: 8 },
   routeSummaryCard: { flex: 1, minHeight: 44, borderRadius: 10, paddingHorizontal: 5, paddingVertical: 6, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.14)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)" },
   routeSummaryLabel: { color: "rgba(255,255,255,0.72)", fontSize: 8, fontWeight: "800", textTransform: "uppercase", textAlign: "center" },

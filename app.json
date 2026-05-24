@@ -17,11 +17,12 @@
     ],
     "ios": {
       "supportsTablet": true,
+      "requireFullScreen": true,
       "bundleIdentifier": "com.haritej.financeapp",
       "buildNumber": "1",
       "icon": "./app/src/main/ic_launcher-playstore.png",
       "infoPlist": {
-        "NSCameraUsageDescription": "We use the camera to scan Aadhaar QR codes during customer registration.",
+        "NSCameraUsageDescription": "Camera is used to scan Aadhaar cards",
         "NSPhotoLibraryUsageDescription": "We use photo access only when you choose an Aadhaar image manually.",
         "NSFaceIDUsageDescription": "Face ID can be used by the device to protect app access when enabled.",
         "NSLocationWhenInUseUsageDescription": "We use your location to tag customer home addresses.",
@@ -35,13 +36,15 @@
       "permissions": [
         "INTERNET",
         "CAMERA",
+        "android.permission.CAMERA",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./app/src/main/ic_launcher-playstore.png",
         "backgroundColor": "#1E40AF"
-      }
+      },
+      "softwareKeyboardLayoutMode": "pan"
     },
     "web": {
       "bundler": "metro",

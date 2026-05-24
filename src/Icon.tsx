@@ -52,6 +52,7 @@ const iconPaths: Record<string, SvgNode[]> = {
     stroke('M6 15h4'),
   ],
   'calendar-outline': [stroke('M8 2v4M16 2v4'), stroke('M3 9h18'), stroke('M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z')],
+  'bar-chart-outline': [stroke('M4 19V5'), stroke('M4 19h16'), stroke('M8 16v-5'), stroke('M12 16V8'), stroke('M16 16v-3')],
   'cash': [
     stroke('M3 7h18v10H3z'),
     stroke('M7 7a4 4 0 0 1-4 4M17 7a4 4 0 0 0 4 4M7 17a4 4 0 0 0-4-4M17 17a4 4 0 0 1 4-4'),
@@ -78,8 +79,10 @@ const iconPaths: Record<string, SvgNode[]> = {
   'log-out-outline': [stroke('M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4'), stroke('M16 17l5-5-5-5'), stroke('M21 12H9')],
   'logo-google': [{ tag: 'text', x: 12, y: 17, value: 'G', fontSize: 16, fontWeight: '700' }],
   'mail-outline': [stroke('M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z'), stroke('m22 6-10 7L2 6')],
+  'map-outline': [stroke('M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3z'), stroke('M9 3v15'), stroke('M15 6v15')],
   'moon-outline': [stroke('M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z')],
   'people': [stroke('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'), { tag: 'circle', cx: 9, cy: 7, r: 4, fill: 'none', stroke: 'currentColor', strokeWidth: 2 }, stroke('M23 21v-2a4 4 0 0 0-3-3.87'), stroke('M16 3.13a4 4 0 0 1 0 7.75')],
+  'people-outline': [stroke('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'), { tag: 'circle', cx: 9, cy: 7, r: 4, fill: 'none', stroke: 'currentColor', strokeWidth: 2 }, stroke('M23 21v-2a4 4 0 0 0-3-3.87'), stroke('M16 3.13a4 4 0 0 1 0 7.75')],
   'person': [{ tag: 'circle', cx: 12, cy: 8, r: 4, fill: 'none', stroke: 'currentColor', strokeWidth: 2 }, stroke('M4 22a8 8 0 0 1 16 0')],
   'person-outline': [{ tag: 'circle', cx: 12, cy: 8, r: 4, fill: 'none', stroke: 'currentColor', strokeWidth: 2 }, stroke('M4 22a8 8 0 0 1 16 0')],
   'phone-portrait-outline': [stroke('M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z'), stroke('M11 18h2')],

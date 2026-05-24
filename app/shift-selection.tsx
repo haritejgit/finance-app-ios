@@ -1,5 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -8,6 +9,7 @@ import {
   Easing,
   FlatList,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -139,6 +141,7 @@ const ToggleStatCard = memo(function ToggleStatCard({
 });
 
 export default function ShiftSelectionScreen() {
+  const nav = useRouter();
   const { user, logout } = useAuth();
   const { colors } = useTheme();
   const [selectedDay, setSelectedDay] = useState("Monday");
@@ -268,16 +271,32 @@ export default function ShiftSelectionScreen() {
     router.push(`/customer/${selectedVillageForRoute.id}`);
   }, [selectedVillageForRoute]);
 
-  const menuItems = useMemo(
+  const openVillageRoute = useCallback(() => {
+    lightImpact();
+    if (selectedShift && selectedShift !== "Full Day") {
+      nav.push({ pathname: "/village/[day]/[shift]", params: { day: selectedDay, shift: selectedShift } });
+      return;
+    }
+    if (selectedVillageForRoute) {
+      nav.push({
+        pathname: "/village/[day]/[shift]",
+        params: { day: selectedVillageForRoute.dayOfWeek, shift: selectedVillageForRoute.shift },
+      });
+      return;
+    }
+    nav.push({ pathname: "/village/[day]/[shift]", params: { day: selectedDay, shift: "Morning" } });
+  }, [nav, selectedDay, selectedShift, selectedVillageForRoute]);
+
+  const quickActions = useMemo(
     () => [
-      { label: "Settings", icon: "settings-outline", action: () => router.push("/settings") },
-      { label: "Reports", icon: "document-text-outline", action: () => router.push("/reports") },
-      { label: "Progress", icon: "analytics-outline", action: () => router.push("/graph") },
-      { label: "Day Report", icon: "calendar-outline", action: () => router.push("/reports") },
-      { label: "Route", icon: "location", action: startCollection, disabled: !selectedShift },
-      { label: "Customers", icon: "people", action: openCustomerList, disabled: !selectedVillageForRoute },
+      { label: "Reports", icon: "document-text-outline", action: () => nav.push("/reports") },
+      { label: "Progress", icon: "bar-chart-outline", action: () => nav.push("/graph") },
+      { label: "Settings", icon: "settings-outline", action: () => nav.push("/settings") },
+      { label: "Day Report", icon: "calendar-outline", action: () => nav.push("/reports") },
+      { label: "Villages", icon: "map-outline", action: openVillageRoute },
+      { label: "Customers", icon: "people-outline", action: openCustomerList },
     ],
-    [openCustomerList, selectedShift, selectedVillageForRoute, startCollection]
+    [nav, openCustomerList, openVillageRoute]
   );
 
   return (
@@ -353,6 +372,33 @@ export default function ShiftSelectionScreen() {
                     />
                   </View>
 
+                  <View style={styles.quickActionsSection}>
+                    <Text style={styles.quickActionsTitle}>Quick Actions</Text>
+                    <View style={styles.quickActionsGrid}>
+                      {quickActions.map((item) => (
+                        <Pressable
+                          key={item.label}
+                          accessibilityLabel={item.label}
+                          onPress={() => {
+                            lightImpact();
+                            item.action();
+                          }}
+                          style={({ pressed }) => [
+                            styles.card,
+                            pressed && { opacity: 0.75, transform: [{ scale: 0.97 }] },
+                          ]}
+                        >
+                          {Platform.OS === "web" ? (
+                            <Icon name={item.icon} size={28} color="#1B4332" />
+                          ) : (
+                            <Ionicons name={item.icon as any} size={28} color="#1B4332" />
+                          )}
+                          <Text style={styles.quickActionLabel}>{item.label}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+
                   <View style={styles.panel}>
                     <View style={styles.sectionHeader}>
                       <Text style={styles.sectionTitle}>Start Collection</Text>
@@ -405,33 +451,6 @@ export default function ShiftSelectionScreen() {
                     ) : null}
                   </View>
 
-                  <View style={styles.menuPanel}>
-                    <View style={styles.sectionHeader}>
-                      <Text style={styles.sectionTitle}>Menu</Text>
-                      <Text style={styles.sectionSub}>Quick navigation</Text>
-                    </View>
-                    <View style={styles.menuGrid}>
-                      {menuItems.map((item) => (
-                        <Pressable
-                          key={item.label}
-                          accessibilityLabel={item.label}
-                          disabled={item.disabled}
-                          onPress={() => {
-                            lightImpact();
-                            item.action();
-                          }}
-                          style={({ pressed }) => [
-                            styles.menuTile,
-                            pressed && !item.disabled && styles.menuTilePressed,
-                            item.disabled && styles.menuTileDisabled,
-                          ]}
-                        >
-                          <Icon name={item.icon} size={21} color={item.disabled ? "#9CA3AF" : "#1E40AF"} />
-                          <Text style={[styles.menuTileText, item.disabled && styles.menuTileTextDisabled]}>{item.label}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
                 </>
               )}
             </Animated.View>
@@ -550,6 +569,11 @@ const styles = StyleSheet.create({
   metricIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 10 },
   metricValue: { color: "#111827", fontSize: 20, fontWeight: "700" },
   metricTitle: { color: "#6B7280", fontSize: 11, lineHeight: 14, fontWeight: "500", marginTop: 4 },
+  quickActionsSection: { gap: 10 },
+  quickActionsTitle: { color: "#111827", fontSize: 20, fontWeight: "700" },
+  quickActionsGrid: { flexDirection: "row", flexWrap: "wrap" },
+  card: { width: "47%", flexGrow: 1, backgroundColor: "#ffffff", borderRadius: 16, padding: 16, margin: 6, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 8, elevation: 3, alignItems: "center", justifyContent: "center", minHeight: 96, minWidth: 44 },
+  quickActionLabel: { fontSize: 13, fontWeight: "600", color: "#1B4332", marginTop: 8, textAlign: "center" },
   panel: { backgroundColor: "#FFFFFF", borderRadius: 16, borderWidth: 1, borderColor: "#DCE6F7", padding: 16, gap: 13, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4 },
   menuPanel: { backgroundColor: "#FFFFFF", borderRadius: 16, borderWidth: 1, borderColor: "#DCE6F7", padding: 16, gap: 13, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4 },
   menuGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },

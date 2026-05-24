@@ -8,6 +8,7 @@ import {
   getDoc,
   getDocs,
   limit,
+  orderBy,
   query,
   startAfter,
   serverTimestamp,
@@ -33,6 +34,8 @@ const coll = {
 const cache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const CUSTOMER_PAGE_CACHE_PREFIX = "customerPage:";
+const PAGE_SIZE = 20;
+let lastCustomerPageDoc: QueryDocumentSnapshot | null = null;
 
 function getCacheKey(userId: string, type: string, id?: string) {
   return id ? `${userId}:${type}:${id}` : `${userId}:${type}`;
@@ -166,6 +169,7 @@ export async function getCustomersPage(
     where("userId", "==", userId),
     where("villageId", "==", villageId),
     where("isActive", "==", true),
+    orderBy("numericalId", "asc"),
   ];
   const pageQuery = cursor
     ? query(coll.customers, ...constraints, startAfter(cursor), limit(pageSize + 1))
@@ -191,6 +195,24 @@ export async function getCustomersPage(
     }
     throw error;
   }
+}
+
+export async function fetchCustomersPage(villageId: string, reset = false) {
+  if (reset) lastCustomerPageDoc = null;
+
+  const baseConstraints = [
+    where("villageId", "==", villageId),
+    where("isActive", "==", true),
+    orderBy("numericalId", "asc"),
+  ];
+
+  const pageQuery = lastCustomerPageDoc
+    ? query(coll.customers, ...baseConstraints, startAfter(lastCustomerPageDoc), limit(PAGE_SIZE))
+    : query(coll.customers, ...baseConstraints, limit(PAGE_SIZE));
+
+  const snap = await getDocs(pageQuery);
+  lastCustomerPageDoc = snap.docs[snap.docs.length - 1] ?? null;
+  return snap.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as object) }));
 }
 
 export type CustomerSearchResult = Customer & {
