@@ -481,6 +481,20 @@ export default function SettingsScreen() {
                 </View>
                 <Icon name="arrow-forward" size={18} color={colors.textMuted} />
               </Pressable>
+              <Pressable
+                accessibilityLabel="Open Insights"
+                style={[styles.settingsLink, { borderTopColor: colors.border }]}
+                onPress={() => router.push("/insights" as any)}
+              >
+                <View style={[styles.infoIcon, { backgroundColor: colors.successSoft }]}>
+                  <Icon name="bulb-outline" size={18} color={colors.success} />
+                </View>
+                <View style={styles.infoCopy}>
+                  <Text style={[styles.label, { color: colors.textSecondary }]}>Insights</Text>
+                  <Text style={[styles.value, { color: colors.text }]}>Smart loan intelligence</Text>
+                </View>
+                <Icon name="arrow-forward" size={18} color={colors.textMuted} />
+              </Pressable>
             </View>
 
             <View style={[styles.securityPanel, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
