@@ -27,7 +27,7 @@ const coll = {
   customers: collection(db, "customers"),
   loans: collection(db, "loans"),
   payments: collection(db, "payments"),
-  blockedAadhaar: collection(db, "blocked_aadhaar"),
+  blockedAadhaar: collection(db, "blockedAadhaar"),
 };
 
 // Simple in-memory cache for better performance
@@ -506,6 +506,38 @@ export async function getPaymentStatusesForCustomersToday(userId: string, custom
   return statuses;
 }
 
+export async function getLastRegularPaymentDatesForCustomers(userId: string, customerIds: string[]) {
+  const wantedCustomerIds = new Set(customerIds);
+  if (wantedCustomerIds.size === 0) return {} as Record<string, number>;
+
+  const [paymentsSnap, loansSnap] = await Promise.all([
+    getDocs(query(coll.payments, where("userId", "==", userId), limit(1500))),
+    getDocs(query(coll.loans, where("userId", "==", userId), limit(1500))),
+  ]);
+
+  const customerIdByLoanId = new Map(
+    loansSnap.docs
+      .map((d) => d.data() as Loan)
+      .filter((loan) => wantedCustomerIds.has(loan.customerId))
+      .map((loan) => [loan.id, loan.customerId])
+  );
+  const latest: Record<string, number> = {};
+
+  paymentsSnap.docs
+    .map((d) => d.data() as Payment)
+    .filter((payment) => payment.paymentType !== "DUE")
+    .forEach((payment) => {
+      const customerId = payment.customerId ?? customerIdByLoanId.get(payment.loanId);
+      if (!customerId || !wantedCustomerIds.has(customerId)) return;
+      const paymentDate = toMillis(payment.paymentDate);
+      if (!latest[customerId] || paymentDate > latest[customerId]) {
+        latest[customerId] = paymentDate;
+      }
+    });
+
+  return latest;
+}
+
 export async function addPayment(loan: Loan, amountPaid: number, paymentDate: number, mode: PaymentMode) {
   assertPositiveAmount(amountPaid, "Payment amount");
   const payment: Payment = {
@@ -779,9 +811,12 @@ export async function blockAadhaar(aadhaar: string, reason: string, userId: stri
   const normalizedAadhaar = normalizeAadhar(aadhaar);
   if (normalizedAadhaar.length !== 12) throw new Error("Aadhaar must be exactly 12 digits.");
   await addDoc(coll.blockedAadhaar, {
+    aadhaarNumber: normalizedAadhaar,
     aadhaar: normalizedAadhaar,
     reason: cleanText(reason),
+    blockedAt: serverTimestamp(),
     blocked_at: serverTimestamp(),
+    blockedBy: userId,
     blocked_by: userId,
   });
 }
@@ -789,9 +824,12 @@ export async function blockAadhaar(aadhaar: string, reason: string, userId: stri
 export async function isAadhaarBlocked(aadhaar: string): Promise<boolean> {
   const normalizedAadhaar = normalizeAadhar(aadhaar);
   if (normalizedAadhaar.length !== 12) return false;
-  const q = query(coll.blockedAadhaar, where("aadhaar", "==", normalizedAadhaar), limit(1));
+  const q = query(coll.blockedAadhaar, where("aadhaarNumber", "==", normalizedAadhaar), limit(1));
   const snap = await getDocs(q);
-  return !snap.empty;
+  if (!snap.empty) return true;
+  const legacyQ = query(coll.blockedAadhaar, where("aadhaar", "==", normalizedAadhaar), limit(1));
+  const legacySnap = await getDocs(legacyQ);
+  return !legacySnap.empty;
 }
 
 export async function getBlockedAadhaars(): Promise<BlockedAadhaar[]> {
@@ -800,5 +838,9 @@ export async function getBlockedAadhaars(): Promise<BlockedAadhaar[]> {
 }
 
 export async function unblockAadhaar(docId: string): Promise<void> {
-  await deleteDoc(doc(db, "blocked_aadhaar", docId));
+  await deleteDoc(doc(db, "blockedAadhaar", docId));
 }
+
+export const addBlockedAadhaar = blockAadhaar;
+export const checkAadhaarBlocked = isAadhaarBlocked;
+export const getBlockedAadhaarList = getBlockedAadhaars;

@@ -18,6 +18,8 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 const THEME_STORAGE_KEY = "finance_app_theme";
 
 function getInitialTheme(): ColorScheme {
+  return "dark";
+/*
   if (Platform.OS !== "web" || typeof window === "undefined") return "system";
   try {
     const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -26,6 +28,7 @@ function getInitialTheme(): ColorScheme {
     // Fall back to system below.
   }
   return "system";
+*/
 }
 
 function applyWebTheme(isDark: boolean, colors: AppColors) {
@@ -52,9 +55,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const loadTheme = async () => {
       try {
         const savedTheme = await AsyncStorage.getItem(THEME_STORAGE_KEY);
-        if (savedTheme) {
-          setColorSchemeState(savedTheme as ColorScheme);
-        }
+      if (savedTheme === "dark") {
+        setColorSchemeState(savedTheme as ColorScheme);
+      }
       } catch (error) {
         console.error("Failed to load theme:", error);
       }

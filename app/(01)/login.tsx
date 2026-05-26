@@ -4,13 +4,13 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, Dimensions, Easing, StyleSheet, Text, TextInput, View, ActivityIndicator, Pressable, ScrollView } from "react-native";
-import { useAuth } from "../src/auth-context";
-import { AnimatedScreen } from "../src/components/AnimatedScreen";
-import { colors as baseColors, getGradient } from "../src/theme";
-import { useTheme } from "../src/theme-context";
+import { useAuth } from "../../src/auth-context";
+import { AnimatedScreen } from "../../src/components/AnimatedScreen";
+import { colors as baseColors, getGradient } from "../../src/theme";
+import { useTheme } from "../../src/theme-context";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Icon from "../src/Icon";
-import FinanceMotion from "../src/FinanceMotion";
+import Icon from "../../src/Icon";
+import FinanceMotion from "../../src/FinanceMotion";
 
 WebBrowser.maybeCompleteAuthSession();
 

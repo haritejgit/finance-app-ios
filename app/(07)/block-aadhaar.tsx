@@ -14,14 +14,14 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAuth } from "../src/auth-context";
-import { AnimatedListItem } from "../src/components/AnimatedListItem";
-import { AnimatedScreen } from "../src/components/AnimatedScreen";
-import Icon from "../src/Icon";
-import { blockAadhaar, getBlockedAadhaars, unblockAadhaar } from "../src/repository";
-import { getGradient } from "../src/theme";
-import { useTheme } from "../src/theme-context";
-import { BlockedAadhaar } from "../src/types";
+import { useAuth } from "../../src/auth-context";
+import { AnimatedListItem } from "../../src/components/AnimatedListItem";
+import { AnimatedScreen } from "../../src/components/AnimatedScreen";
+import Icon from "../../src/Icon";
+import { blockAadhaar, getBlockedAadhaars, unblockAadhaar } from "../../src/repository";
+import { getGradient } from "../../src/theme";
+import { useTheme } from "../../src/theme-context";
+import { BlockedAadhaar } from "../../src/types";
 
 function digitsOnly(value: string) {
   return value.replace(/\D/g, "").slice(0, 12);
@@ -34,6 +34,10 @@ function formatAadhaar(value: string) {
 function maskAadhaar(value: string) {
   const digits = digitsOnly(value);
   return digits.length >= 4 ? `XXXX XXXX ${digits.slice(-4)}` : "XXXX XXXX ----";
+}
+
+function getBlockedDigits(item: BlockedAadhaar) {
+  return item.aadhaarNumber || item.aadhaar || "";
 }
 
 function toDate(value: unknown) {
@@ -109,7 +113,7 @@ export default function BlockAadhaarScreen() {
   }, [aadhaar, loadBlocked, reason, user]);
 
   const confirmUnblock = useCallback((item: BlockedAadhaar) => {
-    Alert.alert("Unblock Aadhaar", `Allow ${maskAadhaar(item.aadhaar)} again?`, [
+    Alert.alert("Unblock Aadhaar", `Allow ${maskAadhaar(getBlockedDigits(item))} again?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Unblock",
@@ -213,18 +217,18 @@ export default function BlockAadhaarScreen() {
                     getItemLayout={(_, index) => ({ length: 88, offset: 88 * index, index })}
                     ListEmptyComponent={<Text style={[styles.empty, { color: colors.textSecondary }]}>No Aadhaar numbers are blocked yet.</Text>}
                     renderItem={({ item, index }) => {
-                      const blockedAt = toDate(item.blocked_at);
+                      const blockedAt = toDate(item.blockedAt || item.blocked_at);
                       return (
                         <AnimatedListItem index={index}>
                           <View style={[styles.blockedRow, { borderColor: colors.border, backgroundColor: colors.surfaceTint }]}>
                             <View style={styles.blockedCopy}>
-                              <Text style={[styles.blockedAadhaar, { color: colors.text }]}>{maskAadhaar(item.aadhaar)}</Text>
+                              <Text style={[styles.blockedAadhaar, { color: colors.text }]}>{maskAadhaar(getBlockedDigits(item))}</Text>
                               <Text style={[styles.blockedReason, { color: colors.textSecondary }]} numberOfLines={2}>
                                 {item.reason || "No reason provided"}{blockedAt ? ` • ${blockedAt.toLocaleDateString()}` : ""}
                               </Text>
                             </View>
                             <Pressable
-                              accessibilityLabel={`Unblock ${maskAadhaar(item.aadhaar)}`}
+                              accessibilityLabel={`Unblock ${maskAadhaar(getBlockedDigits(item))}`}
                               style={[styles.unblockBtn, { backgroundColor: colors.destructiveSoft }]}
                               onPress={() => confirmUnblock(item)}
                             >

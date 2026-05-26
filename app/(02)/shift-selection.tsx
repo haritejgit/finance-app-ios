@@ -19,16 +19,16 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAuth } from "../src/auth-context";
-import { AnimatedListItem } from "../src/components/AnimatedListItem";
-import { AnimatedScreen } from "../src/components/AnimatedScreen";
-import { CustomerIdBadge } from "../src/components/CustomerIdBadge";
-import { getDashboardAnalytics, type CustomerState, type DashboardAnalytics } from "../src/finance-analytics";
-import Icon from "../src/Icon";
-import { lightImpact } from "../src/interactions";
-import { CustomerSearchResult, getAllActiveCustomersWithVillages, getVillages } from "../src/repository";
-import { useTheme } from "../src/theme-context";
-import { Village } from "../src/types";
+import { useAuth } from "../../src/auth-context";
+import { AnimatedListItem } from "../../src/components/AnimatedListItem";
+import { AnimatedScreen } from "../../src/components/AnimatedScreen";
+import { CustomerIdBadge } from "../../src/components/CustomerIdBadge";
+import { getDashboardAnalytics, type CustomerState, type DashboardAnalytics } from "../../src/finance-analytics";
+import Icon from "../../src/Icon";
+import { lightImpact } from "../../src/interactions";
+import { CustomerSearchResult, getActiveLoansByCustomerIds, getAllActiveCustomersWithVillages, getLastRegularPaymentDatesForCustomers, getVillages } from "../../src/repository";
+import { useTheme } from "../../src/theme-context";
+import { Loan, Village } from "../../src/types";
 
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const shortDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -157,6 +157,8 @@ export default function ShiftSelectionScreen() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [customerFilter, setCustomerFilter] = useState<"all" | CustomerState>("all");
   const [allCustomers, setAllCustomers] = useState<CustomerSearchResult[]>([]);
+  const [searchLoans, setSearchLoans] = useState<Record<string, Loan>>({});
+  const [searchLastPayments, setSearchLastPayments] = useState<Record<string, number>>({});
   const [searchLoading, setSearchLoading] = useState(false);
   const intro = useRef(new Animated.Value(0)).current;
 
@@ -210,7 +212,15 @@ export default function ShiftSelectionScreen() {
     if (!user || allCustomers.length > 0) return;
     try {
       setSearchLoading(true);
-      setAllCustomers(await getAllActiveCustomersWithVillages(user.uid));
+      const customers = await getAllActiveCustomersWithVillages(user.uid);
+      const customerIds = customers.map((customer) => customer.id);
+      const [loansByCustomer, latestPayments] = await Promise.all([
+        getActiveLoansByCustomerIds(user.uid, customerIds),
+        getLastRegularPaymentDatesForCustomers(user.uid, customerIds),
+      ]);
+      setAllCustomers(customers);
+      setSearchLoans(loansByCustomer);
+      setSearchLastPayments(latestPayments);
     } catch {
       Alert.alert("Search failed", "Could not load customers. Please try again.");
     } finally {
@@ -290,6 +300,7 @@ export default function ShiftSelectionScreen() {
   const quickActions = useMemo(
     () => [
       { label: "Reports", icon: "document-text-outline", action: () => nav.push("/reports") },
+      { label: "Insights", icon: "bulb-outline", action: () => nav.push("/insights" as any) },
       { label: "Progress", icon: "bar-chart-outline", action: () => nav.push("/graph") },
       { label: "Settings", icon: "settings-outline", action: () => nav.push("/settings") },
       { label: "Day Report", icon: "calendar-outline", action: () => nav.push("/reports") },
@@ -316,7 +327,7 @@ export default function ShiftSelectionScreen() {
                 },
               ]}
             >
-              <LinearGradient colors={["#1E40AF", "#3B82F6"]} style={styles.headerCard}>
+              <LinearGradient colors={["#6C63FF", "#00D4AA"]} style={styles.headerCard}>
                 <View style={styles.headerCopy}>
                   <Text style={styles.header}>{getGreeting()}, {displayName} 👋</Text>
                   <Text style={styles.welcome}>{todayLabel}</Text>
@@ -350,7 +361,7 @@ export default function ShiftSelectionScreen() {
                       altTitle="Today Distributed"
                       altValue={formatMoney(analytics?.totals.distributedToday ?? 0)}
                       icon="cash-outline"
-                      tone="#10B981"
+                      tone="#00D4AA"
                       isAlt={todayToggle}
                       onToggle={() => setTodayToggle((value) => !value)}
                     />
@@ -360,7 +371,7 @@ export default function ShiftSelectionScreen() {
                       altTitle="Today Collected"
                       altValue={formatMoney(analytics?.totals.collectionToday ?? 0)}
                       icon="trending-up-outline"
-                      tone="#F59E0B"
+                      tone="#FFB347"
                       isAlt={distributedToggle}
                       onToggle={() => setDistributedToggle((value) => !value)}
                     />
@@ -368,7 +379,7 @@ export default function ShiftSelectionScreen() {
                       title="Active Loans"
                       value={`${analytics?.totals.activeLoanCount ?? 0}`}
                       icon="wallet-outline"
-                      tone="#1E40AF"
+                      tone="#6C63FF"
                     />
                   </View>
 
@@ -443,7 +454,7 @@ export default function ShiftSelectionScreen() {
 
                     {selectedShift ? (
                       <Pressable accessibilityLabel="Start Collection" onPress={startCollection}>
-                        <LinearGradient colors={["#1E40AF", "#3730A3"]} style={styles.primaryAction}>
+                        <LinearGradient colors={["#6C63FF", "#00D4AA"]} style={styles.primaryAction}>
                           <Text style={styles.primaryActionText}>Start Collection</Text>
                           <Icon name="arrow-forward" size={18} color={colors.white} />
                         </LinearGradient>
@@ -516,6 +527,9 @@ export default function ShiftSelectionScreen() {
                   }
                   renderItem={({ item, index }) => {
                     const state = analytics?.customerStates[item.id] ?? "pending";
+                    const loan = searchLoans[item.id];
+                    const progressPercent = loan?.totalPayable ? Math.min((1 - loan.balanceAmount / loan.totalPayable) * 100, 100) : 0;
+                    const didntPayLastWeek = !!loan && (!searchLastPayments[item.id] || searchLastPayments[item.id] < Date.now() - 7 * 24 * 60 * 60 * 1000);
                     return (
                       <AnimatedListItem index={index}>
                         <Pressable
@@ -534,6 +548,26 @@ export default function ShiftSelectionScreen() {
                               {item.villageName || "No village"} | {item.villageDayOfWeek || "-"} {item.villageShift || ""}
                             </Text>
                             <Text style={styles.searchCustomerPhone}>{item.phone}</Text>
+                            {loan ? (
+                              <View style={styles.searchRepaidWrap}>
+                                <View style={styles.searchRepaidHeader}>
+                                  <Text style={styles.searchRepaidLabel}>Repaid</Text>
+                                  <Text style={styles.searchRepaidPercent}>{progressPercent.toFixed(0)}%</Text>
+                                </View>
+                                <View style={styles.searchRepaidTrack}>
+                                  <View
+                                    style={[
+                                      styles.searchRepaidFill,
+                                      {
+                                        width: `${progressPercent}%`,
+                                        backgroundColor: progressPercent >= 100 ? "#00D4AA" : progressPercent > 50 ? "#6C63FF" : "#FFB347",
+                                      },
+                                    ]}
+                                  />
+                                </View>
+                              </View>
+                            ) : null}
+                            {didntPayLastWeek ? <Text style={styles.lastWeekBadge}>⚠️ Last week didn't pay</Text> : null}
                           </View>
                           <Text style={styles.statePill}>{state}</Text>
                         </Pressable>
@@ -622,5 +656,12 @@ const styles = StyleSheet.create({
   searchCustomerName: { color: "#111827", fontSize: 15, fontWeight: "700" },
   searchCustomerMeta: { color: "#6B7280", fontSize: 12, fontWeight: "500", marginTop: 2 },
   searchCustomerPhone: { color: "#9CA3AF", fontSize: 12, marginTop: 2 },
+  searchRepaidWrap: { marginTop: 6 },
+  searchRepaidHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 3 },
+  searchRepaidLabel: { fontSize: 11, color: "#A0A0B0" },
+  searchRepaidPercent: { fontSize: 11, color: "#00D4AA", fontWeight: "600" },
+  searchRepaidTrack: { height: 6, backgroundColor: "#2A2A3E", borderRadius: 3, overflow: "hidden" },
+  searchRepaidFill: { height: "100%", borderRadius: 3 },
+  lastWeekBadge: { backgroundColor: "#FF6B6B", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, fontSize: 11, color: "white", fontWeight: "600", alignSelf: "flex-start", marginTop: 5, overflow: "hidden" },
   statePill: { color: "#1E40AF", backgroundColor: "#DBEAFE", fontSize: 10, fontWeight: "700", paddingHorizontal: 8, paddingVertical: 5, borderRadius: 999, overflow: "hidden", textTransform: "uppercase" },
 });

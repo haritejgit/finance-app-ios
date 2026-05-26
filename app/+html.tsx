@@ -18,16 +18,13 @@ export default function Root({ children }: PropsWithChildren) {
             __html: `
               (function () {
                 try {
-                  var stored = localStorage.getItem('finance_app_theme');
-                  var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-                  var dark = stored === 'dark' || (!stored || stored === 'system') && prefersDark;
-                  var bg = dark ? '#0B0F19' : '#F5F7FB';
-                  var text = dark ? '#F5F7FA' : '#0F172A';
-                  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+                  var bg = '#0F0F1A';
+                  var text = '#FFFFFF';
+                  document.documentElement.dataset.theme = 'dark';
                   document.documentElement.style.backgroundColor = bg;
                   document.documentElement.style.setProperty('--app-bg', bg);
                   document.documentElement.style.setProperty('--app-text', text);
-                  document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+                  document.documentElement.style.colorScheme = 'dark';
                   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bg);
                 } catch (error) {}
               })();
@@ -37,8 +34,9 @@ export default function Root({ children }: PropsWithChildren) {
         <style
           dangerouslySetInnerHTML={{
             __html: `
-              html, body, #root { min-height: 100%; background: var(--app-bg, #F5F7FB); color: var(--app-text, #0F172A); }
-              html[data-theme="dark"], html[data-theme="dark"] body { background: #0B0F19; }
+              html, body { min-height: 100%; background: var(--app-bg, #0F0F1A); color: var(--app-text, #FFFFFF); }
+              #root { min-height: 100%; max-width: 430px; margin: 0 auto; background: var(--app-bg, #0F0F1A); color: var(--app-text, #FFFFFF); box-shadow: 0 0 0 1px rgba(255,255,255,0.06); }
+              html[data-theme="dark"], html[data-theme="dark"] body { background: #0F0F1A; }
               * { box-sizing: border-box; }
               body { margin: 0; overscroll-behavior-y: none; }
               input, button, textarea { font: inherit; }

@@ -16,12 +16,12 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAuth } from "../src/auth-context";
-import { AnimatedListItem } from "../src/components/AnimatedListItem";
-import { AnimatedScreen } from "../src/components/AnimatedScreen";
-import { getDashboardAnalytics } from "../src/finance-analytics";
-import Icon from "../src/Icon";
-import { useTheme } from "../src/theme-context";
+import { useAuth } from "../../src/auth-context";
+import { AnimatedListItem } from "../../src/components/AnimatedListItem";
+import { AnimatedScreen } from "../../src/components/AnimatedScreen";
+import { getDashboardAnalytics } from "../../src/finance-analytics";
+import Icon from "../../src/Icon";
+import { useTheme } from "../../src/theme-context";
 
 type ChatMessage = {
   id: string;

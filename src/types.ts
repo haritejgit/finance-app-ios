@@ -57,9 +57,31 @@ export type Payment = {
 
 export type BlockedAadhaar = {
   id: string;
+  aadhaarNumber?: string;
   aadhaar: string;
+  blockedAt?: unknown;
   reason: string;
   blocked_at?: unknown;
+  blockedBy?: string;
   blocked_by: string;
+};
+
+export type CustomerRiskInsight = {
+  customerId: string;
+  customerName: string;
+  riskScore: number;
+  missedPayments: number;
+  daysOverdue: number;
+  loanAmount: number;
+};
+
+export type InsightData = {
+  activeLoans: number;
+  distributedThisMonth: number;
+  recoveredThisMonth: number;
+  expectedThisWeek: number;
+  actualThisWeek: number;
+  dailyCollectionStreak: boolean[];
+  customerRisks: CustomerRiskInsight[];
 };
 

@@ -28,8 +28,8 @@ import { colors } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
 import { lightImpact } from "../../src/interactions";
 import { showToast } from "../../src/notify";
-import { LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
-import { addCustomerWithLoan, addPayment, getActiveLoansByCustomerIds, getCustomersPage, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary, isAadhaarBlocked, updateCustomer } from "../../src/repository";
+import { getCachedCoordinates, LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
+import { addCustomerWithLoan, addPayment, getActiveLoansByCustomerIds, getCustomersPage, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, updateCustomer } from "../../src/repository";
 import { Customer, Loan, Village } from "../../src/types";
 import { validateAadhaar, validateIndianPhone, validatePositiveAmount } from "../../src/validation";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -173,6 +173,7 @@ const CustomerItem = React.memo(function CustomerItem({
   status,
   isNew,
   loan,
+  lastPaymentDate,
   isPaying,
   isUpdatingLocation,
 }: {
@@ -185,6 +186,7 @@ const CustomerItem = React.memo(function CustomerItem({
   status: PaymentStatus;
   isNew?: boolean;
   loan?: Loan;
+  lastPaymentDate?: number;
   isPaying?: boolean;
   isUpdatingLocation?: boolean;
 }) {
@@ -192,6 +194,9 @@ const CustomerItem = React.memo(function CustomerItem({
   const hasLocation = hasCoordinates(customer);
   const canPay = !!loan && loan.balanceAmount > 0 && status !== "paid" && !isPaying;
   const paidRatio = loan?.totalPayable ? Math.max(0, Math.min(1, 1 - loan.balanceAmount / loan.totalPayable)) : 0;
+  const progressPercent = Math.min(paidRatio * 100, 100);
+  const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const didntPayLastWeek = !!loan && loan.status === "ACTIVE" && (!lastPaymentDate || lastPaymentDate < oneWeekAgo);
   const missingDocs = [
     customer.aadharSubmitted === false ? "Aadhar not submitted" : "",
     customer.passportPhotoSubmitted === false ? "Passport photo not submitted" : "",
@@ -285,8 +290,22 @@ const CustomerItem = React.memo(function CustomerItem({
         {loan ? <Text style={styles.balancePill}>Rs.{Math.round(loan.balanceAmount)}</Text> : null}
         </View>
         {loan ? (
-          <View style={styles.balanceTrack}>
-            <View style={[styles.balanceFill, { width: `${paidRatio * 100}%` }]} />
+          <View style={styles.repaidWrap}>
+            <View style={styles.repaidHeader}>
+              <Text style={styles.repaidLabel}>Repaid</Text>
+              <Text style={styles.repaidPercent}>{progressPercent.toFixed(0)}%</Text>
+            </View>
+            <View style={styles.repaidTrack}>
+              <View
+                style={[
+                  styles.repaidFill,
+                  {
+                    width: `${progressPercent}%`,
+                    backgroundColor: progressPercent >= 100 ? "#00D4AA" : progressPercent > 50 ? "#6C63FF" : "#FFB347",
+                  },
+                ]}
+              />
+            </View>
           </View>
         ) : null}
         <Text style={styles.phone}>{customer.phone}</Text>
@@ -299,6 +318,7 @@ const CustomerItem = React.memo(function CustomerItem({
         {isNew && (
           <Text style={styles.statusBadgeNew}>NEW</Text>
         )}
+        {didntPayLastWeek ? <Text style={styles.lastWeekBadge}>⚠️ Last week didn't pay</Text> : null}
         {getStatusBadge()}
       </View>
       <View style={styles.itemActions}>
@@ -403,6 +423,7 @@ export default function CustomerListScreen() {
   const [tempRegistrationDate, setTempRegistrationDate] = useState<Date>(new Date());
   const [paymentStatuses, setPaymentStatuses] = useState<Record<string, PaymentStatus>>({});
   const [activeLoans, setActiveLoans] = useState<Record<string, Loan>>({});
+  const [lastPaymentDates, setLastPaymentDates] = useState<Record<string, number>>({});
   const [payingCustomerId, setPayingCustomerId] = useState<string | null>(null);
   const [manualPaymentCustomer, setManualPaymentCustomer] = useState<Customer | null>(null);
   const [manualPaymentAmount, setManualPaymentAmount] = useState("");
@@ -443,12 +464,14 @@ export default function CustomerListScreen() {
       setHasMoreCustomers(page.hasMore);
 
       const customerIds = sortedList.map((customer) => customer.id);
-      const [statuses, loansByCustomer] = await Promise.all([
+      const [statuses, loansByCustomer, latestPayments] = await Promise.all([
         getPaymentStatusesForCustomersToday(user.uid, customerIds),
         getActiveLoansByCustomerIds(user.uid, customerIds),
+        getLastRegularPaymentDatesForCustomers(user.uid, customerIds),
       ]);
       setPaymentStatuses(statuses);
       setActiveLoans(loansByCustomer);
+      setLastPaymentDates(latestPayments);
     } catch {
       Alert.alert("Load failed", "Could not load customers. Please try again.");
     } finally {
@@ -466,12 +489,14 @@ export default function CustomerListScreen() {
       setPageCursor(page.cursor);
       setHasMoreCustomers(page.hasMore);
       const customerIds = nextCustomers.map((customer) => customer.id);
-      const [statuses, loansByCustomer] = await Promise.all([
+      const [statuses, loansByCustomer, latestPayments] = await Promise.all([
         getPaymentStatusesForCustomersToday(user.uid, customerIds),
         getActiveLoansByCustomerIds(user.uid, customerIds),
+        getLastRegularPaymentDatesForCustomers(user.uid, customerIds),
       ]);
       setPaymentStatuses(statuses);
       setActiveLoans(loansByCustomer);
+      setLastPaymentDates(latestPayments);
     } catch {
       Alert.alert("Load failed", "Could not load more customers. Please try again.");
     } finally {
@@ -664,7 +689,10 @@ export default function CustomerListScreen() {
     addLocationRequestRef.current = requestId;
     setIsGettingLocation(true);
     try {
-      const coordinates = await requestCurrentCoordinates();
+      const coordinates = await requestCurrentCoordinates((quickCoordinates) => {
+        if (addLocationRequestRef.current !== requestId) return;
+        setForm(prev => ({ ...prev, coordinates: quickCoordinates }));
+      });
       if (addLocationRequestRef.current !== requestId) return;
       setForm(prev => ({
         ...prev,
@@ -678,6 +706,15 @@ export default function CustomerListScreen() {
       }
     }
   };
+
+  const useLastKnownLocation = useCallback(async () => {
+    const coordinates = await getCachedCoordinates();
+    if (!coordinates) {
+      showToast("info", "No cached location", "Fetch a location once before using the shortcut.");
+      return;
+    }
+    setForm(prev => ({ ...prev, coordinates }));
+  }, []);
 
   const saveCurrentLocationForCustomer = useCallback(async (customer: Customer) => {
     const requestId = saveLocationRequestRef.current + 1;
@@ -871,11 +908,12 @@ export default function CustomerListScreen() {
         status={paymentStatuses[item.id] || 'none'} 
         isNew={isToday(item.createdAt)}
         loan={activeLoans[item.id]}
+        lastPaymentDate={lastPaymentDates[item.id]}
         isPaying={payingCustomerId === item.id}
         isUpdatingLocation={updatingLocationCustomerId === item.id}
       />
     ),
-    [activeLoans, openCustomer, openDirections, openManualPayment, paymentStatuses, payingCustomerId, quickPay, saveCurrentLocationForCustomer, updatingLocationCustomerId]
+    [activeLoans, lastPaymentDates, openCustomer, openDirections, openManualPayment, paymentStatuses, payingCustomerId, quickPay, saveCurrentLocationForCustomer, updatingLocationCustomerId]
   );
 
   return (
@@ -1238,9 +1276,12 @@ export default function CustomerListScreen() {
                     onPress={getCurrentLocation}
                     disabled={isGettingLocation}
                   >
-                    <Icon name="location" size={18} color={colors.white} />
+                    {isGettingLocation ? <View style={styles.locationPulse} /> : <Icon name="location" size={18} color={colors.white} />}
                   </Pressable>
                 </View>
+                <Pressable style={styles.useLastLocationBtn} onPress={useLastKnownLocation}>
+                  <Text style={styles.useLastLocationText}>Use Last Location</Text>
+                </Pressable>
                 {form.coordinates && (
                   <Text style={styles.locationText}>
                     <Icon name="location" size={12} color="#666" /> Location captured: {form.coordinates.latitude.toFixed(6)}, {form.coordinates.longitude.toFixed(6)}
@@ -1568,6 +1609,12 @@ const styles = StyleSheet.create({
   balancePill: { color: colors.teal, backgroundColor: colors.mint, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, fontSize: 10, fontWeight: "900", overflow: "hidden" },
   balanceTrack: { height: 5, borderRadius: 999, backgroundColor: "#E5E7EB", overflow: "hidden", marginTop: 6, marginBottom: 5 },
   balanceFill: { height: "100%", borderRadius: 999, backgroundColor: colors.teal },
+  repaidWrap: { marginTop: 6, marginBottom: 5 },
+  repaidHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 3 },
+  repaidLabel: { fontSize: 11, color: "#A0A0B0" },
+  repaidPercent: { fontSize: 11, color: "#00D4AA", fontWeight: "600" },
+  repaidTrack: { height: 6, backgroundColor: "#2A2A3E", borderRadius: 3, overflow: "hidden" },
+  repaidFill: { height: "100%", borderRadius: 3 },
   phone: { color: "#777", fontSize: 13 },
   coName: { color: "#666", fontSize: 11, fontStyle: "italic", marginTop: 1 },
   missingDocs: { color: "#8b8f97", fontSize: 11, fontWeight: "600", marginTop: 2 },
@@ -1576,6 +1623,7 @@ const styles = StyleSheet.create({
   statusBadgePaidGrey: { fontSize: 10, color: "#666666", fontWeight: "700", backgroundColor: "#f5f5f5", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#999999" },
   statusBadgeDue: { fontSize: 10, color: "#dc3545", fontWeight: "700", marginTop: 4, backgroundColor: "#f8d7da", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
   statusBadgeNew: { fontSize: 10, color: "#374151", fontWeight: "700", marginTop: 4, backgroundColor: "#f3f4f6", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#9ca3af" },
+  lastWeekBadge: { backgroundColor: "#FF6B6B", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, fontSize: 11, color: "white", fontWeight: "600", alignSelf: "flex-start", marginTop: 4, overflow: "hidden" },
   itemActions: { alignItems: "center", gap: 8 },
   iconActionBtn: { width: 38, height: 36, borderRadius: 13, backgroundColor: colors.sky, borderWidth: 1, borderColor: "#bfdbfe", justifyContent: "center", alignItems: "center" },
   iconActionBtnMuted: { backgroundColor: "#f3f4f6", borderColor: "#e5e7eb" },
@@ -1650,6 +1698,9 @@ const styles = StyleSheet.create({
   locationBtn: { width: 50, height: 50, borderRadius: 12, backgroundColor: colors.blue2, justifyContent: "center", alignItems: "center", marginTop: 8 },
   locationBtnDisabled: { backgroundColor: "#ccc" },
   locationBtnText: { fontSize: 20, color: colors.white },
+  locationPulse: { width: 14, height: 14, borderRadius: 7, backgroundColor: "#00D4AA", borderWidth: 4, borderColor: "rgba(0,212,170,0.3)" },
+  useLastLocationBtn: { alignSelf: "flex-start", borderRadius: 999, borderWidth: 1, borderColor: "#2A2A3E", paddingHorizontal: 12, paddingVertical: 8, marginTop: -4, marginBottom: 8, backgroundColor: "#222238" },
+  useLastLocationText: { color: "#00D4AA", fontSize: 12, fontWeight: "800" },
   locationText: { fontSize: 12, color: "#666", marginBottom: 8, fontStyle: "italic" },
   checkRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8, marginBottom: 4 },
   checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: "#cbd5e1", backgroundColor: colors.white, alignItems: "center", justifyContent: "center" },

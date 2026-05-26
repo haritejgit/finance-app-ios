@@ -14,13 +14,13 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAuth } from "../src/auth-context";
-import { AnimatedScreen } from "../src/components/AnimatedScreen";
-import { getDashboardAnalytics, type DashboardAnalytics } from "../src/finance-analytics";
-import { getGradient } from "../src/theme";
-import { useTheme } from "../src/theme-context";
-import { formatAmountInKM } from "../src/utils";
-import Icon from "../src/Icon";
+import { useAuth } from "../../src/auth-context";
+import { AnimatedScreen } from "../../src/components/AnimatedScreen";
+import { getDashboardAnalytics, type DashboardAnalytics } from "../../src/finance-analytics";
+import { getGradient } from "../../src/theme";
+import { useTheme } from "../../src/theme-context";
+import { formatAmountInKM } from "../../src/utils";
+import Icon from "../../src/Icon";
 
 function formatMoney(value: number) {
   return `Rs.${Math.round(value || 0).toLocaleString("en-IN")}`;

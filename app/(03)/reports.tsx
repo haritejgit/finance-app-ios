@@ -15,17 +15,17 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useAuth } from "../src/auth-context";
-import { AnimatedScreen } from "../src/components/AnimatedScreen";
-import Icon from "../src/Icon";
-import { getPaymentsByDate } from "../src/repository";
-import { colors } from "../src/theme";
-import { useTheme } from "../src/theme-context";
+import { useAuth } from "../../src/auth-context";
+import { AnimatedScreen } from "../../src/components/AnimatedScreen";
+import Icon from "../../src/Icon";
+import { getPaymentsByDate } from "../../src/repository";
+import { colors } from "../../src/theme";
+import { useTheme } from "../../src/theme-context";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../src/firebase';
+import { db } from '../../src/firebase';
 
 // Lazy load heavy XLSX library
 let XLSX: any = null;

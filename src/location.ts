@@ -1,62 +1,23 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 
 export const LOCATION_PERMISSION_DENIED = "LOCATION_PERMISSION_DENIED";
 export const LOCATION_TIMEOUT = "LOCATION_TIMEOUT";
+export const LAST_KNOWN_LOCATION_KEY = "lastKnownLocation";
 
-const CURRENT_LOCATION_OPTIONS: Location.LocationOptions = {
-  accuracy: Location.Accuracy.Balanced,
-  mayShowUserSettingsDialog: true,
-  timeInterval: 1000,
-  distanceInterval: 0,
+export type Coordinates = {
+  latitude: number;
+  longitude: number;
 };
-const WATCH_LOCATION_OPTIONS: Location.LocationOptions = {
-  ...CURRENT_LOCATION_OPTIONS,
-  accuracy: Location.Accuracy.High,
-};
-const CURRENT_LOCATION_TIMEOUT_MS = 8000;
-const WATCH_LOCATION_TIMEOUT_MS = 5000;
-const RECENT_LOCATION_MAX_AGE_MS = 60000;
 
-function toCoordinates(location: Location.LocationObject) {
+const QUICK_LOCATION_TIMEOUT_MS = 2500;
+const PRECISE_LOCATION_TIMEOUT_MS = 8000;
+
+function toCoordinates(location: Location.LocationObject): Coordinates {
   return {
     latitude: location.coords.latitude,
     longitude: location.coords.longitude,
   };
-}
-
-function isRecentLocation(location: Location.LocationObject | null, maxAgeMs = RECENT_LOCATION_MAX_AGE_MS): location is Location.LocationObject {
-  return !!location && Date.now() - location.timestamp <= maxAgeMs;
-}
-
-function waitForFreshUpdate(timeoutMs: number) {
-  return new Promise<{ latitude: number; longitude: number }>(async (resolve, reject) => {
-    let subscription: Location.LocationSubscription | null = null;
-    const minimumTimestamp = Date.now() - 1000;
-    const timeout = setTimeout(() => {
-      subscription?.remove();
-      reject(new Error("LOCATION_TIMEOUT"));
-    }, timeoutMs);
-
-    try {
-      subscription = await Location.watchPositionAsync(
-        WATCH_LOCATION_OPTIONS,
-        (location) => {
-          if (location.timestamp < minimumTimestamp) return;
-          clearTimeout(timeout);
-          subscription?.remove();
-          resolve(toCoordinates(location));
-        },
-        (reason) => {
-          clearTimeout(timeout);
-          subscription?.remove();
-          reject(new Error(reason));
-        }
-      );
-    } catch (error) {
-      clearTimeout(timeout);
-      reject(error);
-    }
-  });
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message = LOCATION_TIMEOUT) {
@@ -74,39 +35,76 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message = LOCATI
   });
 }
 
-export async function requestCurrentCoordinates() {
+function distanceMeters(a: Coordinates, b: Coordinates) {
+  const radius = 6371000;
+  const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
+  const dLon = ((b.longitude - a.longitude) * Math.PI) / 180;
+  const lat1 = (a.latitude * Math.PI) / 180;
+  const lat2 = (b.latitude * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return 2 * radius * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+export async function getCachedCoordinates() {
+  const raw = await AsyncStorage.getItem(LAST_KNOWN_LOCATION_KEY).catch(() => null);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Coordinates;
+    if (Number.isFinite(parsed.latitude) && Number.isFinite(parsed.longitude)) {
+      return parsed;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function cacheCoordinates(coordinates: Coordinates) {
+  await AsyncStorage.setItem(LAST_KNOWN_LOCATION_KEY, JSON.stringify(coordinates)).catch(() => undefined);
+}
+
+export async function requestCurrentCoordinates(onQuickLocation?: (coordinates: Coordinates) => void) {
   let permission = await withTimeout(Location.getForegroundPermissionsAsync(), 5000);
   if (permission.status !== "granted") {
     permission = await withTimeout(Location.requestForegroundPermissionsAsync(), 10000);
   }
-  const { status } = permission;
-  if (status !== "granted") {
+  if (permission.status !== "granted") {
     throw new Error(LOCATION_PERMISSION_DENIED);
   }
 
-  const recentLastKnown = Location.getLastKnownPositionAsync({
-    maxAge: RECENT_LOCATION_MAX_AGE_MS,
-    requiredAccuracy: 100,
-  }).catch(() => null);
-
-  const location = await withTimeout(
-    Location.getCurrentPositionAsync(CURRENT_LOCATION_OPTIONS),
-    CURRENT_LOCATION_TIMEOUT_MS
-  ).catch(async (error) => {
-    const fallback = await recentLastKnown;
-    if (isRecentLocation(fallback)) {
-      return fallback;
-    }
-    throw error;
-  });
-
-  if (isRecentLocation(location)) {
-    return toCoordinates(location);
+  const cached = await getCachedCoordinates();
+  if (cached) {
+    onQuickLocation?.(cached);
   }
 
+  const quickLocation = await withTimeout(
+    Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Lowest,
+      timeInterval: 100,
+      distanceInterval: 0,
+    }),
+    QUICK_LOCATION_TIMEOUT_MS
+  );
+  const quick = toCoordinates(quickLocation);
+  onQuickLocation?.(quick);
+  await cacheCoordinates(quick);
+
   try {
-    return await waitForFreshUpdate(WATCH_LOCATION_TIMEOUT_MS);
+    const preciseLocation = await withTimeout(
+      Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      }),
+      PRECISE_LOCATION_TIMEOUT_MS
+    );
+    const precise = toCoordinates(preciseLocation);
+    if (!quick || distanceMeters(quick, precise) > 15) {
+      onQuickLocation?.(precise);
+    }
+    await cacheCoordinates(precise);
+    return precise;
   } catch {
-    return toCoordinates(location);
+    return quick;
   }
 }

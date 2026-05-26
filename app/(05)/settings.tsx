@@ -6,15 +6,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { collection, getDocs, query, where } from "firebase/firestore";
-import { useAuth } from "../src/auth-context";
-import { AnimatedScreen } from "../src/components/AnimatedScreen";
-import { db } from "../src/firebase";
-import { colors as baseColors, getGradient } from "../src/theme";
-import { useTheme } from "../src/theme-context";
-import Icon from "../src/Icon";
-import { Customer, Loan, Payment, Village } from "../src/types";
-import { createBackupSnapshot, makeBackupFilename, parseBackupSnapshot, restoreBackupSnapshot } from "../src/backup";
-import { downloadTextFile } from "../src/exports";
+import { useAuth } from "../../src/auth-context";
+import { AnimatedScreen } from "../../src/components/AnimatedScreen";
+import { db } from "../../src/firebase";
+import { colors as baseColors, getGradient } from "../../src/theme";
+import { useTheme } from "../../src/theme-context";
+import Icon from "../../src/Icon";
+import { Customer, Loan, Payment, Village } from "../../src/types";
+import { createBackupSnapshot, makeBackupFilename, parseBackupSnapshot, restoreBackupSnapshot } from "../../src/backup";
+import { downloadTextFile } from "../../src/exports";
 
 const BUSINESS_START_DATE = new Date(2026, 3, 1).getTime();
 

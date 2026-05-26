@@ -3,11 +3,11 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef } from "react";
 import { ActivityIndicator, Animated, StyleSheet, Text, View } from "react-native";
-import { useAuth } from "../src/auth-context";
-import { AnimatedScreen } from "../src/components/AnimatedScreen";
-import Icon from "../src/Icon";
-import { getGradient } from "../src/theme";
-import { useTheme } from "../src/theme-context";
+import { useAuth } from "../../src/auth-context";
+import { AnimatedScreen } from "../../src/components/AnimatedScreen";
+import Icon from "../../src/Icon";
+import { getGradient } from "../../src/theme";
+import { useTheme } from "../../src/theme-context";
 
 export default function Index() {
   const { user, loading } = useAuth();

@@ -324,7 +324,14 @@ export default function ProfileScreen() {
     setEditCoordinateError("");
     setEditLocationStatus("");
     try {
-      const coordinates = await requestCurrentCoordinates();
+      const coordinates = await requestCurrentCoordinates((quickCoordinates) => {
+        if (locationRequestRef.current !== requestId) return;
+        setEditForm(prev => ({
+          ...prev,
+          latitude: quickCoordinates.latitude.toFixed(6),
+          longitude: quickCoordinates.longitude.toFixed(6),
+        }));
+      });
       if (
         locationRequestRef.current !== requestId ||
         requestCustomerId !== activeCustomerId ||
@@ -443,6 +450,15 @@ export default function ProfileScreen() {
       behavior,
     };
   }, [payments]);
+
+  const repaymentProgress = useMemo(() => {
+    if (!loan?.totalPayable) return { paid: 0, percent: 0 };
+    const paid = Math.max(0, loan.totalPayable - loan.balanceAmount);
+    return {
+      paid,
+      percent: Math.min((paid / loan.totalPayable) * 100, 100),
+    };
+  }, [loan]);
 
   const sendWhatsAppReminder = useCallback(() => {
     if (!customer) return;
@@ -747,6 +763,28 @@ export default function ProfileScreen() {
                 <Text style={[styles.balanceValue, { color: colors.primary }]}>Rs.{loan?.balanceAmount?.toFixed(2) ?? "0.00"}</Text>
               </View>
             </View>
+
+            {loan ? (
+              <View style={[styles.repaymentCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.repaymentHeader}>
+                  <Text style={[styles.repaymentLabel, { color: colors.textSecondary }]}>
+                    Rs.{Math.round(repaymentProgress.paid).toLocaleString("en-IN")} paid of Rs.{Math.round(loan.totalPayable).toLocaleString("en-IN")}
+                  </Text>
+                  <Text style={styles.repaymentPercent}>{repaymentProgress.percent.toFixed(0)}%</Text>
+                </View>
+                <View style={styles.repaymentTrack}>
+                  <View
+                    style={[
+                      styles.repaymentFill,
+                      {
+                        width: `${repaymentProgress.percent}%`,
+                        backgroundColor: repaymentProgress.percent >= 100 ? "#00D4AA" : repaymentProgress.percent > 50 ? "#6C63FF" : "#FFB347",
+                      },
+                    ]}
+                  />
+                </View>
+              </View>
+            ) : null}
 
             {/* Additional Info */}
             {!!customer && (
@@ -1496,6 +1534,12 @@ const styles = StyleSheet.create({
   scoreValue: { color: colors.blue2, fontSize: 24, fontWeight: '700' },
   scoreRating: { color: colors.success, fontSize: 11, fontWeight: '500', marginTop: 2 },
   balanceValue: { color: colors.blue2, fontSize: 18, fontWeight: '700', marginTop: 2 },
+  repaymentCard: { borderRadius: 16, borderWidth: 1, padding: 14, gap: 8, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  repaymentHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
+  repaymentLabel: { flex: 1, fontSize: 12, fontWeight: "700" },
+  repaymentPercent: { color: "#00D4AA", fontSize: 13, fontWeight: "900" },
+  repaymentTrack: { height: 10, backgroundColor: "#2A2A3E", borderRadius: 5, overflow: "hidden" },
+  repaymentFill: { height: "100%", borderRadius: 5 },
   
   // Info Section Styles
   infoContainer: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 14, padding: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
