@@ -113,6 +113,21 @@ function loanHealthScore(loan?: Loan, lastPaymentDate?: number): number {
   return Math.max(0, Math.min(100, 100 - missedWeeks * 15 - daysOverdue * 2));
 }
 
+function shouldShowMissedBadge(loan?: Loan, lastPaymentDate?: number): boolean {
+  if (!loan || loan.status !== "ACTIVE") return false;
+
+  const loanStartDate = loan.startDate ? new Date(loan.startDate) : null;
+  if (!loanStartDate) return false;
+
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  if (loanStartDate >= sevenDaysAgo) return false;
+  if (!lastPaymentDate) return true;
+
+  return new Date(lastPaymentDate) < sevenDaysAgo;
+}
+
 function toStartOfDay(ts: number) {
   const d = new Date(ts);
   d.setHours(0, 0, 0, 0);
@@ -202,10 +217,8 @@ const CustomerItem = React.memo(function CustomerItem({
   const canPay = !!loan && loan.balanceAmount > 0 && status !== "paid" && !isPaying;
   const paidRatio = loan?.totalPayable ? Math.max(0, Math.min(1, 1 - loan.balanceAmount / loan.totalPayable)) : 0;
   const progressPercent = Math.min(paidRatio * 100, 100);
-  const score = loanHealthScore(loan, lastPaymentDate);
-  const scoreColor = score >= 70 ? "#00C896" : score >= 40 ? "#FF9800" : "#EF5350";
-  const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  const didntPayLastWeek = !!loan && loan.status === "ACTIVE" && (!lastPaymentDate || lastPaymentDate < oneWeekAgo);
+  // Badge only shows for customers whose loan started > 7 days ago with no recent payment
+  const didntPayLastWeek = shouldShowMissedBadge(loan, lastPaymentDate);
   const missingDocs = [
     customer.aadharSubmitted === false ? "Aadhar not submitted" : "",
     customer.passportPhotoSubmitted === false ? "Passport photo not submitted" : "",
@@ -286,9 +299,6 @@ const CustomerItem = React.memo(function CustomerItem({
       </View>
       <View style={{ flex: 1 }}>
         <View style={styles.nameRow}>
-          <View style={[styles.healthScoreBadge, { backgroundColor: `${scoreColor}22`, borderColor: scoreColor }]}>
-            <Text style={[styles.healthScoreText, { color: scoreColor }]}>{score}</Text>
-          </View>
           <Text
             style={[
               styles.name,
@@ -299,7 +309,6 @@ const CustomerItem = React.memo(function CustomerItem({
           >
             {customer.name}
           </Text>
-        {loan ? <Text style={styles.balancePill}>Rs.{Math.round(loan.balanceAmount)}</Text> : null}
         </View>
         {loan ? (
           <View style={styles.repaidWrap}>

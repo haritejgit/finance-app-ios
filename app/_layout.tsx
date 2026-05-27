@@ -1,8 +1,9 @@
 import { Stack } from "expo-router";
+import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import NetInfo from "@react-native-community/netinfo";
 import { useEffect, useRef, useState } from "react";
-import { Platform, Text, View } from "react-native";
+import { Platform, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "../src/auth-context";
 import { ErrorBoundary } from "../src/ErrorBoundary";
@@ -76,6 +77,22 @@ function RootLayoutContent() {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    "Onest-Regular": require("../assets/fonts/Onest-Regular.ttf"),
+    "Onest-Medium": require("../assets/fonts/Onest-Medium.ttf"),
+    "Onest-SemiBold": require("../assets/fonts/Onest-SemiBold.ttf"),
+    "Onest-Bold": require("../assets/fonts/Onest-Bold.ttf"),
+  });
+
+  useEffect(() => {
+    (Text as any).defaultProps = (Text as any).defaultProps || {};
+    (Text as any).defaultProps.style = [{ fontFamily: "Onest-Medium" }, (Text as any).defaultProps.style];
+    (TextInput as any).defaultProps = (TextInput as any).defaultProps || {};
+    (TextInput as any).defaultProps.style = [{ fontFamily: "Onest-Medium" }, (TextInput as any).defaultProps.style];
+  }, []);
+
+  if (!fontsLoaded) return null;
+
   return (
     <ErrorBoundary>
       <SafeAreaProvider>

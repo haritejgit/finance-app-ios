@@ -180,6 +180,7 @@ export default function ReportsScreen() {
     if (reportData.length === 0) return;
     
     try {
+      const XLSX = await loadXLSX();
       // Create Excel workbook
       const wb = XLSX.utils.book_new();
       

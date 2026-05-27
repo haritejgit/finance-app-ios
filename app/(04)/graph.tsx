@@ -18,7 +18,7 @@ import { useAuth } from "../../src/auth-context";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import { getDashboardAnalytics, type DashboardAnalytics } from "../../src/finance-analytics";
 import Icon from "../../src/Icon";
-import { getAllTimeTotals } from "../../src/repository";
+import { getAllTimeTotals, getWeeklyChartData, type WeeklyChartPoint } from "../../src/repository";
 import { formatAmountInKM } from "../../src/utils";
 
 function formatMoney(value: number) {
@@ -126,19 +126,19 @@ function InsightCard({ insight, index }: { insight: string; index: number }) {
   );
 }
 
-function TrendChart({ analytics }: { analytics: DashboardAnalytics }) {
-  const maxValue = Math.max(...analytics.weeklyTrend.map((item) => Math.max(item.collection, item.distribution)), 1);
+function TrendChart({ data }: { data: WeeklyChartPoint[] }) {
+  const maxValue = Math.max(...data.map((item) => Math.max(item.collected, item.distributed)), 1);
 
   return (
     <View style={styles.chart}>
-      {analytics.weeklyTrend.map((week) => (
-        <View key={week.label} style={styles.chartColumn}>
+      {data.map((week) => (
+        <View key={week.weekLabel} style={styles.chartColumn}>
           <View style={styles.chartBarWrap}>
-            <View style={[styles.chartBar, styles.outBar, { height: Math.max(7, (week.distribution / maxValue) * 134) }]} />
-            <View style={[styles.chartBar, styles.inBar, { height: Math.max(7, (week.collection / maxValue) * 148) }]} />
+            <View style={[styles.chartBar, styles.outBar, { height: Math.max(7, (week.distributed / maxValue) * 134) }]} />
+            <View style={[styles.chartBar, styles.inBar, { height: Math.max(7, (week.collected / maxValue) * 148) }]} />
           </View>
-          <Text style={styles.chartAmount}>{formatAmountInKM(week.collection, 0)}</Text>
-          <Text style={styles.chartLabel}>{week.label}</Text>
+          <Text style={styles.chartAmount}>{formatAmountInKM(week.collected, 0)}</Text>
+          <Text style={styles.chartLabel}>{week.weekLabel}</Text>
         </View>
       ))}
     </View>
@@ -149,6 +149,7 @@ export default function GraphScreen() {
   const { user, loading: authLoading } = useAuth();
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [allTimeTotals, setAllTimeTotals] = useState<{ distributed: number; collected: number } | null>(null);
+  const [weeklyChartData, setWeeklyChartData] = useState<WeeklyChartPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -160,12 +161,14 @@ export default function GraphScreen() {
     }
     if (showLoader) setLoading(true);
     try {
-      const [nextAnalytics, nextAllTimeTotals] = await Promise.all([
+      const [nextAnalytics, nextAllTimeTotals, nextWeeklyChartData] = await Promise.all([
         getDashboardAnalytics(user.uid),
-        getAllTimeTotals(),
+        getAllTimeTotals(user.uid),
+        getWeeklyChartData(user.uid),
       ]);
       setAnalytics(nextAnalytics);
       setAllTimeTotals(nextAllTimeTotals);
+      setWeeklyChartData(nextWeeklyChartData);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -305,7 +308,11 @@ export default function GraphScreen() {
                       </View>
                     }
                   >
-                    <TrendChart analytics={analytics} />
+                    {weeklyChartData.length ? (
+                      <TrendChart data={weeklyChartData} />
+                    ) : (
+                      <Text style={styles.empty}>No data yet.</Text>
+                    )}
                   </Section>
 
                   <Section

@@ -41,3 +41,6 @@ export function formatAmountInKM(value: number, decimals: number = 1): string {
 export function formatMoney(value: number): string {
   return `Rs.${value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 }
+
+export const formatIndianCurrency = (n: number): string =>
+  "₹" + n.toLocaleString("en-IN", { maximumFractionDigits: 0 });

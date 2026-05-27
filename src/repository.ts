@@ -711,6 +711,99 @@ function toAmount(value: any) {
   return Number.isFinite(amount) ? amount : 0;
 }
 
+function getWeekKey(date: Date): string {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  const week = Math.ceil(
+    ((d.getTime() - new Date(d.getFullYear(), 0, 4).getTime()) / 86400000 + 1) / 7
+  );
+  return `${d.getFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+export type AllPaymentEver = {
+  id: string;
+  amount: number;
+  date: Date;
+  customerId?: string;
+  loanId?: string;
+};
+
+export type AllLoanEver = {
+  id: string;
+  amount: number;
+  date: Date;
+  status: string;
+  customerId?: string;
+};
+
+export type WeeklyChartPoint = {
+  weekLabel: string;
+  collected: number;
+  distributed: number;
+};
+
+export const getAllPaymentsEver = async (userId?: string): Promise<AllPaymentEver[]> => {
+  const snap = await getDocs(userId ? query(coll.payments, where("userId", "==", userId)) : coll.payments);
+  return snap.docs.map((docSnap) => {
+    const d = docSnap.data() as any;
+    const rawDate = d.date ?? d.payment_date ?? d.paymentDate;
+    const millis = toMillis(rawDate);
+    return {
+      id: docSnap.id,
+      amount: toAmount(d.amount ?? d.amount_paid ?? d.amountPaid),
+      date: new Date(millis || Date.now()),
+      customerId: d.customerId ?? d.customer_id,
+      loanId: d.loanId ?? d.loan_id,
+    };
+  });
+};
+
+export const getAllLoansEver = async (userId?: string): Promise<AllLoanEver[]> => {
+  const snap = await getDocs(userId ? query(coll.loans, where("userId", "==", userId)) : coll.loans);
+  return snap.docs.map((docSnap) => {
+    const d = docSnap.data() as any;
+    const rawDate = d.start_date ?? d.startDate ?? d.createdAt;
+    const millis = toMillis(rawDate);
+    return {
+      id: docSnap.id,
+      amount: toAmount(d.principal_amount ?? d.loanAmount ?? d.amount ?? d.totalAmount ?? d.principalAmount),
+      date: new Date(millis || Date.now()),
+      status: d.status || "ACTIVE",
+      customerId: d.customerId ?? d.customer_id,
+    };
+  });
+};
+
+export const getWeeklyChartData = async (userId?: string): Promise<WeeklyChartPoint[]> => {
+  const [payments, loans] = await Promise.all([
+    getAllPaymentsEver(userId),
+    getAllLoansEver(userId),
+  ]);
+
+  const weekMap: Record<string, { collected: number; distributed: number; date: Date }> = {};
+
+  payments.forEach((payment) => {
+    const key = getWeekKey(payment.date);
+    if (!weekMap[key]) weekMap[key] = { collected: 0, distributed: 0, date: payment.date };
+    weekMap[key].collected += payment.amount;
+  });
+
+  loans.forEach((loan) => {
+    const key = getWeekKey(loan.date);
+    if (!weekMap[key]) weekMap[key] = { collected: 0, distributed: 0, date: loan.date };
+    weekMap[key].distributed += loan.amount;
+  });
+
+  return Object.entries(weekMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, value]) => ({
+      weekLabel: value.date.toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
+      collected: value.collected,
+      distributed: value.distributed,
+    }));
+};
+
 export async function getTodayDashboardStats(userId: string) {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
@@ -765,21 +858,15 @@ export async function getTodayDashboardStats(userId: string) {
   return { collectionToday, distributedToday };
 }
 
-export const getAllTimeTotals = async (): Promise<{ distributed: number; collected: number }> => {
-  const loansSnap = await getDocs(coll.loans);
-  const paymentsSnap = await getDocs(coll.payments);
-
-  const distributed = loansSnap.docs.reduce((sum, docSnap) => {
-    const data = docSnap.data() as any;
-    return sum + (data.principal_amount || data.loanAmount || data.amount || data.totalAmount || data.principalAmount || 0);
-  }, 0);
-
-  const collected = paymentsSnap.docs.reduce((sum, docSnap) => {
-    const data = docSnap.data() as any;
-    return sum + (data.amount_paid || data.amount || data.amountPaid || 0);
-  }, 0);
-
-  return { distributed, collected };
+export const getAllTimeTotals = async (userId?: string): Promise<{ distributed: number; collected: number }> => {
+  const [payments, loans] = await Promise.all([
+    getAllPaymentsEver(userId),
+    getAllLoansEver(userId),
+  ]);
+  return {
+    distributed: loans.reduce((sum, loan) => sum + loan.amount, 0),
+    collected: payments.reduce((sum, payment) => sum + payment.amount, 0),
+  };
 };
 
 export async function getPaymentsByDate(userId: string, startDate: number, endDate: number) {
