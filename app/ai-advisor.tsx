@@ -19,6 +19,7 @@ import { useAuth } from "../src/auth-context";
 import { getDashboardAnalytics } from "../src/finance-analytics";
 import { askGemini, BusinessStats } from "../src/gemini";
 import { getAllTimeTotals } from "../src/repository";
+import { Colors, Gradients } from "../src/theme";
 
 type ChatMessage = {
   id: string;
@@ -57,7 +58,7 @@ function hasGeminiKey() {
 }
 
 async function loadBusinessStats(userId: string): Promise<BusinessStats> {
-  const [analytics, allTime] = await Promise.all([getDashboardAnalytics(userId), getAllTimeTotals()]);
+  const [analytics, allTime] = await Promise.all([getDashboardAnalytics(userId), getAllTimeTotals(userId)]);
   return {
     totalCustomers: analytics.totals.customerCount,
     activeLoans: analytics.totals.activeLoanCount,
@@ -103,7 +104,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       <View style={styles.messageMeta}>
         {!isUser ? (
           <View style={styles.assistantAvatar}>
-            <Ionicons name="sparkles-outline" size={15} color="#2563EB" />
+            <Ionicons name="sparkles-outline" size={15} color={Colors.lightSeaGreen} />
           </View>
         ) : null}
         <Text style={styles.messageLabel}>{isUser ? "You" : "AI Advisor"}</Text>
@@ -189,12 +190,12 @@ export default function AIAdvisorScreen() {
   const statusText = !apiReady ? "Setup needed" : booting ? "Loading" : "Ready";
 
   return (
-    <LinearGradient colors={["#07111F", "#102A43", "#143C5C"]} style={styles.root}>
+    <LinearGradient colors={Gradients.screenBg} style={styles.root}>
       <SafeAreaView edges={["top", "bottom"]} style={styles.safe}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.safe}>
           <View style={styles.header}>
             <Pressable accessibilityLabel="Go back" style={styles.iconButton} onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={20} color="#0F172A" />
+              <Ionicons name="arrow-back" size={20} color={Colors.nearBlack} />
             </Pressable>
             <View style={styles.headerCopy}>
               <Text style={styles.eyebrow}>Finance workspace</Text>
@@ -213,7 +214,7 @@ export default function AIAdvisorScreen() {
                 <Text style={styles.contextSub}>Used for every AI answer</Text>
               </View>
               <Pressable accessibilityLabel="Clear chat" style={styles.clearButton} onPress={() => setMessages([])}>
-                <Ionicons name="trash-outline" size={17} color="#64748B" />
+                <Ionicons name="trash-outline" size={17} color={Colors.textMuted} />
               </Pressable>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statRow}>
@@ -224,8 +225,8 @@ export default function AIAdvisorScreen() {
             </ScrollView>
             {!apiReady ? (
               <View style={styles.setupNotice}>
-                <Ionicons name="key-outline" size={17} color="#B45309" />
-                <Text style={styles.setupText}>Add EXPO_PUBLIC_GEMINI_API_KEY to your build environment to enable chat.</Text>
+                <Ionicons name="key-outline" size={17} color="#8a5a00" />
+                <Text style={styles.setupText}>Add EXPO_PUBLIC_GEMINI_API_KEY in local .env or Firebase build environment. Do not commit the real key to GitHub.</Text>
               </View>
             ) : null}
           </View>
@@ -255,7 +256,7 @@ export default function AIAdvisorScreen() {
             {messages.length === 0 && !loading && !booting ? (
               <View style={styles.emptyState}>
                 <View style={styles.emptyIcon}>
-                  <Ionicons name="sparkles-outline" size={26} color="#2563EB" />
+                  <Ionicons name="sparkles-outline" size={26} color={Colors.lightSeaGreen} />
                 </View>
                 <Text style={styles.emptyTitle}>{apiReady ? "Ask a finance question" : "AI setup is pending"}</Text>
                 <Text style={styles.emptySub}>
@@ -274,12 +275,12 @@ export default function AIAdvisorScreen() {
               <View style={[styles.messageBlock, styles.messageBlockAi]}>
                 <View style={styles.messageMeta}>
                   <View style={styles.assistantAvatar}>
-                    <Ionicons name="sparkles-outline" size={15} color="#2563EB" />
+                    <Ionicons name="sparkles-outline" size={15} color={Colors.lightSeaGreen} />
                   </View>
                   <Text style={styles.messageLabel}>AI Advisor</Text>
                 </View>
                 <View style={[styles.bubble, styles.aiBubble, styles.loadingBubble]}>
-                  <ActivityIndicator color="#2563EB" />
+                  <ActivityIndicator color={Colors.lightSeaGreen} />
                   <Text style={styles.loadingText}>{booting ? "Loading business context" : "Thinking"}</Text>
                 </View>
               </View>
@@ -291,13 +292,13 @@ export default function AIAdvisorScreen() {
               value={input}
               onChangeText={setInput}
               placeholder={apiReady ? "Ask about dues, loans, or collections..." : "Add API key to enable AI chat"}
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor={Colors.textMuted}
               style={styles.input}
               multiline
               editable={apiReady && !!stats}
             />
             <Pressable style={[styles.sendButton, !canSend && styles.sendButtonDisabled]} disabled={!canSend} onPress={() => send()}>
-              <Ionicons name="paper-plane" size={19} color="#FFFFFF" />
+              <Ionicons name="paper-plane" size={19} color={Colors.white} />
             </Pressable>
           </View>
         </KeyboardAvoidingView>
@@ -313,84 +314,84 @@ const styles = StyleSheet.create({
     marginHorizontal: 14,
     marginTop: 8,
     borderRadius: 18,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: Colors.white,
     padding: 12,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-  iconButton: { width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: "#E0F2FE" },
+  iconButton: { width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: Colors.frozenWater },
   headerCopy: { flex: 1 },
-  eyebrow: { color: "#64748B", fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
-  title: { color: "#0F172A", fontSize: 21, lineHeight: 25, fontWeight: "900" },
-  statusPill: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, backgroundColor: "#DCFCE7", paddingHorizontal: 10, paddingVertical: 7 },
-  statusPillWarning: { backgroundColor: "#FEF3C7" },
-  statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#16A34A" },
-  statusDotWarning: { backgroundColor: "#F59E0B" },
-  statusText: { color: "#15803D", fontSize: 11, fontWeight: "900" },
-  statusTextWarning: { color: "#B45309" },
-  contextCard: { marginHorizontal: 14, marginTop: 10, borderRadius: 18, backgroundColor: "#FFFFFF", padding: 13, gap: 11 },
+  eyebrow: { color: Colors.textMuted, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
+  title: { color: Colors.nearBlack, fontSize: 21, lineHeight: 25, fontWeight: "900" },
+  statusPill: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, backgroundColor: Colors.frozenWater, paddingHorizontal: 10, paddingVertical: 7 },
+  statusPillWarning: { backgroundColor: Colors.honeyBronze },
+  statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.lightSeaGreen },
+  statusDotWarning: { backgroundColor: Colors.amberGlow },
+  statusText: { color: Colors.lightSeaGreen, fontSize: 11, fontWeight: "900" },
+  statusTextWarning: { color: "#8a5a00" },
+  contextCard: { marginHorizontal: 14, marginTop: 10, borderRadius: 18, backgroundColor: Colors.white, padding: 13, gap: 11 },
   contextHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
-  contextTitle: { color: "#0F172A", fontSize: 17, fontWeight: "900" },
-  contextSub: { color: "#64748B", fontSize: 11, fontWeight: "800", marginTop: 1 },
-  clearButton: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#F1F5F9" },
+  contextTitle: { color: Colors.nearBlack, fontSize: 17, fontWeight: "900" },
+  contextSub: { color: Colors.textMuted, fontSize: 11, fontWeight: "800", marginTop: 1 },
+  clearButton: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#f6fffe" },
   statRow: { gap: 8 },
-  statPill: { minWidth: 92, borderRadius: 14, backgroundColor: "#F8FAFC", borderWidth: 1, borderColor: "#E2E8F0", paddingHorizontal: 10, paddingVertical: 10 },
-  statValue: { color: "#0F172A", fontSize: 15, fontWeight: "900" },
-  statLabel: { color: "#64748B", fontSize: 10, fontWeight: "900", marginTop: 2, textTransform: "uppercase" },
-  setupNotice: { borderRadius: 13, backgroundColor: "#FEF3C7", flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 11, paddingVertical: 10 },
-  setupText: { flex: 1, color: "#92400E", fontSize: 12, lineHeight: 17, fontWeight: "800" },
+  statPill: { minWidth: 92, borderRadius: 14, backgroundColor: "#f6fffe", borderWidth: 1, borderColor: Colors.borderLight, paddingHorizontal: 10, paddingVertical: 10 },
+  statValue: { color: Colors.nearBlack, fontSize: 15, fontWeight: "900" },
+  statLabel: { color: Colors.textMuted, fontSize: 10, fontWeight: "900", marginTop: 2, textTransform: "uppercase" },
+  setupNotice: { borderRadius: 13, backgroundColor: Colors.honeyBronze, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 11, paddingVertical: 10 },
+  setupText: { flex: 1, color: Colors.nearBlack, fontSize: 12, lineHeight: 17, fontWeight: "800" },
   promptSection: { marginTop: 10 },
   promptRow: { gap: 8, paddingHorizontal: 14, paddingBottom: 2 },
-  promptChip: { borderRadius: 999, backgroundColor: "#E0F2FE", borderWidth: 1, borderColor: "#BAE6FD", paddingHorizontal: 13, paddingVertical: 9 },
-  promptText: { color: "#075985", fontSize: 12, fontWeight: "900" },
+  promptChip: { borderRadius: 999, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.borderLight, paddingHorizontal: 13, paddingVertical: 9 },
+  promptText: { color: Colors.lightSeaGreen, fontSize: 12, fontWeight: "900" },
   disabled: { opacity: 0.55 },
   pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
   chat: { flex: 1, marginTop: 8 },
   chatContent: { flexGrow: 1, paddingHorizontal: 14, paddingVertical: 12, gap: 12 },
   emptyState: { flex: 1, alignItems: "center", justifyContent: "center", padding: 22 },
-  emptyIcon: { width: 58, height: 58, borderRadius: 20, backgroundColor: "#DBEAFE", alignItems: "center", justifyContent: "center", marginBottom: 12 },
-  emptyTitle: { color: "#FFFFFF", fontSize: 20, fontWeight: "900", textAlign: "center" },
-  emptySub: { color: "#CBD5E1", fontSize: 13, lineHeight: 19, fontWeight: "800", textAlign: "center", marginTop: 6, maxWidth: 320 },
+  emptyIcon: { width: 58, height: 58, borderRadius: 20, backgroundColor: Colors.white, alignItems: "center", justifyContent: "center", marginBottom: 12 },
+  emptyTitle: { color: Colors.nearBlack, fontSize: 20, fontWeight: "900", textAlign: "center" },
+  emptySub: { color: "#174d48", fontSize: 13, lineHeight: 19, fontWeight: "800", textAlign: "center", marginTop: 6, maxWidth: 320 },
   messageBlock: { maxWidth: "88%", gap: 5 },
   messageBlockUser: { alignSelf: "flex-end", alignItems: "flex-end" },
   messageBlockAi: { alignSelf: "flex-start", alignItems: "flex-start" },
   messageMeta: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 4 },
-  assistantAvatar: { width: 24, height: 24, borderRadius: 9, backgroundColor: "#DBEAFE", alignItems: "center", justifyContent: "center" },
-  messageLabel: { color: "#CBD5E1", fontSize: 11, fontWeight: "900" },
-  messageTime: { color: "#94A3B8", fontSize: 10, fontWeight: "800" },
+  assistantAvatar: { width: 24, height: 24, borderRadius: 9, backgroundColor: Colors.frozenWater, alignItems: "center", justifyContent: "center" },
+  messageLabel: { color: Colors.nearBlack, fontSize: 11, fontWeight: "900" },
+  messageTime: { color: Colors.textMuted, fontSize: 10, fontWeight: "800" },
   bubble: { borderRadius: 18, paddingHorizontal: 14, paddingVertical: 12, gap: 7 },
-  userBubble: { backgroundColor: "#2563EB", borderBottomRightRadius: 5 },
-  aiBubble: { backgroundColor: "#FFFFFF", borderBottomLeftRadius: 5 },
+  userBubble: { backgroundColor: Colors.lightSeaGreen, borderBottomRightRadius: 5 },
+  aiBubble: { backgroundColor: Colors.white, borderBottomLeftRadius: 5 },
   loadingBubble: { minWidth: 160, minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
-  loadingText: { color: "#475569", fontSize: 12, fontWeight: "900" },
+  loadingText: { color: Colors.textMuted, fontSize: 12, fontWeight: "900" },
   messageText: { fontSize: 14, lineHeight: 20, fontWeight: "700" },
-  userText: { color: "#FFFFFF" },
-  aiText: { color: "#0F172A" },
+  userText: { color: Colors.white },
+  aiText: { color: Colors.nearBlack },
   inputBar: {
     flexDirection: "row",
     alignItems: "flex-end",
     gap: 10,
     paddingHorizontal: 12,
     paddingTop: 10,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: Colors.white,
     borderTopWidth: 1,
-    borderTopColor: "#E2E8F0",
+    borderTopColor: Colors.borderLight,
   },
   input: {
     flex: 1,
     maxHeight: 112,
     minHeight: 46,
     borderRadius: 16,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#f6fffe",
     borderWidth: 1,
-    borderColor: "#CBD5E1",
-    color: "#0F172A",
+    borderColor: Colors.borderLight,
+    color: Colors.nearBlack,
     paddingHorizontal: 13,
     paddingVertical: 11,
     fontSize: 14,
     fontWeight: "700",
   },
-  sendButton: { width: 46, height: 46, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: "#2563EB" },
-  sendButtonDisabled: { backgroundColor: "#94A3B8" },
+  sendButton: { width: 46, height: 46, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: Colors.amberGlow },
+  sendButtonDisabled: { backgroundColor: Colors.textMuted },
 });

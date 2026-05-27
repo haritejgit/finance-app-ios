@@ -21,7 +21,7 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { BlockedAadhaar, Customer, Loan, Payment, PaymentMode, Village } from "./types";
-import { getLoanPrincipalAmount, isRealCollectionPayment, loanWeekNumber, money, toMillis } from "./business-logic";
+import { getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, loanWeekNumber, money, toMillis } from "./business-logic";
 import { filterCustomersWithVillage } from "./utils";
 
 const coll = {
@@ -331,6 +331,19 @@ export async function normalizeCustomerNumericalIdsForAllShifts(userId: string) 
   }
 
   return updatedCount;
+}
+
+async function getEligibleCustomerIds(userId: string) {
+  const [customersSnap, villagesSnap] = await Promise.all([
+    getDocs(query(coll.customers, where("userId", "==", userId), limit(1500))),
+    getDocs(query(coll.villages, where("userId", "==", userId), limit(500))),
+  ]);
+  const villageIds = new Set(villagesSnap.docs.map((d) => (d.data() as Village).id));
+  return new Set(
+    filterCustomersWithVillage(customersSnap.docs.map((d) => d.data() as Customer))
+      .filter((customer) => customer.isActive !== false && villageIds.has(customer.villageId))
+      .map((customer) => customer.id)
+  );
 }
 
 export async function addCustomerWithLoan(
@@ -733,7 +746,17 @@ export type WeeklyChartPoint = {
 };
 
 export const getAllPaymentsEver = async (userId?: string): Promise<AllPaymentEver[]> => {
-  const snap = await getDocs(userId ? query(coll.payments, where("userId", "==", userId)) : coll.payments);
+  const [snap, loansSnap, eligibleCustomerIds] = await Promise.all([
+    getDocs(userId ? query(coll.payments, where("userId", "==", userId)) : coll.payments),
+    userId ? getDocs(query(coll.loans, where("userId", "==", userId))) : Promise.resolve(null),
+    userId ? getEligibleCustomerIds(userId) : Promise.resolve(null),
+  ]);
+  const customerIdByLoanId = new Map(
+    loansSnap?.docs.map((d) => {
+      const loan = d.data() as Loan;
+      return [loan.id, loan.customerId];
+    }) ?? []
+  );
   return snap.docs.map((docSnap) => {
     const d = docSnap.data() as any;
     const rawDate = d.date ?? d.payment_date ?? d.paymentDate;
@@ -742,27 +765,30 @@ export const getAllPaymentsEver = async (userId?: string): Promise<AllPaymentEve
       id: docSnap.id,
       amount: money(d.amountPaid ?? d.amount_paid ?? d.amount),
       date: new Date(millis || Date.now()),
-      customerId: d.customerId ?? d.customer_id,
+      customerId: d.customerId ?? d.customer_id ?? customerIdByLoanId.get(d.loanId ?? d.loan_id),
       loanId: d.loanId ?? d.loan_id,
       paymentType: d.paymentType ?? d.type,
     };
-  });
+  }).filter((payment) => !eligibleCustomerIds || (!!payment.customerId && eligibleCustomerIds.has(payment.customerId)));
 };
 
 export const getAllLoansEver = async (userId?: string): Promise<AllLoanEver[]> => {
-  const snap = await getDocs(userId ? query(coll.loans, where("userId", "==", userId)) : coll.loans);
+  const [snap, eligibleCustomerIds] = await Promise.all([
+    getDocs(userId ? query(coll.loans, where("userId", "==", userId)) : coll.loans),
+    userId ? getEligibleCustomerIds(userId) : Promise.resolve(null),
+  ]);
   const loans = snap.docs.map((docSnap) => {
     const d = docSnap.data() as any;
     const rawDate = d.start_date ?? d.startDate ?? d.createdAt;
     const millis = toMillis(rawDate);
     return {
       id: docSnap.id,
-      amount: getLoanPrincipalAmount(d),
+      amount: getLoanDistributedAmount(d),
       date: new Date(millis || Date.now()),
       status: d.status || "ACTIVE",
       customerId: d.customerId ?? d.customer_id,
     };
-  });
+  }).filter((loan) => !eligibleCustomerIds || (!!loan.customerId && eligibleCustomerIds.has(loan.customerId)));
   const seen = new Set<string>();
   return loans.filter((loan) => {
     const key = `${loan.customerId ?? ""}:${loan.date.getTime()}:${loan.amount}:${loan.status}`;
@@ -847,7 +873,7 @@ export async function getTodayDashboardStats(userId: string) {
       const startDate = toMillis(loan.startDate);
       return startDate >= startMs && startDate <= endMs;
     })
-    .reduce((sum, loan) => sum + getLoanPrincipalAmount(loan), 0);
+    .reduce((sum, loan) => sum + getLoanDistributedAmount(loan), 0);
 
   return { collectionToday, distributedToday };
 }

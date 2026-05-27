@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { collection, getDocs, onSnapshot, query, where, type Unsubscribe } from "firebase/firestore";
 import { db } from "./firebase";
 import { Customer, Loan, Payment, Village } from "./types";
-import { DAY_MS as DAY, endOfMonth, getLoanPrincipalAmount, isRealCollectionPayment, money, startOfDay, startOfMonth, toMillis, weekStart } from "./business-logic";
+import { DAY_MS as DAY, endOfMonth, getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, money, startOfDay, startOfMonth, toMillis, weekStart } from "./business-logic";
 import { filterCustomersWithVillage } from "./utils";
 
 export type CustomerState = "paid" | "pending" | "overdue" | "closed";
@@ -93,15 +93,17 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
     throw error;
   }
 
-  const customers = customersRaw.filter((customer) => customer.isActive !== false);
+  const villageById = new Map(villages.map((village) => [village.id, village]));
+  const customers = filterCustomersWithVillage(customersRaw)
+    .filter((customer) => customer.isActive !== false && villageById.has(customer.villageId));
   const customerById = new Map(customers.map((customer) => [customer.id, customer]));
   // NOTE: UI-only filter. Customer documents in Firestore are NOT modified.
-  const namedListCustomerIds = new Set(filterCustomersWithVillage(customers).map((customer) => customer.id));
-  const villageById = new Map(villages.map((village) => [village.id, village]));
+  const namedListCustomerIds = new Set(customers.map((customer) => customer.id));
   const loansNormalized = loansRaw.map((loan) => ({
     ...loan,
     startDate: toMillis(loan.startDate),
     principalAmount: getLoanPrincipalAmount(loan as any),
+    distributedAmount: getLoanDistributedAmount(loan as any),
     balanceAmount: money(loan.balanceAmount),
     totalPayable: money(loan.totalPayable),
   }));
@@ -146,11 +148,11 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
   const distributedThisMonth = loans
     .filter((loan) => customerById.has(loan.customerId))
     .filter((loan) => loan.startDate >= monthStart && loan.startDate <= monthEnd)
-    .reduce((sum, loan) => sum + loan.principalAmount, 0);
+    .reduce((sum, loan) => sum + loan.distributedAmount, 0);
   const distributedToday = loans
     .filter((loan) => customerById.has(loan.customerId))
     .filter((loan) => loan.startDate >= todayStart && loan.startDate <= todayEnd)
-    .reduce((sum, loan) => sum + loan.principalAmount, 0);
+    .reduce((sum, loan) => sum + loan.distributedAmount, 0);
 
   const currentWeekStart = weekStart(Date.now());
   const weeklyTrend = Array.from({ length: 8 }, (_, index) => {
@@ -164,7 +166,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
         .reduce((sum, payment) => sum + payment.amountPaid, 0),
       distribution: loans
         .filter((loan) => loan.startDate >= start && loan.startDate <= end && customerById.has(loan.customerId))
-        .reduce((sum, loan) => sum + loan.principalAmount, 0),
+        .reduce((sum, loan) => sum + loan.distributedAmount, 0),
       dues: payments.filter((payment) => payment.paymentType === "DUE" && payment.paymentDate >= start && payment.paymentDate <= end).length,
     };
   });

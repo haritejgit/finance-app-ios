@@ -26,7 +26,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../src/firebase';
-import { getLoanPrincipalAmount, isRealCollectionPayment, money, toMillis } from "../../src/business-logic";
+import { getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, money, toMillis } from "../../src/business-logic";
 
 // Lazy load heavy XLSX library
 let XLSX: any = null;
@@ -790,7 +790,7 @@ interface Payment {
               const startDate = toMillis(l.startDate);
               return startDate >= from && startDate <= to;
             })
-            .reduce((sum, l) => sum + getLoanPrincipalAmount(l as any), 0);
+            .reduce((sum, l) => sum + getLoanDistributedAmount(l as any), 0);
           const distributed = distributedRaw;
           
           totalCollected += collected;
@@ -905,7 +905,7 @@ interface Payment {
         return loanDate >= startMs && loanDate <= endMs;
       });
 
-      const totalDistributedRaw = dayLoans.reduce((sum, loan) => sum + getLoanPrincipalAmount(loan), 0);
+      const totalDistributedRaw = dayLoans.reduce((sum, loan) => sum + getLoanDistributedAmount(loan), 0);
       const totalDistributed = totalDistributedRaw;
 
       const newData = {
@@ -1152,7 +1152,7 @@ interface Payment {
                 const renewalPayment = weekPayments.find((payment) => payment.paymentType === 'RENEWAL_CLOSURE');
                 const principalAmount = getLoanPrincipalAmount(loanStartingThisWeek as any);
                 const displayedAmount = principalAmount;
-                weeklyDisbursed[weekIdx] += principalAmount;
+                weeklyDisbursed[weekIdx] += getLoanDistributedAmount(loanStartingThisWeek as any);
 
                 if (renewalPayment) {
                   const previousBalance = money(renewalPayment.amountPaid);

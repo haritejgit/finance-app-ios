@@ -82,6 +82,7 @@ export const lightColors = {
   background: Colors.bg,
   backgroundSecondary: Colors.lightSeaGreen,
   border: Colors.border,
+  borderLight: Colors.borderLight,
 
   card: Colors.bgCard,
   cardElevated: "#f6fffe",
@@ -97,7 +98,34 @@ export const lightColors = {
   warningSoft: "rgba(255,159,28,0.18)",
 };
 
-export const darkColors: typeof lightColors = { ...lightColors };
+export const darkColors: typeof lightColors = {
+  ...lightColors,
+  background: "#0f2725",
+  backgroundSecondary: "#174d48",
+  card: "#143b37",
+  cardElevated: "#1a4b45",
+  surface: "#143b37",
+  surfaceTint: "#123632",
+  glass: "rgba(20,59,55,0.86)",
+  glassBorder: "#2f716a",
+  border: "#2f716a",
+  borderLight: "#2f716a",
+  text: "#ffffff",
+  textSecondary: "#cbf3f0",
+  textMuted: "#91c9c3",
+  gray: "#91c9c3",
+  grayLight: "#1a4b45",
+  grayLighter: "#123632",
+  ink: "#ffffff",
+  white: "#ffffff",
+  sky: "#123632",
+  mint: "#174d48",
+  primarySoft: "rgba(46,196,182,0.22)",
+  destructiveSoft: "rgba(217,72,65,0.22)",
+  successSoft: "rgba(46,196,182,0.22)",
+  warningSoft: "rgba(255,159,28,0.22)",
+  overlay: "rgba(15,39,37,0.78)",
+};
 
 export type AppColors = typeof lightColors;
 

@@ -1,4 +1,4 @@
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.EXPO_PUBLIC_GEMINI_API_KEY}`;
+const GEMINI_MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
 
 export interface BusinessStats {
   totalCustomers: number;
@@ -34,7 +34,7 @@ export const askGemini = async (query: string, stats: BusinessStats): Promise<st
       return "AI is unavailable. Add EXPO_PUBLIC_GEMINI_API_KEY to your local .env file.";
     }
 
-    const res = await fetch(GEMINI_URL, {
+    const res = await fetch(`${GEMINI_MODEL_URL}?key=${process.env.EXPO_PUBLIC_GEMINI_API_KEY}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
