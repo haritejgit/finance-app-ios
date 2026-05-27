@@ -21,10 +21,11 @@ import { useAuth } from "../../src/auth-context";
 import { AnimatedListItem } from "../../src/components/AnimatedListItem";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import { CustomerIdBadge } from "../../src/components/CustomerIdBadge";
-import { getDashboardAnalytics, type CustomerState, type DashboardAnalytics } from "../../src/finance-analytics";
+import { getDashboardAnalytics, subscribeDashboardAnalytics, type CustomerState, type DashboardAnalytics } from "../../src/finance-analytics";
 import Icon from "../../src/Icon";
 import { lightImpact } from "../../src/interactions";
 import { CustomerSearchResult, getAllActiveCustomersWithVillages } from "../../src/repository";
+import { Colors, Gradients } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
 
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -147,7 +148,7 @@ function EmptyLine({ text }: { text: string }) {
 function BottomNavButton({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) {
   return (
     <Pressable accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.bottomNavButton, pressed && styles.pressed]}>
-      <Icon name={icon} size={18} color="#DCFFAD" />
+      <Icon name={icon} size={18} color={Colors.lightSeaGreen} />
       <Text style={styles.bottomNavText}>{label}</Text>
     </Pressable>
   );
@@ -202,11 +203,25 @@ export default function ShiftSelectionScreen() {
     }
   }, [user]);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadDashboard();
-    }, [loadDashboard])
-  );
+  useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      return undefined;
+    }
+    setLoading(true);
+    const unsub = subscribeDashboardAnalytics(
+      user.uid,
+      (nextAnalytics) => {
+        setAnalytics(nextAnalytics);
+        setLoading(false);
+        setRefreshing(false);
+      },
+      () => {
+        loadDashboard();
+      }
+    );
+    return unsub;
+  }, [loadDashboard, user]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -296,7 +311,7 @@ export default function ShiftSelectionScreen() {
                 <View style={styles.headerTop}>
                   <View style={styles.brandRow}>
                     <View style={styles.brandIcon}>
-                      <Icon name="wallet-outline" size={19} color="#191818" />
+                      <Icon name="wallet-outline" size={19} color={Colors.nearBlack} />
                     </View>
                     <View style={styles.headerCopy}>
                       <Text style={styles.eyebrow}>Premium finance workspace</Text>
@@ -311,7 +326,7 @@ export default function ShiftSelectionScreen() {
 
                 <Pressable style={styles.todayCard} onPress={() => nav.push("/graph")}>
                   <View style={styles.todayIcon}>
-                    <Icon name="cash-outline" size={18} color="#191818" />
+                    <Icon name="cash-outline" size={18} color={Colors.nearBlack} />
                   </View>
                   <View style={styles.todayCopy}>
                     <Text style={styles.todayLabel}>Collected today</Text>
@@ -360,7 +375,7 @@ export default function ShiftSelectionScreen() {
                             }}
                             style={[styles.shift, active && styles.shiftOn]}
                           >
-                            <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={17} color={active ? "#191818" : "#FFFFFF"} />
+                            <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={17} color={active ? Colors.nearBlack : Colors.lightSeaGreen} />
                             <Text style={[styles.shiftText, active && styles.shiftTextOn]}>{shift}</Text>
                           </Pressable>
                         );
@@ -368,18 +383,18 @@ export default function ShiftSelectionScreen() {
                     </View>
 
                     <Pressable accessibilityLabel="Start Collection" onPress={startCollection}>
-                      <LinearGradient colors={["#DCFFAD", "#C8F090"]} style={styles.primaryAction}>
+                      <LinearGradient colors={Gradients.ctaButton} style={styles.primaryAction}>
                         <Text style={styles.primaryActionText}>Start Collection</Text>
-                        <Icon name="arrow-forward" size={18} color="#191818" />
+                        <Icon name="arrow-forward" size={18} color={Colors.nearBlack} />
                       </LinearGradient>
                     </Pressable>
                   </DashboardPanel>
 
                   <View style={styles.metricGrid}>
                     <DashboardMetric title="Balance" value={formatMoney(balance)} caption="Collected minus pending" icon="wallet-outline" tone="#FFFFFF" />
-                    <DashboardMetric title="Income" value={formatMoney(totals?.monthlyRevenue ?? 0)} caption="Collected this month" icon="cash-outline" tone="#DCFFAD" />
-                    <DashboardMetric title="Expense" value={formatMoney(totals?.distributedThisMonth ?? 0)} caption="Distributed this month" icon="trending-up-outline" tone="#E67E22" />
-                    <DashboardMetric title="Savings" value={formatMoney(savings)} caption="Needs recovery focus" icon="alert-circle-outline" tone="#C0392B" />
+                    <DashboardMetric title="Income" value={formatMoney(totals?.monthlyRevenue ?? 0)} caption="Collected this month" icon="cash-outline" tone={Colors.lightSeaGreen} />
+                    <DashboardMetric title="Expense" value={formatMoney(totals?.distributedThisMonth ?? 0)} caption="Distributed this month" icon="trending-up-outline" tone={Colors.amberGlow} />
+                    <DashboardMetric title="Savings" value={formatMoney(savings)} caption="Needs recovery focus" icon="alert-circle-outline" tone={Colors.danger} />
                   </View>
 
                   {analytics ? (
@@ -389,9 +404,9 @@ export default function ShiftSelectionScreen() {
                         subtitle="Collected vs distributed by week"
                         action={
                           <View style={styles.legend}>
-                            <View style={[styles.legendDot, { backgroundColor: "#DCFFAD" }]} />
+                            <View style={[styles.legendDot, { backgroundColor: Colors.lightSeaGreen }]} />
                             <Text style={styles.legendText}>In</Text>
-                            <View style={[styles.legendDot, { backgroundColor: "#E67E22" }]} />
+                            <View style={[styles.legendDot, { backgroundColor: Colors.amberGlow }]} />
                             <Text style={styles.legendText}>Out</Text>
                           </View>
                         }
@@ -404,7 +419,7 @@ export default function ShiftSelectionScreen() {
                         subtitle="Alerts generated from existing transactions"
                         action={
                           <View style={styles.panelIcon}>
-                            <Icon name="sparkles-outline" size={18} color="#191818" />
+                            <Icon name="sparkles-outline" size={18} color={Colors.nearBlack} />
                           </View>
                         }
                       >
@@ -421,7 +436,7 @@ export default function ShiftSelectionScreen() {
                         subtitle="Latest collections across routes"
                         action={
                           <Pressable style={styles.csvButton} onPress={() => nav.push("/reports")}>
-                            <Icon name="download-outline" size={14} color="#191818" />
+                            <Icon name="download-outline" size={14} color={Colors.nearBlack} />
                             <Text style={styles.csvText}>CSV</Text>
                           </Pressable>
                         }
@@ -434,7 +449,7 @@ export default function ShiftSelectionScreen() {
                               onPress={() => item.customerId && router.push(`/profile/${item.customerId}`)}
                             >
                               <View style={styles.transactionIcon}>
-                                <Icon name="cash-outline" size={15} color="#191818" />
+                                <Icon name="cash-outline" size={15} color={Colors.nearBlack} />
                               </View>
                               <View style={styles.rowCopy}>
                                 <Text style={styles.rowTitle}>{item.customerName}</Text>
@@ -623,11 +638,11 @@ const styles = StyleSheet.create({
   container: { paddingHorizontal: 18, paddingVertical: 12, paddingBottom: 36 },
   content: { width: "100%", maxWidth: Math.min(screenWidth - 36, 920), alignSelf: "center", gap: 12 },
   headerCard: {
-    backgroundColor: "#2D3A28",
+    backgroundColor: Colors.white,
     borderRadius: 18,
     padding: 14,
     gap: 12,
-    shadowColor: "#191818",
+    shadowColor: Colors.lightSeaGreen,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.16,
     shadowRadius: 18,
@@ -635,26 +650,26 @@ const styles = StyleSheet.create({
   },
   headerTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   brandRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
-  brandIcon: { width: 36, height: 36, borderRadius: 11, backgroundColor: "#DCFFAD", alignItems: "center", justifyContent: "center" },
+  brandIcon: { width: 36, height: 36, borderRadius: 11, backgroundColor: Colors.frozenWater, alignItems: "center", justifyContent: "center" },
   headerCopy: { flex: 1 },
-  eyebrow: { color: "#D4E8C2", fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
-  header: { color: "#FFFFFF", fontSize: 22, lineHeight: 27, fontWeight: "900" },
-  welcome: { color: "#D4E8C2", fontSize: 12, marginTop: 2, fontWeight: "800" },
-  searchButton: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "#3D4E37" },
-  todayCard: { minHeight: 74, borderRadius: 14, backgroundColor: "#3D4E37", flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: "#4A5E43" },
-  todayIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: "#DCFFAD", alignItems: "center", justifyContent: "center" },
+  eyebrow: { color: Colors.textMuted, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
+  header: { color: Colors.nearBlack, fontSize: 22, lineHeight: 27, fontWeight: "900" },
+  welcome: { color: "#426c67", fontSize: 12, marginTop: 2, fontWeight: "800" },
+  searchButton: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: Colors.lightSeaGreen },
+  todayCard: { minHeight: 74, borderRadius: 14, backgroundColor: "#f6fffe", flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: Colors.borderLight },
+  todayIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: Colors.honeyBronze, alignItems: "center", justifyContent: "center" },
   todayCopy: { flex: 1 },
-  todayLabel: { color: "#D4E8C2", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
-  todayValue: { color: "#FFFFFF", fontSize: 27, lineHeight: 31, fontWeight: "900" },
-  todayHint: { color: "#D4E8C2", fontSize: 11, fontWeight: "800" },
+  todayLabel: { color: Colors.textMuted, fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
+  todayValue: { color: Colors.nearBlack, fontSize: 27, lineHeight: 31, fontWeight: "900" },
+  todayHint: { color: "#426c67", fontSize: 11, fontWeight: "800" },
   panel: {
-    backgroundColor: "#3D4E37",
+    backgroundColor: Colors.white,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#4A5E43",
+    borderColor: Colors.borderLight,
     padding: 14,
     gap: 12,
-    shadowColor: "#191818",
+    shadowColor: Colors.lightSeaGreen,
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
@@ -662,61 +677,61 @@ const styles = StyleSheet.create({
   },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
   sectionCopy: { flex: 1 },
-  sectionTitle: { color: "#FFFFFF", fontSize: 19, lineHeight: 23, fontWeight: "900" },
-  sectionSub: { color: "#D4E8C2", fontSize: 11, fontWeight: "800", marginTop: 1 },
-  routeMeta: { color: "#D4E8C2", fontSize: 11, fontWeight: "900" },
-  controlLabel: { color: "#D4E8C2", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
+  sectionTitle: { color: Colors.nearBlack, fontSize: 19, lineHeight: 23, fontWeight: "900" },
+  sectionSub: { color: Colors.textMuted, fontSize: 11, fontWeight: "800", marginTop: 1 },
+  routeMeta: { color: Colors.textMuted, fontSize: 11, fontWeight: "900" },
+  controlLabel: { color: Colors.textMuted, fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
   dayGrid: { flexDirection: "row", gap: 6 },
-  dayChip: { flex: 1, borderWidth: 1, borderColor: "#4A5E43", borderRadius: 11, paddingVertical: 10, alignItems: "center", backgroundColor: "#3D4E37", minWidth: 38 },
-  dayChipOn: { backgroundColor: "#DCFFAD", borderColor: "#DCFFAD" },
-  dayChipText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
-  dayChipTextOn: { color: "#191818" },
+  dayChip: { flex: 1, borderWidth: 1, borderColor: Colors.borderLight, borderRadius: 11, paddingVertical: 10, alignItems: "center", backgroundColor: "#f6fffe", minWidth: 38 },
+  dayChipOn: { backgroundColor: Colors.amberGlow, borderColor: Colors.amberGlow },
+  dayChipText: { color: Colors.nearBlack, fontSize: 12, fontWeight: "900" },
+  dayChipTextOn: { color: Colors.white },
   shiftRow: { flexDirection: "row", gap: 8 },
-  shift: { flex: 1, minHeight: 46, borderRadius: 12, borderWidth: 1, borderColor: "#4A5E43", backgroundColor: "#3D4E37", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7, paddingHorizontal: 8 },
-  shiftOn: { backgroundColor: "#DCFFAD", borderColor: "#DCFFAD" },
-  shiftText: { color: "#FFFFFF", fontWeight: "900", fontSize: 13 },
-  shiftTextOn: { color: "#191818" },
+  shift: { flex: 1, minHeight: 46, borderRadius: 12, borderWidth: 1, borderColor: Colors.borderLight, backgroundColor: "#f6fffe", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7, paddingHorizontal: 8 },
+  shiftOn: { backgroundColor: Colors.amberGlow, borderColor: Colors.amberGlow },
+  shiftText: { color: Colors.lightSeaGreen, fontWeight: "900", fontSize: 13 },
+  shiftTextOn: { color: Colors.white },
   primaryAction: { borderRadius: 12, paddingVertical: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
-  primaryActionText: { color: "#191818", fontWeight: "900", fontSize: 15 },
+  primaryActionText: { color: Colors.nearBlack, fontWeight: "900", fontSize: 15 },
   metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  metricCard: { flexGrow: 1, flexBasis: "47%", minWidth: 150, minHeight: 116, borderRadius: 16, backgroundColor: "#3D4E37", borderWidth: 1, borderColor: "#4A5E43", padding: 13 },
+  metricCard: { flexGrow: 1, flexBasis: "47%", minWidth: 150, minHeight: 116, borderRadius: 16, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.borderLight, padding: 13 },
   metricIcon: { width: 33, height: 33, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 9 },
-  metricTitle: { color: "#D4E8C2", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
-  metricValue: { color: "#FFFFFF", fontSize: 21, lineHeight: 26, fontWeight: "900", marginTop: 3 },
-  metricCaption: { color: "#D4E8C2", fontSize: 11, fontWeight: "800", marginTop: 2 },
+  metricTitle: { color: Colors.textMuted, fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
+  metricValue: { color: Colors.nearBlack, fontSize: 21, lineHeight: 26, fontWeight: "900", marginTop: 3 },
+  metricCaption: { color: Colors.textMuted, fontSize: 11, fontWeight: "800", marginTop: 2 },
   legend: { flexDirection: "row", alignItems: "center", gap: 5 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { color: "#64748B", fontSize: 10, fontWeight: "900" },
+  legendText: { color: Colors.textMuted, fontSize: 10, fontWeight: "900" },
   chart: { height: 142, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 10, paddingTop: 2 },
   chartColumn: { flex: 1, alignItems: "center", gap: 6 },
   chartBarWrap: { height: 116, flexDirection: "row", alignItems: "flex-end", gap: 5 },
   chartBar: { width: 10, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
-  chartBarOut: { backgroundColor: "#E67E22" },
-  chartBarIn: { backgroundColor: "#DCFFAD" },
-  chartLabel: { color: "#64748B", fontSize: 10, fontWeight: "900" },
-  panelIcon: { width: 36, height: 36, borderRadius: 13, backgroundColor: "#DBEAFE", alignItems: "center", justifyContent: "center" },
+  chartBarOut: { backgroundColor: Colors.amberGlow },
+  chartBarIn: { backgroundColor: Colors.lightSeaGreen },
+  chartLabel: { color: Colors.textMuted, fontSize: 10, fontWeight: "900" },
+  panelIcon: { width: 36, height: 36, borderRadius: 13, backgroundColor: Colors.frozenWater, alignItems: "center", justifyContent: "center" },
   insightRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  insightDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#2563EB", marginTop: 5 },
-  insightText: { flex: 1, color: "#64748B", fontSize: 13, lineHeight: 19, fontWeight: "800" },
-  csvButton: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, backgroundColor: "#DBEAFE", paddingHorizontal: 10, paddingVertical: 7 },
-  csvText: { color: "#2563EB", fontSize: 10, fontWeight: "900" },
-  transactionRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13, borderTopWidth: 1, borderTopColor: "#E2E8F0" },
-  transactionIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: "#DCFCE7", alignItems: "center", justifyContent: "center" },
+  insightDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.amberGlow, marginTop: 5 },
+  insightText: { flex: 1, color: "#426c67", fontSize: 13, lineHeight: 19, fontWeight: "800" },
+  csvButton: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, backgroundColor: Colors.frozenWater, paddingHorizontal: 10, paddingVertical: 7 },
+  csvText: { color: Colors.lightSeaGreen, fontSize: 10, fontWeight: "900" },
+  transactionRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13, borderTopWidth: 1, borderTopColor: Colors.borderLight },
+  transactionIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: Colors.frozenWater, alignItems: "center", justifyContent: "center" },
   rowCopy: { flex: 1, minWidth: 0 },
-  rowTitle: { color: "#0F172A", fontSize: 14, fontWeight: "900" },
-  rowMeta: { color: "#64748B", fontSize: 12, fontWeight: "800", marginTop: 2 },
-  transactionAmount: { color: "#10B981", fontSize: 13, fontWeight: "900" },
-  alertBadge: { overflow: "hidden", borderRadius: 999, backgroundColor: "#FEE2E2", color: "#EF4444", paddingHorizontal: 10, paddingVertical: 6, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
-  alertRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13, borderTopWidth: 1, borderTopColor: "#E2E8F0" },
-  alertIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: "#FEE2E2", alignItems: "center", justifyContent: "center" },
-  emptyText: { color: "#64748B", fontSize: 13, fontWeight: "800", paddingVertical: 12 },
+  rowTitle: { color: Colors.nearBlack, fontSize: 14, fontWeight: "900" },
+  rowMeta: { color: Colors.textMuted, fontSize: 12, fontWeight: "800", marginTop: 2 },
+  transactionAmount: { color: Colors.lightSeaGreen, fontSize: 13, fontWeight: "900" },
+  alertBadge: { overflow: "hidden", borderRadius: 999, backgroundColor: "#fde7e5", color: Colors.danger, paddingHorizontal: 10, paddingVertical: 6, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
+  alertRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13, borderTopWidth: 1, borderTopColor: Colors.borderLight },
+  alertIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: Colors.danger, alignItems: "center", justifyContent: "center" },
+  emptyText: { color: Colors.textMuted, fontSize: 13, fontWeight: "800", paddingVertical: 12 },
   bottomNav: { flexDirection: "row", gap: 10 },
-  bottomNavButton: { flex: 1, minHeight: 58, borderRadius: 14, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E2E8F0", alignItems: "center", justifyContent: "center", gap: 4 },
-  bottomNavText: { color: "#0F172A", fontSize: 12, fontWeight: "900" },
+  bottomNavButton: { flex: 1, minHeight: 58, borderRadius: 14, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.borderLight, alignItems: "center", justifyContent: "center", gap: 4 },
+  bottomNavText: { color: Colors.nearBlack, fontSize: 12, fontWeight: "900" },
   logoutLink: { alignItems: "center", paddingVertical: 8 },
   logoutText: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
   pressed: { opacity: 0.76, transform: [{ scale: 0.98 }] },
-  skeletonPanel: { backgroundColor: "#FFFFFF", borderRadius: 18, borderWidth: 1, borderColor: "#E2E8F0", padding: 16, gap: 14 },
+  skeletonPanel: { backgroundColor: Colors.white, borderRadius: 18, borderWidth: 1, borderColor: Colors.borderLight, padding: 16, gap: 14 },
   skeletonLine: { height: 16, borderRadius: 999, backgroundColor: "#DCE6F7" },
   searchModalSafe: { flex: 1 },
   searchModalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingVertical: 14, backgroundColor: "#FFFFFF", borderBottomWidth: 1, borderBottomColor: "#DCE6F7" },
@@ -727,7 +742,7 @@ const styles = StyleSheet.create({
   customerSearchInput: { flex: 1, paddingVertical: 13, fontSize: 15, color: "#111827" },
   filterRow: { gap: 8, paddingBottom: 12 },
   filterChip: { borderRadius: 999, borderWidth: 1, borderColor: "#DCE6F7", paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "#FFFFFF" },
-  filterChipOn: { backgroundColor: "#2563EB", borderColor: "#2563EB" },
+  filterChipOn: { backgroundColor: Colors.lightSeaGreen, borderColor: Colors.lightSeaGreen },
   filterChipText: { color: "#6B7280", fontSize: 12, fontWeight: "700", textTransform: "capitalize" },
   filterChipTextOn: { color: "#FFFFFF" },
   searchLoading: { paddingVertical: 30, gap: 12 },
@@ -739,6 +754,6 @@ const styles = StyleSheet.create({
   searchCustomerName: { color: "#111827", fontSize: 15, fontWeight: "700" },
   searchCustomerMeta: { color: "#6B7280", fontSize: 12, fontWeight: "500", marginTop: 2 },
   searchCustomerPhone: { color: "#9CA3AF", fontSize: 12, marginTop: 2 },
-  statePill: { color: "#2563EB", backgroundColor: "#DBEAFE", fontSize: 10, fontWeight: "700", paddingHorizontal: 8, paddingVertical: 5, borderRadius: 999, overflow: "hidden", textTransform: "uppercase" },
-  aiFab: { position: "absolute", right: 18, bottom: 24, width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: "#2563EB", shadowColor: "#2563EB", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.45, shadowRadius: 14, elevation: 8 },
+  statePill: { color: Colors.lightSeaGreen, backgroundColor: Colors.frozenWater, fontSize: 10, fontWeight: "700", paddingHorizontal: 8, paddingVertical: 5, borderRadius: 999, overflow: "hidden", textTransform: "uppercase" },
+  aiFab: { position: "absolute", right: 18, bottom: 24, width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: Colors.amberGlow, shadowColor: Colors.amberGlow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.45, shadowRadius: 14, elevation: 8 },
 });

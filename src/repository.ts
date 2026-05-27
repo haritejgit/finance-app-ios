@@ -21,6 +21,7 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { BlockedAadhaar, Customer, Loan, Payment, PaymentMode, Village } from "./types";
+import { getLoanPrincipalAmount, isRealCollectionPayment, loanWeekNumber, money, toMillis } from "./business-logic";
 import { filterCustomersWithVillage } from "./utils";
 
 const coll = {
@@ -528,7 +529,7 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
 
   paymentsSnap.docs
     .map((d) => d.data() as Payment)
-    .filter((payment) => payment.paymentType !== "DUE")
+    .filter(isRealCollectionPayment)
     .forEach((payment) => {
       const customerId = payment.customerId ?? customerIdByLoanId.get(payment.loanId);
       if (!customerId || !wantedCustomerIds.has(customerId)) return;
@@ -549,7 +550,7 @@ export async function addPayment(loan: Loan, amountPaid: number, paymentDate: nu
     customerId: loan.customerId,
     amountPaid,
     paymentDate,
-    weekNumber: 0,
+    weekNumber: loanWeekNumber(loan.startDate, paymentDate),
     paymentType: "REGULAR",
     paymentMode: mode,
     userId: loan.userId,
@@ -576,7 +577,7 @@ export async function addPaymentsBatch(
       customerId: loan.customerId,
       amountPaid,
       paymentDate,
-      weekNumber: 0,
+      weekNumber: loanWeekNumber(loan.startDate, paymentDate),
       paymentType: "REGULAR",
       paymentMode: mode,
       userId: loan.userId,
@@ -641,7 +642,7 @@ export async function markDue(loan: Loan, paymentDate: number) {
     customerId: loan.customerId,
     amountPaid: 0,
     paymentDate,
-    weekNumber: 0,
+    weekNumber: loanWeekNumber(loan.startDate, paymentDate),
     paymentType: "DUE",
     paymentMode: "CASH",
     userId: loan.userId,
@@ -659,7 +660,7 @@ export async function renewLoan(loan: Loan, newPrincipal: number, date: number) 
       customerId: loan.customerId,
       amountPaid: loan.balanceAmount,
       paymentDate: date,
-      weekNumber: 0,
+      weekNumber: loanWeekNumber(loan.startDate, date),
       paymentType: "RENEWAL_CLOSURE",
       paymentMode: "CASH",
       notes: "Loan renewed - old balance cleared",
@@ -694,21 +695,8 @@ export async function getCollectionToday(userId: string) {
   const snap = await getDocs(q);
   return snap.docs
     .map((d) => d.data() as Payment)
-    .filter((p) => p.paymentDate >= start.getTime() && p.paymentDate <= end.getTime())
+    .filter((p) => isRealCollectionPayment(p) && p.paymentDate >= start.getTime() && p.paymentDate <= end.getTime())
     .reduce((sum, p) => sum + p.amountPaid, 0);
-}
-
-function toMillis(value: any) {
-  if (typeof value === "number") return value;
-  if (value instanceof Date) return value.getTime();
-  if (typeof value?.toMillis === "function") return value.toMillis();
-  if (typeof value?.seconds === "number") return value.seconds * 1000;
-  return 0;
-}
-
-function toAmount(value: any) {
-  const amount = Number(value);
-  return Number.isFinite(amount) ? amount : 0;
 }
 
 function getWeekKey(date: Date): string {
@@ -727,6 +715,7 @@ export type AllPaymentEver = {
   date: Date;
   customerId?: string;
   loanId?: string;
+  paymentType?: Payment["paymentType"];
 };
 
 export type AllLoanEver = {
@@ -751,27 +740,35 @@ export const getAllPaymentsEver = async (userId?: string): Promise<AllPaymentEve
     const millis = toMillis(rawDate);
     return {
       id: docSnap.id,
-      amount: toAmount(d.amount ?? d.amount_paid ?? d.amountPaid),
+      amount: money(d.amountPaid ?? d.amount_paid ?? d.amount),
       date: new Date(millis || Date.now()),
       customerId: d.customerId ?? d.customer_id,
       loanId: d.loanId ?? d.loan_id,
+      paymentType: d.paymentType ?? d.type,
     };
   });
 };
 
 export const getAllLoansEver = async (userId?: string): Promise<AllLoanEver[]> => {
   const snap = await getDocs(userId ? query(coll.loans, where("userId", "==", userId)) : coll.loans);
-  return snap.docs.map((docSnap) => {
+  const loans = snap.docs.map((docSnap) => {
     const d = docSnap.data() as any;
     const rawDate = d.start_date ?? d.startDate ?? d.createdAt;
     const millis = toMillis(rawDate);
     return {
       id: docSnap.id,
-      amount: toAmount(d.principal_amount ?? d.loanAmount ?? d.amount ?? d.totalAmount ?? d.principalAmount),
+      amount: getLoanPrincipalAmount(d),
       date: new Date(millis || Date.now()),
       status: d.status || "ACTIVE",
       customerId: d.customerId ?? d.customer_id,
     };
+  });
+  const seen = new Set<string>();
+  return loans.filter((loan) => {
+    const key = `${loan.customerId ?? ""}:${loan.date.getTime()}:${loan.amount}:${loan.status}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 };
 
@@ -783,7 +780,7 @@ export const getWeeklyChartData = async (userId?: string): Promise<WeeklyChartPo
 
   const weekMap: Record<string, { collected: number; distributed: number; date: Date }> = {};
 
-  payments.forEach((payment) => {
+  payments.filter(isRealCollectionPayment).forEach((payment) => {
     const key = getWeekKey(payment.date);
     if (!weekMap[key]) weekMap[key] = { collected: 0, distributed: 0, date: payment.date };
     weekMap[key].collected += payment.amount;
@@ -843,17 +840,14 @@ export async function getTodayDashboardStats(userId: string) {
         activeCustomerIds.has(customerId)
       );
     })
-    .reduce((sum, payment) => sum + toAmount(payment.amountPaid), 0);
+    .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
 
-  const distributedTodayRaw = activeLoans
+  const distributedToday = activeLoans
     .filter((loan) => {
       const startDate = toMillis(loan.startDate);
       return startDate >= startMs && startDate <= endMs;
     })
-    .reduce((sum, loan) => sum + toAmount(loan.principalAmount), 0);
-  
-  // Deduct 20 Rs per 1000 Rs distributed
-  const distributedToday = distributedTodayRaw - (Math.floor(distributedTodayRaw / 1000) * 20);
+    .reduce((sum, loan) => sum + getLoanPrincipalAmount(loan), 0);
 
   return { collectionToday, distributedToday };
 }
@@ -865,7 +859,7 @@ export const getAllTimeTotals = async (userId?: string): Promise<{ distributed: 
   ]);
   return {
     distributed: loans.reduce((sum, loan) => sum + loan.amount, 0),
-    collected: payments.reduce((sum, payment) => sum + payment.amount, 0),
+    collected: payments.filter(isRealCollectionPayment).reduce((sum, payment) => sum + payment.amount, 0),
   };
 };
 

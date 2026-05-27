@@ -1,7 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, onSnapshot, query, where, type Unsubscribe } from "firebase/firestore";
 import { db } from "./firebase";
 import { Customer, Loan, Payment, Village } from "./types";
+import { DAY_MS as DAY, endOfMonth, getLoanPrincipalAmount, isRealCollectionPayment, money, startOfDay, startOfMonth, toMillis, weekStart } from "./business-logic";
 import { filterCustomersWithVillage } from "./utils";
 
 export type CustomerState = "paid" | "pending" | "overdue" | "closed";
@@ -51,55 +52,7 @@ export type DashboardAnalytics = {
   aiInsights: string[];
 };
 
-const DAY = 24 * 60 * 60 * 1000;
 const DASHBOARD_CACHE_PREFIX = "dashboardAnalytics:";
-
-function toMillis(value: any) {
-  if (typeof value === "number") return value;
-  if (value instanceof Date) return value.getTime();
-  if (typeof value?.toMillis === "function") return value.toMillis();
-  if (typeof value?.seconds === "number") return value.seconds * 1000;
-  return 0;
-}
-
-function money(value: any) {
-  const amount = Number(value);
-  return Number.isFinite(amount) ? amount : 0;
-}
-
-function netDistributedAmount(value: number) {
-  const amount = money(value);
-  return Math.max(0, amount - Math.floor(amount / 1000) * 20);
-}
-
-function startOfDay(ts: number) {
-  const d = new Date(ts);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-function startOfMonth(offset = 0) {
-  const d = new Date();
-  d.setMonth(d.getMonth() + offset, 1);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-function endOfMonth(offset = 0) {
-  const d = new Date();
-  d.setMonth(d.getMonth() + offset + 1, 0);
-  d.setHours(23, 59, 59, 999);
-  return d.getTime();
-}
-
-function weekStart(ts: number) {
-  const d = new Date(ts);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
 
 function changeText(current: number, previous: number, label: string) {
   if (previous <= 0 && current > 0) return `${label} started this period with Rs.${Math.round(current).toLocaleString("en-IN")} collected.`;
@@ -145,13 +98,20 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
   // NOTE: UI-only filter. Customer documents in Firestore are NOT modified.
   const namedListCustomerIds = new Set(filterCustomersWithVillage(customers).map((customer) => customer.id));
   const villageById = new Map(villages.map((village) => [village.id, village]));
-  const loans = loansRaw.map((loan) => ({
+  const loansNormalized = loansRaw.map((loan) => ({
     ...loan,
     startDate: toMillis(loan.startDate),
-    principalAmount: money(loan.principalAmount),
+    principalAmount: getLoanPrincipalAmount(loan as any),
     balanceAmount: money(loan.balanceAmount),
     totalPayable: money(loan.totalPayable),
   }));
+  const seenLoanKeys = new Set<string>();
+  const loans = loansNormalized.filter((loan) => {
+    const key = `${loan.customerId}:${loan.startDate}:${loan.principalAmount}:${loan.status}`;
+    if (seenLoanKeys.has(key)) return false;
+    seenLoanKeys.add(key);
+    return true;
+  });
   const activeLoans = loans.filter((loan) => loan.status === "ACTIVE" && customerById.has(loan.customerId));
   const activeLoanByCustomerId = new Map(activeLoans.map((loan) => [loan.customerId, loan]));
   const customerIdByLoanId = new Map(loans.map((loan) => [loan.id, loan.customerId]));
@@ -171,7 +131,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
   const previousMonthStart = startOfMonth(-1);
   const previousMonthEnd = endOfMonth(-1);
 
-  const regularPayments = payments.filter((payment) => payment.paymentType !== "DUE");
+  const regularPayments = payments.filter(isRealCollectionPayment);
   const totalCollection = regularPayments.reduce((sum, payment) => sum + payment.amountPaid, 0);
   const monthlyRevenue = regularPayments
     .filter((payment) => payment.paymentDate >= monthStart && payment.paymentDate <= monthEnd)
@@ -183,12 +143,14 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
     .filter((payment) => payment.paymentDate >= todayStart && payment.paymentDate <= todayEnd)
     .reduce((sum, payment) => sum + payment.amountPaid, 0);
   const pendingAmount = activeLoans.reduce((sum, loan) => sum + loan.balanceAmount, 0);
-  const distributedThisMonth = activeLoans
+  const distributedThisMonth = loans
+    .filter((loan) => customerById.has(loan.customerId))
     .filter((loan) => loan.startDate >= monthStart && loan.startDate <= monthEnd)
-    .reduce((sum, loan) => sum + netDistributedAmount(loan.principalAmount), 0);
-  const distributedToday = activeLoans
+    .reduce((sum, loan) => sum + loan.principalAmount, 0);
+  const distributedToday = loans
+    .filter((loan) => customerById.has(loan.customerId))
     .filter((loan) => loan.startDate >= todayStart && loan.startDate <= todayEnd)
-    .reduce((sum, loan) => sum + netDistributedAmount(loan.principalAmount), 0);
+    .reduce((sum, loan) => sum + loan.principalAmount, 0);
 
   const currentWeekStart = weekStart(Date.now());
   const weeklyTrend = Array.from({ length: 8 }, (_, index) => {
@@ -202,7 +164,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
         .reduce((sum, payment) => sum + payment.amountPaid, 0),
       distribution: loans
         .filter((loan) => loan.startDate >= start && loan.startDate <= end && customerById.has(loan.customerId))
-        .reduce((sum, loan) => sum + netDistributedAmount(loan.principalAmount), 0),
+        .reduce((sum, loan) => sum + loan.principalAmount, 0),
       dues: payments.filter((payment) => payment.paymentType === "DUE" && payment.paymentDate >= start && payment.paymentDate <= end).length,
     };
   });
@@ -328,4 +290,43 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
     // Cache failures should not block live dashboard data.
   }
   return dashboardAnalytics;
+}
+
+export function subscribeDashboardAnalytics(
+  userId: string,
+  onData: (analytics: DashboardAnalytics) => void,
+  onError?: (error: unknown) => void
+): Unsubscribe {
+  let cancelled = false;
+  let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const refresh = () => {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      getDashboardAnalytics(userId)
+        .then((analytics) => {
+          if (!cancelled) onData(analytics);
+        })
+        .catch((error) => {
+          if (!cancelled) onError?.(error);
+        });
+    }, 120);
+  };
+
+  const watch = (name: string) =>
+    onSnapshot(query(collection(db, name), where("userId", "==", userId)), refresh, (error) => onError?.(error));
+
+  const unsubs = [
+    watch("villages"),
+    watch("customers"),
+    watch("loans"),
+    watch("payments"),
+  ];
+  refresh();
+
+  return () => {
+    cancelled = true;
+    if (refreshTimer) clearTimeout(refreshTimer);
+    unsubs.forEach((unsub) => unsub());
+  };
 }

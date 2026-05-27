@@ -26,6 +26,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../src/firebase';
+import { getLoanPrincipalAmount, isRealCollectionPayment, money, toMillis } from "../../src/business-logic";
 
 // Lazy load heavy XLSX library
 let XLSX: any = null;
@@ -76,21 +77,9 @@ function toStartOfDay(ts: number) {
   return d.getTime();
 }
 
-function toMillis(value: any) {
-  if (typeof value === "number") return value;
-  if (value instanceof Date) return value.getTime();
-  if (typeof value?.toMillis === "function") return value.toMillis();
-  if (typeof value?.seconds === "number") return value.seconds * 1000;
-  return 0;
-}
-
 function formatFilenameDate(ts: number) {
   const d = new Date(ts);
   return `${d.getDate()}-${d.getMonth() + 1}-${String(d.getFullYear()).slice(-2)}`;
-}
-
-function getNetDistributedAmount(amount: number) {
-  return amount - Math.floor(amount / 1000) * 20;
 }
 
 export default function ReportsScreen() {
@@ -791,7 +780,7 @@ interface Payment {
           const collected = shiftPayments
             .filter(p => {
               const paymentDate = toMillis(p.paymentDate);
-              return p.paymentType !== "DUE" && paymentDate >= from && paymentDate <= to;
+              return isRealCollectionPayment(p) && paymentDate >= from && paymentDate <= to;
             })
             .reduce((sum, p) => sum + Number(p.amountPaid ?? 0), 0);
           
@@ -801,8 +790,8 @@ interface Payment {
               const startDate = toMillis(l.startDate);
               return startDate >= from && startDate <= to;
             })
-            .reduce((sum, l) => sum + Number(l.principalAmount ?? 0), 0);
-          const distributed = getNetDistributedAmount(distributedRaw);
+            .reduce((sum, l) => sum + getLoanPrincipalAmount(l as any), 0);
+          const distributed = distributedRaw;
           
           totalCollected += collected;
           totalDistributed += distributed;
@@ -893,7 +882,7 @@ interface Payment {
           return (
             paymentDate >= startMs &&
             paymentDate <= endMs &&
-            p.paymentType !== "DUE" &&
+            isRealCollectionPayment(p) &&
             !!customerId &&
             shiftCustomerIds.has(customerId)
           );
@@ -916,8 +905,8 @@ interface Payment {
         return loanDate >= startMs && loanDate <= endMs;
       });
 
-      const totalDistributedRaw = dayLoans.reduce((sum, loan) => sum + (loan.principalAmount || 0), 0);
-      const totalDistributed = getNetDistributedAmount(totalDistributedRaw);
+      const totalDistributedRaw = dayLoans.reduce((sum, loan) => sum + getLoanPrincipalAmount(loan), 0);
+      const totalDistributed = totalDistributedRaw;
 
       const newData = {
         cashCollection,
@@ -1161,13 +1150,12 @@ interface Payment {
 
               if (loanStartingThisWeek) {
                 const renewalPayment = weekPayments.find((payment) => payment.paymentType === 'RENEWAL_CLOSURE');
-                const displayedAmount = money(loanStartingThisWeek.totalPayable);
-                const principalAmount = money(loanStartingThisWeek.principalAmount);
+                const principalAmount = getLoanPrincipalAmount(loanStartingThisWeek as any);
+                const displayedAmount = principalAmount;
                 weeklyDisbursed[weekIdx] += principalAmount;
 
                 if (renewalPayment) {
                   const previousBalance = money(renewalPayment.amountPaid);
-                  weeklyCollected[weekIdx] += previousBalance;
                   row.push(`${Math.trunc(previousBalance)}\n${Math.trunc(displayedAmount)}`);
                   setStyle(rowIndex, colIndex, orangeStyle);
                 } else {
@@ -1226,7 +1214,7 @@ interface Payment {
             '',
             '',
             'TOTAL DISBURSED',
-            ...weeklyDisbursed.map((amount) => amount - (amount / 100) * 2),
+            ...weeklyDisbursed,
           ]);
 
           weekDates.forEach((_, index) => {

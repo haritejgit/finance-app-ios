@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { router, useFocusEffect } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import { router } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,10 +16,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../src/auth-context";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
-import { getDashboardAnalytics, type DashboardAnalytics } from "../../src/finance-analytics";
+import { getDashboardAnalytics, subscribeDashboardAnalytics, type DashboardAnalytics } from "../../src/finance-analytics";
 import Icon from "../../src/Icon";
 import { getAllTimeTotals, getWeeklyChartData, type WeeklyChartPoint } from "../../src/repository";
 import { formatAmountInKM } from "../../src/utils";
+import { Gradients, Colors } from "../../src/theme";
 
 function formatMoney(value: number) {
   return `Rs.${Math.round(value || 0).toLocaleString("en-IN")}`;
@@ -111,7 +112,7 @@ function Section({
 }
 
 function InsightCard({ insight, index }: { insight: string; index: number }) {
-  const palette = ["#2563EB", "#10B981", "#F97316", "#EF4444"];
+  const palette = [Colors.lightSeaGreen, Colors.amberGlow, Colors.honeyBronze, Colors.danger];
   const tone = palette[index % palette.length];
   return (
     <View style={styles.insightCard}>
@@ -175,12 +176,39 @@ export default function GraphScreen() {
     }
   }, [user]);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (authLoading) return;
-      load();
-    }, [authLoading, load])
-  );
+  useEffect(() => {
+    if (authLoading) return undefined;
+    if (!user) {
+      setLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    const hydrateTotals = async () => {
+      const [nextAllTimeTotals, nextWeeklyChartData] = await Promise.all([
+        getAllTimeTotals(user.uid),
+        getWeeklyChartData(user.uid),
+      ]);
+      if (!cancelled) {
+        setAllTimeTotals(nextAllTimeTotals);
+        setWeeklyChartData(nextWeeklyChartData);
+        setLoading(false);
+      }
+    };
+    const unsub = subscribeDashboardAnalytics(
+      user.uid,
+      (nextAnalytics) => {
+        setAnalytics(nextAnalytics);
+        hydrateTotals().catch(() => setLoading(false));
+      },
+      () => {
+        load(false);
+      }
+    );
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, [authLoading, load, user]);
 
   const recoveryRate = useMemo(() => {
     if (!analytics || analytics.totals.distributedThisMonth <= 0) return 0;
@@ -211,7 +239,7 @@ export default function GraphScreen() {
   if (loading && !analytics) {
     return (
       <AnimatedScreen style={styles.root}>
-        <LinearGradient colors={["#07111F", "#102A43", "#143C5C"]} style={styles.root}>
+        <LinearGradient colors={Gradients.screenBg} style={styles.root}>
           <SafeAreaView style={styles.safe}>
             <View style={styles.loading}>
               <ActivityIndicator size="large" color="#FFFFFF" />
@@ -225,7 +253,7 @@ export default function GraphScreen() {
 
   return (
     <AnimatedScreen style={styles.root}>
-      <LinearGradient colors={["#07111F", "#102A43", "#143C5C"]} style={styles.root}>
+        <LinearGradient colors={Gradients.screenBg} style={styles.root}>
         <SafeAreaView style={styles.safe}>
           <ScrollView
             contentContainerStyle={styles.container}
@@ -234,7 +262,7 @@ export default function GraphScreen() {
             <View style={styles.content}>
               <View style={styles.hero}>
                 <Pressable accessibilityLabel="Go back" style={styles.backBtn} onPress={() => router.back()}>
-                  <Icon name="arrow-back" size={19} color="#0F172A" />
+                  <Icon name="arrow-back" size={19} color={Colors.nearBlack} />
                 </Pressable>
                 <View style={styles.heroCopy}>
                   <Text style={styles.eyebrow}>Business insights</Text>
@@ -242,8 +270,8 @@ export default function GraphScreen() {
                   <Text style={styles.subtitle}>Lifetime money, recovery health, and follow-up priorities in one view.</Text>
                 </View>
                 <View style={[styles.netPill, netPosition >= 0 ? styles.netPillGood : styles.netPillRisk]}>
-                  <Icon name={netPosition >= 0 ? "trending-up" : "trending-down"} size={17} color={netPosition >= 0 ? "#10B981" : "#EF4444"} />
-                  <Text style={[styles.netPillText, { color: netPosition >= 0 ? "#10B981" : "#EF4444" }]}>
+                  <Icon name={netPosition >= 0 ? "trending-up" : "trending-down"} size={17} color={netPosition >= 0 ? Colors.lightSeaGreen : Colors.danger} />
+                  <Text style={[styles.netPillText, { color: netPosition >= 0 ? Colors.lightSeaGreen : Colors.danger }]}>
                     {formatMoney(netPosition)}
                   </Text>
                 </View>
@@ -255,31 +283,31 @@ export default function GraphScreen() {
                   value={formatIndianCurrency(allTimeTotals?.distributed ?? 0)}
                   sub="Since business started"
                   icon="arrow-up-outline"
-                  tone="#F97316"
+                  tone={Colors.amberGlow}
                 />
                 <LifetimeCard
                   label="Total Collected"
                   value={formatIndianCurrency(allTimeTotals?.collected ?? 0)}
                   sub="Since business started"
                   icon="arrow-down"
-                  tone="#10B981"
+                  tone={Colors.lightSeaGreen}
                 />
                 <LifetimeCard
                   label="Lifetime Net"
                   value={formatIndianCurrency(lifetimeNet)}
                   sub="Collected minus distributed"
                   icon={lifetimeNet >= 0 ? "trending-up" : "trending-down"}
-                  tone={lifetimeNet >= 0 ? "#2563EB" : "#EF4444"}
+                  tone={lifetimeNet >= 0 ? Colors.lightSeaGreen : Colors.danger}
                 />
               </View>
 
               {analytics ? (
                 <>
                   <View style={styles.metricGrid}>
-                    <MetricCard label="This Month" value={formatMoney(analytics.totals.monthlyRevenue)} sub="Collected revenue" icon="cash-outline" tone="#10B981" />
-                    <MetricCard label="Distributed" value={formatMoney(analytics.totals.distributedThisMonth)} sub="Fresh money this month" icon="wallet-outline" tone="#F97316" />
-                    <MetricCard label="Recovery Rate" value={`${recoveryRate.toFixed(0)}%`} sub="Collected vs distributed" icon="analytics-outline" tone="#2563EB" />
-                    <MetricCard label="Active Loans" value={`${analytics.totals.activeLoanCount}`} sub={`${analytics.totals.customerCount} customers`} icon="people-outline" tone="#8B5CF6" />
+                    <MetricCard label="This Month" value={formatMoney(analytics.totals.monthlyRevenue)} sub="Collected revenue" icon="cash-outline" tone={Colors.lightSeaGreen} />
+                    <MetricCard label="Distributed" value={formatMoney(analytics.totals.distributedThisMonth)} sub="Fresh money this month" icon="wallet-outline" tone={Colors.amberGlow} />
+                    <MetricCard label="Recovery Rate" value={`${recoveryRate.toFixed(0)}%`} sub="Collected vs distributed" icon="analytics-outline" tone={Colors.honeyBronze} />
+                    <MetricCard label="Active Loans" value={`${analytics.totals.activeLoanCount}`} sub={`${analytics.totals.customerCount} customers`} icon="people-outline" tone={Colors.lightSeaGreen} />
                   </View>
 
                   <Section
@@ -301,9 +329,9 @@ export default function GraphScreen() {
                     subtitle="Collections and distributions by week"
                     action={
                       <View style={styles.legend}>
-                        <View style={[styles.legendDot, { backgroundColor: "#2563EB" }]} />
+                        <View style={[styles.legendDot, { backgroundColor: Colors.lightSeaGreen }]} />
                         <Text style={styles.legendText}>Collected</Text>
-                        <View style={[styles.legendDot, { backgroundColor: "#F97316" }]} />
+                        <View style={[styles.legendDot, { backgroundColor: Colors.amberGlow }]} />
                         <Text style={styles.legendText}>Distributed</Text>
                       </View>
                     }
@@ -324,7 +352,7 @@ export default function GraphScreen() {
                       analytics.dueAlerts.map((alert) => (
                         <View key={alert.customerId} style={styles.row}>
                           <View style={styles.alertIcon}>
-                            <Icon name="alert-circle-outline" size={17} color="#EF4444" />
+                            <Icon name="alert-circle-outline" size={17} color={Colors.danger} />
                           </View>
                           <View style={styles.rowCopy}>
                             <Text style={styles.rowTitle}>{alert.customerName}</Text>
@@ -333,10 +361,10 @@ export default function GraphScreen() {
                             </Text>
                           </View>
                           <Pressable accessibilityLabel={`WhatsApp ${alert.customerName}`} style={styles.whatsappBtn} onPress={() => sendRiskReminder(alert)}>
-                            <Icon name="logo-whatsapp" size={17} color="#10B981" />
+                            <Icon name="logo-whatsapp" size={17} color={Colors.lightSeaGreen} />
                           </Pressable>
                           <Pressable accessibilityLabel={`Open ${alert.customerName}`} style={styles.openBtn} onPress={() => router.push(`/profile/${alert.customerId}`)}>
-                            <Icon name="arrow-forward" size={16} color="#2563EB" />
+                            <Icon name="arrow-forward" size={16} color={Colors.lightSeaGreen} />
                           </Pressable>
                         </View>
                       ))
@@ -354,7 +382,7 @@ export default function GraphScreen() {
                           onPress={() => item.customerId && router.push(`/profile/${item.customerId}`)}
                         >
                           <View style={styles.collectionIcon}>
-                            <Icon name={item.paymentMode === "PHONE" ? "phone-portrait-outline" : "cash-outline"} size={16} color="#2563EB" />
+                            <Icon name={item.paymentMode === "PHONE" ? "phone-portrait-outline" : "cash-outline"} size={16} color={Colors.lightSeaGreen} />
                           </View>
                           <View style={styles.rowCopy}>
                             <Text style={styles.rowTitle}>{item.customerName}</Text>
@@ -405,14 +433,14 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 5,
   },
-  backBtn: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "#E0F2FE" },
+  backBtn: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: Colors.frozenWater },
   heroCopy: { flex: 1 },
-  eyebrow: { color: "#64748B", fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
-  title: { color: "#0F172A", fontSize: 24, lineHeight: 29, fontWeight: "900" },
-  subtitle: { color: "#64748B", fontSize: 12, lineHeight: 18, fontWeight: "800", marginTop: 2 },
+  eyebrow: { color: Colors.textMuted, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
+  title: { color: Colors.nearBlack, fontSize: 24, lineHeight: 29, fontWeight: "900" },
+  subtitle: { color: Colors.textMuted, fontSize: 12, lineHeight: 18, fontWeight: "800", marginTop: 2 },
   netPill: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 8 },
-  netPillGood: { backgroundColor: "#DCFCE7" },
-  netPillRisk: { backgroundColor: "#FEE2E2" },
+  netPillGood: { backgroundColor: Colors.frozenWater },
+  netPillRisk: { backgroundColor: "#fde7e5" },
   netPillText: { fontSize: 12, fontWeight: "900" },
   lifetimeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   lifetimeCard: {
@@ -423,13 +451,13 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: Colors.borderLight,
     padding: 14,
   },
   lifetimeIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center", marginBottom: 10 },
-  lifetimeLabel: { color: "#64748B", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
+  lifetimeLabel: { color: Colors.textMuted, fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
   lifetimeValue: { fontSize: 24, lineHeight: 29, fontWeight: "900", marginTop: 3 },
-  lifetimeSub: { color: "#64748B", fontSize: 11, fontWeight: "800", marginTop: 2 },
+  lifetimeSub: { color: Colors.textMuted, fontSize: 11, fontWeight: "800", marginTop: 2 },
   metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   metricCard: {
     flexGrow: 1,
@@ -438,7 +466,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: Colors.borderLight,
     padding: 13,
     flexDirection: "row",
     alignItems: "center",
@@ -446,40 +474,40 @@ const styles = StyleSheet.create({
   },
   metricIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   metricCopy: { flex: 1, minWidth: 0 },
-  metricLabel: { color: "#64748B", fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
-  metricValue: { color: "#0F172A", fontSize: 19, lineHeight: 24, fontWeight: "900", marginTop: 2 },
-  metricSub: { color: "#64748B", fontSize: 11, fontWeight: "800", marginTop: 1 },
-  section: { borderRadius: 20, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E2E8F0", padding: 14, gap: 12 },
+  metricLabel: { color: Colors.textMuted, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
+  metricValue: { color: Colors.nearBlack, fontSize: 19, lineHeight: 24, fontWeight: "900", marginTop: 2 },
+  metricSub: { color: Colors.textMuted, fontSize: 11, fontWeight: "800", marginTop: 1 },
+  section: { borderRadius: 20, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.borderLight, padding: 14, gap: 12 },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
   sectionCopy: { flex: 1 },
-  sectionTitle: { color: "#0F172A", fontSize: 19, lineHeight: 23, fontWeight: "900" },
-  sectionSub: { color: "#64748B", fontSize: 11, fontWeight: "800", marginTop: 2 },
-  sectionBadge: { overflow: "hidden", borderRadius: 999, backgroundColor: "#DBEAFE", color: "#2563EB", paddingHorizontal: 10, paddingVertical: 6, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
+  sectionTitle: { color: Colors.nearBlack, fontSize: 19, lineHeight: 23, fontWeight: "900" },
+  sectionSub: { color: Colors.textMuted, fontSize: 11, fontWeight: "800", marginTop: 2 },
+  sectionBadge: { overflow: "hidden", borderRadius: 999, backgroundColor: Colors.frozenWater, color: Colors.lightSeaGreen, paddingHorizontal: 10, paddingVertical: 6, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
   insightGrid: { gap: 9 },
-  insightCard: { borderRadius: 16, backgroundColor: "#F8FAFC", borderWidth: 1, borderColor: "#E2E8F0", padding: 12, flexDirection: "row", gap: 11 },
+  insightCard: { borderRadius: 16, backgroundColor: "#f6fffe", borderWidth: 1, borderColor: Colors.borderLight, padding: 12, flexDirection: "row", gap: 11 },
   insightIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   insightCopy: { flex: 1 },
-  insightTitle: { color: "#0F172A", fontSize: 12, fontWeight: "900", textTransform: "uppercase" },
-  insightText: { color: "#475569", fontSize: 13, lineHeight: 19, fontWeight: "800", marginTop: 3 },
+  insightTitle: { color: Colors.nearBlack, fontSize: 12, fontWeight: "900", textTransform: "uppercase" },
+  insightText: { color: "#426c67", fontSize: 13, lineHeight: 19, fontWeight: "800", marginTop: 3 },
   legend: { flexDirection: "row", alignItems: "center", gap: 5, flexWrap: "wrap", justifyContent: "flex-end", flex: 1 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { color: "#64748B", fontSize: 10, fontWeight: "900" },
+  legendText: { color: Colors.textMuted, fontSize: 10, fontWeight: "900" },
   chart: { height: 184, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 7 },
   chartColumn: { flex: 1, alignItems: "center", gap: 5 },
   chartBarWrap: { height: 150, flexDirection: "row", alignItems: "flex-end", gap: 3 },
   chartBar: { width: 10, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
-  inBar: { width: 13, backgroundColor: "#2563EB" },
-  outBar: { backgroundColor: "#F97316" },
-  chartAmount: { color: "#475569", fontSize: 9, fontWeight: "900" },
-  chartLabel: { color: "#64748B", fontSize: 9, fontWeight: "800" },
-  row: { flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 11, borderTopWidth: 1, borderTopColor: "#E2E8F0" },
+  inBar: { width: 13, backgroundColor: Colors.lightSeaGreen },
+  outBar: { backgroundColor: Colors.amberGlow },
+  chartAmount: { color: "#426c67", fontSize: 9, fontWeight: "900" },
+  chartLabel: { color: Colors.textMuted, fontSize: 9, fontWeight: "800" },
+  row: { flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 11, borderTopWidth: 1, borderTopColor: Colors.borderLight },
   rowCopy: { flex: 1, minWidth: 0 },
-  rowTitle: { color: "#0F172A", fontSize: 14, fontWeight: "900" },
-  rowMeta: { color: "#64748B", fontSize: 12, lineHeight: 17, fontWeight: "800", marginTop: 2 },
-  alertIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: "#FEE2E2", alignItems: "center", justifyContent: "center" },
-  collectionIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: "#DBEAFE", alignItems: "center", justifyContent: "center" },
-  whatsappBtn: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#DCFCE7" },
-  openBtn: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#DBEAFE" },
-  collectionAmount: { color: "#10B981", fontSize: 13, fontWeight: "900" },
-  empty: { color: "#64748B", fontSize: 13, lineHeight: 19, fontWeight: "800" },
+  rowTitle: { color: Colors.nearBlack, fontSize: 14, fontWeight: "900" },
+  rowMeta: { color: Colors.textMuted, fontSize: 12, lineHeight: 17, fontWeight: "800", marginTop: 2 },
+  alertIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: "#fde7e5", alignItems: "center", justifyContent: "center" },
+  collectionIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: Colors.frozenWater, alignItems: "center", justifyContent: "center" },
+  whatsappBtn: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: Colors.frozenWater },
+  openBtn: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: Colors.frozenWater },
+  collectionAmount: { color: Colors.lightSeaGreen, fontSize: 13, fontWeight: "900" },
+  empty: { color: Colors.textMuted, fontSize: 13, lineHeight: 19, fontWeight: "800" },
 });

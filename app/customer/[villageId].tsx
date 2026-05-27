@@ -116,16 +116,15 @@ function loanHealthScore(loan?: Loan, lastPaymentDate?: number): number {
 function shouldShowMissedBadge(loan?: Loan, lastPaymentDate?: number): boolean {
   if (!loan || loan.status !== "ACTIVE") return false;
 
-  const loanStartDate = loan.startDate ? new Date(loan.startDate) : null;
+  const loanStartDate = loan.startDate ? toStartOfDay(loan.startDate) : 0;
   if (!loanStartDate) return false;
 
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const sevenDaysAgo = toStartOfDay(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
   if (loanStartDate >= sevenDaysAgo) return false;
   if (!lastPaymentDate) return true;
 
-  return new Date(lastPaymentDate) < sevenDaysAgo;
+  return toStartOfDay(lastPaymentDate) < sevenDaysAgo;
 }
 
 function toStartOfDay(ts: number) {
@@ -322,7 +321,7 @@ const CustomerItem = React.memo(function CustomerItem({
                   styles.repaidFill,
                   {
                     width: `${progressPercent}%`,
-                    backgroundColor: progressPercent >= 100 ? "#00D4AA" : progressPercent > 50 ? "#6C63FF" : "#FFB347",
+                    backgroundColor: progressPercent >= 100 ? colors.success : progressPercent >= 50 ? colors.blue2 : colors.amber,
                   },
                 ]}
               />
@@ -1775,8 +1774,8 @@ const styles = StyleSheet.create({
   repaidWrap: { marginTop: 6, marginBottom: 5 },
   repaidHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 3 },
   repaidLabel: { fontSize: 11, color: "#A0A0B0" },
-  repaidPercent: { fontSize: 11, color: "#00D4AA", fontWeight: "600" },
-  repaidTrack: { height: 6, backgroundColor: "#2A2A3E", borderRadius: 3, overflow: "hidden" },
+  repaidPercent: { fontSize: 11, color: colors.blue2, fontWeight: "600" },
+  repaidTrack: { height: 6, backgroundColor: colors.frozenWater, borderRadius: 3, overflow: "hidden" },
   repaidFill: { height: "100%", borderRadius: 3 },
   phone: { color: "#777", fontSize: 13 },
   coName: { color: "#666", fontSize: 11, fontStyle: "italic", marginTop: 1 },
@@ -1786,7 +1785,7 @@ const styles = StyleSheet.create({
   statusBadgePaidGrey: { fontSize: 10, color: "#666666", fontWeight: "700", backgroundColor: "#f5f5f5", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#999999" },
   statusBadgeDue: { fontSize: 10, color: "#dc3545", fontWeight: "700", marginTop: 4, backgroundColor: "#f8d7da", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
   statusBadgeNew: { fontSize: 10, color: "#374151", fontWeight: "700", marginTop: 4, backgroundColor: "#f3f4f6", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#9ca3af" },
-  lastWeekBadge: { backgroundColor: "#FF6B6B", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, fontSize: 11, color: "white", fontWeight: "600", alignSelf: "flex-start", marginTop: 4, overflow: "hidden" },
+  lastWeekBadge: { backgroundColor: colors.missedRed, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, fontSize: 11, color: "white", fontWeight: "600", alignSelf: "flex-start", marginTop: 4, overflow: "hidden" },
   itemActions: { alignItems: "center", gap: 8 },
   iconActionBtn: { width: 38, height: 36, borderRadius: 13, backgroundColor: colors.sky, borderWidth: 1, borderColor: "#bfdbfe", justifyContent: "center", alignItems: "center" },
   iconActionBtnMuted: { backgroundColor: "#f3f4f6", borderColor: "#e5e7eb" },
@@ -1807,7 +1806,7 @@ const styles = StyleSheet.create({
     width: 54, 
     height: 54, 
     borderRadius: 18, 
-    backgroundColor: colors.coral, 
+    backgroundColor: colors.amber, 
     alignItems: 'center', 
     justifyContent: 'center',
     shadowColor: '#000',
@@ -1823,7 +1822,7 @@ const styles = StyleSheet.create({
     bottom: 16,
     minHeight: 46,
     borderRadius: 18,
-    backgroundColor: "#1565C0",
+    backgroundColor: colors.blue2,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 14,
