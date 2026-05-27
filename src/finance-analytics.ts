@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "./firebase";
 import { Customer, Loan, Payment, Village } from "./types";
+import { filterCustomersWithVillage } from "./utils";
 
 export type CustomerState = "paid" | "pending" | "overdue" | "closed";
 
@@ -141,6 +142,8 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
 
   const customers = customersRaw.filter((customer) => customer.isActive !== false);
   const customerById = new Map(customers.map((customer) => [customer.id, customer]));
+  // NOTE: UI-only filter. Customer documents in Firestore are NOT modified.
+  const namedListCustomerIds = new Set(filterCustomersWithVillage(customers).map((customer) => customer.id));
   const villageById = new Map(villages.map((village) => [village.id, village]));
   const loans = loansRaw.map((loan) => ({
     ...loan,
@@ -206,9 +209,9 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
 
   const recentTransactions = regularPayments
     .sort((a, b) => b.paymentDate - a.paymentDate)
-    .slice(0, 8)
     .map((payment) => {
       const customer = payment.customerId ? customerById.get(payment.customerId) : undefined;
+      if (!customer || !namedListCustomerIds.has(customer.id)) return null;
       const village = customer ? villageById.get(customer.villageId) : undefined;
       return {
         id: payment.id,
@@ -220,7 +223,9 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
         paymentMode: payment.paymentMode,
         paymentType: payment.paymentType,
       };
-    });
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+    .slice(0, 8);
 
   const duePaymentsByCustomer = new Map<string, Payment[]>();
   payments
@@ -234,6 +239,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
   const dueAlerts = Array.from(duePaymentsByCustomer.entries())
     .map(([customerId, duePayments]) => {
       const customer = customerById.get(customerId);
+      if (!customer || !namedListCustomerIds.has(customer.id)) return null;
       const village = customer ? villageById.get(customer.villageId) : undefined;
       const loan = activeLoanByCustomerId.get(customerId);
       const weeklyAmount = loan ? Math.min(Math.max(1, Math.round(loan.principalAmount / 10)), loan.balanceAmount) : 0;
@@ -250,6 +256,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
         lastDueDate: Math.max(...duePayments.map((payment) => toMillis(payment.paymentDate))),
       };
     })
+    .filter((alert): alert is NonNullable<typeof alert> => alert !== null)
     .filter((alert) => alert.balanceAmount > 0)
     .sort((a, b) => b.lastDueDate - a.lastDueDate)
     .slice(0, 8);

@@ -17,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../src/auth-context";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import { getDashboardAnalytics, type DashboardAnalytics } from "../../src/finance-analytics";
+import { getAllTimeTotals } from "../../src/repository";
 import { getGradient } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
 import { formatAmountInKM } from "../../src/utils";
@@ -25,6 +26,10 @@ import Icon from "../../src/Icon";
 function formatMoney(value: number) {
   return `Rs.${Math.round(value || 0).toLocaleString("en-IN")}`;
 }
+
+const formatIndianCurrency = (amount: number): string => {
+  return `Rs.${amount.toLocaleString("en-IN")}`;
+};
 
 function Metric({
   label,
@@ -48,6 +53,29 @@ function Metric({
       <Text style={[styles.metricValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
         {value}
       </Text>
+      <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>{label}</Text>
+    </View>
+  );
+}
+
+function AllTimeCard({
+  label,
+  value,
+  icon,
+  color,
+}: {
+  label: string;
+  value: string;
+  icon: string;
+  color: string;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View style={[styles.allTimeCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={[styles.metricIcon, { backgroundColor: `${color}22` }]}>
+        <Icon name={icon} size={20} color={color} />
+      </View>
+      <Text style={[styles.allTimeValue, { color }]}>{value}</Text>
       <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>{label}</Text>
     </View>
   );
@@ -90,6 +118,7 @@ export default function GraphScreen() {
   const { user, loading: authLoading } = useAuth();
   const { colors } = useTheme();
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
+  const [allTimeTotals, setAllTimeTotals] = useState<{ distributed: number; collected: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -100,7 +129,12 @@ export default function GraphScreen() {
     }
     if (showLoader) setLoading(true);
     try {
-      setAnalytics(await getDashboardAnalytics(user.uid));
+      const [nextAnalytics, nextAllTimeTotals] = await Promise.all([
+        getDashboardAnalytics(user.uid),
+        getAllTimeTotals(),
+      ]);
+      setAnalytics(nextAnalytics);
+      setAllTimeTotals(nextAllTimeTotals);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -181,6 +215,18 @@ export default function GraphScreen() {
             {analytics && (
               <>
                 <View style={styles.metrics}>
+                  <AllTimeCard
+                    label="Total Distributed · Since Day 1"
+                    value={formatIndianCurrency(allTimeTotals?.distributed ?? 0)}
+                    icon="arrow-up-circle-outline"
+                    color="#FF9800"
+                  />
+                  <AllTimeCard
+                    label="Total Collected · Since Day 1"
+                    value={formatIndianCurrency(allTimeTotals?.collected ?? 0)}
+                    icon="arrow-down-circle-outline"
+                    color="#00C896"
+                  />
                   <Metric label="Total collection" value={formatAmountInKM(analytics.totals.totalCollection, 1)} icon="cash-outline" tone="green" />
                   <Metric label="Pending amount" value={formatAmountInKM(analytics.totals.pendingAmount, 1)} icon="alert-circle-outline" tone="red" />
                   <Metric label="Monthly recovery" value={`${recoveryRate.toFixed(0)}%`} icon="analytics-outline" tone="blue" />
@@ -286,6 +332,8 @@ const styles = StyleSheet.create({
   metricIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 10 },
   metricValue: { fontSize: 23, fontWeight: "900" },
   metricLabel: { fontSize: 11, fontWeight: "900", marginTop: 4, textTransform: "uppercase" },
+  allTimeCard: { flexGrow: 1, flexBasis: "47%", minWidth: 156, borderWidth: 1, borderRadius: 18, padding: 14 },
+  allTimeValue: { fontSize: 22, fontWeight: "900", marginBottom: 4 },
   card: { borderRadius: 20, borderWidth: 1, padding: 16, gap: 12 },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
   cardTitle: { fontSize: 18, fontWeight: "900" },

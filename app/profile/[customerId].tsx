@@ -39,7 +39,7 @@ import {
   updateLoan,
   updatePayment
 } from "../../src/repository";
-import { Customer, Loan, PaymentMode, PaymentType } from "../../src/types";
+import { Customer, Loan, Payment, PaymentMode, PaymentType } from "../../src/types";
 import { colors } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -250,6 +250,7 @@ export default function ProfileScreen() {
   const [showEditLoanDatePicker, setShowEditLoanDatePicker] = useState(false);
   const [tempEditLoanDate, setTempEditLoanDate] = useState<Date>(new Date());
   const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
+  const [selectedTimelineWeek, setSelectedTimelineWeek] = useState<number | null>(null);
   
   // Combined customer & loan edit state
   const [editOpen, setEditOpen] = useState(false);
@@ -459,6 +460,27 @@ export default function ProfileScreen() {
       percent: Math.min((paid / loan.totalPayable) * 100, 100),
     };
   }, [loan]);
+
+  const paymentTimeline = useMemo(() => {
+    if (!loan) return [] as { index: number; date: number; status: "paid" | "overdue" | "upcoming"; amount: number }[];
+    const paidByWeek = new Map<number, number>();
+    payments
+      .filter((payment: Payment) => payment.paymentType === "REGULAR")
+      .forEach((payment: Payment) => {
+        const weekIndex = Math.max(0, Math.floor((toStartOfDay(payment.paymentDate) - toStartOfDay(loan.startDate)) / (7 * 24 * 60 * 60 * 1000)));
+        paidByWeek.set(weekIndex, (paidByWeek.get(weekIndex) ?? 0) + Number(payment.amountPaid || 0));
+      });
+    return Array.from({ length: 12 }, (_, index) => {
+      const date = toStartOfDay(loan.startDate) + index * 7 * 24 * 60 * 60 * 1000;
+      const amount = paidByWeek.get(index) ?? 0;
+      return {
+        index,
+        date,
+        amount,
+        status: amount > 0 ? "paid" : date < Date.now() ? "overdue" : "upcoming",
+      };
+    });
+  }, [loan, payments]);
 
   const sendWhatsAppReminder = useCallback(() => {
     if (!customer) return;
@@ -783,6 +805,44 @@ export default function ProfileScreen() {
                     ]}
                   />
                 </View>
+              </View>
+            ) : null}
+
+            {loan ? (
+              <View style={[styles.timelineCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.timelineTitle, { color: colors.text }]}>Payment Timeline</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.timelineRow}>
+                  {paymentTimeline.map((week) => {
+                    const circleColor = week.status === "paid" ? "#00C896" : week.status === "overdue" ? "#EF5350" : "#607D8B";
+                    return (
+                      <Pressable
+                        key={week.index}
+                        style={styles.timelineItem}
+                        onPress={() => setSelectedTimelineWeek(selectedTimelineWeek === week.index ? null : week.index)}
+                      >
+                        <View
+                          style={[
+                            styles.timelineCircle,
+                            week.status === "upcoming"
+                              ? { borderColor: circleColor, backgroundColor: "transparent" }
+                              : { borderColor: circleColor, backgroundColor: circleColor },
+                          ]}
+                        />
+                        <Text style={[styles.timelineWeekLabel, { color: colors.textMuted }]}>W{week.index + 1}</Text>
+                        {selectedTimelineWeek === week.index ? (
+                          <View style={[styles.timelineTooltip, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
+                            <Text style={[styles.timelineTooltipText, { color: colors.text }]}>
+                              Rs.{Math.round(week.amount).toLocaleString("en-IN")}
+                            </Text>
+                            <Text style={[styles.timelineTooltipDate, { color: colors.textSecondary }]}>
+                              {new Date(week.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
               </View>
             ) : null}
 
@@ -1540,6 +1600,15 @@ const styles = StyleSheet.create({
   repaymentPercent: { color: "#00D4AA", fontSize: 13, fontWeight: "900" },
   repaymentTrack: { height: 10, backgroundColor: "#2A2A3E", borderRadius: 5, overflow: "hidden" },
   repaymentFill: { height: "100%", borderRadius: 5 },
+  timelineCard: { borderRadius: 16, borderWidth: 1, padding: 14, gap: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  timelineTitle: { fontSize: 14, fontWeight: "900" },
+  timelineRow: { gap: 10, paddingVertical: 4 },
+  timelineItem: { width: 48, minHeight: 72, alignItems: "center" },
+  timelineCircle: { width: 32, height: 32, borderRadius: 16, borderWidth: 2 },
+  timelineWeekLabel: { fontSize: 10, fontWeight: "800", marginTop: 5 },
+  timelineTooltip: { position: "absolute", top: 42, minWidth: 74, borderRadius: 10, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 6, zIndex: 2 },
+  timelineTooltipText: { fontSize: 11, fontWeight: "900", textAlign: "center" },
+  timelineTooltipDate: { fontSize: 10, fontWeight: "700", textAlign: "center", marginTop: 2 },
   
   // Info Section Styles
   infoContainer: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 14, padding: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },

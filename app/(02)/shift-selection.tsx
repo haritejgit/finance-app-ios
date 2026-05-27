@@ -545,6 +545,17 @@ export default function ShiftSelectionScreen() {
             </View>
           </SafeAreaView>
         </Modal>
+
+        <Pressable
+          accessibilityLabel="Open AI Business Advisor"
+          style={styles.aiFab}
+          onPress={() => {
+            lightImpact();
+            nav.push("/ai-advisor" as any);
+          }}
+        >
+          <Ionicons name="sparkles-outline" size={24} color="#FFFFFF" />
+        </Pressable>
       </LinearGradient>
     </AnimatedScreen>
   );
@@ -623,5 +634,6 @@ const styles = StyleSheet.create({
   searchCustomerMeta: { color: "#6B7280", fontSize: 12, fontWeight: "500", marginTop: 2 },
   searchCustomerPhone: { color: "#9CA3AF", fontSize: 12, marginTop: 2 },
   statePill: { color: "#1E40AF", backgroundColor: "#DBEAFE", fontSize: 10, fontWeight: "700", paddingHorizontal: 8, paddingVertical: 5, borderRadius: 999, overflow: "hidden", textTransform: "uppercase" },
+  aiFab: { position: "absolute", right: 18, bottom: 24, width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: "#1565C0", shadowColor: "#1565C0", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.45, shadowRadius: 14, elevation: 8 },
 });
 

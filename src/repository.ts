@@ -21,6 +21,7 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { BlockedAadhaar, Customer, Loan, Payment, PaymentMode, Village } from "./types";
+import { filterCustomersWithVillage } from "./utils";
 
 const coll = {
   villages: collection(db, "villages"),
@@ -236,6 +237,8 @@ export async function getAllActiveCustomersWithVillages(userId: string): Promise
 
   return customersSnap.docs
     .map((d) => d.data() as Customer)
+    // NOTE: UI-only filter. Customer documents in Firestore are NOT modified.
+    .filter((customer) => filterCustomersWithVillage([customer]).length > 0)
     .filter((customer) => customer.isActive !== false)
     .map((customer) => {
       const village = villagesById.get(customer.villageId);
@@ -560,6 +563,36 @@ export async function addPayment(loan: Loan, amountPaid: number, paymentDate: nu
   clearCache();
 }
 
+export async function addPaymentsBatch(
+  entries: { loan: Loan; amountPaid: number; paymentDate: number; mode: PaymentMode }[]
+) {
+  if (entries.length === 0) return 0;
+  const batch = writeBatch(db);
+  entries.forEach(({ loan, amountPaid, paymentDate, mode }) => {
+    assertPositiveAmount(amountPaid, "Payment amount");
+    const payment: Payment = {
+      id: id(),
+      loanId: loan.id,
+      customerId: loan.customerId,
+      amountPaid,
+      paymentDate,
+      weekNumber: 0,
+      paymentType: "REGULAR",
+      paymentMode: mode,
+      userId: loan.userId,
+    };
+    const newBalance = Math.max(0, loan.balanceAmount - amountPaid);
+    batch.set(doc(db, "payments", payment.id), stripUndefined(payment));
+    batch.update(doc(db, "loans", loan.id), {
+      balanceAmount: newBalance,
+      status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+    });
+  });
+  await batch.commit();
+  clearCache();
+  return entries.length;
+}
+
 export async function updatePayment(payment: Payment, newAmount: number, newDate: number, newMode: PaymentMode) {
   assertPositiveAmount(newAmount, "Payment amount");
   const oldAmount = payment.amountPaid;
@@ -731,6 +764,23 @@ export async function getTodayDashboardStats(userId: string) {
 
   return { collectionToday, distributedToday };
 }
+
+export const getAllTimeTotals = async (): Promise<{ distributed: number; collected: number }> => {
+  const loansSnap = await getDocs(coll.loans);
+  const paymentsSnap = await getDocs(coll.payments);
+
+  const distributed = loansSnap.docs.reduce((sum, docSnap) => {
+    const data = docSnap.data() as any;
+    return sum + (data.principal_amount || data.loanAmount || data.amount || data.totalAmount || data.principalAmount || 0);
+  }, 0);
+
+  const collected = paymentsSnap.docs.reduce((sum, docSnap) => {
+    const data = docSnap.data() as any;
+    return sum + (data.amount_paid || data.amount || data.amountPaid || 0);
+  }, 0);
+
+  return { distributed, collected };
+};
 
 export async function getPaymentsByDate(userId: string, startDate: number, endDate: number) {
   const q = query(coll.payments, where("userId", "==", userId));

@@ -4,8 +4,8 @@
     "slug": "finance-manager",
     "scheme": "financemanager",
     "version": "1.1.0",
-    "orientation": "portrait",
-    "userInterfaceStyle": "light",
+    "orientation": "default",
+    "userInterfaceStyle": "dark",
     "icon": "./app/src/main/ic_launcher-playstore.png",
     "splash": {
       "image": "./app/src/main/ic_launcher-playstore.png",

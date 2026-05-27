@@ -29,7 +29,7 @@ import { useTheme } from "../../src/theme-context";
 import { lightImpact } from "../../src/interactions";
 import { showToast } from "../../src/notify";
 import { getCachedCoordinates, LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
-import { addCustomerWithLoan, addPayment, getActiveLoansByCustomerIds, getCustomersPage, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, updateCustomer } from "../../src/repository";
+import { addCustomerWithLoan, addPayment, addPaymentsBatch, getActiveLoansByCustomerIds, getCustomersPage, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, updateCustomer } from "../../src/repository";
 import { Customer, Loan, Village } from "../../src/types";
 import { validateAadhaar, validateIndianPhone, validatePositiveAmount } from "../../src/validation";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -104,6 +104,13 @@ function getSuggestedPaymentAmount(loan?: Loan) {
   if (!loan) return 0;
   const standardAmount = Math.max(1, Math.round(loan.principalAmount / 10));
   return Math.min(standardAmount, loan.balanceAmount);
+}
+
+function loanHealthScore(loan?: Loan, lastPaymentDate?: number): number {
+  if (!loan || loan.balanceAmount <= 0) return 100;
+  const missedWeeks = lastPaymentDate ? Math.max(0, Math.floor((Date.now() - lastPaymentDate) / (7 * 24 * 60 * 60 * 1000))) : 1;
+  const daysOverdue = lastPaymentDate ? Math.max(0, Math.floor((Date.now() - lastPaymentDate) / (24 * 60 * 60 * 1000)) - 7) : 7;
+  return Math.max(0, Math.min(100, 100 - missedWeeks * 15 - daysOverdue * 2));
 }
 
 function toStartOfDay(ts: number) {
@@ -195,6 +202,8 @@ const CustomerItem = React.memo(function CustomerItem({
   const canPay = !!loan && loan.balanceAmount > 0 && status !== "paid" && !isPaying;
   const paidRatio = loan?.totalPayable ? Math.max(0, Math.min(1, 1 - loan.balanceAmount / loan.totalPayable)) : 0;
   const progressPercent = Math.min(paidRatio * 100, 100);
+  const score = loanHealthScore(loan, lastPaymentDate);
+  const scoreColor = score >= 70 ? "#00C896" : score >= 40 ? "#FF9800" : "#EF5350";
   const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const didntPayLastWeek = !!loan && loan.status === "ACTIVE" && (!lastPaymentDate || lastPaymentDate < oneWeekAgo);
   const missingDocs = [
@@ -277,6 +286,9 @@ const CustomerItem = React.memo(function CustomerItem({
       </View>
       <View style={{ flex: 1 }}>
         <View style={styles.nameRow}>
+          <View style={[styles.healthScoreBadge, { backgroundColor: `${scoreColor}22`, borderColor: scoreColor }]}>
+            <Text style={[styles.healthScoreText, { color: scoreColor }]}>{score}</Text>
+          </View>
           <Text
             style={[
               styles.name,
@@ -429,6 +441,9 @@ export default function CustomerListScreen() {
   const [manualPaymentAmount, setManualPaymentAmount] = useState("");
   const [manualPaymentMode, setManualPaymentMode] = useState<"CASH" | "PHONE">("CASH");
   const [manualPaymentError, setManualPaymentError] = useState("");
+  const [quickCollectOpen, setQuickCollectOpen] = useState(false);
+  const [quickCollectSaving, setQuickCollectSaving] = useState(false);
+  const [quickCollectValues, setQuickCollectValues] = useState<Record<string, { selected: boolean; amount: string }>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [pageCursor, setPageCursor] = useState<QueryDocumentSnapshot | null>(null);
   const [hasMoreCustomers, setHasMoreCustomers] = useState(true);
@@ -790,6 +805,19 @@ export default function CustomerListScreen() {
     );
   }, [filtered, paymentStatuses]);
 
+  const quickCollectCustomers = useMemo(
+    () => customers.filter((customer) => {
+      const loan = activeLoans[customer.id];
+      return !!loan && loan.balanceAmount > 0;
+    }),
+    [activeLoans, customers]
+  );
+
+  const selectedQuickCollectCount = useMemo(
+    () => Object.values(quickCollectValues).filter((entry) => entry.selected && Number(entry.amount) > 0).length,
+    [quickCollectValues]
+  );
+
   const activeFilterLabel = useMemo(
     () => CUSTOMER_FILTERS.find((filter) => filter.key === statusFilter)?.label ?? "All",
     [statusFilter]
@@ -851,6 +879,58 @@ export default function CustomerListScreen() {
     setManualPaymentMode("CASH");
     setManualPaymentError("");
   }, [activeLoans]);
+
+  const openQuickCollect = useCallback(() => {
+    const nextValues: Record<string, { selected: boolean; amount: string }> = {};
+    quickCollectCustomers.forEach((customer) => {
+      const loan = activeLoans[customer.id];
+      nextValues[customer.id] = {
+        selected: false,
+        amount: getSuggestedPaymentAmount(loan).toString(),
+      };
+    });
+    setQuickCollectValues(nextValues);
+    setQuickCollectOpen(true);
+  }, [activeLoans, quickCollectCustomers]);
+
+  const toggleQuickCollectAll = useCallback(() => {
+    const shouldSelect = selectedQuickCollectCount !== quickCollectCustomers.length;
+    setQuickCollectValues((current) => {
+      const next = { ...current };
+      quickCollectCustomers.forEach((customer) => {
+        const loan = activeLoans[customer.id];
+        next[customer.id] = {
+          selected: shouldSelect,
+          amount: next[customer.id]?.amount ?? getSuggestedPaymentAmount(loan).toString(),
+        };
+      });
+      return next;
+    });
+  }, [activeLoans, quickCollectCustomers, selectedQuickCollectCount]);
+
+  const confirmQuickCollect = useCallback(async () => {
+    const entries = quickCollectCustomers
+      .map((customer) => {
+        const value = quickCollectValues[customer.id];
+        const loan = activeLoans[customer.id];
+        const amountPaid = Number(value?.amount);
+        if (!value?.selected || !loan || !Number.isFinite(amountPaid) || amountPaid <= 0) return null;
+        return { loan, amountPaid: Math.min(amountPaid, loan.balanceAmount), paymentDate: toStartOfDay(Date.now()), mode: "CASH" as const };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+    if (entries.length === 0) return;
+    try {
+      setQuickCollectSaving(true);
+      await addPaymentsBatch(entries);
+      showToast("success", "Payments recorded", `${entries.length} payments recorded`);
+      setQuickCollectOpen(false);
+      await reload();
+    } catch {
+      Alert.alert("Quick collect failed", "Could not record these payments. Please try again.");
+    } finally {
+      setQuickCollectSaving(false);
+    }
+  }, [activeLoans, quickCollectCustomers, quickCollectValues, reload]);
 
   const closeManualPayment = useCallback(() => {
     setManualPaymentCustomer(null);
@@ -1015,11 +1095,83 @@ export default function CustomerListScreen() {
             }
           />
           
+          <Pressable style={styles.quickCollectFab} onPress={openQuickCollect}>
+            <Text style={styles.quickCollectFabText}>Quick Collect</Text>
+          </Pressable>
+
           <Pressable style={styles.fab} onPress={openAddCustomer}>
             <Icon name="add" size={26} color={colors.white} />
           </Pressable>
         </View>
       </SafeAreaView>
+
+      <Modal visible={quickCollectOpen} animationType="slide" onRequestClose={() => setQuickCollectOpen(false)}>
+        <SafeAreaView style={styles.modal}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Quick Collect</Text>
+            <Pressable onPress={() => setQuickCollectOpen(false)} style={styles.closeBtn}>
+              <Text style={styles.closeBtnText}>x</Text>
+            </Pressable>
+          </View>
+          <View style={styles.formContainer}>
+            <Pressable style={styles.selectAllBtn} onPress={toggleQuickCollectAll}>
+              <Text style={styles.selectAllText}>
+                {selectedQuickCollectCount === quickCollectCustomers.length ? "Clear All" : "Select All"}
+              </Text>
+            </Pressable>
+            <FlatList
+              data={quickCollectCustomers}
+              keyExtractor={(item) => item.id}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.quickCollectList}
+              renderItem={({ item }) => {
+                const value = quickCollectValues[item.id] ?? { selected: false, amount: "" };
+                const loan = activeLoans[item.id];
+                return (
+                  <View style={styles.quickCollectRow}>
+                    <Pressable
+                      style={[styles.checkbox, value.selected && styles.checkboxOn]}
+                      onPress={() =>
+                        setQuickCollectValues((current) => ({
+                          ...current,
+                          [item.id]: { selected: !value.selected, amount: value.amount || getSuggestedPaymentAmount(loan).toString() },
+                        }))
+                      }
+                    >
+                      {value.selected ? <Icon name="checkmark" size={15} color={colors.white} /> : null}
+                    </Pressable>
+                    <View style={styles.quickCollectInfo}>
+                      <Text style={styles.quickCollectName}>{item.name}</Text>
+                      <Text style={styles.quickCollectMeta}>Balance Rs.{Math.round(loan?.balanceAmount ?? 0)}</Text>
+                    </View>
+                    <TextInput
+                      value={value.amount}
+                      onChangeText={(amount) =>
+                        setQuickCollectValues((current) => ({
+                          ...current,
+                          [item.id]: { selected: value.selected, amount: amount.replace(/[^\d.]/g, "") },
+                        }))
+                      }
+                      keyboardType="numeric"
+                      style={styles.quickCollectInput}
+                    />
+                  </View>
+                );
+              }}
+              ListEmptyComponent={<Text style={styles.emptyText}>No active loan payments to collect.</Text>}
+            />
+            <Pressable
+              style={[styles.save, (quickCollectSaving || selectedQuickCollectCount === 0) && styles.saveDisabled]}
+              disabled={quickCollectSaving || selectedQuickCollectCount === 0}
+              onPress={confirmQuickCollect}
+            >
+              <Text style={styles.saveTxt}>
+                {quickCollectSaving ? "Recording..." : `Record ${selectedQuickCollectCount} Payments`}
+              </Text>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </Modal>
 
       <Modal visible={filterMenuOpen} transparent animationType="fade" onRequestClose={() => setFilterMenuOpen(false)}>
         <View style={styles.filterOverlay}>
@@ -1603,6 +1755,8 @@ const styles = StyleSheet.create({
   idContainer: { alignItems: "center", gap: 4 },
   coIdBadge: { fontSize: 10, textAlign: "center", backgroundColor: "#fff3e0", color: "#f57c00", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, fontWeight: "600" },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  healthScoreBadge: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  healthScoreText: { fontSize: 11, fontWeight: "700" },
   name: { flex: 1, fontWeight: "900", fontSize: 15, color: "#111827" },
   namePaid: { color: "#16803a" },
   nameDue: { color: "#dc3545" },
@@ -1654,6 +1808,23 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   fabIcon: { color: colors.white, fontSize: 24, fontWeight: '300' },
+  quickCollectFab: {
+    position: "absolute",
+    left: 16,
+    bottom: 16,
+    minHeight: 46,
+    borderRadius: 18,
+    backgroundColor: "#1565C0",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  quickCollectFabText: { color: colors.white, fontSize: 12, fontWeight: "900" },
   modal: { flex: 1, backgroundColor: "#f7f9fc" },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10, backgroundColor: colors.white, borderBottomWidth: 1, borderBottomColor: "#e0e0e0", gap: 8 },
   modalTitle: { fontSize: 24, fontWeight: "700", color: "#333", flex: 1 },
@@ -1662,6 +1833,14 @@ const styles = StyleSheet.create({
   closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#f0f0f0", justifyContent: "center", alignItems: "center" },
   closeBtnText: { fontSize: 18, color: "#666", fontWeight: "600" },
   formContainer: { flex: 1, padding: 20 },
+  selectAllBtn: { alignSelf: "flex-start", borderRadius: 999, backgroundColor: "#1565C0", paddingHorizontal: 14, paddingVertical: 9, marginBottom: 12 },
+  selectAllText: { color: colors.white, fontSize: 12, fontWeight: "900" },
+  quickCollectList: { flexGrow: 1, paddingBottom: 16 },
+  quickCollectRow: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.white, borderRadius: 14, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: "#e0e0e0" },
+  quickCollectInfo: { flex: 1 },
+  quickCollectName: { color: "#111827", fontSize: 14, fontWeight: "900" },
+  quickCollectMeta: { color: "#666", fontSize: 11, fontWeight: "700", marginTop: 2 },
+  quickCollectInput: { width: 86, borderRadius: 10, borderWidth: 1, borderColor: "#d2d8e1", color: "#111827", paddingHorizontal: 10, paddingVertical: 9, fontSize: 14 },
   formScrollContent: { paddingBottom: 20 },
   privacyBanner: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#EFF6FF", borderColor: "#BFDBFE", borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 14 },
   privacyText: { flex: 1, color: colors.ink, fontSize: 12, lineHeight: 17, fontWeight: "600" },

@@ -1,41 +1,71 @@
+export const Colors = {
+  bg: "#0A0E1A",
+  bgCard: "#1A1A2E",
+  bgCardAlt: "#16213E",
+  primary: "#1565C0",
+  primaryLight: "#1976D2",
+  primaryGradient: ["#1565C0", "#0D47A1"] as const,
+  accent: "#00C896",
+  warning: "#FF9800",
+  danger: "#EF5350",
+  gold: "#FFD700",
+  textPrimary: "#FFFFFF",
+  textSecondary: "#B0BEC5",
+  textMuted: "#607D8B",
+  border: "#1E2D3D",
+  success: "#00C896",
+  cardShadow: "#000000",
+};
+
+export const Gradients = {
+  screenBg: ["#0A0E1A", "#0D1B2A"] as const,
+  header: ["#1A1A2E", "#16213E"] as const,
+  collectedCard: ["#1565C0", "#0D47A1", "#1976D2"] as const,
+  startButton: ["#FF6B35", "#F7451A"] as const,
+};
+
+export const Spacing = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 };
+export const Radius = { sm: 8, md: 12, lg: 16, xl: 24 };
+export const FontSize = { xs: 11, sm: 13, md: 15, lg: 18, xl: 22, xxl: 28 };
+
 export const lightColors = {
-  blue1: "#17152F",
-  blue2: "#6C63FF",
-  blue3: "#00D4AA",
-  teal: "#00D4AA",
-  indigo: "#6C63FF",
-  coral: "#FFB347",
-  mint: "#103D38",
-  sky: "#24244A",
+  blue1: Colors.bg,
+  blue2: Colors.primary,
+  blue3: "#0D1B2A",
+  teal: Colors.accent,
+  indigo: Colors.primaryLight,
+  coral: "#FF6B35",
+  mint: "#0E3B35",
+  sky: Colors.bgCardAlt,
 
   white: "#FFFFFF",
-  gray: "#A0A0B0",
+  gray: Colors.textSecondary,
   grayLight: "#2A2A3E",
   grayLighter: "#121220",
-  ink: "#FFFFFF",
-  surface: "#1A1A2E",
-  surfaceTint: "#222238",
+  ink: Colors.textPrimary,
+  surface: Colors.bgCard,
+  surfaceTint: Colors.bgCardAlt,
 
-  paidGreen: "#00D4AA",
-  missedRed: "#FF6B6B",
-  amber: "#FFB347",
+  paidGreen: Colors.accent,
+  missedRed: Colors.danger,
+  amber: Colors.warning,
 
-  success: "#00D4AA",
-  warning: "#FFB347",
-  error: "#FF6B6B",
-  info: "#6C63FF",
+  success: Colors.success,
+  warning: Colors.warning,
+  error: Colors.danger,
+  info: Colors.primaryLight,
 
-  text: "#FFFFFF",
-  textSecondary: "#A0A0B0",
-  textMuted: "#77778A",
-  background: "#0F0F1A",
-  backgroundSecondary: "#15152A",
-  border: "#2A2A3E",
+  text: Colors.textPrimary,
+  textSecondary: Colors.textSecondary,
+  textMuted: Colors.textMuted,
+  background: Colors.bg,
+  backgroundSecondary: "#0D1B2A",
+  border: Colors.border,
 
-  card: "#1A1A2E",
-  cardElevated: "#222238",
-  primary: "#6C63FF",
-  primarySoft: "#292659",
+  card: Colors.bgCard,
+  cardElevated: Colors.bgCardAlt,
+  primary: Colors.primary,
+  primarySoft: "#0E2D55",
   overlay: "rgba(0,0,0,0.68)",
   glass: "rgba(26,26,46,0.76)",
   glassBorder: "rgba(255,255,255,0.12)",
@@ -52,10 +82,10 @@ export type AppColors = typeof lightColors;
 
 export const colors = darkColors;
 
-export const gradient = [colors.blue1, colors.blue2, colors.blue3] as const;
+export const gradient = Gradients.screenBg as readonly [string, string];
 
 export function getGradient(themeColors: AppColors) {
-  return [themeColors.blue1, themeColors.blue2, themeColors.blue3] as const;
+  return [themeColors.background, themeColors.backgroundSecondary] as const;
 }
 
 export const spacing = {

@@ -1,3 +1,16 @@
+import type { Customer } from "./types";
+
+// UI-only filter. Customer documents in Firestore are NOT modified.
+export const filterCustomersWithVillage = (customers: Customer[]): Customer[] => {
+  return customers.filter((customer) => {
+    const villageId =
+      (customer as any).villageId ||
+      (customer as any).village_id ||
+      (customer as any).village;
+    return villageId !== null && villageId !== undefined && villageId !== "";
+  });
+};
+
 /**
  * Format amount to display in K (thousands) or M (millions)
  * Amounts over 999K will be displayed as Millions

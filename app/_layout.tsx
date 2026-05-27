@@ -1,7 +1,8 @@
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
-import { Platform } from "react-native";
+import NetInfo from "@react-native-community/netinfo";
+import { useEffect, useRef, useState } from "react";
+import { Platform, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "../src/auth-context";
 import { ErrorBoundary } from "../src/ErrorBoundary";
@@ -13,6 +14,8 @@ void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 function RootLayoutContent() {
   const { colors } = useTheme();
   const { loading: authLoading } = useAuth();
+  const [isOffline, setIsOffline] = useState(false);
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;
@@ -32,16 +35,43 @@ function RootLayoutContent() {
     }
   }, [authLoading]);
 
+  useEffect(() => {
+    const unsub = NetInfo.addEventListener((state) => {
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = null;
+      }
+      if (!state.isConnected) {
+        setIsOffline(true);
+        return;
+      }
+      reconnectTimer.current = setTimeout(() => setIsOffline(false), 2000);
+    });
+    return () => {
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      unsub();
+    };
+  }, []);
+
   if (authLoading) return null;
   
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        animation: "slide_from_right",
-        contentStyle: { backgroundColor: colors.background },
-      }}
-    />
+    <>
+      {isOffline && (
+        <View style={{ backgroundColor: "#FF9800", paddingVertical: 6, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>
+            You're offline - data may not be current
+          </Text>
+        </View>
+      )}
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: "slide_from_right",
+          contentStyle: { backgroundColor: colors.background },
+        }}
+      />
+    </>
   );
 }
 

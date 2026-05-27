@@ -454,15 +454,15 @@ export default function SettingsScreen() {
 
             <View style={[styles.securityPanel, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
               <Pressable
-                accessibilityLabel="Open Finance AI Assistant"
+                accessibilityLabel="Open AI Business Advisor"
                 style={styles.settingsLink}
-                onPress={() => router.push("/ai" as any)}
+                onPress={() => router.push("/ai-advisor" as any)}
               >
                 <View style={[styles.infoIcon, { backgroundColor: colors.primarySoft }]}>
                   <Icon name="sparkles-outline" size={18} color={colors.primary} />
                 </View>
                 <View style={styles.infoCopy}>
-                  <Text style={[styles.label, { color: colors.textSecondary }]}>Finance AI Assistant</Text>
+                  <Text style={[styles.label, { color: colors.textSecondary }]}>AI Business Advisor</Text>
                   <Text style={[styles.value, { color: colors.text }]}>Ask about collections and dues</Text>
                 </View>
                 <Icon name="arrow-forward" size={18} color={colors.textMuted} />
