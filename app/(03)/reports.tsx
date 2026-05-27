@@ -1446,53 +1446,7 @@ interface Payment {
             </Pressable>
           </View>
 
-          <View style={styles.exportGrid}>
-            <Pressable
-              style={styles.exportBtn}
-              onPress={() => setShowDayReportModal(true)}
-            >
-              <Icon name="document-text-outline" size={24} color={colors.white} />
-              <Text style={styles.exportLabel}>Day Report</Text>
-            </Pressable>
 
-            <Pressable
-              style={[styles.exportBtn, isExporting && styles.exportBtnDisabled]}
-              onPress={exportWeeklyCollectionReport}
-              disabled={isExporting}
-            >
-              <Text style={styles.exportIcon}>
-                {isExporting ? '⏳' : '📊'}
-              </Text>
-              <Text style={styles.exportLabel}>
-                {isExporting ? 'Exporting...' : 'Weekly Report'}
-              </Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.quickStats}>
-            <Text style={styles.statsTitle}>Quick Stats</Text>
-            <View style={styles.statsGrid}>
-              <View style={styles.statCard}>
-                <Text style={styles.statNumber}>7</Text>
-                <Text style={styles.statLabel}>Days Default</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statNumber}>📅</Text>
-                <Text style={styles.statLabel}>Date Range</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Icon name="cash-outline" size={24} color={colors.white} />
-                <Text style={styles.statLabel}>Payment Data</Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.actionSection}>
-            <Text style={styles.sectionTitle}>Actions</Text>
-            <Pressable style={styles.totalsBtn} onPress={() => setShowTotalsModal(true)}>
-              <Text style={styles.totalsBtnText}>📊 View Totals</Text>
-            </Pressable>
-          </View>
         </ScrollView>
       </SafeAreaView>
 
@@ -2115,8 +2069,8 @@ const styles = StyleSheet.create({
   scrollContent: { flex: 1 },
   scrollContentContainer: { padding: 16, paddingBottom: 40 },
   header: { display: 'none' },
-  reportHero: { backgroundColor: 'rgba(255,255,255,0.16)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.24)', borderRadius: 22, padding: 16, marginBottom: 14, gap: 12 },
-  reportBackBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.24)' },
+  reportHero: { backgroundColor: 'rgba(255,255,255,0.16)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.24)', borderRadius: 22, padding: 16, marginBottom: 14, gap: 12, flexDirection: 'column' },
+  reportBackBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.24)', alignSelf: 'flex-start' },
   reportHeroIcon: { width: 52, height: 52, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
   reportHeroCopy: { gap: 3 },
   reportEyebrow: { color: 'rgba(255,255,255,0.76)', fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
@@ -2179,14 +2133,14 @@ const styles = StyleSheet.create({
   
   // Clean export button styles
   reportActionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 18 },
-  reportActionCard: { flexGrow: 1, flexBasis: '47%', minHeight: 132, backgroundColor: colors.white, borderRadius: 18, padding: 14, justifyContent: 'space-between', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 3 },
+  reportActionCard: { flexGrow: 1, flexBasis: '47%', minWidth: 150, minHeight: 132, backgroundColor: '#ffffff', borderRadius: 18, padding: 14, justifyContent: 'space-between', borderWidth: 1, borderColor: '#e5e7eb', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 3 },
   reportActionIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   reportActionIconBlue: { backgroundColor: '#eaf2ff' },
-  reportActionIconGreen: { backgroundColor: colors.mint },
+  reportActionIconGreen: { backgroundColor: '#e8fbf9' },
   reportActionIconOrange: { backgroundColor: '#fff0df' },
   reportActionIconPurple: { backgroundColor: '#ede9fe' },
-  reportActionTitle: { color: colors.ink, fontSize: 15, fontWeight: '900' },
-  reportActionSub: { color: colors.gray, fontSize: 11, fontWeight: '700', marginTop: 3 },
+  reportActionTitle: { color: '#111827', fontSize: 15, fontWeight: '900' },
+  reportActionSub: { color: '#6b7280', fontSize: 11, fontWeight: '700', marginTop: 3 },
   exportGrid: { display: 'none' },
   exportBtn: { 
     flex: 1,

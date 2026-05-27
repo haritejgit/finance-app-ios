@@ -1373,32 +1373,21 @@ export default function CustomerListScreen() {
                   </View>
                 </View>
 
-                <View style={styles.formRow}>
-                  <View style={styles.formColumn}>
+                <View style={styles.formColumn}>
                     <Text style={[styles.label, { color: colors.text }]}>Aadhar Number</Text>
-                    <View style={styles.scanInputRow}>
-                      <TextInput
-                        placeholder="Aadhar ID"
-                        placeholderTextColor={colors.textMuted}
-                        value={form.aadhar}
-                        onChangeText={(t) => {
-                          const normalized = normalizeAadhar(t).slice(0, 12);
-                          setForm((f) => ({ ...f, aadhar: normalized }));
-                          setFormErrors((current) => ({ ...current, aadhar: validateAadhaar(normalized) }));
-                        }}
-                        style={[styles.input, styles.scanInput, { backgroundColor: colors.surfaceTint, borderColor: aadharBlocked ? colors.error : colors.border, color: colors.text }]}
-                        keyboardType="numeric"
-                        maxLength={12}
-                      />
-                      <Pressable
-                        accessibilityLabel="Scan Aadhaar card"
-                        style={[styles.scanBtn, scanningAadhaar && styles.saveDisabled]}
-                        onPress={handleAadhaarScan}
-                        disabled={scanningAadhaar}
-                      >
-                        {scanningAadhaar ? <ActivityIndicator size="small" color={colors.white} /> : <Text style={styles.scanBtnText}>Scan</Text>}
-                      </Pressable>
-                    </View>
+                    <TextInput
+                      placeholder="Aadhar ID"
+                      placeholderTextColor={colors.textMuted}
+                      value={form.aadhar}
+                      onChangeText={(t) => {
+                        const normalized = normalizeAadhar(t).slice(0, 12);
+                        setForm((f) => ({ ...f, aadhar: normalized }));
+                        setFormErrors((current) => ({ ...current, aadhar: validateAadhaar(normalized) }));
+                      }}
+                      style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: aadharBlocked ? colors.error : colors.border, color: colors.text }]}
+                      keyboardType="numeric"
+                      maxLength={12}
+                    />
                     {aadharChecking ? (
                       <Text style={styles.aadharHint}>Checking Aadhar...</Text>
                     ) : formErrors.aadhar ? (
@@ -1407,6 +1396,8 @@ export default function CustomerListScreen() {
                       <Text style={styles.aadharWarning}>{aadharWarning}</Text>
                     ) : null}
                   </View>
+
+                  <View style={styles.formRow}>
                   <View style={styles.formColumn}>
                     <Text style={[styles.label, { color: colors.text }]}>Co-Applicant ID</Text>
                     <TextInput
@@ -1705,7 +1696,7 @@ export default function CustomerListScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  content: { flex: 1, width: "100%", maxWidth: Math.min(Dimensions.get("window").width - 32, 430), alignSelf: "center", paddingTop: 8 },
+  content: { flex: 1, width: "100%", maxWidth: 430, alignSelf: "center", paddingTop: 8, paddingHorizontal: 8 },
   headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 10 },
   backBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.18)", justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.26)" },
   backBtnText: { color: colors.white, fontSize: 20, fontWeight: "700" },
