@@ -1,7 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect, useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Animated,
@@ -9,7 +8,6 @@ import {
   Easing,
   FlatList,
   Modal,
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -26,13 +24,12 @@ import { CustomerIdBadge } from "../../src/components/CustomerIdBadge";
 import { getDashboardAnalytics, type CustomerState, type DashboardAnalytics } from "../../src/finance-analytics";
 import Icon from "../../src/Icon";
 import { lightImpact } from "../../src/interactions";
-import { CustomerSearchResult, getAllActiveCustomersWithVillages, getVillages } from "../../src/repository";
+import { CustomerSearchResult, getAllActiveCustomersWithVillages } from "../../src/repository";
 import { useTheme } from "../../src/theme-context";
-import { Village } from "../../src/types";
 
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const shortDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const shifts = ["Morning", "Evening", "Full Day"] as const;
+const shifts = ["Morning", "Evening"] as const;
 type Shift = (typeof shifts)[number];
 const filters: { key: "all" | CustomerState; label: string }[] = [
   { key: "all", label: "All" },
@@ -60,98 +57,111 @@ function SkeletonLine({ width = "100%" }: { width?: number | `${number}%` }) {
 function DashboardSkeleton() {
   return (
     <View style={styles.skeletonPanel}>
-      <SkeletonLine width="45%" />
-      <View style={styles.statsRow}>
-        <SkeletonLine width="31%" />
-        <SkeletonLine width="31%" />
-        <SkeletonLine width="31%" />
+      <SkeletonLine width="42%" />
+      <SkeletonLine />
+      <View style={styles.metricGrid}>
+        <SkeletonLine width="48%" />
+        <SkeletonLine width="48%" />
+        <SkeletonLine width="48%" />
+        <SkeletonLine width="48%" />
       </View>
       <SkeletonLine />
     </View>
   );
 }
 
-const ToggleStatCard = memo(function ToggleStatCard({
+function DashboardPanel({
+  title,
+  subtitle,
+  children,
+  action,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}) {
+  return (
+    <View style={styles.panel}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionCopy}>
+          <Text style={styles.sectionTitle}>{title}</Text>
+          {subtitle ? <Text style={styles.sectionSub}>{subtitle}</Text> : null}
+        </View>
+        {action}
+      </View>
+      {children}
+    </View>
+  );
+}
+
+function DashboardMetric({
   title,
   value,
-  altTitle,
-  altValue,
   icon,
   tone,
-  isAlt,
-  onToggle,
+  caption,
 }: {
   title: string;
   value: string;
-  altTitle?: string;
-  altValue?: string;
   icon: string;
   tone: string;
-  isAlt?: boolean;
-  onToggle?: () => void;
+  caption: string;
 }) {
-  const fade = useRef(new Animated.Value(1)).current;
-  const scale = useRef(new Animated.Value(1)).current;
+  return (
+    <View style={styles.metricCard}>
+      <View style={[styles.metricIcon, { backgroundColor: `${tone}18` }]}>
+        <Icon name={icon} size={17} color={tone} />
+      </View>
+      <Text style={styles.metricTitle}>{title}</Text>
+      <Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+        {value}
+      </Text>
+      <Text style={styles.metricCaption}>{caption}</Text>
+    </View>
+  );
+}
 
-  useEffect(() => {
-    fade.setValue(0);
-    Animated.timing(fade, {
-      toValue: 1,
-      duration: 220,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [fade, isAlt]);
-
-  const pressIn = useCallback(() => {
-    Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, friction: 7, tension: 140 }).start();
-  }, [scale]);
-
-  const pressOut = useCallback(() => {
-    Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 7, tension: 140 }).start();
-  }, [scale]);
-
-  const handlePress = useCallback(() => {
-    lightImpact();
-    onToggle?.();
-  }, [onToggle]);
+function MoneyMovementChart({ analytics }: { analytics: DashboardAnalytics }) {
+  const maxValue = Math.max(...analytics.weeklyTrend.map((item) => Math.max(item.collection, item.distribution)), 1);
 
   return (
-    <Animated.View style={[styles.statCardWrap, { transform: [{ scale }] }]}>
-      <Pressable
-        accessibilityLabel={title}
-        onPress={handlePress}
-        onPressIn={pressIn}
-        onPressOut={pressOut}
-        disabled={!onToggle}
-        style={[styles.metricCard, { borderLeftColor: tone }]}
-      >
-        <View style={[styles.metricIcon, { backgroundColor: `${tone}18` }]}>
-          <Icon name={icon} size={18} color={tone} />
+    <View style={styles.chart}>
+      {analytics.weeklyTrend.slice(-6).map((week) => (
+        <View key={week.label} style={styles.chartColumn}>
+          <View style={styles.chartBarWrap}>
+            <View style={[styles.chartBar, styles.chartBarOut, { height: Math.max(8, (week.distribution / maxValue) * 116) }]} />
+            <View style={[styles.chartBar, styles.chartBarIn, { height: Math.max(8, (week.collection / maxValue) * 116) }]} />
+          </View>
+          <Text style={styles.chartLabel}>{week.label}</Text>
         </View>
-        <Animated.View style={{ opacity: fade }}>
-          <Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
-            {isAlt ? altValue : value}
-          </Text>
-          <Text style={styles.metricTitle}>{isAlt ? altTitle : title}</Text>
-        </Animated.View>
-      </Pressable>
-    </Animated.View>
+      ))}
+    </View>
   );
-});
+}
+
+function EmptyLine({ text }: { text: string }) {
+  return <Text style={styles.emptyText}>{text}</Text>;
+}
+
+function BottomNavButton({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.bottomNavButton, pressed && styles.pressed]}>
+      <Icon name={icon} size={18} color="#2563EB" />
+      <Text style={styles.bottomNavText}>{label}</Text>
+    </Pressable>
+  );
+}
 
 export default function ShiftSelectionScreen() {
   const nav = useRouter();
   const { user, logout } = useAuth();
   const { colors } = useTheme();
   const [selectedDay, setSelectedDay] = useState("Monday");
-  const [selectedShift, setSelectedShift] = useState<Shift | null>(null);
+  const [selectedShift, setSelectedShift] = useState<Shift>("Morning");
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
-  const [villages, setVillages] = useState<Village[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [todayToggle, setTodayToggle] = useState(false);
-  const [distributedToggle, setDistributedToggle] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -175,15 +185,14 @@ export default function ShiftSelectionScreen() {
   }, [searchQuery]);
 
   const loadDashboard = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     try {
       setLoading(true);
-      const [nextAnalytics, nextVillages] = await Promise.all([
-        getDashboardAnalytics(user.uid),
-        getVillages(user.uid),
-      ]);
-      setAnalytics(nextAnalytics);
-      setVillages(nextVillages);
+      setAnalytics(await getDashboardAnalytics(user.uid));
     } catch (error) {
       console.error("Dashboard load failed", error);
       Alert.alert("Dashboard unavailable", "Could not load finance analytics. Please try again.");
@@ -247,57 +256,24 @@ export default function ShiftSelectionScreen() {
 
   const displayName = useMemo(() => (user?.displayName || user?.email || "User").split(/[ @]/)[0], [user?.displayName, user?.email]);
   const todayLabel = useMemo(() => new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" }), []);
+  const bottomActions = useMemo(
+    () => [
+      { label: "Reports", icon: "document-text-outline", action: () => nav.push("/reports") },
+      { label: "Analytics", icon: "bar-chart-outline", action: () => nav.push("/graph") },
+      { label: "Settings", icon: "settings-outline", action: () => nav.push("/settings") },
+    ],
+    [nav]
+  );
 
   const startCollection = useCallback(() => {
-    if (!selectedShift) return;
     lightImpact();
     router.push({ pathname: "/village/[day]/[shift]", params: { day: selectedDay, shift: selectedShift } });
   }, [selectedDay, selectedShift]);
 
-  const selectedVillageForRoute = useMemo(() => {
-    const dayVillages = villages.filter((village) => village.dayOfWeek === selectedDay);
-    if (selectedShift && selectedShift !== "Full Day") {
-      return dayVillages.find((village) => village.shift === selectedShift) ?? null;
-    }
-    return dayVillages[0] ?? null;
-  }, [selectedDay, selectedShift, villages]);
-
-  const openCustomerList = useCallback(() => {
-    lightImpact();
-    if (!selectedVillageForRoute) {
-      Alert.alert("No village selected", "Choose a day and shift with at least one village before opening customers.");
-      return;
-    }
-    router.push(`/customer/${selectedVillageForRoute.id}`);
-  }, [selectedVillageForRoute]);
-
-  const openVillageRoute = useCallback(() => {
-    lightImpact();
-    if (selectedShift && selectedShift !== "Full Day") {
-      nav.push({ pathname: "/village/[day]/[shift]", params: { day: selectedDay, shift: selectedShift } });
-      return;
-    }
-    if (selectedVillageForRoute) {
-      nav.push({
-        pathname: "/village/[day]/[shift]",
-        params: { day: selectedVillageForRoute.dayOfWeek, shift: selectedVillageForRoute.shift },
-      });
-      return;
-    }
-    nav.push({ pathname: "/village/[day]/[shift]", params: { day: selectedDay, shift: "Morning" } });
-  }, [nav, selectedDay, selectedShift, selectedVillageForRoute]);
-
-  const quickActions = useMemo(
-    () => [
-      { label: "Reports", icon: "document-text-outline", action: () => nav.push("/reports") },
-      { label: "Progress", icon: "bar-chart-outline", action: () => nav.push("/graph") },
-      { label: "Settings", icon: "settings-outline", action: () => nav.push("/settings") },
-      { label: "Day Report", icon: "calendar-outline", action: () => nav.push("/reports") },
-      { label: "Villages", icon: "map-outline", action: openVillageRoute },
-      { label: "Customers", icon: "people-outline", action: openCustomerList },
-    ],
-    [nav, openCustomerList, openVillageRoute]
-  );
+  const totals = analytics?.totals;
+  const balance = (totals?.totalCollection ?? 0) - (totals?.pendingAmount ?? 0);
+  const savings = (totals?.monthlyRevenue ?? 0) - (totals?.distributedThisMonth ?? 0);
+  const dueAlerts = analytics?.dueAlerts ?? [];
 
   return (
     <AnimatedScreen style={styles.root}>
@@ -316,95 +292,44 @@ export default function ShiftSelectionScreen() {
                 },
               ]}
             >
-              <LinearGradient colors={["#6C63FF", "#00D4AA"]} style={styles.headerCard}>
-                <View style={styles.headerCopy}>
-                  <Text style={styles.header}>{getGreeting()}, {displayName} 👋</Text>
-                  <Text style={styles.welcome}>{todayLabel}</Text>
-                </View>
-                <View style={styles.headerActions}>
-                  <Pressable accessibilityLabel="Search customers" style={styles.heroIconBtn} onPress={openCustomerSearch}>
-                    <Icon name="search" size={19} color={colors.white} />
-                  </Pressable>
-                  <Pressable
-                    accessibilityLabel="Logout"
-                    style={styles.heroIconBtn}
-                    onPress={async () => {
-                      lightImpact();
-                      await logout();
-                      router.replace("/login");
-                    }}
-                  >
-                    <Icon name="log-out-outline" size={19} color={colors.white} />
+              <View style={styles.headerCard}>
+                <View style={styles.headerTop}>
+                  <View style={styles.brandRow}>
+                    <View style={styles.brandIcon}>
+                      <Icon name="wallet-outline" size={19} color="#2563EB" />
+                    </View>
+                    <View style={styles.headerCopy}>
+                      <Text style={styles.eyebrow}>Premium finance workspace</Text>
+                      <Text style={styles.header}>Finance Dashboard</Text>
+                      <Text style={styles.welcome}>{getGreeting()}, {displayName} | {todayLabel}</Text>
+                    </View>
+                  </View>
+                  <Pressable accessibilityLabel="Search customers" style={styles.searchButton} onPress={openCustomerSearch}>
+                    <Icon name="search" size={20} color="#FFFFFF" />
                   </Pressable>
                 </View>
-              </LinearGradient>
+
+                <Pressable style={styles.todayCard} onPress={() => nav.push("/graph")}>
+                  <View style={styles.todayIcon}>
+                    <Icon name="cash-outline" size={18} color="#2563EB" />
+                  </View>
+                  <View style={styles.todayCopy}>
+                    <Text style={styles.todayLabel}>Collected today</Text>
+                    <Text style={styles.todayValue}>{formatMoney(totals?.collectionToday ?? 0)}</Text>
+                    <Text style={styles.todayHint}>Tap to see distributed today: {formatMoney(totals?.distributedToday ?? 0)}</Text>
+                  </View>
+                </Pressable>
+              </View>
 
               {loading && !analytics ? (
                 <DashboardSkeleton />
               ) : (
                 <>
-                  <View style={styles.statsRow}>
-                    <ToggleStatCard
-                      title="Today's Collection"
-                      value={formatMoney(analytics?.totals.collectionToday ?? 0)}
-                      altTitle="Today Distributed"
-                      altValue={formatMoney(analytics?.totals.distributedToday ?? 0)}
-                      icon="cash-outline"
-                      tone="#00D4AA"
-                      isAlt={todayToggle}
-                      onToggle={() => setTodayToggle((value) => !value)}
-                    />
-                    <ToggleStatCard
-                      title="Total Distributed"
-                      value={formatMoney(analytics?.totals.distributedThisMonth ?? 0)}
-                      altTitle="Today Collected"
-                      altValue={formatMoney(analytics?.totals.collectionToday ?? 0)}
-                      icon="trending-up-outline"
-                      tone="#FFB347"
-                      isAlt={distributedToggle}
-                      onToggle={() => setDistributedToggle((value) => !value)}
-                    />
-                    <ToggleStatCard
-                      title="Active Loans"
-                      value={`${analytics?.totals.activeLoanCount ?? 0}`}
-                      icon="wallet-outline"
-                      tone="#6C63FF"
-                    />
-                  </View>
-
-                  <View style={styles.quickActionsSection}>
-                    <Text style={styles.quickActionsTitle}>Quick Actions</Text>
-                    <View style={styles.quickActionsGrid}>
-                      {quickActions.map((item) => (
-                        <Pressable
-                          key={item.label}
-                          accessibilityLabel={item.label}
-                          onPress={() => {
-                            lightImpact();
-                            item.action();
-                          }}
-                          style={({ pressed }) => [
-                            styles.card,
-                            pressed && { opacity: 0.75, transform: [{ scale: 0.97 }] },
-                          ]}
-                        >
-                          {Platform.OS === "web" ? (
-                            <Icon name={item.icon} size={28} color="#1B4332" />
-                          ) : (
-                            <Ionicons name={item.icon as any} size={28} color="#1B4332" />
-                          )}
-                          <Text style={styles.quickActionLabel}>{item.label}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-
-                  <View style={styles.panel}>
-                    <View style={styles.sectionHeader}>
-                      <Text style={styles.sectionTitle}>Start Collection</Text>
-                      <Text style={styles.sectionSub}>{selectedDay}{selectedShift ? ` / ${selectedShift}` : ""}</Text>
-                    </View>
-
+                  <DashboardPanel
+                    title="Collection Route"
+                    action={<Text style={styles.routeMeta}>{selectedDay} / {selectedShift}</Text>}
+                  >
+                    <Text style={styles.controlLabel}>Day</Text>
                     <View style={styles.dayGrid}>
                       {days.map((day, index) => (
                         <Pressable
@@ -421,6 +346,7 @@ export default function ShiftSelectionScreen() {
                       ))}
                     </View>
 
+                    <Text style={styles.controlLabel}>Shift</Text>
                     <View style={styles.shiftRow}>
                       {shifts.map((shift) => {
                         const active = selectedShift === shift;
@@ -434,23 +360,151 @@ export default function ShiftSelectionScreen() {
                             }}
                             style={[styles.shift, active && styles.shiftOn]}
                           >
-                            <Icon name={shift === "Morning" ? "sunny-outline" : shift === "Evening" ? "moon-outline" : "calendar-outline"} size={17} color={active ? colors.white : colors.primary} />
+                            <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={17} color={active ? "#FFFFFF" : "#2563EB"} />
                             <Text style={[styles.shiftText, active && styles.shiftTextOn]}>{shift}</Text>
                           </Pressable>
                         );
                       })}
                     </View>
 
-                    {selectedShift ? (
-                      <Pressable accessibilityLabel="Start Collection" onPress={startCollection}>
-                        <LinearGradient colors={["#6C63FF", "#00D4AA"]} style={styles.primaryAction}>
-                          <Text style={styles.primaryActionText}>Start Collection</Text>
-                          <Icon name="arrow-forward" size={18} color={colors.white} />
-                        </LinearGradient>
-                      </Pressable>
-                    ) : null}
+                    <Pressable accessibilityLabel="Start Collection" onPress={startCollection}>
+                      <LinearGradient colors={["#F97316", "#F59E0B"]} style={styles.primaryAction}>
+                        <Text style={styles.primaryActionText}>Start Collection</Text>
+                        <Icon name="arrow-forward" size={18} color="#FFFFFF" />
+                      </LinearGradient>
+                    </Pressable>
+                  </DashboardPanel>
+
+                  <View style={styles.metricGrid}>
+                    <DashboardMetric title="Balance" value={formatMoney(balance)} caption="Collected minus pending" icon="wallet-outline" tone="#2563EB" />
+                    <DashboardMetric title="Income" value={formatMoney(totals?.monthlyRevenue ?? 0)} caption="Collected this month" icon="cash-outline" tone="#10B981" />
+                    <DashboardMetric title="Expense" value={formatMoney(totals?.distributedThisMonth ?? 0)} caption="Distributed this month" icon="trending-up-outline" tone="#F59E0B" />
+                    <DashboardMetric title="Savings" value={formatMoney(savings)} caption="Needs recovery focus" icon="alert-circle-outline" tone="#EF4444" />
                   </View>
 
+                  {analytics ? (
+                    <>
+                      <DashboardPanel
+                        title="Monthly Overview"
+                        subtitle="Collected vs distributed by week"
+                        action={
+                          <View style={styles.legend}>
+                            <View style={[styles.legendDot, { backgroundColor: "#2563EB" }]} />
+                            <Text style={styles.legendText}>In</Text>
+                            <View style={[styles.legendDot, { backgroundColor: "#F59E0B" }]} />
+                            <Text style={styles.legendText}>Out</Text>
+                          </View>
+                        }
+                      >
+                        <MoneyMovementChart analytics={analytics} />
+                      </DashboardPanel>
+
+                      <DashboardPanel
+                        title="Smart Insights"
+                        subtitle="Alerts generated from existing transactions"
+                        action={
+                          <View style={styles.panelIcon}>
+                            <Icon name="sparkles-outline" size={18} color="#2563EB" />
+                          </View>
+                        }
+                      >
+                        {analytics.insights.concat(analytics.aiInsights).slice(0, 4).map((insight) => (
+                          <View key={insight} style={styles.insightRow}>
+                            <View style={styles.insightDot} />
+                            <Text style={styles.insightText}>{insight}</Text>
+                          </View>
+                        ))}
+                      </DashboardPanel>
+
+                      <DashboardPanel
+                        title="Recent Transactions"
+                        subtitle="Latest collections across routes"
+                        action={
+                          <Pressable style={styles.csvButton} onPress={() => nav.push("/reports")}>
+                            <Icon name="download-outline" size={14} color="#2563EB" />
+                            <Text style={styles.csvText}>CSV</Text>
+                          </Pressable>
+                        }
+                      >
+                        {analytics.recentTransactions.length ? (
+                          analytics.recentTransactions.slice(0, 5).map((item) => (
+                            <Pressable
+                              key={item.id}
+                              style={styles.transactionRow}
+                              onPress={() => item.customerId && router.push(`/profile/${item.customerId}`)}
+                            >
+                              <View style={styles.transactionIcon}>
+                                <Icon name="cash-outline" size={15} color="#10B981" />
+                              </View>
+                              <View style={styles.rowCopy}>
+                                <Text style={styles.rowTitle}>{item.customerName}</Text>
+                                <Text style={styles.rowMeta}>
+                                  {item.villageName} / {new Date(item.paymentDate).toLocaleDateString("en-IN")}
+                                </Text>
+                              </View>
+                              <Text style={styles.transactionAmount}>{formatMoney(item.amountPaid)}</Text>
+                            </Pressable>
+                          ))
+                        ) : (
+                          <EmptyLine text="Collections will appear here after payments are recorded." />
+                        )}
+                      </DashboardPanel>
+                    </>
+                  ) : null}
+
+                  <DashboardPanel
+                    title="Budget Alerts"
+                    subtitle="Customers needing follow-up"
+                    action={<Text style={styles.alertBadge}>{dueAlerts.length} active</Text>}
+                  >
+                    {dueAlerts.length ? (
+                      dueAlerts.slice(0, 4).map((alert) => (
+                        <Pressable
+                          key={alert.customerId}
+                          style={styles.alertRow}
+                          onPress={() => router.push(`/profile/${alert.customerId}`)}
+                        >
+                          <View style={styles.alertIcon}>
+                            <Icon name="alert-circle-outline" size={15} color="#EF4444" />
+                          </View>
+                          <View style={styles.rowCopy}>
+                            <Text style={styles.rowTitle}>{alert.customerName}</Text>
+                            <Text style={styles.rowMeta}>
+                              {alert.villageName} / {alert.dueCount} due / {formatMoney(alert.dueAmount)}
+                            </Text>
+                          </View>
+                          <Icon name="warning" size={16} color="#94A3B8" />
+                        </Pressable>
+                      ))
+                    ) : (
+                      <EmptyLine text={analytics ? "No active budget alerts right now." : "Sign in to load customer follow-up alerts."} />
+                    )}
+                  </DashboardPanel>
+
+                  <View style={styles.bottomNav}>
+                    {bottomActions.map((item) => (
+                      <BottomNavButton
+                        key={item.label}
+                        label={item.label}
+                        icon={item.icon}
+                        onPress={() => {
+                          lightImpact();
+                          item.action();
+                        }}
+                      />
+                    ))}
+                  </View>
+
+                  <Pressable
+                    style={styles.logoutLink}
+                    onPress={async () => {
+                      lightImpact();
+                      await logout();
+                      router.replace("/login");
+                    }}
+                  >
+                    <Text style={styles.logoutText}>Logout</Text>
+                  </Pressable>
                 </>
               )}
             </Animated.View>
@@ -554,7 +608,7 @@ export default function ShiftSelectionScreen() {
             nav.push("/ai-advisor" as any);
           }}
         >
-          <Ionicons name="sparkles-outline" size={24} color="#FFFFFF" />
+          <Icon name="sparkles-outline" size={24} color="#FFFFFF" />
         </Pressable>
       </LinearGradient>
     </AnimatedScreen>
@@ -566,49 +620,103 @@ const screenWidth = Dimensions.get("window").width;
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  container: { paddingHorizontal: 20, paddingVertical: 12, paddingBottom: 32 },
-  content: { width: "100%", maxWidth: Math.min(screenWidth - 40, 920), alignSelf: "center", gap: 14 },
-  headerCard: { borderRadius: 16, padding: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.12, shadowRadius: 12, elevation: 4 },
+  container: { paddingHorizontal: 18, paddingVertical: 12, paddingBottom: 36 },
+  content: { width: "100%", maxWidth: Math.min(screenWidth - 36, 920), alignSelf: "center", gap: 12 },
+  headerCard: {
+    backgroundColor: "rgba(229, 247, 246, 0.84)",
+    borderRadius: 18,
+    padding: 14,
+    gap: 12,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    elevation: 5,
+  },
+  headerTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  brandRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+  brandIcon: { width: 36, height: 36, borderRadius: 11, backgroundColor: "#DBEAFE", alignItems: "center", justifyContent: "center" },
   headerCopy: { flex: 1 },
-  headerActions: { flexDirection: "row", gap: 8 },
-  heroIconBtn: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.18)", borderWidth: 1, borderColor: "rgba(255,255,255,0.24)" },
-  header: { color: "#FFFFFF", fontSize: 23, lineHeight: 28, fontWeight: "700" },
-  welcome: { color: "rgba(255,255,255,0.76)", fontSize: 13, marginTop: 4, fontWeight: "500" },
-  statsRow: { flexDirection: "row", gap: 10 },
-  statCardWrap: { flex: 1, minWidth: 0 },
-  metricCard: { minHeight: 116, borderRadius: 16, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#DCE6F7", borderLeftWidth: 4, padding: 12, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4 },
-  metricIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 10 },
-  metricValue: { color: "#111827", fontSize: 20, fontWeight: "700" },
-  metricTitle: { color: "#6B7280", fontSize: 11, lineHeight: 14, fontWeight: "500", marginTop: 4 },
-  quickActionsSection: { gap: 10 },
-  quickActionsTitle: { color: "#111827", fontSize: 20, fontWeight: "700" },
-  quickActionsGrid: { flexDirection: "row", flexWrap: "wrap" },
-  card: { width: "47%", flexGrow: 1, backgroundColor: "#ffffff", borderRadius: 16, padding: 16, margin: 6, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 8, elevation: 3, alignItems: "center", justifyContent: "center", minHeight: 96, minWidth: 44 },
-  quickActionLabel: { fontSize: 13, fontWeight: "600", color: "#1B4332", marginTop: 8, textAlign: "center" },
-  panel: { backgroundColor: "#FFFFFF", borderRadius: 16, borderWidth: 1, borderColor: "#DCE6F7", padding: 16, gap: 13, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4 },
-  menuPanel: { backgroundColor: "#FFFFFF", borderRadius: 16, borderWidth: 1, borderColor: "#DCE6F7", padding: 16, gap: 13, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4 },
-  menuGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  menuTile: { width: "31%", minWidth: 96, flexGrow: 1, minHeight: 84, borderRadius: 14, borderWidth: 1, borderColor: "#DCE6F7", backgroundColor: "#F8FAFC", alignItems: "center", justifyContent: "center", gap: 8 },
-  menuTilePressed: { transform: [{ scale: 0.97 }], backgroundColor: "#EFF6FF" },
-  menuTileDisabled: { opacity: 0.48 },
-  menuTileText: { color: "#111827", fontSize: 12, fontWeight: "800", textAlign: "center" },
-  menuTileTextDisabled: { color: "#9CA3AF" },
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
-  sectionTitle: { color: "#111827", fontSize: 20, fontWeight: "700" },
-  sectionSub: { color: "#6B7280", fontSize: 12, fontWeight: "500" },
+  eyebrow: { color: "#64748B", fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
+  header: { color: "#0F172A", fontSize: 22, lineHeight: 27, fontWeight: "900" },
+  welcome: { color: "#64748B", fontSize: 12, marginTop: 2, fontWeight: "800" },
+  searchButton: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "#2563EB" },
+  todayCard: { minHeight: 74, borderRadius: 14, backgroundColor: "#FFFFFF", flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  todayIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: "#DBEAFE", alignItems: "center", justifyContent: "center" },
+  todayCopy: { flex: 1 },
+  todayLabel: { color: "#64748B", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
+  todayValue: { color: "#0F172A", fontSize: 27, lineHeight: 31, fontWeight: "900" },
+  todayHint: { color: "#64748B", fontSize: 11, fontWeight: "800" },
+  panel: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    padding: 14,
+    gap: 12,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
+  sectionCopy: { flex: 1 },
+  sectionTitle: { color: "#0F172A", fontSize: 19, lineHeight: 23, fontWeight: "900" },
+  sectionSub: { color: "#64748B", fontSize: 11, fontWeight: "800", marginTop: 1 },
+  routeMeta: { color: "#64748B", fontSize: 11, fontWeight: "900" },
+  controlLabel: { color: "#64748B", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
   dayGrid: { flexDirection: "row", gap: 6 },
-  dayChip: { flex: 1, borderWidth: 1, borderColor: "#DCE6F7", borderRadius: 12, paddingVertical: 10, alignItems: "center", backgroundColor: "#F8FAFC" },
-  dayChipOn: { backgroundColor: "#1E40AF", borderColor: "#1E40AF" },
-  dayChipText: { color: "#6B7280", fontSize: 12, fontWeight: "700" },
+  dayChip: { flex: 1, borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 11, paddingVertical: 10, alignItems: "center", backgroundColor: "#F8FAFC", minWidth: 38 },
+  dayChipOn: { backgroundColor: "#2563EB", borderColor: "#2563EB" },
+  dayChipText: { color: "#64748B", fontSize: 12, fontWeight: "900" },
   dayChipTextOn: { color: "#FFFFFF" },
   shiftRow: { flexDirection: "row", gap: 8 },
-  shift: { flex: 1, minHeight: 46, borderRadius: 12, borderWidth: 1, borderColor: "#DCE6F7", backgroundColor: "#F8FAFC", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6, paddingHorizontal: 4 },
-  shiftOn: { backgroundColor: "#10B981", borderColor: "#10B981" },
-  shiftText: { color: "#1E40AF", fontWeight: "700", fontSize: 13 },
+  shift: { flex: 1, minHeight: 46, borderRadius: 12, borderWidth: 1, borderColor: "#E2E8F0", backgroundColor: "#F8FAFC", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7, paddingHorizontal: 8 },
+  shiftOn: { backgroundColor: "#2563EB", borderColor: "#2563EB" },
+  shiftText: { color: "#2563EB", fontWeight: "900", fontSize: 13 },
   shiftTextOn: { color: "#FFFFFF" },
   primaryAction: { borderRadius: 12, paddingVertical: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
-  primaryActionText: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
-  skeletonPanel: { backgroundColor: "#FFFFFF", borderRadius: 16, borderWidth: 1, borderColor: "#DCE6F7", padding: 16, gap: 14 },
+  primaryActionText: { color: "#FFFFFF", fontWeight: "900", fontSize: 15 },
+  metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  metricCard: { flexGrow: 1, flexBasis: "47%", minWidth: 150, minHeight: 116, borderRadius: 16, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E2E8F0", padding: 13 },
+  metricIcon: { width: 33, height: 33, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 9 },
+  metricTitle: { color: "#64748B", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
+  metricValue: { color: "#0F172A", fontSize: 21, lineHeight: 26, fontWeight: "900", marginTop: 3 },
+  metricCaption: { color: "#64748B", fontSize: 11, fontWeight: "800", marginTop: 2 },
+  legend: { flexDirection: "row", alignItems: "center", gap: 5 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { color: "#64748B", fontSize: 10, fontWeight: "900" },
+  chart: { height: 142, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 10, paddingTop: 2 },
+  chartColumn: { flex: 1, alignItems: "center", gap: 6 },
+  chartBarWrap: { height: 116, flexDirection: "row", alignItems: "flex-end", gap: 5 },
+  chartBar: { width: 10, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
+  chartBarOut: { backgroundColor: "#F59E0B" },
+  chartBarIn: { backgroundColor: "#2563EB" },
+  chartLabel: { color: "#64748B", fontSize: 10, fontWeight: "900" },
+  panelIcon: { width: 36, height: 36, borderRadius: 13, backgroundColor: "#DBEAFE", alignItems: "center", justifyContent: "center" },
+  insightRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  insightDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#2563EB", marginTop: 5 },
+  insightText: { flex: 1, color: "#64748B", fontSize: 13, lineHeight: 19, fontWeight: "800" },
+  csvButton: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, backgroundColor: "#DBEAFE", paddingHorizontal: 10, paddingVertical: 7 },
+  csvText: { color: "#2563EB", fontSize: 10, fontWeight: "900" },
+  transactionRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13, borderTopWidth: 1, borderTopColor: "#E2E8F0" },
+  transactionIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: "#DCFCE7", alignItems: "center", justifyContent: "center" },
+  rowCopy: { flex: 1, minWidth: 0 },
+  rowTitle: { color: "#0F172A", fontSize: 14, fontWeight: "900" },
+  rowMeta: { color: "#64748B", fontSize: 12, fontWeight: "800", marginTop: 2 },
+  transactionAmount: { color: "#10B981", fontSize: 13, fontWeight: "900" },
+  alertBadge: { overflow: "hidden", borderRadius: 999, backgroundColor: "#FEE2E2", color: "#EF4444", paddingHorizontal: 10, paddingVertical: 6, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
+  alertRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13, borderTopWidth: 1, borderTopColor: "#E2E8F0" },
+  alertIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: "#FEE2E2", alignItems: "center", justifyContent: "center" },
+  emptyText: { color: "#64748B", fontSize: 13, fontWeight: "800", paddingVertical: 12 },
+  bottomNav: { flexDirection: "row", gap: 10 },
+  bottomNavButton: { flex: 1, minHeight: 58, borderRadius: 14, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E2E8F0", alignItems: "center", justifyContent: "center", gap: 4 },
+  bottomNavText: { color: "#0F172A", fontSize: 12, fontWeight: "900" },
+  logoutLink: { alignItems: "center", paddingVertical: 8 },
+  logoutText: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
+  pressed: { opacity: 0.76, transform: [{ scale: 0.98 }] },
+  skeletonPanel: { backgroundColor: "#FFFFFF", borderRadius: 18, borderWidth: 1, borderColor: "#E2E8F0", padding: 16, gap: 14 },
   skeletonLine: { height: 16, borderRadius: 999, backgroundColor: "#DCE6F7" },
   searchModalSafe: { flex: 1 },
   searchModalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingVertical: 14, backgroundColor: "#FFFFFF", borderBottomWidth: 1, borderBottomColor: "#DCE6F7" },
@@ -619,7 +727,7 @@ const styles = StyleSheet.create({
   customerSearchInput: { flex: 1, paddingVertical: 13, fontSize: 15, color: "#111827" },
   filterRow: { gap: 8, paddingBottom: 12 },
   filterChip: { borderRadius: 999, borderWidth: 1, borderColor: "#DCE6F7", paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "#FFFFFF" },
-  filterChipOn: { backgroundColor: "#1E40AF", borderColor: "#1E40AF" },
+  filterChipOn: { backgroundColor: "#2563EB", borderColor: "#2563EB" },
   filterChipText: { color: "#6B7280", fontSize: 12, fontWeight: "700", textTransform: "capitalize" },
   filterChipTextOn: { color: "#FFFFFF" },
   searchLoading: { paddingVertical: 30, gap: 12 },
@@ -627,13 +735,10 @@ const styles = StyleSheet.create({
   searchEmpty: { alignItems: "center", justifyContent: "center", paddingVertical: 60, gap: 10 },
   searchEmptyText: { color: "#6B7280", fontWeight: "700" },
   searchCustomerRow: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 16, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: "#DCE6F7", backgroundColor: "#FFFFFF" },
-  searchCustomerBadge: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: "#DBEAFE" },
-  searchCustomerBadgeText: { color: "#1E40AF", fontSize: 13, fontWeight: "700" },
   searchCustomerInfo: { flex: 1 },
   searchCustomerName: { color: "#111827", fontSize: 15, fontWeight: "700" },
   searchCustomerMeta: { color: "#6B7280", fontSize: 12, fontWeight: "500", marginTop: 2 },
   searchCustomerPhone: { color: "#9CA3AF", fontSize: 12, marginTop: 2 },
-  statePill: { color: "#1E40AF", backgroundColor: "#DBEAFE", fontSize: 10, fontWeight: "700", paddingHorizontal: 8, paddingVertical: 5, borderRadius: 999, overflow: "hidden", textTransform: "uppercase" },
-  aiFab: { position: "absolute", right: 18, bottom: 24, width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: "#1565C0", shadowColor: "#1565C0", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.45, shadowRadius: 14, elevation: 8 },
+  statePill: { color: "#2563EB", backgroundColor: "#DBEAFE", fontSize: 10, fontWeight: "700", paddingHorizontal: 8, paddingVertical: 5, borderRadius: 999, overflow: "hidden", textTransform: "uppercase" },
+  aiFab: { position: "absolute", right: 18, bottom: 24, width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: "#2563EB", shadowColor: "#2563EB", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.45, shadowRadius: 14, elevation: 8 },
 });
-
