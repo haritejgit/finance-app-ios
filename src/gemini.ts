@@ -1,4 +1,4 @@
-const GEMINI_MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+const GEMINI_MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
 export interface BusinessStats {
   totalCustomers: number;
@@ -43,8 +43,13 @@ export const askGemini = async (query: string, stats: BusinessStats): Promise<st
       }),
     });
     const data = await res.json();
+    if (!res.ok) {
+      console.error("Gemini API error:", res.status, JSON.stringify(data));
+      return `AI error (${res.status}): ${data?.error?.message ?? "Unknown error. Check API key and quota."}`;
+    }
     return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "Unable to get AI response.";
-  } catch {
+  } catch (err) {
+    console.error("Gemini fetch error:", err);
     return "AI is unavailable. Check your connection or API key.";
   }
 };
