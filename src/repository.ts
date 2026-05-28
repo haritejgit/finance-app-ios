@@ -21,7 +21,7 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { BlockedAadhaar, Customer, Loan, Payment, PaymentMode, Village } from "./types";
-import { getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, loanWeekNumber, money, toMillis } from "./business-logic";
+import { getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, loanWeekNumber, money, toMillis, weekStart } from "./business-logic";
 import { filterCustomersWithVillage } from "./utils";
 
 const coll = {
@@ -476,16 +476,12 @@ export async function getPaymentsForCustomer(userId: string, customerId: string)
     .sort((a, b) => b.paymentDate - a.paymentDate);
 }
 
-export async function getPaymentStatusesForCustomersToday(userId: string, customerIds: string[]) {
+export async function getPaymentStatusesForCustomersThisWeek(userId: string, customerIds: string[]) {
   const wantedCustomerIds = new Set(customerIds);
   if (wantedCustomerIds.size === 0) return {} as Record<string, "paid" | "due" | "none">;
 
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setHours(23, 59, 59, 999);
-  const startMs = start.getTime();
-  const endMs = end.getTime();
+  const startMs = weekStart(Date.now());
+  const endMs = startMs + 7 * 24 * 60 * 60 * 1000 - 1;
 
   const [paymentsSnap, loansSnap] = await Promise.all([
     getDocs(query(coll.payments, where("userId", "==", userId))),

@@ -29,7 +29,7 @@ import { useTheme } from "../../src/theme-context";
 import { lightImpact } from "../../src/interactions";
 import { showToast } from "../../src/notify";
 import { getCachedCoordinates, LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
-import { addCustomerWithLoan, addPayment, addPaymentsBatch, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, updateCustomer } from "../../src/repository";
+import { addCustomerWithLoan, addPayment, addPaymentsBatch, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersThisWeek, getVillageById, getCustomerLoanSummary, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, updateCustomer } from "../../src/repository";
 import { Customer, Loan, Village } from "../../src/types";
 import { validateAadhaar, validateIndianPhone, validatePositiveAmount } from "../../src/validation";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -505,7 +505,7 @@ export default function CustomerListScreen() {
 
       const customerIds = sortedList.map((customer) => customer.id);
       const [statuses, loansByCustomer, latestPayments] = await Promise.all([
-        getPaymentStatusesForCustomersToday(user.uid, customerIds),
+        getPaymentStatusesForCustomersThisWeek(user.uid, customerIds),
         getActiveLoansByCustomerIds(user.uid, customerIds),
         getLastRegularPaymentDatesForCustomers(user.uid, customerIds),
       ]);
