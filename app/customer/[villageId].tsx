@@ -1,9 +1,9 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import type { QueryDocumentSnapshot } from "firebase/firestore";
+
 import {
   ActivityIndicator,
   Alert,
@@ -29,7 +29,7 @@ import { useTheme } from "../../src/theme-context";
 import { lightImpact } from "../../src/interactions";
 import { showToast } from "../../src/notify";
 import { getCachedCoordinates, LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
-import { addCustomerWithLoan, addPayment, addPaymentsBatch, getActiveLoansByCustomerIds, getCustomersPage, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, updateCustomer } from "../../src/repository";
+import { addCustomerWithLoan, addPayment, addPaymentsBatch, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersToday, getVillageById, getCustomerLoanSummary, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, updateCustomer } from "../../src/repository";
 import { Customer, Loan, Village } from "../../src/types";
 import { validateAadhaar, validateIndianPhone, validatePositiveAmount } from "../../src/validation";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -310,22 +310,14 @@ const CustomerItem = React.memo(function CustomerItem({
           </Text>
         </View>
         {loan ? (
-          <View style={styles.repaidWrap}>
-            <View style={styles.repaidHeader}>
-              <Text style={styles.repaidLabel}>Repaid</Text>
-              <Text style={styles.repaidPercent}>{progressPercent.toFixed(0)}%</Text>
-            </View>
-            <View style={styles.repaidTrack}>
-              <View
-                style={[
-                  styles.repaidFill,
-                  {
-                    width: `${progressPercent}%`,
-                    backgroundColor: progressPercent >= 100 ? colors.success : progressPercent >= 50 ? colors.blue2 : colors.amber,
-                  },
-                ]}
-              />
-            </View>
+          <View style={styles.balanceRow}>
+            <Text style={styles.balanceLabel}>Balance:</Text>
+            <Text style={[
+              styles.balanceAmount,
+              loan.balanceAmount <= 0 && styles.balanceCleared,
+            ]}>
+              Rs.{Math.round(loan.balanceAmount).toLocaleString("en-IN")}
+            </Text>
           </View>
         ) : null}
         <Text style={styles.phone}>{customer.phone}</Text>
@@ -453,9 +445,8 @@ export default function CustomerListScreen() {
   const [quickCollectSaving, setQuickCollectSaving] = useState(false);
   const [quickCollectValues, setQuickCollectValues] = useState<Record<string, { selected: boolean; amount: string }>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [pageCursor, setPageCursor] = useState<QueryDocumentSnapshot | null>(null);
-  const [hasMoreCustomers, setHasMoreCustomers] = useState(true);
-  const [loadingMoreCustomers, setLoadingMoreCustomers] = useState(false);
+  const flatListRef = useRef<FlatList>(null);
+  const scrollOffsetRef = useRef(0);
   const [aadharWarning, setAadharWarning] = useState("");
   const [aadharChecking, setAadharChecking] = useState(false);
   const [aadharBlocked, setAadharBlocked] = useState(false);
@@ -469,22 +460,20 @@ export default function CustomerListScreen() {
   const [scannedData, setScannedData] = useState<AadhaarScanResult | null>(null);
   const [formErrors, setFormErrors] = useState<{ phone?: string; aadhar?: string; principal?: string }>({});
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (preserveScroll = false) => {
     if (!user || !villageId) {
       setIsLoading(false);
       return;
     }
     try {
       setIsLoading(true);
-      const [page, villageDetails] = await Promise.all([
-        getCustomersPage(user.uid, villageId, 20, null),
+      const [allCustomers, villageDetails] = await Promise.all([
+        getCustomers(user.uid, villageId, false),
         getVillageById(villageId),
       ]);
-      const sortedList = [...page.customers].sort((a, b) => a.numericalId - b.numericalId);
+      const sortedList = [...allCustomers].sort((a, b) => a.numericalId - b.numericalId);
       setCustomers(sortedList);
       setVillage(villageDetails);
-      setPageCursor(page.cursor);
-      setHasMoreCustomers(page.hasMore);
 
       const customerIds = sortedList.map((customer) => customer.id);
       const [statuses, loansByCustomer, latestPayments] = await Promise.all([
@@ -495,6 +484,13 @@ export default function CustomerListScreen() {
       setPaymentStatuses(statuses);
       setActiveLoans(loansByCustomer);
       setLastPaymentDates(latestPayments);
+
+      // Restore scroll position after data loads
+      if (preserveScroll && scrollOffsetRef.current > 0) {
+        requestAnimationFrame(() => {
+          flatListRef.current?.scrollToOffset({ offset: scrollOffsetRef.current, animated: false });
+        });
+      }
     } catch {
       Alert.alert("Load failed", "Could not load customers. Please try again.");
     } finally {
@@ -502,35 +498,20 @@ export default function CustomerListScreen() {
     }
   }, [user, villageId]);
 
-  const loadMoreCustomers = useCallback(async () => {
-    if (!user || !villageId || !hasMoreCustomers || loadingMoreCustomers || isLoading) return;
-    try {
-      setLoadingMoreCustomers(true);
-      const page = await getCustomersPage(user.uid, villageId, 20, pageCursor);
-      const nextCustomers = [...customers, ...page.customers].sort((a, b) => a.numericalId - b.numericalId);
-      setCustomers(nextCustomers);
-      setPageCursor(page.cursor);
-      setHasMoreCustomers(page.hasMore);
-      const customerIds = nextCustomers.map((customer) => customer.id);
-      const [statuses, loansByCustomer, latestPayments] = await Promise.all([
-        getPaymentStatusesForCustomersToday(user.uid, customerIds),
-        getActiveLoansByCustomerIds(user.uid, customerIds),
-        getLastRegularPaymentDatesForCustomers(user.uid, customerIds),
-      ]);
-      setPaymentStatuses(statuses);
-      setActiveLoans(loansByCustomer);
-      setLastPaymentDates(latestPayments);
-    } catch {
-      Alert.alert("Load failed", "Could not load more customers. Please try again.");
-    } finally {
-      setLoadingMoreCustomers(false);
-    }
-  }, [customers, hasMoreCustomers, isLoading, loadingMoreCustomers, pageCursor, user, villageId]);
-  useFocusEffect(useCallback(() => {
-    // Wait for Firebase Auth to resolve before fetching
+
+  // On initial load
+  useEffect(() => {
     if (authLoading) return;
     reload();
-  }, [authLoading, reload]));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, villageId, user]);
+
+  // On focus (coming back from customer details), preserve scroll position
+  useFocusEffect(useCallback(() => {
+    if (authLoading || !user || !villageId) return;
+    // Reload data but restore scroll position
+    reload(true);
+  }, [authLoading, reload, user, villageId]));
 
   useEffect(() => {
     const timeout = setTimeout(() => setDebouncedQuery(query.trim().toLowerCase()), 220);
@@ -1064,29 +1045,20 @@ export default function CustomerListScreen() {
             </View>
           </View>
           <FlatList
+            ref={flatListRef}
             data={filtered}
             keyExtractor={(i) => i.id}
             renderItem={renderCustomer}
             style={styles.list}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
-            initialNumToRender={15}
-            maxToRenderPerBatch={10}
-            windowSize={5}
+            initialNumToRender={30}
+            maxToRenderPerBatch={20}
+            windowSize={10}
             removeClippedSubviews={true}
             updateCellsBatchingPeriod={50}
-            disableVirtualization={false}
-            legacyImplementation={false}
-            onEndReached={loadMoreCustomers}
-            onEndReachedThreshold={0.45}
-            ListFooterComponent={
-              loadingMoreCustomers ? (
-                <View style={styles.loadingMore}>
-                  <ActivityIndicator size="small" color={colors.white} />
-                  <Text style={styles.loadingText}>Loading more...</Text>
-                </View>
-              ) : null
-            }
+            onScroll={(e) => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
+            scrollEventThrottle={100}
             ListEmptyComponent={
               isLoading ? (
                 <View style={styles.loadingContainer}>
@@ -1762,12 +1734,10 @@ const styles = StyleSheet.create({
   balancePill: { color: colors.teal, backgroundColor: colors.mint, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, fontSize: 10, fontWeight: "900", overflow: "hidden" },
   balanceTrack: { height: 5, borderRadius: 999, backgroundColor: "#E5E7EB", overflow: "hidden", marginTop: 6, marginBottom: 5 },
   balanceFill: { height: "100%", borderRadius: 999, backgroundColor: colors.teal },
-  repaidWrap: { marginTop: 6, marginBottom: 5 },
-  repaidHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 3 },
-  repaidLabel: { fontSize: 11, color: "#A0A0B0" },
-  repaidPercent: { fontSize: 11, color: colors.blue2, fontWeight: "600" },
-  repaidTrack: { height: 6, backgroundColor: colors.frozenWater, borderRadius: 3, overflow: "hidden" },
-  repaidFill: { height: "100%", borderRadius: 3 },
+  balanceRow: { flexDirection: "row", alignItems: "center", marginTop: 4, marginBottom: 2, gap: 6 },
+  balanceLabel: { fontSize: 12, color: "#6B7280", fontWeight: "600" },
+  balanceAmount: { fontSize: 13, color: colors.blue2, fontWeight: "800" },
+  balanceCleared: { color: colors.success },
   phone: { color: "#777", fontSize: 13 },
   coName: { color: "#666", fontSize: 11, fontStyle: "italic", marginTop: 1 },
   missingDocs: { color: "#8b8f97", fontSize: 11, fontWeight: "600", marginTop: 2 },
