@@ -290,28 +290,32 @@ const CustomerItem = React.memo(function CustomerItem({
       ]}
       onPress={openCustomer}
     >
+      {/* Left: ID + C/O ID */}
       <View style={styles.idContainer}>
         <CustomerIdBadge numericalId={customer.numericalId} id={customer.id} />
-        {customer.coId && (
+        {customer.coId ? (
           <Text style={styles.coIdBadge}>C/O: {customer.coId}</Text>
-        )}
+        ) : null}
       </View>
-      <View style={{ flex: 1 }}>
-        <View style={styles.nameRow}>
-          <Text
-            style={[
-              styles.name,
-              status === "paid" && styles.namePaid,
-              status === "due" && styles.nameDue,
-            ]}
-            numberOfLines={1}
-          >
-            {customer.name}
-          </Text>
-        </View>
+
+      {/* Center: Name, C/O Name, Balance */}
+      <View style={styles.centerContent}>
+        <Text
+          style={[
+            styles.name,
+            status === "paid" && styles.namePaid,
+            status === "due" && styles.nameDue,
+          ]}
+          numberOfLines={1}
+        >
+          {customer.name}
+        </Text>
+        {customer.coName ? (
+          <Text style={styles.coName} numberOfLines={1}>C/O: {customer.coName}</Text>
+        ) : null}
         {loan ? (
           <View style={styles.balanceRow}>
-            <Text style={styles.balanceLabel}>Balance:</Text>
+            <Text style={styles.balanceLabel}>Bal:</Text>
             <Text style={[
               styles.balanceAmount,
               loan.balanceAmount <= 0 && styles.balanceCleared,
@@ -320,58 +324,70 @@ const CustomerItem = React.memo(function CustomerItem({
             </Text>
           </View>
         ) : null}
-        <Text style={styles.phone}>{customer.phone}</Text>
-        {customer.coName && (
-          <Text style={styles.coName}>{customer.coName}</Text>
-        )}
-        {missingDocs.length > 0 && (
-          <Text style={styles.missingDocs}>{missingDocs.join(" | ")}</Text>
-        )}
-        {isNew && (
-          <Text style={styles.statusBadgeNew}>NEW</Text>
-        )}
-        {didntPayLastWeek ? <Text style={styles.lastWeekBadge}>⚠️ Last week didn't pay</Text> : null}
+        {isNew ? <Text style={styles.statusBadgeNew}>NEW</Text> : null}
         {getStatusBadge()}
       </View>
+
+      {/* Right: Icons row + Actions */}
       <View style={styles.itemActions}>
-        <Pressable
-          style={[styles.iconActionBtn, noTextSelection, !hasLocation && styles.iconActionBtnMuted]}
-          disabled={isUpdatingLocation}
-          onPressIn={markActionPress}
-          onPressOut={markActionPress}
-          onPress={(e) => {
-            markActionPress(e);
-            lightImpact();
-            if (hasLocation) onOpenDirections();
-          }}
-          onLongPress={(e) => {
-            markActionPress(e);
-            if (!hasLocation) onSaveCurrentLocation();
-          }}
-        >
-          {isUpdatingLocation ? (
-            <ActivityIndicator size="small" color="#9ca3af" />
-          ) : (
-            <Icon name="location" size={18} color={hasLocation ? colors.blue2 : "#9ca3af"} />
-          )}
-        </Pressable>
-        <Pressable
-          style={[styles.quickPayBtn, noTextSelection, !canPay && styles.quickPayBtnDisabled]}
-          disabled={!canPay}
-          onPressIn={markActionPress}
-          onPressOut={markActionPress}
-          onPress={(e) => {
-            markActionPress(e);
-            lightImpact();
-            onQuickPay();
-          }}
-          onLongPress={(e) => {
-            markActionPress(e);
-            onManualPay();
-          }}
-        >
-          <Text selectable={false} style={styles.quickPayText}>{isPaying ? "..." : "Pay"}</Text>
-        </Pressable>
+        {/* Status icons row */}
+        <View style={styles.statusIconsRow}>
+          {/* Last week missed indicator */}
+          {didntPayLastWeek ? (
+            <View style={styles.statusIconWarn}>
+              <Icon name="alert-circle" size={16} color="#dc3545" />
+            </View>
+          ) : null}
+          {/* Aadhar doc icon */}
+          <View style={customer.aadharSubmitted ? styles.statusIconOk : styles.statusIconMissing}>
+            <Icon name="id-card" size={14} color={customer.aadharSubmitted ? "#16a34a" : "#9ca3af"} />
+          </View>
+          {/* Photo doc icon */}
+          <View style={customer.passportPhotoSubmitted ? styles.statusIconOk : styles.statusIconMissing}>
+            <Icon name="camera" size={14} color={customer.passportPhotoSubmitted ? "#16a34a" : "#9ca3af"} />
+          </View>
+        </View>
+        {/* Action buttons */}
+        <View style={styles.actionBtnsRow}>
+          <Pressable
+            style={[styles.iconActionBtn, noTextSelection, !hasLocation && styles.iconActionBtnMuted]}
+            disabled={isUpdatingLocation}
+            onPressIn={markActionPress}
+            onPressOut={markActionPress}
+            onPress={(e) => {
+              markActionPress(e);
+              lightImpact();
+              if (hasLocation) onOpenDirections();
+            }}
+            onLongPress={(e) => {
+              markActionPress(e);
+              if (!hasLocation) onSaveCurrentLocation();
+            }}
+          >
+            {isUpdatingLocation ? (
+              <ActivityIndicator size="small" color="#9ca3af" />
+            ) : (
+              <Icon name="location" size={18} color={hasLocation ? colors.blue2 : "#9ca3af"} />
+            )}
+          </Pressable>
+          <Pressable
+            style={[styles.quickPayBtn, noTextSelection, !canPay && styles.quickPayBtnDisabled]}
+            disabled={!canPay}
+            onPressIn={markActionPress}
+            onPressOut={markActionPress}
+            onPress={(e) => {
+              markActionPress(e);
+              lightImpact();
+              onQuickPay();
+            }}
+            onLongPress={(e) => {
+              markActionPress(e);
+              onManualPay();
+            }}
+          >
+            <Text selectable={false} style={styles.quickPayText}>{isPaying ? "..." : "Pay"}</Text>
+          </Pressable>
+        </View>
       </View>
     </Pressable>
   );
@@ -1722,37 +1738,33 @@ const styles = StyleSheet.create({
   routeSummaryValue: { color: colors.white, fontSize: 14, fontWeight: "900", marginTop: 1 },
   list: { flex: 1 },
   listContent: { paddingBottom: 20 },
-  item: { backgroundColor: colors.white, borderRadius: 16, padding: 13, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4, borderLeftWidth: 4, borderLeftColor: colors.teal },
-  idContainer: { alignItems: "center", gap: 4 },
-  coIdBadge: { fontSize: 10, textAlign: "center", backgroundColor: "#fff3e0", color: "#f57c00", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, fontWeight: "600" },
-  nameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  healthScoreBadge: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, alignItems: "center", justifyContent: "center" },
-  healthScoreText: { fontSize: 11, fontWeight: "700" },
-  name: { flex: 1, fontWeight: "900", fontSize: 15, color: "#111827" },
+  item: { backgroundColor: colors.white, borderRadius: 16, padding: 12, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 8, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4, borderLeftWidth: 4, borderLeftColor: colors.teal },
+  idContainer: { alignItems: "center", gap: 3, minWidth: 42 },
+  coIdBadge: { fontSize: 9, textAlign: "center", backgroundColor: "#fff3e0", color: "#f57c00", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 6, fontWeight: "700" },
+  centerContent: { flex: 1 },
+  name: { fontWeight: "900", fontSize: 14, color: "#111827" },
   namePaid: { color: "#16803a" },
   nameDue: { color: "#dc3545" },
-  balancePill: { color: colors.teal, backgroundColor: colors.mint, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, fontSize: 10, fontWeight: "900", overflow: "hidden" },
-  balanceTrack: { height: 5, borderRadius: 999, backgroundColor: "#E5E7EB", overflow: "hidden", marginTop: 6, marginBottom: 5 },
-  balanceFill: { height: "100%", borderRadius: 999, backgroundColor: colors.teal },
-  balanceRow: { flexDirection: "row", alignItems: "center", marginTop: 4, marginBottom: 2, gap: 6 },
-  balanceLabel: { fontSize: 12, color: "#6B7280", fontWeight: "600" },
-  balanceAmount: { fontSize: 13, color: colors.blue2, fontWeight: "800" },
+  coName: { color: "#6B7280", fontSize: 11, fontWeight: "600", marginTop: 1 },
+  balanceRow: { flexDirection: "row", alignItems: "center", marginTop: 3, gap: 4 },
+  balanceLabel: { fontSize: 11, color: "#9CA3AF", fontWeight: "600" },
+  balanceAmount: { fontSize: 12, color: colors.blue2, fontWeight: "800" },
   balanceCleared: { color: colors.success },
-  phone: { color: "#777", fontSize: 13 },
-  coName: { color: "#666", fontSize: 11, fontStyle: "italic", marginTop: 1 },
-  missingDocs: { color: "#8b8f97", fontSize: 11, fontWeight: "600", marginTop: 2 },
-  statusBadgeContainer: { flexDirection: "row", alignItems: "center", marginTop: 4, alignSelf: "flex-start" },
-  statusBadgePaid: { fontSize: 10, color: "#28a745", fontWeight: "700", backgroundColor: "#d4edda", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
-  statusBadgePaidGrey: { fontSize: 10, color: "#666666", fontWeight: "700", backgroundColor: "#f5f5f5", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#999999" },
-  statusBadgeDue: { fontSize: 10, color: "#dc3545", fontWeight: "700", marginTop: 4, backgroundColor: "#f8d7da", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start" },
-  statusBadgeNew: { fontSize: 10, color: "#374151", fontWeight: "700", marginTop: 4, backgroundColor: "#f3f4f6", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#9ca3af" },
-  lastWeekBadge: { backgroundColor: colors.missedRed, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, fontSize: 11, color: "white", fontWeight: "600", alignSelf: "flex-start", marginTop: 4, overflow: "hidden" },
-  itemActions: { alignItems: "center", gap: 8 },
-  iconActionBtn: { width: 38, height: 36, borderRadius: 13, backgroundColor: colors.sky, borderWidth: 1, borderColor: "#bfdbfe", justifyContent: "center", alignItems: "center" },
+  statusBadgeContainer: { flexDirection: "row", alignItems: "center", marginTop: 3, alignSelf: "flex-start" },
+  statusBadgePaidGrey: { fontSize: 9, color: "#666666", fontWeight: "700", backgroundColor: "#f5f5f5", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#999999" },
+  statusBadgeDue: { fontSize: 9, color: "#dc3545", fontWeight: "700", backgroundColor: "#f8d7da", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start" },
+  statusBadgeNew: { fontSize: 9, color: "#374151", fontWeight: "700", marginTop: 3, backgroundColor: "#f3f4f6", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#9ca3af" },
+  itemActions: { alignItems: "center", gap: 6 },
+  statusIconsRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 4 },
+  statusIconOk: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#dcfce7", alignItems: "center", justifyContent: "center" },
+  statusIconMissing: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#f3f4f6", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#e5e7eb" },
+  statusIconWarn: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#fee2e2", alignItems: "center", justifyContent: "center" },
+  actionBtnsRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  iconActionBtn: { width: 34, height: 32, borderRadius: 10, backgroundColor: colors.sky, borderWidth: 1, borderColor: "#bfdbfe", justifyContent: "center", alignItems: "center" },
   iconActionBtnMuted: { backgroundColor: "#f3f4f6", borderColor: "#e5e7eb" },
-  quickPayBtn: { minWidth: 48, height: 36, borderRadius: 13, backgroundColor: colors.paidGreen, justifyContent: "center", alignItems: "center", paddingHorizontal: 10 },
+  quickPayBtn: { minWidth: 44, height: 32, borderRadius: 10, backgroundColor: colors.paidGreen, justifyContent: "center", alignItems: "center", paddingHorizontal: 8 },
   quickPayBtnDisabled: { backgroundColor: "#d1d5db" },
-  quickPayText: { color: colors.white, fontWeight: "900", fontSize: 12 },
+  quickPayText: { color: colors.white, fontWeight: "900", fontSize: 11 },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyText: { color: colors.white, fontSize: 18, fontWeight: "700", marginBottom: 6 },

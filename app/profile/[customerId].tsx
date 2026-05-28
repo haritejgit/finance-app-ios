@@ -470,15 +470,21 @@ export default function ProfileScreen() {
         const weekIndex = Math.max(0, Math.floor((toStartOfDay(payment.paymentDate) - toStartOfDay(loan.startDate)) / (7 * 24 * 60 * 60 * 1000)));
         paidByWeek.set(weekIndex, (paidByWeek.get(weekIndex) ?? 0) + Number(payment.amountPaid || 0));
       });
+    const now = Date.now();
     return Array.from({ length: 12 }, (_, index) => {
       const date = toStartOfDay(loan.startDate) + index * 7 * 24 * 60 * 60 * 1000;
       const amount = paidByWeek.get(index) ?? 0;
-      return {
-        index,
-        date,
-        amount,
-        status: amount > 0 ? "paid" : date < Date.now() ? "overdue" : "upcoming",
-      };
+      // A week is overdue only AFTER its 7-day window has fully passed with no payment
+      const weekDeadline = date + 7 * 24 * 60 * 60 * 1000;
+      let status: "paid" | "overdue" | "upcoming";
+      if (amount > 0) {
+        status = "paid";
+      } else if (weekDeadline < now) {
+        status = "overdue";
+      } else {
+        status = "upcoming";
+      }
+      return { index, date, amount, status };
     });
   }, [loan, payments]);
 
