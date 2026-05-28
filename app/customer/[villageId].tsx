@@ -290,15 +290,18 @@ const CustomerItem = React.memo(function CustomerItem({
       ]}
       onPress={openCustomer}
     >
-      {/* Left: ID + C/O ID */}
+      {/* Left: ID + C/O ID + C/O Name */}
       <View style={styles.idContainer}>
         <CustomerIdBadge numericalId={customer.numericalId} id={customer.id} />
         {customer.coId ? (
-          <Text style={styles.coIdBadge}>C/O: {customer.coId}</Text>
+          <Text style={styles.coIdBadge}>c/o: {customer.coId}</Text>
+        ) : null}
+        {customer.coName ? (
+          <Text style={styles.coNameBadge} numberOfLines={1}>{customer.coName}</Text>
         ) : null}
       </View>
 
-      {/* Center: Name, C/O Name, Balance */}
+      {/* Center: Name, Phone, Balance, Icons, Location description */}
       <View style={styles.centerContent}>
         <Text
           style={[
@@ -310,12 +313,10 @@ const CustomerItem = React.memo(function CustomerItem({
         >
           {customer.name}
         </Text>
-        {customer.coName ? (
-          <Text style={styles.coName} numberOfLines={1}>C/O: {customer.coName}</Text>
-        ) : null}
+        <Text style={styles.phoneLabel}>ph.no:- {customer.phone || "-"}</Text>
         {loan ? (
           <View style={styles.balanceRow}>
-            <Text style={styles.balanceLabel}>Bal:</Text>
+            <Text style={styles.balanceLabel}>Balance :- </Text>
             <Text style={[
               styles.balanceAmount,
               loan.balanceAmount <= 0 && styles.balanceCleared,
@@ -324,7 +325,7 @@ const CustomerItem = React.memo(function CustomerItem({
             </Text>
 
             {/* Status icons row side-by-side with Balance */}
-            <View style={[styles.statusIconsRow, { marginLeft: 8, marginBottom: 0 }]}>
+            <View style={[styles.statusIconsRow, { marginLeft: 6, marginBottom: 0 }]}>
               {/* Last week missed indicator */}
               {didntPayLastWeek ? (
                 <View style={styles.statusIconWarn}>
@@ -347,13 +348,18 @@ const CustomerItem = React.memo(function CustomerItem({
             </View>
           </View>
         ) : null}
+        {customer.locationDesc ? (
+          <Text style={styles.locationDescText} numberOfLines={1}>[{customer.locationDesc}]</Text>
+        ) : (
+          <Text style={styles.locationDescText} numberOfLines={1}>[No location description]</Text>
+        )}
         {isNew ? <Text style={styles.statusBadgeNew}>NEW</Text> : null}
         {getStatusBadge()}
       </View>
 
       {/* Right: Actions Stack */}
       <View style={styles.itemActions}>
-        {/* Action buttons */}
+        {/* Action buttons stacked vertically */}
         <View style={styles.actionBtnsRow}>
           <Pressable
             style={[styles.iconActionBtn, noTextSelection, !hasLocation && styles.iconActionBtnMuted]}
@@ -1745,18 +1751,20 @@ const styles = StyleSheet.create({
   routeSummaryValue: { color: colors.white, fontSize: 14, fontWeight: "900", marginTop: 1 },
   list: { flex: 1 },
   listContent: { paddingBottom: 20 },
-  item: { backgroundColor: colors.white, borderRadius: 16, padding: 12, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 8, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4, borderLeftWidth: 4, borderLeftColor: colors.teal },
-  idContainer: { alignItems: "center", gap: 3, minWidth: 42 },
+  item: { backgroundColor: colors.white, borderRadius: 16, padding: 12, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4, borderLeftWidth: 4, borderLeftColor: colors.teal },
+  idContainer: { alignItems: "center", gap: 3, minWidth: 64, maxWidth: 84 },
   coIdBadge: { fontSize: 9, textAlign: "center", backgroundColor: "#fff3e0", color: "#f57c00", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 6, fontWeight: "700" },
-  centerContent: { flex: 1 },
-  name: { fontWeight: "900", fontSize: 14, color: "#111827" },
+  coNameBadge: { fontSize: 8, color: "#6B7280", fontWeight: "700", marginTop: 2, textAlign: "center", width: "100%" },
+  centerContent: { flex: 1, paddingLeft: 2 },
+  name: { fontWeight: "900", fontSize: 15, color: "#111827" },
   namePaid: { color: "#16803a" },
   nameDue: { color: "#dc3545" },
-  coName: { color: "#6B7280", fontSize: 11, fontWeight: "600", marginTop: 1 },
+  phoneLabel: { fontSize: 11, color: "#4B5563", fontWeight: "600", marginTop: 2 },
   balanceRow: { flexDirection: "row", alignItems: "center", marginTop: 3, gap: 4 },
-  balanceLabel: { fontSize: 11, color: "#9CA3AF", fontWeight: "600" },
+  balanceLabel: { fontSize: 11, color: "#4B5563", fontWeight: "700" },
   balanceAmount: { fontSize: 12, color: colors.blue2, fontWeight: "800" },
   balanceCleared: { color: colors.success },
+  locationDescText: { fontSize: 11, color: "#6B7280", fontWeight: "700", marginTop: 3, fontStyle: "italic" },
   statusBadgeContainer: { flexDirection: "row", alignItems: "center", marginTop: 3, alignSelf: "flex-start" },
   statusBadgePaidGrey: { fontSize: 9, color: "#666666", fontWeight: "700", backgroundColor: "#f5f5f5", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#999999" },
   statusBadgeDue: { fontSize: 9, color: "#dc3545", fontWeight: "700", backgroundColor: "#f8d7da", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start" },
