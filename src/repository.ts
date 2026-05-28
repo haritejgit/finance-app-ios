@@ -521,7 +521,7 @@ export async function getPaymentStatusesForCustomersThisWeek(userId: string, cus
 
 export async function getLastRegularPaymentDatesForCustomers(userId: string, customerIds: string[]) {
   const wantedCustomerIds = new Set(customerIds);
-  if (wantedCustomerIds.size === 0) return {} as Record<string, number>;
+  if (wantedCustomerIds.size === 0) return {} as Record<string, { lastPaymentDate: number; paidLastWeek: boolean }>;
 
   const [paymentsSnap, loansSnap] = await Promise.all([
     getDocs(query(coll.payments, where("userId", "==", userId), limit(1500))),
@@ -534,7 +534,15 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
       .filter((loan) => wantedCustomerIds.has(loan.customerId))
       .map((loan) => [loan.id, loan.customerId])
   );
-  const latest: Record<string, number> = {};
+
+  const currentMonday = weekStart(Date.now());
+  const prevWeekStart = currentMonday - 7 * 24 * 60 * 60 * 1000;
+  const prevWeekEnd = currentMonday - 1;
+
+  const latest: Record<string, { lastPaymentDate: number; paidLastWeek: boolean }> = {};
+  customerIds.forEach((id) => {
+    latest[id] = { lastPaymentDate: 0, paidLastWeek: false };
+  });
 
   paymentsSnap.docs
     .map((d) => d.data() as Payment)
@@ -543,8 +551,11 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
       const customerId = payment.customerId ?? customerIdByLoanId.get(payment.loanId);
       if (!customerId || !wantedCustomerIds.has(customerId)) return;
       const paymentDate = toMillis(payment.paymentDate);
-      if (!latest[customerId] || paymentDate > latest[customerId]) {
-        latest[customerId] = paymentDate;
+      if (paymentDate > latest[customerId].lastPaymentDate) {
+        latest[customerId].lastPaymentDate = paymentDate;
+      }
+      if (paymentDate >= prevWeekStart && paymentDate <= prevWeekEnd) {
+        latest[customerId].paidLastWeek = true;
       }
     });
 

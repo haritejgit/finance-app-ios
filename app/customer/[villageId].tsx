@@ -121,19 +121,7 @@ function loanHealthScore(loan?: Loan, lastPaymentDate?: number): number {
   return Math.max(0, Math.min(100, 100 - missedWeeks * 15 - daysOverdue * 2));
 }
 
-function shouldShowMissedBadge(loan?: Loan, lastPaymentDate?: number): boolean {
-  if (!loan || loan.status !== "ACTIVE") return false;
 
-  const loanStartDate = loan.startDate ? toStartOfDay(loan.startDate) : 0;
-  if (!loanStartDate) return false;
-
-  const sevenDaysAgo = toStartOfDay(Date.now() - 7 * 24 * 60 * 60 * 1000);
-
-  if (loanStartDate >= sevenDaysAgo) return false;
-  if (!lastPaymentDate) return true;
-
-  return toStartOfDay(lastPaymentDate) < sevenDaysAgo;
-}
 
 function toStartOfDay(ts: number) {
   const d = new Date(ts);
@@ -203,6 +191,7 @@ const CustomerItem = React.memo(function CustomerItem({
   isNew,
   loan,
   lastPaymentDate,
+  paidLastWeek,
   isPaying,
   isUpdatingLocation,
 }: {
@@ -216,6 +205,7 @@ const CustomerItem = React.memo(function CustomerItem({
   isNew?: boolean;
   loan?: Loan;
   lastPaymentDate?: number;
+  paidLastWeek?: boolean;
   isPaying?: boolean;
   isUpdatingLocation?: boolean;
 }) {
@@ -224,8 +214,9 @@ const CustomerItem = React.memo(function CustomerItem({
   const canPay = !!loan && loan.balanceAmount > 0 && status !== "paid" && !isPaying;
   const paidRatio = loan?.totalPayable ? Math.max(0, Math.min(1, 1 - loan.balanceAmount / loan.totalPayable)) : 0;
   const progressPercent = Math.min(paidRatio * 100, 100);
-  // Badge only shows for customers whose loan started > 7 days ago with no recent payment
-  const didntPayLastWeek = shouldShowMissedBadge(loan, lastPaymentDate);
+  // Badge only shows for customers whose loan started before the current week with no payment in the previous week
+  const currentMonday = weekStart(Date.now());
+  const didntPayLastWeek = !!loan && loan.status === "ACTIVE" && loan.startDate < currentMonday && !paidLastWeek;
   const missingDocs = [
     customer.aadharSubmitted === false ? "Aadhar not submitted" : "",
     customer.passportPhotoSubmitted === false ? "Passport photo not submitted" : "",
@@ -469,7 +460,7 @@ export default function CustomerListScreen() {
   const [tempRegistrationDate, setTempRegistrationDate] = useState<Date>(new Date());
   const [paymentStatuses, setPaymentStatuses] = useState<Record<string, PaymentStatus>>({});
   const [activeLoans, setActiveLoans] = useState<Record<string, Loan>>({});
-  const [lastPaymentDates, setLastPaymentDates] = useState<Record<string, number>>({});
+  const [lastPaymentDates, setLastPaymentDates] = useState<Record<string, { lastPaymentDate: number; paidLastWeek: boolean }>>({});
   const [payingCustomerId, setPayingCustomerId] = useState<string | null>(null);
   const [manualPaymentCustomer, setManualPaymentCustomer] = useState<Customer | null>(null);
   const [manualPaymentAmount, setManualPaymentAmount] = useState("");
@@ -1019,7 +1010,8 @@ export default function CustomerListScreen() {
         status={paymentStatuses[item.id] || 'none'} 
         isNew={isNewThisWeek(item.createdAt)}
         loan={activeLoans[item.id]}
-        lastPaymentDate={lastPaymentDates[item.id]}
+        lastPaymentDate={lastPaymentDates[item.id]?.lastPaymentDate}
+        paidLastWeek={lastPaymentDates[item.id]?.paidLastWeek}
         isPaying={payingCustomerId === item.id}
         isUpdatingLocation={updatingLocationCustomerId === item.id}
       />
