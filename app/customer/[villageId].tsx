@@ -350,9 +350,7 @@ const CustomerItem = React.memo(function CustomerItem({
         ) : null}
         {customer.locationDesc ? (
           <Text style={styles.locationDescText} numberOfLines={1}>[{customer.locationDesc}]</Text>
-        ) : (
-          <Text style={styles.locationDescText} numberOfLines={1}>[No location description]</Text>
-        )}
+        ) : null}
         {isNew ? <Text style={styles.statusBadgeNew}>NEW</Text> : null}
         {getStatusBadge()}
       </View>
