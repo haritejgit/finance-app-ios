@@ -91,3 +91,62 @@ export function openCustomerLedgerPrint(customer: Customer, loan: Loan | null, p
     `
   );
 }
+
+export function openAccountStatementPrint(
+  periodStartStr: string,
+  periodEndStr: string,
+  bf: number,
+  investments: number,
+  collections: number,
+  payments: number,
+  expenses: { amount: number; description: string }[],
+  total: number
+) {
+  const formatVal = (v: number) => Number(v).toLocaleString("en-IN");
+  
+  let output = `============================================
+            ACCOUNT STATEMENT
+============================================
+Period: ${periodStartStr}  to  ${periodEndStr}
+Generated: ${new Date().toLocaleString("en-IN")}
+
+`;
+
+  const bfLine = `BF               =  ${formatVal(bf).padStart(9)}`;
+  const invLine = `Investments      =  ${formatVal(investments).padStart(9)}`;
+  const subtotal1 = bf + investments;
+  const subtotal1Line = `                 =  ${formatVal(subtotal1).padStart(9)}`;
+
+  output += `${bfLine}\n${invLine}\n------------------------------------\n${subtotal1Line}\n\n`;
+
+  const colLine = `Collections      =  ${formatVal(collections).padStart(9)}`;
+  const payLine = `Payments         =  ${formatVal(payments).padStart(9)}`;
+  const subtotal2 = subtotal1 + collections - payments;
+  const subtotal2Line = `                 =  ${formatVal(subtotal2).padStart(9)}`;
+
+  output += `${colLine}\n${payLine}\n------------------------------------\n${subtotal2Line}\n\n`;
+
+  if (expenses.length > 0) {
+    expenses.forEach((exp) => {
+      const expLabel = `${exp.description} (Expense)`.slice(0, 16).padEnd(16);
+      const expLine = `${expLabel} =  ${formatVal(exp.amount).padStart(9)}`;
+      output += `${expLine}\n`;
+    });
+    output += `------------------------------------\n\n`;
+  } else {
+    output += `No Expenses\n------------------------------------\n\n`;
+  }
+
+  const totalLine = `TOTAL            =  ${formatVal(total).padStart(9)}`;
+  output += `============================================
+${totalLine}
+============================================`;
+
+  const htmlBody = `
+    <div style="font-family: Courier, Monaco, monospace; font-size: 14px; line-height: 1.5; color: #1e293b; max-width: 480px; margin: 0 auto; padding: 20px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+      <pre style="margin: 0; white-space: pre-wrap; font-family: inherit;">${escapeHtml(output)}</pre>
+    </div>
+  `;
+
+  return openPrintableDocument("Account Statement", htmlBody);
+}

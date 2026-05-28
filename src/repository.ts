@@ -30,6 +30,9 @@ const coll = {
   loans: collection(db, "loans"),
   payments: collection(db, "payments"),
   blockedAadhaar: collection(db, "blockedAadhaar"),
+  balancingFund: collection(db, "balancingFund"),
+  investments: collection(db, "investments"),
+  expenses: collection(db, "expenses"),
 };
 
 // Simple in-memory cache for better performance
@@ -1008,3 +1011,90 @@ export async function unblockAadhaar(docId: string): Promise<void> {
 export const addBlockedAadhaar = blockAadhaar;
 export const checkAadhaarBlocked = isAadhaarBlocked;
 export const getBlockedAadhaarList = getBlockedAadhaars;
+
+export async function getBalancingFund(userId: string): Promise<number> {
+  const snap = await getDoc(doc(db, "balancingFund", userId));
+  if (snap.exists()) {
+    const data = snap.data();
+    return Number(data.amount || 0);
+  }
+  return 0;
+}
+
+export async function saveBalancingFund(userId: string, amount: number): Promise<void> {
+  await setDoc(doc(db, "balancingFund", userId), {
+    id: userId,
+    userId,
+    amount,
+    updatedAt: Date.now()
+  });
+  clearCache();
+}
+
+export type Investment = {
+  id: string;
+  userId: string;
+  amount: number;
+  date: number;
+};
+
+export async function getInvestments(userId: string): Promise<Investment[]> {
+  const q = query(coll.investments, where("userId", "==", userId));
+  const snap = await getDocs(q);
+  return snap.docs.map((docSnap) => docSnap.data() as Investment)
+    .sort((a, b) => b.date - a.date);
+}
+
+export async function addInvestment(userId: string, amount: number, date: number): Promise<Investment> {
+  assertPositiveAmount(amount, "Investment amount");
+  const investment: Investment = {
+    id: id(),
+    userId,
+    amount,
+    date
+  };
+  await setDoc(doc(db, "investments", investment.id), stripUndefined(investment));
+  clearCache();
+  return investment;
+}
+
+export async function deleteInvestment(investmentId: string): Promise<void> {
+  await deleteDoc(doc(db, "investments", investmentId));
+  clearCache();
+}
+
+export type Expense = {
+  id: string;
+  userId: string;
+  amount: number;
+  description: string;
+  date: number;
+};
+
+export async function getExpenses(userId: string): Promise<Expense[]> {
+  const q = query(coll.expenses, where("userId", "==", userId));
+  const snap = await getDocs(q);
+  return snap.docs.map((docSnap) => docSnap.data() as Expense)
+    .sort((a, b) => b.date - a.date);
+}
+
+export async function addExpense(userId: string, amount: number, description: string, date: number): Promise<Expense> {
+  assertPositiveAmount(amount, "Expense amount");
+  const cleanedDescription = cleanText(description);
+  if (!cleanedDescription) throw new Error("Description is required.");
+  const expense: Expense = {
+    id: id(),
+    userId,
+    amount,
+    description: cleanedDescription,
+    date
+  };
+  await setDoc(doc(db, "expenses", expense.id), stripUndefined(expense));
+  clearCache();
+  return expense;
+}
+
+export async function deleteExpense(expenseId: string): Promise<void> {
+  await deleteDoc(doc(db, "expenses", expenseId));
+  clearCache();
+}

@@ -15,6 +15,7 @@ import Icon from "../../src/Icon";
 import { Customer, Loan, Payment, Village } from "../../src/types";
 import { createBackupSnapshot, makeBackupFilename, parseBackupSnapshot, restoreBackupSnapshot } from "../../src/backup";
 import { downloadTextFile } from "../../src/exports";
+import { toMillis, money, startOfDay } from "../../src/business-logic";
 
 const BUSINESS_START_DATE = new Date(2026, 3, 1).getTime();
 
@@ -24,25 +25,6 @@ async function loadXLSX() {
     XLSX = await import("xlsx-js-style");
   }
   return XLSX;
-}
-
-function toMillis(value: any) {
-  if (typeof value === "number") return value;
-  if (value instanceof Date) return value.getTime();
-  if (typeof value?.toMillis === "function") return value.toMillis();
-  if (typeof value?.seconds === "number") return value.seconds * 1000;
-  return 0;
-}
-
-function money(value: any) {
-  const amount = Number(value);
-  return Number.isFinite(amount) ? amount : 0;
-}
-
-function startOfDay(ts: number) {
-  const d = new Date(ts);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
 }
 
 function formatSheetDate(ts: number) {

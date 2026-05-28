@@ -274,6 +274,7 @@ export default function ShiftSelectionScreen() {
   const bottomActions = useMemo(
     () => [
       { label: "Reports", icon: "document-text-outline", action: () => nav.push("/reports") },
+      { label: "Account", icon: "wallet-outline", action: () => nav.push("/account") },
       { label: "Analytics", icon: "bar-chart-outline", action: () => nav.push("/graph") },
       { label: "Settings", icon: "settings-outline", action: () => nav.push("/settings") },
     ],

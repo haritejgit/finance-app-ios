@@ -1,7 +1,7 @@
 import { collection, doc, getDocs, query, where, writeBatch } from "firebase/firestore";
 import { db } from "./firebase";
 
-const COLLECTIONS = ["villages", "customers", "loans", "payments"] as const;
+const COLLECTIONS = ["villages", "customers", "loans", "payments", "balancingFund", "investments", "expenses"] as const;
 
 type BackupCollection = (typeof COLLECTIONS)[number];
 

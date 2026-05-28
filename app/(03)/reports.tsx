@@ -26,7 +26,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../src/firebase';
-import { getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, money, toMillis } from "../../src/business-logic";
+import { getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, money, toMillis, startOfDay } from "../../src/business-logic";
 
 // Lazy load heavy XLSX library
 let XLSX: any = null;
@@ -69,12 +69,6 @@ function parseDateInput(value: string) {
     return null;
   }
   return date.getTime();
-}
-
-function toStartOfDay(ts: number) {
-  const d = new Date(ts);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
 }
 
 function formatFilenameDate(ts: number) {
@@ -144,7 +138,7 @@ export default function ReportsScreen() {
       const from = parseDateInput(fromDate);
       const to = parseDateInput(toDate);
       
-      const data = await getPaymentsByDate(user.uid, toStartOfDay(from!), toStartOfDay(to! + 24 * 60 * 60 * 1000 - 1));
+      const data = await getPaymentsByDate(user.uid, startOfDay(from!), startOfDay(to! + 24 * 60 * 60 * 1000 - 1));
       
       // Calculate summary
       const summary = {
