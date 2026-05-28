@@ -31,6 +31,7 @@ import { showToast } from "../../src/notify";
 import { getCachedCoordinates, LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
 import { addCustomerWithLoan, addPayment, addPaymentsBatch, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersThisWeek, getVillageById, getCustomerLoanSummary, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, updateCustomer } from "../../src/repository";
 import { Customer, Loan, Village } from "../../src/types";
+import { weekStart } from "../../src/business-logic";
 import { validateAadhaar, validateIndianPhone, validatePositiveAmount } from "../../src/validation";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -71,6 +72,13 @@ function isToday(timestamp: number): boolean {
   return date.getDate() === today.getDate() &&
     date.getMonth() === today.getMonth() &&
     date.getFullYear() === today.getFullYear();
+}
+
+// Helper to check if date is in the current week (Monday to Sunday)
+function isNewThisWeek(timestamp: number): boolean {
+  const startMs = weekStart(Date.now());
+  const endMs = startMs + 7 * 24 * 60 * 60 * 1000 - 1;
+  return timestamp >= startMs && timestamp <= endMs;
 }
 
 // Get customer payment status for today
@@ -199,11 +207,11 @@ const CustomerItem = React.memo(function CustomerItem({
   isUpdatingLocation,
 }: {
   customer: Customer;
-  onPress: () => void;
-  onOpenDirections: () => void;
-  onQuickPay: () => void;
-  onManualPay: () => void;
-  onSaveCurrentLocation: () => void;
+  onPress: (id: string) => void;
+  onOpenDirections: (customer: Customer) => void;
+  onQuickPay: (customer: Customer) => void;
+  onManualPay: (customer: Customer) => void;
+  onSaveCurrentLocation: (customer: Customer) => void;
   status: PaymentStatus;
   isNew?: boolean;
   loan?: Loan;
@@ -273,8 +281,8 @@ const CustomerItem = React.memo(function CustomerItem({
       return;
     }
     lightImpact();
-    onPress();
-  }, [onPress]);
+    onPress(customer.id);
+  }, [customer.id, onPress]);
 
   return (
     <Pressable
@@ -367,11 +375,11 @@ const CustomerItem = React.memo(function CustomerItem({
             onPress={(e) => {
               markActionPress(e);
               lightImpact();
-              if (hasLocation) onOpenDirections();
+              if (hasLocation) onOpenDirections(customer);
             }}
             onLongPress={(e) => {
               markActionPress(e);
-              if (!hasLocation) onSaveCurrentLocation();
+              if (!hasLocation) onSaveCurrentLocation(customer);
             }}
           >
             {isUpdatingLocation ? (
@@ -388,11 +396,11 @@ const CustomerItem = React.memo(function CustomerItem({
             onPress={(e) => {
               markActionPress(e);
               lightImpact();
-              onQuickPay();
+              onQuickPay(customer);
             }}
             onLongPress={(e) => {
               markActionPress(e);
-              onManualPay();
+              onManualPay(customer);
             }}
           >
             <Text selectable={false} style={styles.quickPayText}>{isPaying ? "..." : "Pay"}</Text>
@@ -788,8 +796,10 @@ export default function CustomerListScreen() {
         const status = paymentStatuses[customer.id] || "none";
         if (statusFilter === "paid") return status === "paid";
         if (statusFilter === "due") return status === "due";
-        if (statusFilter === "pending") return status === "none" && !!activeLoans[customer.id]?.balanceAmount;
-        if (statusFilter === "new") return isToday(customer.createdAt);
+        if (statusFilter === "pending") {
+          return !isNewThisWeek(customer.createdAt) && status !== "paid" && status !== "due";
+        }
+        if (statusFilter === "new") return isNewThisWeek(customer.createdAt);
         if (statusFilter === "docs") return customer.aadharSubmitted !== true || customer.passportPhotoSubmitted !== true;
         return true;
       });
@@ -805,22 +815,26 @@ export default function CustomerListScreen() {
       });
     }
     return [...result].sort((a, b) => a.numericalId - b.numericalId);
-  }, [activeLoans, customers, debouncedQuery, paymentStatuses, statusFilter]);
+  }, [customers, debouncedQuery, paymentStatuses, statusFilter]);
 
   const customerStats = useMemo(() => {
-    return filtered.reduce(
+    return customers.reduce(
       (stats, customer) => {
         const status = paymentStatuses[customer.id] || "none";
+        const isNew = isNewThisWeek(customer.createdAt);
+        const isPaid = status === "paid";
+        const isDue = status === "due";
+
         stats.total += 1;
-        if (isToday(customer.createdAt)) stats.today += 1;
-        if (status === "paid") stats.paid += 1;
-        if (status === "due") stats.dues += 1;
-        if (customer.aadharSubmitted !== true || customer.passportPhotoSubmitted !== true) stats.docs += 1;
+        if (!isNew) stats.today += 1;
+        if (isPaid) stats.paid += 1;
+        if (isDue) stats.dues += 1;
+        if (!isNew && !isPaid && !isDue) stats.remaining += 1;
         return stats;
       },
-      { total: 0, today: 0, paid: 0, dues: 0, docs: 0 }
+      { total: 0, today: 0, paid: 0, dues: 0, remaining: 0 }
     );
-  }, [filtered, paymentStatuses]);
+  }, [customers, paymentStatuses]);
 
   const quickCollectCustomers = useMemo(
     () => customers.filter((customer) => {
@@ -997,13 +1011,13 @@ export default function CustomerListScreen() {
     ({ item }: { item: Customer }) => (
       <CustomerItem 
         customer={item} 
-        onPress={() => openCustomer(item.id)} 
-        onOpenDirections={() => openDirections(item)}
-        onQuickPay={() => quickPay(item)}
-        onManualPay={() => openManualPayment(item)}
-        onSaveCurrentLocation={() => saveCurrentLocationForCustomer(item)}
+        onPress={openCustomer} 
+        onOpenDirections={openDirections}
+        onQuickPay={quickPay}
+        onManualPay={openManualPayment}
+        onSaveCurrentLocation={saveCurrentLocationForCustomer}
         status={paymentStatuses[item.id] || 'none'} 
-        isNew={isToday(item.createdAt)}
+        isNew={isNewThisWeek(item.createdAt)}
         loan={activeLoans[item.id]}
         lastPaymentDate={lastPaymentDates[item.id]}
         isPaying={payingCustomerId === item.id}
@@ -1060,7 +1074,7 @@ export default function CustomerListScreen() {
               <Text style={styles.routeSummaryValue}>{customerStats.today}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
-              <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Total Paid</Text>
+              <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Paid</Text>
               <Text style={styles.routeSummaryValue}>{customerStats.paid}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
@@ -1068,8 +1082,8 @@ export default function CustomerListScreen() {
               <Text style={styles.routeSummaryValue}>{customerStats.dues}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
-              <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Docs Pending</Text>
-              <Text style={styles.routeSummaryValue}>{customerStats.docs}</Text>
+              <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Remaining</Text>
+              <Text style={styles.routeSummaryValue}>{customerStats.remaining}</Text>
             </View>
           </View>
           <FlatList
