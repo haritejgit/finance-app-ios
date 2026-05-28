@@ -322,36 +322,37 @@ const CustomerItem = React.memo(function CustomerItem({
             ]}>
               Rs.{Math.round(loan.balanceAmount).toLocaleString("en-IN")}
             </Text>
+
+            {/* Status icons row side-by-side with Balance */}
+            <View style={[styles.statusIconsRow, { marginLeft: 8, marginBottom: 0 }]}>
+              {/* Last week missed indicator */}
+              {didntPayLastWeek ? (
+                <View style={styles.statusIconWarn}>
+                  <Icon name="alert-circle" size={14} color="#dc3545" />
+                </View>
+              ) : null}
+              {/* Document status icons (only show if not both submitted) */}
+              {!(customer.aadharSubmitted && customer.passportPhotoSubmitted) ? (
+                <>
+                  {/* Aadhar doc icon */}
+                  <View style={customer.aadharSubmitted ? styles.statusIconOk : styles.statusIconMissing}>
+                    <Icon name="id-card" size={13} color={customer.aadharSubmitted ? "#16a34a" : "#9ca3af"} />
+                  </View>
+                  {/* Photo doc icon */}
+                  <View style={customer.passportPhotoSubmitted ? styles.statusIconOk : styles.statusIconMissing}>
+                    <Icon name="camera" size={13} color={customer.passportPhotoSubmitted ? "#16a34a" : "#9ca3af"} />
+                  </View>
+                </>
+              ) : null}
+            </View>
           </View>
         ) : null}
         {isNew ? <Text style={styles.statusBadgeNew}>NEW</Text> : null}
         {getStatusBadge()}
       </View>
 
-      {/* Right: Icons row + Actions */}
+      {/* Right: Actions Stack */}
       <View style={styles.itemActions}>
-        {/* Status icons row */}
-        <View style={styles.statusIconsRow}>
-          {/* Last week missed indicator */}
-          {didntPayLastWeek ? (
-            <View style={styles.statusIconWarn}>
-              <Icon name="alert-circle" size={16} color="#dc3545" />
-            </View>
-          ) : null}
-          {/* Document status icons (only show if not both submitted) */}
-          {!(customer.aadharSubmitted && customer.passportPhotoSubmitted) ? (
-            <>
-              {/* Aadhar doc icon */}
-              <View style={customer.aadharSubmitted ? styles.statusIconOk : styles.statusIconMissing}>
-                <Icon name="id-card" size={14} color={customer.aadharSubmitted ? "#16a34a" : "#9ca3af"} />
-              </View>
-              {/* Photo doc icon */}
-              <View style={customer.passportPhotoSubmitted ? styles.statusIconOk : styles.statusIconMissing}>
-                <Icon name="camera" size={14} color={customer.passportPhotoSubmitted ? "#16a34a" : "#9ca3af"} />
-              </View>
-            </>
-          ) : null}
-        </View>
         {/* Action buttons */}
         <View style={styles.actionBtnsRow}>
           <Pressable
