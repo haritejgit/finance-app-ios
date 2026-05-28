@@ -338,14 +338,19 @@ const CustomerItem = React.memo(function CustomerItem({
               <Icon name="alert-circle" size={16} color="#dc3545" />
             </View>
           ) : null}
-          {/* Aadhar doc icon */}
-          <View style={customer.aadharSubmitted ? styles.statusIconOk : styles.statusIconMissing}>
-            <Icon name="id-card" size={14} color={customer.aadharSubmitted ? "#16a34a" : "#9ca3af"} />
-          </View>
-          {/* Photo doc icon */}
-          <View style={customer.passportPhotoSubmitted ? styles.statusIconOk : styles.statusIconMissing}>
-            <Icon name="camera" size={14} color={customer.passportPhotoSubmitted ? "#16a34a" : "#9ca3af"} />
-          </View>
+          {/* Document status icons (only show if not both submitted) */}
+          {!(customer.aadharSubmitted && customer.passportPhotoSubmitted) ? (
+            <>
+              {/* Aadhar doc icon */}
+              <View style={customer.aadharSubmitted ? styles.statusIconOk : styles.statusIconMissing}>
+                <Icon name="id-card" size={14} color={customer.aadharSubmitted ? "#16a34a" : "#9ca3af"} />
+              </View>
+              {/* Photo doc icon */}
+              <View style={customer.passportPhotoSubmitted ? styles.statusIconOk : styles.statusIconMissing}>
+                <Icon name="camera" size={14} color={customer.passportPhotoSubmitted ? "#16a34a" : "#9ca3af"} />
+              </View>
+            </>
+          ) : null}
         </View>
         {/* Action buttons */}
         <View style={styles.actionBtnsRow}>
@@ -482,7 +487,9 @@ export default function CustomerListScreen() {
       return;
     }
     try {
-      setIsLoading(true);
+      if (!preserveScroll) {
+        setIsLoading(true);
+      }
       const [allCustomers, villageDetails] = await Promise.all([
         getCustomers(user.uid, villageId, false),
         getVillageById(villageId),
@@ -1071,8 +1078,7 @@ export default function CustomerListScreen() {
             initialNumToRender={30}
             maxToRenderPerBatch={20}
             windowSize={10}
-            removeClippedSubviews={true}
-            updateCellsBatchingPeriod={50}
+            removeClippedSubviews={false}
             onScroll={(e) => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
             scrollEventThrottle={100}
             ListEmptyComponent={

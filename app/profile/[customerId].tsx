@@ -464,18 +464,22 @@ export default function ProfileScreen() {
   const paymentTimeline = useMemo(() => {
     if (!loan) return [] as { index: number; date: number; status: "paid" | "overdue" | "upcoming"; amount: number }[];
     const paidByWeek = new Map<number, number>();
+    const oneWeek = 7 * 24 * 60 * 60 * 1000;
     payments
       .filter((payment: Payment) => payment.paymentType === "REGULAR")
       .forEach((payment: Payment) => {
-        const weekIndex = Math.max(0, Math.floor((toStartOfDay(payment.paymentDate) - toStartOfDay(loan.startDate)) / (7 * 24 * 60 * 60 * 1000)));
+        const diff = toStartOfDay(payment.paymentDate) - toStartOfDay(loan.startDate);
+        // Week 0 covers day 0 through day 7 (inclusive).
+        // A payment on the 7th day (e.g. next Monday for a Monday loan) belongs to week 0.
+        const weekIndex = diff <= 0 ? 0 : Math.max(0, Math.ceil(diff / oneWeek) - 1);
         paidByWeek.set(weekIndex, (paidByWeek.get(weekIndex) ?? 0) + Number(payment.amountPaid || 0));
       });
     const now = Date.now();
     return Array.from({ length: 12 }, (_, index) => {
-      const date = toStartOfDay(loan.startDate) + index * 7 * 24 * 60 * 60 * 1000;
+      const date = toStartOfDay(loan.startDate) + index * oneWeek;
       const amount = paidByWeek.get(index) ?? 0;
       // A week is overdue only AFTER its 7-day window has fully passed with no payment
-      const weekDeadline = date + 7 * 24 * 60 * 60 * 1000;
+      const weekDeadline = date + oneWeek;
       let status: "paid" | "overdue" | "upcoming";
       if (amount > 0) {
         status = "paid";
