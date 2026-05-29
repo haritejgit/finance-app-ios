@@ -1141,6 +1141,18 @@ export async function deleteInvestment(investmentId: string): Promise<void> {
   clearCache();
 }
 
+export async function updateInvestment(investmentId: string, amount: number, date: number, investorName?: string): Promise<void> {
+  assertPositiveAmount(amount, "Investment amount");
+  const ref = doc(db, "investments", investmentId);
+  await updateDoc(ref, {
+    amount,
+    date,
+    investorName: investorName || "",
+    updatedAt: Date.now()
+  });
+  clearCache();
+}
+
 export type Expense = {
   id: string;
   userId: string;
@@ -1177,7 +1189,7 @@ export async function deleteExpense(expenseId: string): Promise<void> {
   clearCache();
 }
 
-export async function updateExpense(expenseId: string, amount: number, description: string): Promise<void> {
+export async function updateExpense(expenseId: string, amount: number, description: string, date: number): Promise<void> {
   assertPositiveAmount(amount, "Expense amount");
   const cleanedDescription = cleanText(description);
   if (!cleanedDescription) throw new Error("Description is required.");
@@ -1186,6 +1198,7 @@ export async function updateExpense(expenseId: string, amount: number, descripti
   await updateDoc(ref, {
     amount,
     description: cleanedDescription,
+    date,
     updatedAt: Date.now()
   });
   clearCache();

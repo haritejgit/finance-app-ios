@@ -31,6 +31,7 @@ import {
   getInvestments,
   addInvestment,
   deleteInvestment,
+  updateInvestment,
   getExpenses,
   addExpense,
   deleteExpense,
@@ -142,6 +143,13 @@ export default function AccountScreen() {
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [editExpAmount, setEditExpAmount] = useState<string>("");
   const [editExpDesc, setEditExpDesc] = useState<string>("");
+  const [editExpDate, setEditExpDate] = useState<string>("");
+
+  // Edit Investment Modal State
+  const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null);
+  const [editInvAmount, setEditInvAmount] = useState<string>("");
+  const [editInvDate, setEditInvDate] = useState<string>("");
+  const [editInvName, setEditInvName] = useState<string>("");
 
   // Export Modal Options State
   const [showExportModal, setShowExportModal] = useState(false);
@@ -434,6 +442,7 @@ export default function AccountScreen() {
     setEditingExpense(expense);
     setEditExpAmount(expense.amount.toString());
     setEditExpDesc(expense.description);
+    setEditExpDate(formatDDMMYYYY(expense.date));
   }, []);
 
   const handleUpdateExpense = useCallback(async () => {
@@ -447,9 +456,14 @@ export default function AccountScreen() {
       Alert.alert(t("error"), "Please enter a description.");
       return;
     }
+    const timestamp = parseDDMMYYYY(editExpDate);
+    if (!timestamp) {
+      Alert.alert(t("error"), "Please enter a valid date in DD/MM/YYYY format.");
+      return;
+    }
     try {
       setSubmitting(true);
-      await updateExpense(editingExpense.id, amount, editExpDesc.trim());
+      await updateExpense(editingExpense.id, amount, editExpDesc.trim(), timestamp);
       setEditingExpense(null);
       const exps = await getExpenses(user.uid);
       setExpenses(exps);
@@ -459,7 +473,41 @@ export default function AccountScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [user, editingExpense, editExpAmount, editExpDesc, t]);
+  }, [user, editingExpense, editExpAmount, editExpDesc, editExpDate, t]);
+
+  // Edit Investment
+  const handleEditInvestment = useCallback((investment: Investment) => {
+    setEditingInvestment(investment);
+    setEditInvAmount(investment.amount.toString());
+    setEditInvDate(formatDDMMYYYY(investment.date));
+    setEditInvName(investment.investorName || "");
+  }, []);
+
+  const handleUpdateInvestment = useCallback(async () => {
+    if (!user || !editingInvestment) return;
+    const amount = parseFloat(editInvAmount);
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert(t("error"), "Please enter a valid investment amount.");
+      return;
+    }
+    const timestamp = parseDDMMYYYY(editInvDate);
+    if (!timestamp) {
+      Alert.alert(t("error"), "Please enter a valid date in DD/MM/YYYY format.");
+      return;
+    }
+    try {
+      setSubmitting(true);
+      await updateInvestment(editingInvestment.id, amount, timestamp, editInvName.trim());
+      setEditingInvestment(null);
+      const invs = await getInvestments(user.uid);
+      setInvestments(invs);
+      Alert.alert(t("success"), "Investment updated successfully.");
+    } catch (err: any) {
+      Alert.alert(t("error"), err?.message ?? "An error occurred.");
+    } finally {
+      setSubmitting(false);
+    }
+  }, [user, editingInvestment, editInvAmount, editInvDate, editInvName, t]);
 
   // Dynamic starting balance for the selected period
   const periodBf = useMemo(() => {
@@ -913,19 +961,28 @@ export default function AccountScreen() {
                         investments.map((item) => (
                           <View key={item.id} style={styles.logRow}>
                              <View style={styles.logDetails}>
-                              <Text style={styles.logAmount}>+ Rs.${item.amount.toLocaleString("en-IN")}</Text>
+                              <Text style={styles.logAmount}>+ Rs. {item.amount.toLocaleString("en-IN")}</Text>
                               {item.investorName ? (
                                 <Text style={styles.logDesc}>{item.investorName}</Text>
                               ) : null}
                               <Text style={styles.logDate}>{formatDDMMYYYY(item.date)}</Text>
                             </View>
-                            <Pressable 
-                              style={styles.deleteBtn} 
-                              onPress={() => handleDeleteInvestment(item.id)}
-                              accessibilityLabel="Delete entry"
-                            >
-                              <Icon name="trash-outline" size={18} color="#d94841" />
-                            </Pressable>
+                            <View style={{ flexDirection: "row", gap: 6 }}>
+                              <Pressable 
+                                style={[styles.deleteBtn, { backgroundColor: "#e0f2fe" }]} 
+                                onPress={() => handleEditInvestment(item)}
+                                accessibilityLabel="Edit entry"
+                              >
+                                <Icon name="create-outline" size={18} color="#0284c7" />
+                              </Pressable>
+                              <Pressable 
+                                style={styles.deleteBtn} 
+                                onPress={() => handleDeleteInvestment(item.id)}
+                                accessibilityLabel="Delete entry"
+                              >
+                                <Icon name="trash-outline" size={18} color="#d94841" />
+                              </Pressable>
+                            </View>
                           </View>
                         ))
                       )}
@@ -1000,7 +1057,7 @@ export default function AccountScreen() {
                           <View key={item.id} style={styles.logRow}>
                             <View style={styles.logDetails}>
                               <Text style={[styles.logAmount, { color: "#d94841" }]}>
-                                - Rs.${item.amount.toLocaleString("en-IN")}
+                                - Rs. {item.amount.toLocaleString("en-IN")}
                               </Text>
                               <Text style={styles.logDesc}>{item.description}</Text>
                               <Text style={styles.logDate}>{formatDDMMYYYY(item.date)}</Text>
@@ -1147,6 +1204,19 @@ export default function AccountScreen() {
                     />
                   </View>
 
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.modalLabel}>{t("date")}</Text>
+                    <TextInput
+                      style={[styles.textInput, { borderColor: "#e2e8f0" }]}
+                      value={editExpDate}
+                      onChangeText={(txt) => handleDateChange(txt, setEditExpDate)}
+                      placeholder="DD/MM/YYYY"
+                      maxLength={10}
+                      keyboardType="numeric"
+                      placeholderTextColor="#78909c"
+                    />
+                  </View>
+
                   <View style={styles.modalActionsRow}>
                     <Pressable style={styles.modalCancelBtn} onPress={() => setEditingExpense(null)}>
                       <Text style={styles.modalCancelText}>{t("cancel")}</Text>
@@ -1158,6 +1228,66 @@ export default function AccountScreen() {
                     >
                       <Text style={styles.modalConfirmText}>
                         {submitting ? t("loading") : t("updateExpenseEntry")}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* Edit Investment Modal */}
+            {editingInvestment && (
+              <View style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>{t("editInvestment")}</Text>
+                  
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.modalLabel}>{t("investmentAmount")}</Text>
+                    <TextInput
+                      style={[styles.textInput, { borderColor: "#e2e8f0" }]}
+                      value={editInvAmount}
+                      onChangeText={setEditInvAmount}
+                      keyboardType="numeric"
+                      placeholder="e.g. 50000"
+                      placeholderTextColor="#78909c"
+                    />
+                  </View>
+
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.modalLabel}>{t("investorName")}</Text>
+                    <TextInput
+                      style={[styles.textInput, { borderColor: "#e2e8f0" }]}
+                      value={editInvName}
+                      onChangeText={setEditInvName}
+                      placeholder={t("investorNamePlaceholder")}
+                      placeholderTextColor="#78909c"
+                    />
+                  </View>
+
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.modalLabel}>{t("date")}</Text>
+                    <TextInput
+                      style={[styles.textInput, { borderColor: "#e2e8f0" }]}
+                      value={editInvDate}
+                      onChangeText={(txt) => handleDateChange(txt, setEditInvDate)}
+                      placeholder="DD/MM/YYYY"
+                      maxLength={10}
+                      keyboardType="numeric"
+                      placeholderTextColor="#78909c"
+                    />
+                  </View>
+
+                  <View style={styles.modalActionsRow}>
+                    <Pressable style={styles.modalCancelBtn} onPress={() => setEditingInvestment(null)}>
+                      <Text style={styles.modalCancelText}>{t("cancel")}</Text>
+                    </Pressable>
+                    <Pressable 
+                      style={[styles.modalConfirmBtn, submitting && styles.btnDisabled]} 
+                      onPress={handleUpdateInvestment}
+                      disabled={submitting}
+                    >
+                      <Text style={styles.modalConfirmText}>
+                        {submitting ? t("loading") : t("updateInvestmentEntry")}
                       </Text>
                     </Pressable>
                   </View>

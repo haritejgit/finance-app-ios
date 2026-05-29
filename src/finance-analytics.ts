@@ -35,6 +35,7 @@ export type PredictionItem = {
 export type DashboardAnalytics = {
   totals: {
     totalCollection: number;
+    totalDistributed: number;
     pendingAmount: number;
     monthlyRevenue: number;
     previousMonthlyRevenue: number;
@@ -447,6 +448,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
   const dashboardAnalytics: DashboardAnalytics = {
     totals: {
       totalCollection,
+      totalDistributed,
       pendingAmount,
       monthlyRevenue,
       previousMonthlyRevenue,

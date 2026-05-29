@@ -141,6 +141,8 @@ const dictionary: Record<Language, Record<string, string>> = {
     investorNamePlaceholder: "e.g. Ravi, Suresh",
     editExpense: "Edit Expense",
     updateExpenseEntry: "Update Expense",
+    editInvestment: "Edit Investment",
+    updateInvestmentEntry: "Update Investment",
     edit: "Edit",
 
     // Village Screen
@@ -289,6 +291,8 @@ const dictionary: Record<Language, Record<string, string>> = {
     investorNamePlaceholder: "ఉదా. రవి, సురేష్",
     editExpense: "ఖర్చును సవరించు",
     updateExpenseEntry: "ఖర్చును నవీకరించు",
+    editInvestment: "పెట్టుబడిని సవరించు",
+    updateInvestmentEntry: "పెట్టుబడిని నవీకరించు",
     edit: "సవరించు",
 
     // Village Screen

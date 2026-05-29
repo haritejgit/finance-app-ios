@@ -25,7 +25,7 @@ import {
   type PredictionItem,
 } from "../../src/finance-analytics";
 import Icon from "../../src/Icon";
-import { getAllTimeTotals, getWeeklyChartData, type WeeklyChartPoint } from "../../src/repository";
+import { getWeeklyChartData, type WeeklyChartPoint } from "../../src/repository";
 import { formatAmountInKM } from "../../src/utils";
 import { Gradients, Colors } from "../../src/theme";
 
@@ -316,7 +316,6 @@ function CashPositionCard({
 export default function GraphScreen() {
   const { user, loading: authLoading } = useAuth();
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
-  const [allTimeTotals, setAllTimeTotals] = useState<{ distributed: number; collected: number } | null>(null);
   const [weeklyChartData, setWeeklyChartData] = useState<WeeklyChartPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -329,13 +328,11 @@ export default function GraphScreen() {
     }
     if (showLoader) setLoading(true);
     try {
-      const [nextAnalytics, nextAllTimeTotals, nextWeeklyChartData] = await Promise.all([
+      const [nextAnalytics, nextWeeklyChartData] = await Promise.all([
         getDashboardAnalytics(user.uid),
-        getAllTimeTotals(user.uid),
         getWeeklyChartData(user.uid),
       ]);
       setAnalytics(nextAnalytics);
-      setAllTimeTotals(nextAllTimeTotals);
       setWeeklyChartData(nextWeeklyChartData);
     } finally {
       setLoading(false);
@@ -350,13 +347,9 @@ export default function GraphScreen() {
       return undefined;
     }
     let cancelled = false;
-    const hydrateTotals = async () => {
-      const [nextAllTimeTotals, nextWeeklyChartData] = await Promise.all([
-        getAllTimeTotals(user.uid),
-        getWeeklyChartData(user.uid),
-      ]);
+    const hydrateWeekly = async () => {
+      const nextWeeklyChartData = await getWeeklyChartData(user.uid);
       if (!cancelled) {
-        setAllTimeTotals(nextAllTimeTotals);
         setWeeklyChartData(nextWeeklyChartData);
         setLoading(false);
       }
@@ -365,7 +358,7 @@ export default function GraphScreen() {
       user.uid,
       (nextAnalytics) => {
         setAnalytics(nextAnalytics);
-        hydrateTotals().catch(() => setLoading(false));
+        hydrateWeekly().catch(() => setLoading(false));
       },
       () => {
         load(false);
@@ -387,8 +380,11 @@ export default function GraphScreen() {
     return analytics.totals.totalCollection - analytics.totals.pendingAmount;
   }, [analytics]);
 
-  const lifetimeNet = (allTimeTotals?.collected ?? 0) - (allTimeTotals?.distributed ?? 0)
-    + (analytics?.totals.totalInvestments ?? 0) - (analytics?.totals.totalExpenses ?? 0);
+  const lifetimeNet = useMemo(() => {
+    if (!analytics) return 0;
+    return analytics.totals.totalCollection - analytics.totals.totalDistributed
+      + analytics.totals.totalInvestments - analytics.totals.totalExpenses;
+  }, [analytics]);
 
   const insightList = analytics ? analytics.insights.concat(analytics.aiInsights).slice(0, 7) : [];
 
@@ -464,14 +460,14 @@ export default function GraphScreen() {
               <View style={styles.lifetimeGrid}>
                 <LifetimeCard
                   label="Total Distributed"
-                  value={formatIndianCurrency(allTimeTotals?.distributed ?? 0)}
+                  value={formatIndianCurrency(analytics?.totals.totalDistributed ?? 0)}
                   sub="Since business started"
                   icon="arrow-up-outline"
                   tone={Colors.amberGlow}
                 />
                 <LifetimeCard
                   label="Total Collected"
-                  value={formatIndianCurrency(allTimeTotals?.collected ?? 0)}
+                  value={formatIndianCurrency(analytics?.totals.totalCollection ?? 0)}
                   sub="Since business started"
                   icon="arrow-down"
                   tone={Colors.lightSeaGreen}
