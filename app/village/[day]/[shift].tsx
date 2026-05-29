@@ -36,6 +36,10 @@ export default function VillageListScreen() {
   const [moveShift, setMoveShift] = useState<string>("Morning");
   const [moveSaving, setMoveSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [renameModalVisible, setRenameModalVisible] = useState(false);
+  const [villageToRename, setVillageToRename] = useState<Village | null>(null);
+  const [renameInput, setRenameInput] = useState("");
+  const [renameSaving, setRenameSaving] = useState(false);
 
   const reload = useCallback(async (options?: { fresh?: boolean }) => {
     if (!user) {
@@ -73,6 +77,43 @@ export default function VillageListScreen() {
     setMoveModalVisible(false);
     setVillageToMove(null);
     setEditVillageName("");
+  };
+
+  const openRenameModal = (village: Village) => {
+    lightImpact();
+    setVillageToRename(village);
+    setRenameInput(village.name);
+    setRenameModalVisible(true);
+  };
+
+  const closeRenameModal = () => {
+    setRenameModalVisible(false);
+    setVillageToRename(null);
+    setRenameInput("");
+  };
+
+  const handleSaveRename = async () => {
+    if (!villageToRename || !renameInput.trim()) return;
+    const newName = renameInput.trim();
+    
+    // Update local UI state immediately!
+    const updatedVillages = villages.map(v => 
+      v.id === villageToRename.id ? { ...v, name: newName } : v
+    );
+    setVillages(updatedVillages);
+    
+    closeRenameModal();
+    
+    try {
+      setRenameSaving(true);
+      await updateVillageName(villageToRename.id, newName);
+      await reload({ fresh: true });
+    } catch (err: any) {
+      Alert.alert(t("error"), err.message || "Failed to update village name");
+      await reload({ fresh: true }); // Rollback on error
+    } finally {
+      setRenameSaving(false);
+    }
   };
 
   const saveMove = async () => {
@@ -169,7 +210,7 @@ export default function VillageListScreen() {
                   <AnimatedListItem index={index}>
                   <Pressable
                     onPress={() => router.push(`/customer/${item.id}`)}
-                    onLongPress={() => openMoveModal(item)}
+                    onLongPress={() => openRenameModal(item)}
                     delayLongPress={450}
                     style={[styles.villageCard, { backgroundColor: colors.card }]}
                   >
@@ -302,6 +343,56 @@ export default function VillageListScreen() {
             </Pressable>
             <Pressable style={styles.moveDeleteLink} onPress={requestDeleteFromMoveModal}>
               <Text style={[styles.moveDeleteLinkText, { color: colors.error }]}>{t("deleteVillageTitle")}…</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={renameModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={closeRenameModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.confirmDialog, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.confirmTitle, { color: colors.text }]}>{t("renameVillage")}</Text>
+            <TextInput
+              placeholder={t("villageNamePlaceholder")}
+              value={renameInput}
+              onChangeText={setRenameInput}
+              style={[styles.input, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border, color: colors.text, width: "100%", marginVertical: 12 }]}
+              placeholderTextColor={colors.textSecondary}
+              autoCapitalize="words"
+              autoCorrect={false}
+            />
+            <View style={styles.confirmButtons}>
+              <Pressable style={[styles.cancelBtn, { backgroundColor: colors.border }]} onPress={closeRenameModal}>
+                <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>{t("cancel")}</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.deleteBtn, { backgroundColor: colors.primary }, !renameInput.trim() && styles.addBtnDisabled]}
+                onPress={handleSaveRename}
+                disabled={!renameInput.trim() || renameSaving}
+              >
+                <Text style={[styles.deleteBtnText, { color: colors.white }]}>
+                  {renameSaving ? "Saving..." : t("save")}
+                </Text>
+              </Pressable>
+            </View>
+            
+            <Pressable 
+              style={{ marginTop: 16, padding: 8 }} 
+              onPress={() => {
+                if (villageToRename) {
+                  closeRenameModal();
+                  openMoveModal(villageToRename);
+                }
+              }}
+            >
+              <Text style={{ color: colors.primary, fontSize: 13, fontWeight: "700" }}>
+                {t("moreOptions")}
+              </Text>
             </Pressable>
           </View>
         </View>

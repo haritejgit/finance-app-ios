@@ -33,21 +33,107 @@ export function openPrintableDocument(title: string, bodyHtml: string) {
     <html>
       <head>
         <title>${escapeHtml(title)}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+Telugu:wght@400;500;700&display=swap" rel="stylesheet">
         <style>
-          body { margin: 0; padding: 32px; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #0f172a; background: #f8fafc; }
-          .sheet { max-width: 860px; margin: 0 auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 28px; box-shadow: 0 18px 50px rgba(15,23,42,.12); }
-          h1 { margin: 0 0 6px; font-size: 28px; }
-          h2 { margin: 24px 0 10px; font-size: 16px; color: #2563eb; }
-          .muted { color: #64748b; font-size: 13px; }
-          .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 20px 0; }
-          .metric { border: 1px solid #e2e8f0; border-radius: 14px; padding: 12px; background: #f8fafc; }
-          .metric strong { display: block; font-size: 18px; margin-top: 4px; }
-          table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-          th, td { text-align: left; border-bottom: 1px solid #e2e8f0; padding: 10px 8px; font-size: 13px; }
-          th { color: #475569; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+          body {
+            margin: 0;
+            padding: 40px 20px;
+            font-family: 'Plus Jakarta Sans', 'Noto Sans Telugu', system-ui, -apple-system, sans-serif;
+            color: #1e293b;
+            background: #f8fafc;
+            display: flex;
+            justify-content: center;
+          }
+          .sheet {
+            width: 100%;
+            max-width: 860px;
+            background: #ffffff;
+            border-top: 6px solid #0f172a;
+            border-left: 1px solid #e2e8f0;
+            border-right: 1px solid #e2e8f0;
+            border-bottom: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+            box-sizing: border-box;
+          }
+          h1 {
+            margin: 0 0 6px;
+            font-size: 26px;
+            font-weight: 700;
+            color: #0f172a;
+          }
+          h2 {
+            margin: 28px 0 12px;
+            font-size: 16px;
+            font-weight: 700;
+            color: #0d9488;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+          }
+          .muted {
+            color: #64748b;
+            font-size: 13px;
+            margin: 4px 0 0 0;
+          }
+          .grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin: 24px 0;
+          }
+          .metric {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 14px 16px;
+            background: #f8fafc;
+          }
+          .metric span {
+            font-size: 10px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+          }
+          .metric strong {
+            display: block;
+            font-size: 17px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-top: 6px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+            margin-bottom: 24px;
+          }
+          th, td {
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 12px 16px;
+            font-size: 13px;
+          }
+          th {
+            background: #0f172a;
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 2px solid #e2e8f0;
+          }
+          td {
+            color: #334155;
+          }
+          tr:nth-child(even) td {
+            background: #fafafa;
+          }
           @media print {
-            body { background: #fff; padding: 0; }
-            .sheet { border: 0; box-shadow: none; border-radius: 0; }
+            body { background: #ffffff; padding: 0; }
+            .sheet { border: 0; box-shadow: none; border-radius: 0; padding: 0; }
           }
         </style>
       </head>
@@ -228,13 +314,13 @@ export async function openAccountStatementPrint(
         <title>${escapeHtml(title)}</title>
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Telugu:wght@400;500;700&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+Telugu:wght@400;500;700&display=swap" rel="stylesheet">
         <style>
           body {
             margin: 0;
             padding: 40px 20px;
-            font-family: 'Noto Sans Telugu', 'Inter', system-ui, -apple-system, sans-serif;
-            background-color: #f1f5f9;
+            font-family: 'Plus Jakarta Sans', 'Noto Sans Telugu', system-ui, -apple-system, sans-serif;
+            background-color: #f8fafc;
             display: flex;
             justify-content: center;
             -webkit-print-color-adjust: exact;
@@ -243,8 +329,11 @@ export async function openAccountStatementPrint(
           #statement-card {
             background: #ffffff;
             width: 100%;
-            max-width: 800px;
-            border: 1px solid #e2e8f0;
+            max-width: 840px;
+            border-top: 6px solid #0f172a;
+            border-left: 1px solid #e2e8f0;
+            border-right: 1px solid #e2e8f0;
+            border-bottom: 1px solid #e2e8f0;
             border-radius: 16px;
             padding: 40px;
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
@@ -255,68 +344,76 @@ export async function openAccountStatementPrint(
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            border-bottom: 2px solid #f1f5f9;
-            padding-bottom: 24px;
+            border-bottom: 2px dashed #e2e8f0;
+            padding-bottom: 28px;
             margin-bottom: 30px;
           }
           .logo-section {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 14px;
           }
           .logo-icon {
-            width: 48px;
-            height: 48px;
+            width: 52px;
+            height: 52px;
             border-radius: 12px;
-            background: linear-gradient(135deg, #2ec4b6, #0f172a);
+            background: linear-gradient(135deg, #0f172a, #1e3a8a);
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
-            font-weight: bold;
+            color: #ffffff;
+            font-weight: 800;
             font-size: 24px;
-            font-family: 'Inter', sans-serif;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            border: 2px solid #e2e8f0;
           }
           .company-title {
-            font-size: 22px;
-            font-weight: 700;
+            font-size: 24px;
+            font-weight: 800;
             color: #0f172a;
             margin: 0;
+            letter-spacing: -0.02em;
           }
           .company-sub {
             font-size: 13px;
             color: #64748b;
             margin: 4px 0 0 0;
+            font-weight: 500;
           }
           .meta-section {
             text-align: right;
+            border-left: 2px solid #e2e8f0;
+            padding-left: 24px;
           }
           .meta-title {
             font-size: 18px;
-            font-weight: 700;
-            color: #2ec4b6;
-            margin: 0;
+            font-weight: 800;
+            color: #0d9488;
+            margin: 0 0 8px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
           }
           .meta-item {
             font-size: 12px;
             color: #64748b;
             margin: 4px 0 0 0;
+            font-weight: 500;
           }
           .meta-value {
-            font-weight: 600;
-            color: #334155;
+            font-weight: 700;
+            color: #1e293b;
           }
           .summary-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
             gap: 12px;
-            margin-bottom: 30px;
+            margin-bottom: 35px;
           }
           .summary-card {
             background: #f8fafc;
             border: 1px solid #e2e8f0;
             border-radius: 12px;
-            padding: 12px 16px;
+            padding: 14px 16px;
           }
           .summary-label {
             font-size: 10px;
@@ -326,7 +423,7 @@ export async function openAccountStatementPrint(
             letter-spacing: 0.05em;
           }
           .summary-value {
-            font-size: 16px;
+            font-size: 18px;
             font-weight: 700;
             color: #0f172a;
             margin-top: 6px;
@@ -340,18 +437,24 @@ export async function openAccountStatementPrint(
           table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 30px;
+            margin-bottom: 35px;
+            page-break-inside: auto;
+          }
+          tr {
+            page-break-inside: avoid;
+            page-break-after: auto;
           }
           th {
-            background: #f8fafc;
-            border-bottom: 2px solid #e2e8f0;
-            color: #475569;
+            background: #0f172a;
+            color: #ffffff;
             font-size: 11px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.05em;
             text-align: left;
-            padding: 12px 16px;
+            padding: 14px 16px;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
           }
           td {
             border-bottom: 1px solid #e2e8f0;
@@ -360,7 +463,7 @@ export async function openAccountStatementPrint(
             color: #334155;
           }
           tr:nth-child(even) td {
-            background: #fafafa;
+            background: #f8fafc;
           }
           .badge {
             display: inline-block;
@@ -369,6 +472,7 @@ export async function openAccountStatementPrint(
             font-weight: 700;
             border-radius: 6px;
             text-transform: uppercase;
+            letter-spacing: 0.02em;
           }
           .badge-investment { background: #e0f2fe; color: #0369a1; }
           .badge-collection { background: #ecfdf5; color: #047857; }
@@ -377,6 +481,39 @@ export async function openAccountStatementPrint(
           .text-right {
             text-align: right;
           }
+          .signature-section {
+            margin-top: 40px;
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            gap: 40px;
+            page-break-inside: avoid;
+          }
+          .signature-box {
+            flex: 1;
+            border: 1px dashed #cbd5e1;
+            border-radius: 12px;
+            padding: 24px 20px;
+            text-align: center;
+            background: #fafafa;
+          }
+          .sig-line {
+            border-top: 1px solid #94a3b8;
+            margin: 40px auto 10px auto;
+            width: 80%;
+          }
+          .sig-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #334155;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+          }
+          .sig-date {
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 8px;
+          }
           .footer {
             border-top: 1px solid #e2e8f0;
             padding-top: 20px;
@@ -384,6 +521,7 @@ export async function openAccountStatementPrint(
             justify-content: space-between;
             font-size: 11px;
             color: #94a3b8;
+            font-weight: 500;
           }
           .status-overlay {
             position: fixed;
@@ -475,6 +613,19 @@ export async function openAccountStatementPrint(
               ${tableRowsHtml || `<tr><td colspan="4" style="text-align: center; color: #94a3b8;">${isTe ? "లావాదేవీలు ఏవీ లేవు" : "No transactions found in this period."}</td></tr>`}
             </tbody>
           </table>
+
+          <div class="signature-section">
+            <div class="signature-box">
+              <div class="sig-line"></div>
+              <div class="sig-title">${isTe ? "ఫీల్డ్ ప్రతినిధి సంతకం" : "Field Representative Signature"}</div>
+              <div class="sig-date">${isTe ? "తేదీ" : "Date"}: ____________________</div>
+            </div>
+            <div class="signature-box">
+              <div class="sig-line"></div>
+              <div class="sig-title">${isTe ? "అధికారిక మేనేజర్ సంతకం" : "Authorized Manager Sign-off"}</div>
+              <div class="sig-date">${isTe ? "తేదీ" : "Date"}: ____________________</div>
+            </div>
+          </div>
 
           <div class="footer">
             <span>${isTe ? "ఫైనాన్స్ డ్యాష్‌బోర్డ్ ద్వారా సృష్టించబడింది" : "Generated by Finance App Dashboard"}</span>

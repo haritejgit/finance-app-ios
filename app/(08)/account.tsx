@@ -112,6 +112,7 @@ export default function AccountScreen() {
   const [bfDateStr, setBfDateStr] = useState<string>("");
   const [bfInput, setBfInput] = useState<string>("0");
   const [bfPreFilledStatus, setBfPreFilledStatus] = useState<"saved" | "computed" | "default">("default");
+  const [lastBfDate, setLastBfDate] = useState<string>("");
   
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -274,8 +275,12 @@ export default function AccountScreen() {
   // Reactively calculate bfInput & pre-filled status when date or dependencies change
   useEffect(() => {
     if (!bfDateStr || loading) return;
+    const dateChanged = bfDateStr !== lastBfDate;
     const res = getBalancingFundForDateState(bfDateStr);
-    setBfInput(res.amount.toString());
+    if (dateChanged) {
+      setBfInput(res.amount.toString());
+      setLastBfDate(bfDateStr);
+    }
     setBfPreFilledStatus(res.exists ? "saved" : (res.isPreFilled ? "computed" : "default"));
   }, [bfDateStr, dateSpecificBfs, bf, investments, expenses, payments, loans, loading]);
 
