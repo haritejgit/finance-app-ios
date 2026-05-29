@@ -69,13 +69,15 @@ function parseDDMMYYYY(str: string): number | null {
   return date.getTime();
 }
 
-function ddmmToYyyymmdd(ddmm: string): string {
+function ddmmToYyyymmdd(ddmm?: string): string {
+  if (!ddmm) return "";
   const parts = ddmm.split("/");
   if (parts.length !== 3) return "";
   return `${parts[2]}-${parts[1]}-${parts[0]}`;
 }
 
-function yyyymmddToDdmm(yyyymmdd: string): string {
+function yyyymmddToDdmm(yyyymmdd?: string): string {
+  if (!yyyymmdd) return "";
   const parts = yyyymmdd.split("-");
   if (parts.length !== 3) return "";
   return `${parts[2]}/${parts[1]}/${parts[0]}`;
@@ -225,6 +227,7 @@ export default function AccountScreen() {
 
     // Find the latest override on or before the previous day
     const overridesBeforeOrOnPrev = dateSpecificBfs
+      .filter((item) => typeof item?.dateStr === "string")
       .map((item) => ({
         ...item,
         timestamp: parseDDMMYYYY(yyyymmddToDdmm(item.dateStr)) ?? 0
