@@ -34,6 +34,7 @@ import {
   getExpenses,
   addExpense,
   deleteExpense,
+  updateExpense,
   getAllPaymentsEver,
   getAllLoansEver,
   Investment,
@@ -132,9 +133,15 @@ export default function AccountScreen() {
   // Forms inputs
   const [invAmount, setInvAmount] = useState<string>("");
   const [invDate, setInvDate] = useState<string>("");
+  const [invName, setInvName] = useState<string>("");
   const [expAmount, setExpAmount] = useState<string>("");
   const [expDesc, setExpDesc] = useState<string>("");
   const [expDate, setExpDate] = useState<string>("");
+
+  // Edit Expense Modal State
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [editExpAmount, setEditExpAmount] = useState<string>("");
+  const [editExpDesc, setEditExpDesc] = useState<string>("");
 
   // Export Modal Options State
   const [showExportModal, setShowExportModal] = useState(false);
@@ -331,8 +338,9 @@ export default function AccountScreen() {
     }
     try {
       setSubmitting(true);
-      await addInvestment(user.uid, amount, timestamp);
+      await addInvestment(user.uid, amount, timestamp, invName.trim() || undefined);
       setInvAmount("");
+      setInvName("");
       // Refresh list
       const invs = await getInvestments(user.uid);
       setInvestments(invs);
@@ -342,7 +350,7 @@ export default function AccountScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [user, invAmount, invDate, t]);
+  }, [user, invAmount, invDate, invName, t]);
 
   const handleDeleteInvestment = useCallback((id: string) => {
     Alert.alert(t("delete"), "Are you sure you want to delete this investment entry?", [
@@ -421,6 +429,38 @@ export default function AccountScreen() {
     ]);
   }, [user, t]);
 
+  // Edit Expense
+  const handleEditExpense = useCallback((expense: Expense) => {
+    setEditingExpense(expense);
+    setEditExpAmount(expense.amount.toString());
+    setEditExpDesc(expense.description);
+  }, []);
+
+  const handleUpdateExpense = useCallback(async () => {
+    if (!user || !editingExpense) return;
+    const amount = parseFloat(editExpAmount);
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert(t("error"), "Please enter a valid expense amount.");
+      return;
+    }
+    if (!editExpDesc.trim()) {
+      Alert.alert(t("error"), "Please enter a description.");
+      return;
+    }
+    try {
+      setSubmitting(true);
+      await updateExpense(editingExpense.id, amount, editExpDesc.trim());
+      setEditingExpense(null);
+      const exps = await getExpenses(user.uid);
+      setExpenses(exps);
+      Alert.alert(t("success"), "Expense updated successfully.");
+    } catch (err: any) {
+      Alert.alert(t("error"), err?.message ?? "An error occurred.");
+    } finally {
+      setSubmitting(false);
+    }
+  }, [user, editingExpense, editExpAmount, editExpDesc, t]);
+
   // Dynamic starting balance for the selected period
   const periodBf = useMemo(() => {
     return getBalancingFundForDateState(startDateStr).amount;
@@ -473,13 +513,15 @@ export default function AccountScreen() {
 
     let text = "";
     text += `BF               =  ${fmt(periodBf).padStart(9)}\n`;
-    text += `Investments      =  ${fmt(sumInvs).padStart(9)}\n`;
-    text += `                 ---------\n`;
-    text += `                 =  ${fmt(periodBf + sumInvs).padStart(9)}\n`;
+    if (sumInvs > 0) {
+      text += `Investments      =  ${fmt(sumInvs).padStart(9)}\n`;
+      text += `                 ---------\n`;
+      text += `                 =  ${fmt(periodBf + sumInvs).padStart(9)}\n`;
+    }
     text += `Collections      =  ${fmt(sumColls).padStart(9)}\n`;
     text += `Payments         =  ${fmt(sumLoans).padStart(9)}\n`;
     text += `                 ---------\n`;
-    text += `                 =  ${fmt(periodBf + sumInvs + sumColls - sumLoans).padStart(9)}\n`;
+    text += `                 =  ${fmt((sumInvs > 0 ? periodBf + sumInvs : periodBf) + sumColls - sumLoans).padStart(9)}\n`;
 
     if (rangeExps.length > 0) {
       rangeExps.forEach((exp) => {
@@ -552,10 +594,13 @@ export default function AccountScreen() {
     const transList: ExportTransaction[] = [];
 
     filteredInvs.forEach((i) => {
+      const invDesc = i.investorName
+        ? `${exportLanguage === "te" ? "పెట్టుబడి" : "Investment"} (${i.investorName})`
+        : (exportLanguage === "te" ? "పెట్టుబడి" : "Investment");
       transList.push({
         date: i.date,
         type: "INVESTMENT",
-        desc: exportLanguage === "te" ? "పెట్టుబడి" : "Investment",
+        desc: invDesc,
         amount: i.amount
       });
     });
@@ -824,6 +869,17 @@ export default function AccountScreen() {
                       </View>
 
                       <View style={styles.inputContainer}>
+                        <Text style={styles.inputLabel}>{t("investorName")}</Text>
+                        <TextInput
+                          style={styles.textInput}
+                          value={invName}
+                          onChangeText={setInvName}
+                          placeholder={t("investorNamePlaceholder")}
+                          placeholderTextColor="#78909c"
+                        />
+                      </View>
+
+                      <View style={styles.inputContainer}>
                         <Text style={styles.inputLabel}>{t("date")}</Text>
                         <TextInput
                           style={styles.textInput}
@@ -858,6 +914,9 @@ export default function AccountScreen() {
                           <View key={item.id} style={styles.logRow}>
                              <View style={styles.logDetails}>
                               <Text style={styles.logAmount}>+ Rs.${item.amount.toLocaleString("en-IN")}</Text>
+                              {item.investorName ? (
+                                <Text style={styles.logDesc}>{item.investorName}</Text>
+                              ) : null}
                               <Text style={styles.logDate}>{formatDDMMYYYY(item.date)}</Text>
                             </View>
                             <Pressable 
@@ -946,13 +1005,22 @@ export default function AccountScreen() {
                               <Text style={styles.logDesc}>{item.description}</Text>
                               <Text style={styles.logDate}>{formatDDMMYYYY(item.date)}</Text>
                             </View>
-                            <Pressable 
-                              style={styles.deleteBtn} 
-                              onPress={() => handleDeleteExpense(item.id)}
-                              accessibilityLabel="Delete entry"
-                            >
-                              <Icon name="trash-outline" size={18} color="#d94841" />
-                            </Pressable>
+                            <View style={{ flexDirection: "row", gap: 6 }}>
+                              <Pressable 
+                                style={[styles.deleteBtn, { backgroundColor: "#e0f2fe" }]} 
+                                onPress={() => handleEditExpense(item)}
+                                accessibilityLabel="Edit entry"
+                              >
+                                <Icon name="create-outline" size={18} color="#0284c7" />
+                              </Pressable>
+                              <Pressable 
+                                style={styles.deleteBtn} 
+                                onPress={() => handleDeleteExpense(item.id)}
+                                accessibilityLabel="Delete entry"
+                              >
+                                <Icon name="trash-outline" size={18} color="#d94841" />
+                              </Pressable>
+                            </View>
                           </View>
                         ))
                       )}
@@ -1044,6 +1112,53 @@ export default function AccountScreen() {
                     </Pressable>
                     <Pressable style={styles.modalConfirmBtn} onPress={handleConfirmExport}>
                       <Text style={styles.modalConfirmText}>{t("export")}</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* Edit Expense Modal */}
+            {editingExpense && (
+              <View style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>{t("editExpense")}</Text>
+                  
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.modalLabel}>{t("expenseAmount")}</Text>
+                    <TextInput
+                      style={[styles.textInput, { borderColor: "#e2e8f0" }]}
+                      value={editExpAmount}
+                      onChangeText={setEditExpAmount}
+                      keyboardType="numeric"
+                      placeholder="e.g. 1300"
+                      placeholderTextColor="#78909c"
+                    />
+                  </View>
+
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.modalLabel}>{t("description")}</Text>
+                    <TextInput
+                      style={[styles.textInput, { borderColor: "#e2e8f0" }]}
+                      value={editExpDesc}
+                      onChangeText={setEditExpDesc}
+                      placeholder="e.g. Petrol"
+                      placeholderTextColor="#78909c"
+                    />
+                  </View>
+
+                  <View style={styles.modalActionsRow}>
+                    <Pressable style={styles.modalCancelBtn} onPress={() => setEditingExpense(null)}>
+                      <Text style={styles.modalCancelText}>{t("cancel")}</Text>
+                    </Pressable>
+                    <Pressable 
+                      style={[styles.modalConfirmBtn, submitting && styles.btnDisabled]} 
+                      onPress={handleUpdateExpense}
+                      disabled={submitting}
+                    >
+                      <Text style={styles.modalConfirmText}>
+                        {submitting ? t("loading") : t("updateExpenseEntry")}
+                      </Text>
                     </Pressable>
                   </View>
                 </View>

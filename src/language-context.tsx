@@ -137,6 +137,11 @@ const dictionary: Record<Language, Record<string, string>> = {
     chooseVillage: "Choose Village Filter",
     allVillages: "All Villages",
     export: "Export",
+    investorName: "Investor Name",
+    investorNamePlaceholder: "e.g. Ravi, Suresh",
+    editExpense: "Edit Expense",
+    updateExpenseEntry: "Update Expense",
+    edit: "Edit",
 
     // Village Screen
     villages: "Villages",
@@ -280,6 +285,11 @@ const dictionary: Record<Language, Record<string, string>> = {
     chooseVillage: "గ్రామ ఫిల్టర్‌ను ఎంచుకోండి",
     allVillages: "అన్ని గ్రామాలు",
     export: "ఎగుమతి చేయి",
+    investorName: "పెట్టుబడిదారు పేరు",
+    investorNamePlaceholder: "ఉదా. రవి, సురేష్",
+    editExpense: "ఖర్చును సవరించు",
+    updateExpenseEntry: "ఖర్చును నవీకరించు",
+    edit: "సవరించు",
 
     // Village Screen
     villages: "గ్రామాలు",

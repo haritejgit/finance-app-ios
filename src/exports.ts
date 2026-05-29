@@ -253,13 +253,15 @@ export async function openAccountStatementPrint(
     const lineSecondSum = formatLine("", formatVal(secondSum));
 
     ledgerText += `${lineBf}\n`;
-    ledgerText += `${lineInvs}\n`;
-    ledgerText += `${divider}\n`;
-    ledgerText += `${lineFirstSum}\n`;
+    if (totals.sumInvs > 0) {
+      ledgerText += `${lineInvs}\n`;
+      ledgerText += `${divider}\n`;
+      ledgerText += `${lineFirstSum}\n`;
+    }
     ledgerText += `${lineColls}\n`;
     ledgerText += `${lineLoans}\n`;
     ledgerText += `${divider}\n`;
-    ledgerText += `${lineSecondSum}\n`;
+    ledgerText += `${totals.sumInvs > 0 ? lineSecondSum : formatLine("", formatVal(bf + totals.sumColls - totals.sumLoans))}\n`;
 
     const exps = transactions.filter((t) => t.type === "EXPENSE");
     if (exps.length > 0) {
@@ -537,13 +539,15 @@ function generatePlainTextStatement(
     const lineSecondSum = formatLine("", formatVal(secondSum));
 
     output += `${lineBf}\n`;
-    output += `${lineInvs}\n`;
-    output += `${divider}\n`;
-    output += `${lineFirstSum}\n`;
+    if (totals.sumInvs > 0) {
+      output += `${lineInvs}\n`;
+      output += `${divider}\n`;
+      output += `${lineFirstSum}\n`;
+    }
     output += `${lineColls}\n`;
     output += `${lineLoans}\n`;
     output += `${divider}\n`;
-    output += `${lineSecondSum}\n`;
+    output += `${totals.sumInvs > 0 ? lineSecondSum : formatLine("", formatVal(bf + totals.sumColls - totals.sumLoans))}\n`;
 
     const exps = transactions.filter((t) => t.type === "EXPENSE");
     if (exps.length > 0) {
