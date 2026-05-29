@@ -219,21 +219,30 @@ export async function openAccountStatementPrint(
   const formatVal = (v: number) => Math.round(v).toLocaleString("en-IN");
   const isAllVillages = villageName === "All Villages" || villageName === "అన్ని గ్రామాలు";
 
-  // Monospace formatter configuration
-  const width = 45;
-  const divider = "-".repeat(width);
-  const doubleDivider = "=".repeat(width);
+// Monospace formatter configuration
+const width = 45;
+const divider = "-".repeat(width);
+const doubleDivider = "=".repeat(width);
 
-  const formatLine = (label: string, value: string, symbol: string = "="): string => {
-    const valPart = `${symbol} ${value}`;
-    const padLength = width - label.length - valPart.length;
-    if (padLength > 0) {
-      return `${label}${" ".repeat(padLength)}${valPart}`;
-    }
-    return `${label} ${valPart}`;
-  };
+// Helper to truncate long labels and add ellipsis
+const truncateLabel = (label: string, maxLen: number): string => {
+  if (maxLen <= 0) return "";
+  if (label.length <= maxLen) return label;
+  return label.slice(0, maxLen - 1) + "…";
+};
 
-  let ledgerText = "";
+// Formats a line ensuring the label, symbol and value occupy exactly `width` characters
+const formatLine = (label: string, value: string, symbol: string = "="): string => {
+  const valPart = `${symbol} ${value}`;
+  // Calculate max label length leaving at least one space before valPart
+  const maxLabelLen = width - valPart.length - 1;
+  const finalLabel = label.length > maxLabelLen ? truncateLabel(label, maxLabelLen) : label;
+  const padLength = width - finalLabel.length - valPart.length;
+  const padding = padLength > 0 ? " ".repeat(padLength) : "";
+  return `${finalLabel}${padding}${valPart}`;
+};
+
+let ledgerText = "";
 
   if (isAllVillages) {
     const lblBf = isTe ? "BF (ప్రారంభ నిల్వ)" : "BF";
@@ -480,7 +489,7 @@ export async function openAccountStatementPrint(
   return { success: true, platform: "web" };
 }
 
-function generatePlainTextStatement(
+export function generatePlainTextStatement(
   periodStartStr: string,
   periodEndStr: string,
   bf: number,
@@ -502,14 +511,22 @@ function generatePlainTextStatement(
   const divider = "-".repeat(width);
   const doubleDivider = "=".repeat(width);
 
-  const formatLine = (label: string, value: string, symbol: string = "="): string => {
-    const valPart = `${symbol} ${value}`;
-    const padLength = width - label.length - valPart.length;
-    if (padLength > 0) {
-      return `${label}${" ".repeat(padLength)}${valPart}`;
-    }
-    return `${label} ${valPart}`;
-  };
+// Helper to truncate long labels and add ellipsis
+const truncateLabel = (label: string, maxLen: number): string => {
+  if (maxLen <= 0) return "";
+  if (label.length <= maxLen) return label;
+  return label.slice(0, maxLen - 1) + "…";
+};
+
+// Formats a line ensuring the label, symbol and value occupy exactly `width` characters
+const formatLine = (label: string, value: string, symbol: string = "="): string => {
+  const valPart = `${symbol} ${value}`;
+  const maxLabelLen = width - valPart.length - 1;
+  const finalLabel = label.length > maxLabelLen ? truncateLabel(label, maxLabelLen) : label;
+  const padLength = width - finalLabel.length - valPart.length;
+  const padding = padLength > 0 ? " ".repeat(padLength) : "";
+  return `${finalLabel}${padding}${valPart}`;
+};
 
   let output = `=============================================\n`;
   output += `            ${title}\n`;
