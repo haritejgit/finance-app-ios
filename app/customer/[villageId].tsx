@@ -317,12 +317,11 @@ const CustomerItem = React.memo(function CustomerItem({
         <Text style={styles.phoneLabel}>ph.no:- {customer.phone || "-"}</Text>
         {loan ? (
           <View style={styles.balanceRow}>
-            <Text style={styles.balanceLabel}>Rs. </Text>
             <Text style={[
               styles.balanceAmount,
               loan.balanceAmount <= 0 && styles.balanceCleared,
             ]}>
-              Rs.{Math.round(loan.balanceAmount).toLocaleString("en-IN")}
+              Rs. {Math.round(loan.balanceAmount).toLocaleString("en-IN")}
             </Text>
 
             {/* Status icons row side-by-side with Balance */}
@@ -358,10 +357,38 @@ const CustomerItem = React.memo(function CustomerItem({
 
       {/* Right: Actions Stack */}
       <View style={styles.itemActions}>
-        {/* Action buttons stacked vertically */}
-        <View style={styles.actionBtnsRow}>
+        <View style={styles.cardActionGrid}>
           <Pressable
-            style={[styles.iconActionBtn, noTextSelection, !hasLocation && styles.iconActionBtnMuted]}
+            accessibilityLabel={`Mark ${customer.name} due`}
+            style={[styles.cardActionBtn, styles.cardActionDue, !canPay && styles.quickPayBtnDisabled]}
+            disabled={!canPay}
+            onPressIn={markActionPress}
+            onPressOut={markActionPress}
+            onPress={(e) => {
+              markActionPress(e);
+              lightImpact();
+              onMarkDue(customer);
+            }}
+          >
+            <Text selectable={false} style={styles.cardActionText}>D</Text>
+          </Pressable>
+          <Pressable
+            accessibilityLabel={`Cash payment for ${customer.name}`}
+            style={[styles.cardActionBtn, styles.cardActionCash, !canPay && styles.quickPayBtnDisabled]}
+            disabled={!canPay}
+            onPressIn={markActionPress}
+            onPressOut={markActionPress}
+            onPress={(e) => {
+              markActionPress(e);
+              lightImpact();
+              onManualPay(customer, "CASH");
+            }}
+          >
+            <Text selectable={false} style={styles.cardActionText}>{isPaying ? "..." : "C"}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityLabel={`Open directions for ${customer.name}`}
+            style={[styles.cardActionBtn, styles.cardActionOpen, !hasLocation && styles.iconActionBtnMuted]}
             disabled={isUpdatingLocation}
             onPressIn={markActionPress}
             onPressOut={markActionPress}
@@ -375,53 +402,22 @@ const CustomerItem = React.memo(function CustomerItem({
               if (!hasLocation) onSaveCurrentLocation(customer);
             }}
           >
-            {isUpdatingLocation ? (
-              <ActivityIndicator size="small" color="#9ca3af" />
-            ) : (
-              <Icon name="location" size={18} color={hasLocation ? colors.blue2 : "#9ca3af"} />
-            )}
+            {isUpdatingLocation ? <ActivityIndicator size="small" color="#9ca3af" /> : <Text selectable={false} style={styles.cardActionText}>O</Text>}
           </Pressable>
-          <View style={styles.payButtonsRow}>
-            <Pressable
-              style={[styles.cashPayBtn, noTextSelection, !canPay && styles.quickPayBtnDisabled]}
-              disabled={!canPay}
-              onPressIn={markActionPress}
-              onPressOut={markActionPress}
-              onPress={(e) => {
-                markActionPress(e);
-                lightImpact();
-                onManualPay(customer, "CASH");
-              }}
-            >
-              <Text selectable={false} style={styles.quickPayText}>{isPaying ? "..." : "Cash"}</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.phonePePayBtn, noTextSelection, !canPay && styles.quickPayBtnDisabled]}
-              disabled={!canPay}
-              onPressIn={markActionPress}
-              onPressOut={markActionPress}
-              onPress={(e) => {
-                markActionPress(e);
-                lightImpact();
-                onManualPay(customer, "PHONE");
-              }}
-            >
-              <Text selectable={false} style={styles.quickPayText}>PhonePe</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.dueCardBtn, noTextSelection, !canPay && styles.quickPayBtnDisabled]}
-              disabled={!canPay}
-              onPressIn={markActionPress}
-              onPressOut={markActionPress}
-              onPress={(e) => {
-                markActionPress(e);
-                lightImpact();
-                onMarkDue(customer);
-              }}
-            >
-              <Text selectable={false} style={styles.quickPayText}>Due</Text>
-            </Pressable>
-          </View>
+          <Pressable
+            accessibilityLabel={`PhonePe payment for ${customer.name}`}
+            style={[styles.cardActionBtn, styles.cardActionPhone, !canPay && styles.quickPayBtnDisabled]}
+            disabled={!canPay}
+            onPressIn={markActionPress}
+            onPressOut={markActionPress}
+            onPress={(e) => {
+              markActionPress(e);
+              lightImpact();
+              onManualPay(customer, "PHONE");
+            }}
+          >
+            <Text selectable={false} style={styles.cardActionText}>P</Text>
+          </Pressable>
         </View>
       </View>
     </Pressable>
@@ -1836,12 +1832,19 @@ const styles = StyleSheet.create({
   statusBadgePaidGrey: { fontSize: 9, color: "#666666", fontWeight: "700", backgroundColor: "#f5f5f5", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#999999" },
   statusBadgeDue: { fontSize: 9, color: "#dc3545", fontWeight: "700", backgroundColor: "#f8d7da", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start" },
   statusBadgeNew: { fontSize: 9, color: "#374151", fontWeight: "700", marginTop: 3, backgroundColor: "#f3f4f6", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#9ca3af" },
-  itemActions: { alignItems: "center", gap: 6 },
+  itemActions: { alignItems: "center", gap: 6, width: 74 },
   statusIconsRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 4 },
   statusIconOk: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#dcfce7", alignItems: "center", justifyContent: "center" },
   statusIconMissing: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#f3f4f6", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#e5e7eb" },
   statusIconWarn: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#fee2e2", alignItems: "center", justifyContent: "center" },
   actionBtnsRow: { flexDirection: "column", alignItems: "center", gap: 5 },
+  cardActionGrid: { width: 70, flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center", justifyContent: "center" },
+  cardActionBtn: { width: 31, height: 31, borderRadius: 9, alignItems: "center", justifyContent: "center", borderWidth: 1 },
+  cardActionDue: { backgroundColor: "#C62828", borderColor: "#C62828" },
+  cardActionCash: { backgroundColor: "#1565C0", borderColor: "#1565C0" },
+  cardActionOpen: { backgroundColor: "#1976D2", borderColor: "#1976D2" },
+  cardActionPhone: { backgroundColor: "#5F259F", borderColor: "#5F259F" },
+  cardActionText: { color: colors.white, fontWeight: "900", fontSize: 13 },
   iconActionBtn: { width: 44, height: 32, borderRadius: 10, backgroundColor: colors.sky, borderWidth: 1, borderColor: "#bfdbfe", justifyContent: "center", alignItems: "center" },
   iconActionBtnMuted: { backgroundColor: "#f3f4f6", borderColor: "#e5e7eb" },
   payButtonsRow: { flexDirection: "row", gap: 5, width: 150 },

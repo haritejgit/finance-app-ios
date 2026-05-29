@@ -110,7 +110,7 @@ export default function AccountScreen() {
 
 
   // Selected Tab state: 'summary' | 'investments' | 'expenses'
-  const [activeTab, setActiveTab] = useState<"summary" | "investments" | "expenses">("summary");
+  const [activeTab, setActiveTab] = useState<"summary" | "investments" | "expenses" | "notes">("summary");
 
   // Loading States
   const [loading, setLoading] = useState(true);
@@ -210,7 +210,7 @@ export default function AccountScreen() {
       setVillages(vills);
       setCustomers(custs);
       setUserProfile(profile);
-      // PRIVATE — never export
+      // PRIVATE â€” never export
       setAccountNotesInput(profile.accountNotes ?? "");
       setCashOpeningInput(String(profile.cashOpeningBalance ?? 0));
       setPhoneOpeningInput(String(profile.phonePeOpeningBalance ?? 0));
@@ -615,7 +615,7 @@ export default function AccountScreen() {
     try {
       setNotesStatus("idle");
       await new Promise((resolve) => setTimeout(resolve, 300));
-      // PRIVATE — never export
+      // PRIVATE â€” never export
       await saveAccountNotes(user.uid, accountNotesInput);
       setUserProfile((current) => ({ ...(current ?? { id: user.uid, userId: user.uid }), accountNotes: accountNotesInput }));
       setNotesEditing(false);
@@ -715,8 +715,8 @@ export default function AccountScreen() {
 
     filteredInvs.forEach((i) => {
       const invDesc = i.investorName
-        ? `${exportLanguage === "te" ? "పెట్టుబడి" : "Investment"} (${i.investorName})`
-        : (exportLanguage === "te" ? "పెట్టుబడి" : "Investment");
+        ? `${exportLanguage === "te" ? "à°ªà±†à°Ÿà±à°Ÿà±à°¬à°¡à°¿" : "Investment"} (${i.investorName})`
+        : (exportLanguage === "te" ? "à°ªà±†à°Ÿà±à°Ÿà±à°¬à°¡à°¿" : "Investment");
       transList.push({
         date: i.date,
         type: "INVESTMENT",
@@ -727,7 +727,7 @@ export default function AccountScreen() {
 
     filteredColls.forEach((p) => {
       const cust = customerMap.get(p.customerId);
-      const desc = cust ? `${cust.name} (${cust.numericalId})` : (exportLanguage === "te" ? "వసూలు" : "Collection");
+      const desc = cust ? `${cust.name} (${cust.numericalId})` : (exportLanguage === "te" ? "à°µà°¸à±‚à°²à±" : "Collection");
       transList.push({
         date: p.date instanceof Date ? p.date.getTime() : p.date,
         type: "COLLECTION",
@@ -738,7 +738,7 @@ export default function AccountScreen() {
 
     filteredLoans.forEach((l) => {
       const cust = customerMap.get(l.customerId);
-      const desc = cust ? `${cust.name} (${cust.numericalId})` : (exportLanguage === "te" ? "రుణం" : "Loan");
+      const desc = cust ? `${cust.name} (${cust.numericalId})` : (exportLanguage === "te" ? "à°°à±à°£à°‚" : "Loan");
       transList.push({
         date: l.date instanceof Date ? l.date.getTime() : l.date,
         type: "LOAN",
@@ -775,7 +775,7 @@ export default function AccountScreen() {
     };
 
     const targetVillageName = isAllVillages
-      ? (exportLanguage === "te" ? "అన్ని గ్రామాలు" : "All Villages")
+      ? (exportLanguage === "te" ? "à°…à°¨à±à°¨à°¿ à°—à±à°°à°¾à°®à°¾à°²à±" : "All Villages")
       : (villages.find((v) => v.id === selectedVillageId)?.name ?? "Village");
 
     const res = await openAccountStatementPrint(
@@ -792,14 +792,106 @@ export default function AccountScreen() {
 
     if (res.success) {
       if (res.copied) {
-        Alert.alert(t("success"), exportLanguage === "te" ? "నివేదిక క్లిప్‌బోర్డ్‌కు నకలు చేయబడింది!" : "Plain text report copied to clipboard!");
+        Alert.alert(t("success"), exportLanguage === "te" ? "à°¨à°¿à°µà±‡à°¦à°¿à°• à°•à±à°²à°¿à°ªà±â€Œà°¬à±‹à°°à±à°¡à±â€Œà°•à± à°¨à°•à°²à± à°šà±‡à°¯à°¬à°¡à°¿à°‚à°¦à°¿!" : "Plain text report copied to clipboard!");
       } else {
-        Alert.alert(t("success"), exportLanguage === "te" ? "నివేదిక విజయవంతంగా రూపొందించబడింది!" : "Report generated successfully!");
+        Alert.alert(t("success"), exportLanguage === "te" ? "à°¨à°¿à°µà±‡à°¦à°¿à°• à°µà°¿à°œà°¯à°µà°‚à°¤à°‚à°—à°¾ à°°à±‚à°ªà±Šà°‚à°¦à°¿à°‚à°šà°¬à°¡à°¿à°‚à°¦à°¿!" : "Report generated successfully!");
       }
     } else {
       Alert.alert(t("error"), "Export failed. Please check your settings.");
     }
   };
+
+  const renderCalculateCard = () => (
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>{t("calculateTotals")}</Text>
+      <Text style={styles.cardDesc}>{t("calculateTotalsDesc")}</Text>
+
+      <View style={styles.datePickerRow}>
+        <View style={[styles.inputContainer, { flex: 1 }]}>
+          <Text style={styles.inputLabel}>{t("startDate")}</Text>
+          <TextInput
+            style={styles.textInput}
+            value={startDateStr}
+            onChangeText={(txt) => handleDateChange(txt, setStartDateStr)}
+            placeholder="DD/MM/YYYY"
+            maxLength={10}
+            keyboardType="numeric"
+            placeholderTextColor="#78909c"
+          />
+        </View>
+        <View style={[styles.inputContainer, { flex: 1 }]}>
+          <Text style={styles.inputLabel}>{t("endDate")}</Text>
+          <TextInput
+            style={styles.textInput}
+            value={endDateStr}
+            onChangeText={(txt) => handleDateChange(txt, setEndDateStr)}
+            placeholder="DD/MM/YYYY"
+            maxLength={10}
+            keyboardType="numeric"
+            placeholderTextColor="#78909c"
+          />
+        </View>
+      </View>
+
+      <View style={styles.breakdownHeaderRow}>
+        <Text style={styles.breakdownTitle}>{t("liveSummary")}</Text>
+        <Pressable style={styles.pdfButton} onPress={handleExportPDF}>
+          <Icon name="document-text-outline" size={14} color="#111827" />
+          <Text style={styles.pdfButtonText}>{isTe ? "à°Žà°—à±à°®à°¤à°¿" : "Export"}</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.monospacePanel}>
+        <Text style={styles.monospaceText}>{liveMonospaceBreakdown}</Text>
+      </View>
+    </View>
+  );
+
+  const renderBlockAadhaarCard = () => (
+    <Pressable style={[styles.card, styles.blockAadhaarCard]} onPress={() => router.push("/block-aadhaar" as any)}>
+      <View style={styles.blockAadhaarHeader}>
+        <View style={styles.blockAadhaarIcon}>
+          <Icon name="shield-checkmark-outline" size={20} color="#C62828" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.cardTitle}>Block Aadhaar</Text>
+          <Text style={styles.cardDesc}>Prevent blocked Aadhaar numbers from new registrations</Text>
+        </View>
+        <Icon name="arrow-forward" size={20} color="#C62828" />
+      </View>
+    </Pressable>
+  );
+
+  const renderNotesCard = () => (
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>My Notes</Text>
+      <Text style={styles.cardDesc}>Write anything - for your eyes only</Text>
+      {notesEditing || !(userProfile?.accountNotes || "").trim() ? (
+        <>
+          <TextInput
+            style={[styles.textInput, styles.notesInput]}
+            value={accountNotesInput}
+            onChangeText={setAccountNotesInput}
+            placeholder="Write notes about accounts, customers, reminders..."
+            placeholderTextColor="#78909c"
+            multiline
+            numberOfLines={4}
+          />
+          {notesStatus === "error" ? <Text style={styles.notesError}>Save failed - try again</Text> : null}
+          <Pressable style={styles.primaryButton} onPress={handleSaveNotes}>
+            <Text style={styles.primaryButtonText}>{notesStatus === "saved" ? "Saved ✓" : "Save"}</Text>
+          </Pressable>
+        </>
+      ) : (
+        <>
+          <Text style={styles.notesReadOnly}>{userProfile?.accountNotes}</Text>
+          <Pressable style={styles.smallEditBtn} onPress={() => setNotesEditing(true)}>
+            <Text style={styles.smallEditText}>Edit</Text>
+          </Pressable>
+        </>
+      )}
+    </View>
+  );
 
   if (!user) return null;
 
@@ -827,9 +919,9 @@ export default function AccountScreen() {
 
             {/* Tabs Selector */}
             <View style={styles.tabBar}>
-              {(["summary", "investments", "expenses"] as const).map((tab) => {
+              {(["summary", "investments", "expenses", "notes"] as const).map((tab) => {
                 const active = activeTab === tab;
-                const label = tab === "summary" ? t("bfSummary") : (tab === "investments" ? t("investments") : t("expenses"));
+                const label = tab === "summary" ? t("bfSummary") : (tab === "investments" ? t("investments") : (tab === "expenses" ? t("expenses") : "Notes"));
                 return (
                   <Pressable
                     key={tab}
@@ -855,6 +947,8 @@ export default function AccountScreen() {
                 {/* TAB 1: Balancing Fund & Range Summary */}
                 {activeTab === "summary" && (
                   <View style={styles.cardContainer}>
+                    {renderCalculateCard()}
+                    {renderBlockAadhaarCard()}
                     
                     {/* A. Balancing Fund Configuration */}
                     <View style={styles.card}>
@@ -885,25 +979,6 @@ export default function AccountScreen() {
                             placeholderTextColor="#78909c"
                           />
                         </View>
-                      </View>
-
-                      {/* Status indicator under the date selector */}
-                      <View style={{ marginTop: 2, paddingHorizontal: 4 }}>
-                        {bfPreFilledStatus === "saved" && (
-                          <Text style={{ fontSize: 11, fontWeight: "700", color: "#0f766e" }}>
-                            ✓ {isTe ? "ఈ తేదీ కొరకు భద్రపరచబడిన రికార్డు" : "Saved record for this date"}
-                          </Text>
-                        )}
-                        {bfPreFilledStatus === "computed" && (
-                          <Text style={{ fontSize: 11, fontWeight: "700", color: "#b45309" }}>
-                            ℹ {isTe ? "మునుపటి ముగింపు బ్యాలెన్స్ నుండి తీసుకోబడింది" : "Pre-filled from previous day's balance"}
-                          </Text>
-                        )}
-                        {bfPreFilledStatus === "default" && (
-                          <Text style={{ fontSize: 11, fontWeight: "600", color: "#64748b" }}>
-                            ℹ {isTe ? "డిఫాల్ట్ 0 గా సెట్ చేయబడింది" : "Defaulted to 0"}
-                          </Text>
-                        )}
                       </View>
 
                       <Pressable 
@@ -977,83 +1052,6 @@ export default function AccountScreen() {
                           </View>
                         </>
                       ) : null}
-                    </View>
-
-                    <View style={styles.card}>
-                      <Text style={styles.cardTitle}>My Notes</Text>
-                      <Text style={styles.cardDesc}>Write anything - for your eyes only</Text>
-                      {notesEditing || !(userProfile?.accountNotes || "").trim() ? (
-                        <>
-                          <TextInput
-                            style={[styles.textInput, styles.notesInput]}
-                            value={accountNotesInput}
-                            onChangeText={setAccountNotesInput}
-                            placeholder="Write notes about accounts, customers, reminders..."
-                            placeholderTextColor="#78909c"
-                            multiline
-                            numberOfLines={4}
-                          />
-                          {notesStatus === "error" ? <Text style={styles.notesError}>Save failed - try again</Text> : null}
-                          <Pressable style={styles.primaryButton} onPress={handleSaveNotes}>
-                            <Text style={styles.primaryButtonText}>{notesStatus === "saved" ? "Saved ✓" : "Save"}</Text>
-                          </Pressable>
-                        </>
-                      ) : (
-                        <>
-                          <Text style={styles.notesReadOnly}>{userProfile?.accountNotes}</Text>
-                          <Pressable style={styles.smallEditBtn} onPress={() => setNotesEditing(true)}>
-                            <Text style={styles.smallEditText}>Edit</Text>
-                          </Pressable>
-                        </>
-                      )}
-                    </View>
-
-                    {/* B. Date Range Selector & Summary */}
-                    <View style={styles.card}>
-                      <Text style={styles.cardTitle}>{t("calculateTotals")}</Text>
-                      <Text style={styles.cardDesc}>{t("calculateTotalsDesc")}</Text>
-
-                      <View style={styles.datePickerRow}>
-                        <View style={[styles.inputContainer, { flex: 1 }]}>
-                          <Text style={styles.inputLabel}>{t("startDate")}</Text>
-                          <TextInput
-                            style={styles.textInput}
-                            value={startDateStr}
-                            onChangeText={(txt) => handleDateChange(txt, setStartDateStr)}
-                            placeholder="DD/MM/YYYY"
-                            maxLength={10}
-                            keyboardType="numeric"
-                            placeholderTextColor="#78909c"
-                          />
-                        </View>
-                        <View style={[styles.inputContainer, { flex: 1 }]}>
-                          <Text style={styles.inputLabel}>{t("endDate")}</Text>
-                          <TextInput
-                            style={styles.textInput}
-                            value={endDateStr}
-                            onChangeText={(txt) => handleDateChange(txt, setEndDateStr)}
-                            placeholder="DD/MM/YYYY"
-                            maxLength={10}
-                            keyboardType="numeric"
-                            placeholderTextColor="#78909c"
-                          />
-                        </View>
-                      </View>
-
-                      <View style={styles.breakdownHeaderRow}>
-                        <Text style={styles.breakdownTitle}>{t("liveSummary")}</Text>
-                        <Pressable 
-                          style={styles.pdfButton} 
-                          onPress={handleExportPDF}
-                        >
-                          <Icon name="document-text-outline" size={14} color="#111827" />
-                          <Text style={styles.pdfButtonText}>{isTe ? "ఎగుమతి" : "Export"}</Text>
-                        </Pressable>
-                      </View>
-
-                      <View style={styles.monospacePanel}>
-                        <Text style={styles.monospaceText}>{liveMonospaceBreakdown}</Text>
-                      </View>
                     </View>
                   </View>
                 )}
@@ -1290,6 +1288,12 @@ export default function AccountScreen() {
                   </View>
                 )}
 
+                {activeTab === "notes" && (
+                  <View style={styles.cardContainer}>
+                    {renderNotesCard()}
+                  </View>
+                )}
+
               </ScrollView>
             )}
 
@@ -1300,7 +1304,7 @@ export default function AccountScreen() {
                   <Text style={styles.modalTitle}>{t("selectExportFormat")}</Text>
                   
                   {/* Format Choice */}
-                  <Text style={styles.modalLabel}>{isTe ? "ఆకృతి (Format)" : "Export Format"}</Text>
+                  <Text style={styles.modalLabel}>{isTe ? "à°†à°•à±ƒà°¤à°¿ (Format)" : "Export Format"}</Text>
                   <View style={styles.modalToggleRow}>
                     <Pressable
                       style={[styles.modalToggleBtn, exportFormat === "pdf" && styles.modalToggleBtnActive]}
@@ -1588,6 +1592,9 @@ const styles = StyleSheet.create({
   walletCardValue: { fontSize: 20, fontWeight: "900" },
   walletCardSub: { color: "#546E7A", fontSize: 11, fontWeight: "800" },
   walletBreakdown: { color: "#546E7A", fontSize: 10, lineHeight: 15, fontWeight: "700" },
+  blockAadhaarCard: { borderColor: "#fecaca", backgroundColor: "#fff7f7" },
+  blockAadhaarHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  blockAadhaarIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#fee2e2" },
   paymentModeRow: { flexDirection: "row", gap: 8 },
   paymentModeBtn: { flex: 1, borderRadius: 999, backgroundColor: "#F5F9FF", borderWidth: 1, borderColor: "#d2d8e1", paddingVertical: 10, alignItems: "center" },
   paymentModeText: { color: "#64748b", fontSize: 13, fontWeight: "900" },
