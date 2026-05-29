@@ -27,6 +27,7 @@ import { lightImpact } from "../../src/interactions";
 import { CustomerSearchResult, getAllActiveCustomersWithVillages } from "../../src/repository";
 import { Colors, Gradients } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
+import { useLanguage } from "../../src/language-context";
 
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const shortDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -44,11 +45,11 @@ function formatMoney(value: number) {
   return `Rs.${Math.round(value || 0).toLocaleString("en-IN")}`;
 }
 
-function getGreeting() {
+function getGreeting(t: (key: string) => string) {
   const hour = new Date().getHours();
-  if (hour < 12) return "Good Morning";
-  if (hour < 17) return "Good Afternoon";
-  return "Good Evening";
+  if (hour < 12) return t("goodMorning");
+  if (hour < 17) return t("goodAfternoon");
+  return t("goodEvening");
 }
 
 function SkeletonLine({ width = "100%" }: { width?: number | `${number}%` }) {
@@ -158,6 +159,7 @@ export default function ShiftSelectionScreen() {
   const nav = useRouter();
   const { user, logout } = useAuth();
   const { colors } = useTheme();
+  const { t } = useLanguage();
   const [selectedDay, setSelectedDay] = useState("Monday");
   const [selectedShift, setSelectedShift] = useState<Shift>("Morning");
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
@@ -273,12 +275,12 @@ export default function ShiftSelectionScreen() {
   const todayLabel = useMemo(() => new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" }), []);
   const bottomActions = useMemo(
     () => [
-      { label: "Reports", icon: "document-text-outline", action: () => nav.push("/reports") },
-      { label: "Account", icon: "wallet-outline", action: () => nav.push("/account") },
-      { label: "Analytics", icon: "bar-chart-outline", action: () => nav.push("/graph") },
-      { label: "Settings", icon: "settings-outline", action: () => nav.push("/settings") },
+      { label: t("reports"), icon: "document-text-outline", action: () => nav.push("/reports") },
+      { label: t("account"), icon: "wallet-outline", action: () => nav.push("/account") },
+      { label: t("analytics"), icon: "bar-chart-outline", action: () => nav.push("/graph") },
+      { label: t("settings"), icon: "settings-outline", action: () => nav.push("/settings") },
     ],
-    [nav]
+    [nav, t]
   );
 
   const startCollection = useCallback(() => {
@@ -315,12 +317,12 @@ export default function ShiftSelectionScreen() {
                       <Icon name="wallet-outline" size={19} color={Colors.nearBlack} />
                     </View>
                     <View style={styles.headerCopy}>
-                      <Text style={styles.eyebrow}>Premium finance workspace</Text>
-                      <Text style={styles.header}>Finance Dashboard</Text>
-                      <Text style={styles.welcome}>{getGreeting()}, {displayName} | {todayLabel}</Text>
+                      <Text style={styles.eyebrow}>{t("premiumWorkspace")}</Text>
+                      <Text style={styles.header}>{t("financeDashboard")}</Text>
+                      <Text style={styles.welcome}>{getGreeting(t)}, {displayName} | {todayLabel}</Text>
                     </View>
                   </View>
-                  <Pressable accessibilityLabel="Search customers" style={styles.searchButton} onPress={openCustomerSearch}>
+                  <Pressable accessibilityLabel={t("searchCustomers")} style={styles.searchButton} onPress={openCustomerSearch}>
                     <Icon name="search" size={20} color="#FFFFFF" />
                   </Pressable>
                 </View>
@@ -330,9 +332,9 @@ export default function ShiftSelectionScreen() {
                     <Icon name="cash-outline" size={18} color={Colors.nearBlack} />
                   </View>
                   <View style={styles.todayCopy}>
-                    <Text style={styles.todayLabel}>Collected today</Text>
+                    <Text style={styles.todayLabel}>{t("collectedToday")}</Text>
                     <Text style={styles.todayValue}>{formatMoney(totals?.collectionToday ?? 0)}</Text>
-                    <Text style={styles.todayHint}>Tap to see distributed today: {formatMoney(totals?.distributedToday ?? 0)}</Text>
+                    <Text style={styles.todayHint}>{t("distributedTodayHint")} {formatMoney(totals?.distributedToday ?? 0)}</Text>
                   </View>
                 </Pressable>
               </View>
@@ -342,27 +344,27 @@ export default function ShiftSelectionScreen() {
               ) : (
                 <>
                   <DashboardPanel
-                    title="Collection Route"
+                    title={t("collectionRoute")}
                     action={<Text style={styles.routeMeta}>{selectedDay} / {selectedShift}</Text>}
                   >
-                    <Text style={styles.controlLabel}>Day</Text>
+                    <Text style={styles.controlLabel}>{t("day")}</Text>
                     <View style={styles.dayGrid}>
                       {days.map((day, index) => (
                         <Pressable
-                          key={day}
-                          accessibilityLabel={`Select ${day}`}
-                          onPress={() => {
-                            lightImpact();
-                            setSelectedDay(day);
-                          }}
-                          style={[styles.dayChip, selectedDay === day && styles.dayChipOn]}
+                           key={day}
+                           accessibilityLabel={`Select ${day}`}
+                           onPress={() => {
+                             lightImpact();
+                             setSelectedDay(day);
+                           }}
+                           style={[styles.dayChip, selectedDay === day && styles.dayChipOn]}
                         >
                           <Text style={[styles.dayChipText, selectedDay === day && styles.dayChipTextOn]}>{shortDays[index]}</Text>
                         </Pressable>
                       ))}
                     </View>
 
-                    <Text style={styles.controlLabel}>Shift</Text>
+                    <Text style={styles.controlLabel}>{t("shift")}</Text>
                     <View style={styles.shiftRow}>
                       {shifts.map((shift) => {
                         const active = selectedShift === shift;
@@ -383,32 +385,32 @@ export default function ShiftSelectionScreen() {
                       })}
                     </View>
 
-                    <Pressable accessibilityLabel="Start Collection" onPress={startCollection}>
+                    <Pressable accessibilityLabel={t("startCollection")} onPress={startCollection}>
                       <LinearGradient colors={Gradients.ctaButton} style={styles.primaryAction}>
-                        <Text style={styles.primaryActionText}>Start Collection</Text>
+                        <Text style={styles.primaryActionText}>{t("startCollection")}</Text>
                         <Icon name="arrow-forward" size={18} color={Colors.nearBlack} />
                       </LinearGradient>
                     </Pressable>
                   </DashboardPanel>
 
                   <View style={styles.metricGrid}>
-                    <DashboardMetric title="Balance" value={formatMoney(balance)} caption="Collected minus pending" icon="wallet-outline" tone="#FFFFFF" />
-                    <DashboardMetric title="Income" value={formatMoney(totals?.monthlyRevenue ?? 0)} caption="Collected this month" icon="cash-outline" tone={Colors.lightSeaGreen} />
-                    <DashboardMetric title="Expense" value={formatMoney(totals?.distributedThisMonth ?? 0)} caption="Distributed this month" icon="trending-up-outline" tone={Colors.amberGlow} />
-                    <DashboardMetric title="Savings" value={formatMoney(savings)} caption="Needs recovery focus" icon="alert-circle-outline" tone={Colors.danger} />
+                    <DashboardMetric title={t("balance")} value={formatMoney(balance)} caption={t("collectedMinusPending")} icon="wallet-outline" tone="#FFFFFF" />
+                    <DashboardMetric title={t("income")} value={formatMoney(totals?.monthlyRevenue ?? 0)} caption={t("collectedThisMonth")} icon="cash-outline" tone={Colors.lightSeaGreen} />
+                    <DashboardMetric title={t("expense")} value={formatMoney(totals?.distributedThisMonth ?? 0)} caption={t("distributedThisMonth")} icon="trending-up-outline" tone={Colors.amberGlow} />
+                    <DashboardMetric title={t("savings")} value={formatMoney(savings)} caption={t("needsRecoveryFocus")} icon="alert-circle-outline" tone={Colors.danger} />
                   </View>
 
                   {analytics ? (
                     <>
                       <DashboardPanel
-                        title="Monthly Overview"
-                        subtitle="Collected vs distributed by week"
+                        title={t("monthlyOverview")}
+                        subtitle={t("collectedVsDistributedByWeek")}
                         action={
                           <View style={styles.legend}>
                             <View style={[styles.legendDot, { backgroundColor: Colors.lightSeaGreen }]} />
-                            <Text style={styles.legendText}>In</Text>
+                            <Text style={styles.legendText}>{t("in")}</Text>
                             <View style={[styles.legendDot, { backgroundColor: Colors.amberGlow }]} />
-                            <Text style={styles.legendText}>Out</Text>
+                            <Text style={styles.legendText}>{t("out")}</Text>
                           </View>
                         }
                       >
@@ -416,8 +418,8 @@ export default function ShiftSelectionScreen() {
                       </DashboardPanel>
 
                       <DashboardPanel
-                        title="Smart Insights"
-                        subtitle="Alerts generated from existing transactions"
+                        title={t("smartInsights")}
+                        subtitle={t("alertsFromTransactions")}
                         action={
                           <View style={styles.panelIcon}>
                             <Icon name="sparkles-outline" size={18} color={Colors.nearBlack} />
@@ -433,8 +435,8 @@ export default function ShiftSelectionScreen() {
                       </DashboardPanel>
 
                       <DashboardPanel
-                        title="Recent Transactions"
-                        subtitle="Latest collections across routes"
+                        title={t("recentTransactions")}
+                        subtitle={t("latestCollections")}
                         action={
                           <Pressable style={styles.csvButton} onPress={() => nav.push("/reports")}>
                             <Icon name="download-outline" size={14} color={Colors.nearBlack} />
@@ -469,9 +471,9 @@ export default function ShiftSelectionScreen() {
                   ) : null}
 
                   <DashboardPanel
-                    title="Budget Alerts"
-                    subtitle="Customers needing follow-up"
-                    action={<Text style={styles.alertBadge}>{dueAlerts.length} active</Text>}
+                    title={t("budgetAlerts")}
+                    subtitle={t("customersNeedingFollowup")}
+                    action={<Text style={styles.alertBadge}>{dueAlerts.length} {t("active")}</Text>}
                   >
                     {dueAlerts.length ? (
                       dueAlerts.slice(0, 4).map((alert) => (
@@ -519,7 +521,7 @@ export default function ShiftSelectionScreen() {
                       router.replace("/login");
                     }}
                   >
-                    <Text style={styles.logoutText}>Logout</Text>
+                    <Text style={styles.logoutText}>{t("logout")}</Text>
                   </Pressable>
                 </>
               )}

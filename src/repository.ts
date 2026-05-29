@@ -138,6 +138,15 @@ export async function updateVillageDayShift(villageId: string, dayOfWeek: string
   clearCache();
 }
 
+export async function updateVillageName(villageId: string, name: string) {
+  const villageName = cleanText(name);
+  if (!villageName) throw new Error("Village name is required.");
+  await updateDoc(doc(db, "villages", villageId), {
+    name: villageName,
+  });
+  clearCache();
+}
+
 export async function getCustomers(userId: string, villageId: string, useCache = true) {
   const cacheKey = getCacheKey(userId, "customers", villageId);
   if (useCache) {
@@ -809,20 +818,58 @@ export const getAllLoansEver = async (userId?: string): Promise<AllLoanEver[]> =
 };
 
 export const getWeeklyChartData = async (userId?: string): Promise<WeeklyChartPoint[]> => {
-  const [payments, loans] = await Promise.all([
-    getAllPaymentsEver(userId),
-    getAllLoansEver(userId),
+  // Only load data from the last 12 weeks for the chart
+  const twelveWeeksAgoMs = Date.now() - 12 * 7 * 24 * 60 * 60 * 1000;
+
+  const paymentsQuery = userId
+    ? query(coll.payments, where("userId", "==", userId), where("paymentDate", ">=", twelveWeeksAgoMs))
+    : query(coll.payments);
+  const loansQuery = userId
+    ? query(coll.loans, where("userId", "==", userId), where("startDate", ">=", twelveWeeksAgoMs))
+    : query(coll.loans);
+  const [eligibleCustomerIds, paymentsSnap, loansSnap] = await Promise.all([
+    userId ? getEligibleCustomerIds(userId) : Promise.resolve(null),
+    getDocs(paymentsQuery),
+    getDocs(loansQuery),
   ]);
+
+  // Build loan customerId lookup for payments that only have loanId
+  const loansRaw = loansSnap.docs.map((docSnap) => {
+    const d = docSnap.data() as any;
+    const rawDate = d.start_date ?? d.startDate ?? d.createdAt;
+    const millis = toMillis(rawDate);
+    return {
+      id: docSnap.id,
+      amount: getLoanDistributedAmount(d),
+      date: new Date(millis || Date.now()),
+      customerId: d.customerId ?? d.customer_id,
+    };
+  }).filter((loan) => !eligibleCustomerIds || (!!loan.customerId && eligibleCustomerIds.has(loan.customerId)));
+
+  const customerIdByLoanId = new Map(loansRaw.map((l) => [l.id, l.customerId]));
+
+  const paymentsRaw = paymentsSnap.docs.map((docSnap) => {
+    const d = docSnap.data() as any;
+    const rawDate = d.date ?? d.payment_date ?? d.paymentDate;
+    const millis = toMillis(rawDate);
+    return {
+      id: docSnap.id,
+      amount: money(d.amountPaid ?? d.amount_paid ?? d.amount),
+      date: new Date(millis || Date.now()),
+      customerId: d.customerId ?? d.customer_id ?? customerIdByLoanId.get(d.loanId ?? d.loan_id),
+      paymentType: d.paymentType ?? d.type,
+    };
+  }).filter((payment) => !eligibleCustomerIds || (!!payment.customerId && eligibleCustomerIds.has(payment.customerId)));
 
   const weekMap: Record<string, { collected: number; distributed: number; date: Date }> = {};
 
-  payments.filter(isRealCollectionPayment).forEach((payment) => {
+  paymentsRaw.filter(isRealCollectionPayment).forEach((payment) => {
     const key = getWeekKey(payment.date);
     if (!weekMap[key]) weekMap[key] = { collected: 0, distributed: 0, date: payment.date };
     weekMap[key].collected += payment.amount;
   });
 
-  loans.forEach((loan) => {
+  loansRaw.forEach((loan) => {
     const key = getWeekKey(loan.date);
     if (!weekMap[key]) weekMap[key] = { collected: 0, distributed: 0, date: loan.date };
     weekMap[key].distributed += loan.amount;
@@ -846,8 +893,8 @@ export async function getTodayDashboardStats(userId: string) {
   const endMs = end.getTime();
 
   const [paymentsSnap, loansSnap, customersSnap] = await Promise.all([
-    getDocs(query(coll.payments, where("userId", "==", userId))),
-    getDocs(query(coll.loans, where("userId", "==", userId))),
+    getDocs(query(coll.payments, where("userId", "==", userId), where("paymentDate", ">=", startMs), where("paymentDate", "<=", endMs))),
+    getDocs(query(coll.loans, where("userId", "==", userId), where("startDate", ">=", startMs), where("startDate", "<=", endMs))),
     getDocs(query(coll.customers, where("userId", "==", userId))),
   ]);
 
@@ -858,19 +905,16 @@ export async function getTodayDashboardStats(userId: string) {
       .map((customer) => customer.id)
   );
   const activeLoanCustomerById = new Map<string, string>();
-  const activeLoans = loansSnap.docs
+  const todayLoans = loansSnap.docs
     .map((d) => d.data() as Loan)
     .filter((loan) => activeCustomerIds.has(loan.customerId));
-  activeLoans.forEach((loan) => activeLoanCustomerById.set(loan.id, loan.customerId));
+  todayLoans.forEach((loan) => activeLoanCustomerById.set(loan.id, loan.customerId));
 
   const collectionToday = paymentsSnap.docs
     .map((d) => d.data() as Payment)
     .filter((payment) => {
-      const paymentDate = toMillis(payment.paymentDate);
       const customerId = payment.customerId ?? activeLoanCustomerById.get(payment.loanId);
       return (
-        paymentDate >= startMs &&
-        paymentDate <= endMs &&
         payment.paymentType !== "DUE" &&
         !!customerId &&
         activeCustomerIds.has(customerId)
@@ -878,11 +922,7 @@ export async function getTodayDashboardStats(userId: string) {
     })
     .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
 
-  const distributedToday = activeLoans
-    .filter((loan) => {
-      const startDate = toMillis(loan.startDate);
-      return startDate >= startMs && startDate <= endMs;
-    })
+  const distributedToday = todayLoans
     .reduce((sum, loan) => sum + getLoanDistributedAmount(loan), 0);
 
   return { collectionToday, distributedToday };
@@ -900,11 +940,14 @@ export const getAllTimeTotals = async (userId?: string): Promise<{ distributed: 
 };
 
 export async function getPaymentsByDate(userId: string, startDate: number, endDate: number) {
-  const q = query(coll.payments, where("userId", "==", userId));
+  const q = query(
+    coll.payments,
+    where("userId", "==", userId),
+    where("paymentDate", ">=", startDate),
+    where("paymentDate", "<=", endDate)
+  );
   const snap = await getDocs(q);
-  return snap.docs
-    .map((d) => d.data() as Payment)
-    .filter((p) => p.paymentDate >= startDate && p.paymentDate <= endDate);
+  return snap.docs.map((d) => d.data() as Payment);
 }
 
 export async function updateCustomer(customer: Customer) {
@@ -918,34 +961,41 @@ export async function updateCustomer(customer: Customer) {
 }
 
 export async function deleteCustomer(userId: string, customerId: string) {
+  const batch = writeBatch(db);
+
   // Delete all loans associated with this customer
   const loansQ = query(coll.loans, where("userId", "==", userId), where("customerId", "==", customerId));
   const loansSnap = await getDocs(loansQ);
   
-  // Delete all payments for these loans first
-  for (const loanDoc of loansSnap.docs) {
-    const loanId = loanDoc.id;
+  // We will collect loan IDs to query payments
+  const loanIds = loansSnap.docs.map(doc => doc.id);
+
+  // Delete loans
+  loansSnap.docs.forEach((loanDoc) => {
+    batch.delete(loanDoc.ref);
+  });
+
+  // Delete payments for these loans
+  for (const loanId of loanIds) {
     const paymentsQ = query(coll.payments, where("userId", "==", userId), where("loanId", "==", loanId));
     const paymentsSnap = await getDocs(paymentsQ);
-    
-    // Delete all payments for this loan
-    for (const paymentDoc of paymentsSnap.docs) {
-      await deleteDoc(paymentDoc.ref);
-    }
-    
-    // Delete the loan
-    await deleteDoc(loanDoc.ref);
+    paymentsSnap.docs.forEach((paymentDoc) => {
+      batch.delete(paymentDoc.ref);
+    });
   }
 
   // Delete any stray payments attached directly to the customer
   const strayPaymentsQ = query(coll.payments, where("userId", "==", userId), where("customerId", "==", customerId));
   const strayPaymentsSnap = await getDocs(strayPaymentsQ);
-  for (const paymentDoc of strayPaymentsSnap.docs) {
-    await deleteDoc(paymentDoc.ref);
-  }
+  strayPaymentsSnap.docs.forEach((paymentDoc) => {
+    batch.delete(paymentDoc.ref);
+  });
   
   // Finally delete the customer
-  await deleteDoc(doc(db, "customers", customerId));
+  batch.delete(doc(db, "customers", customerId));
+
+  // Commit the batch
+  await batch.commit();
   clearCache();
 }
 
@@ -1029,6 +1079,32 @@ export async function saveBalancingFund(userId: string, amount: number): Promise
     updatedAt: Date.now()
   });
   clearCache();
+}
+
+export async function getBalancingFundForDate(userId: string, dateStr: string): Promise<{amount: number; exists: boolean}> {
+  const snap = await getDoc(doc(db, "balancingFund", `${userId}_${dateStr}`));
+  if (snap.exists()) {
+    const data = snap.data();
+    return { amount: Number(data.amount || 0), exists: true };
+  }
+  return { amount: 0, exists: false };
+}
+
+export async function saveBalancingFundForDate(userId: string, amount: number, dateStr: string): Promise<void> {
+  await setDoc(doc(db, "balancingFund", `${userId}_${dateStr}`), {
+    id: `${userId}_${dateStr}`,
+    userId,
+    amount,
+    dateStr,
+    updatedAt: Date.now()
+  });
+  clearCache();
+}
+
+export async function getAllBalancingFunds(userId: string): Promise<any[]> {
+  const q = query(coll.balancingFund, where("userId", "==", userId));
+  const snap = await getDocs(q);
+  return snap.docs.map((docSnap) => docSnap.data());
 }
 
 export type Investment = {

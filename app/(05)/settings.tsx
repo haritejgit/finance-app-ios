@@ -16,6 +16,7 @@ import { Customer, Loan, Payment, Village } from "../../src/types";
 import { createBackupSnapshot, makeBackupFilename, parseBackupSnapshot, restoreBackupSnapshot } from "../../src/backup";
 import { downloadTextFile } from "../../src/exports";
 import { toMillis, money, startOfDay } from "../../src/business-logic";
+import { useLanguage } from "../../src/language-context";
 
 const BUSINESS_START_DATE = new Date(2026, 3, 1).getTime();
 
@@ -44,6 +45,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
 export default function SettingsScreen() {
   const { user, logout } = useAuth();
   const { isDark, toggleDarkMode, colorScheme, setColorScheme, colors } = useTheme();
+  const { language, setLanguage, t } = useLanguage();
   const [isExporting, setIsExporting] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -357,8 +359,8 @@ export default function SettingsScreen() {
             <View style={styles.avatar}>
               <Icon name="person" size={28} color={colors.white} />
             </View>
-            <Text style={styles.title}>Settings</Text>
-            <Text style={styles.subtitle}>Account and session details</Text>
+            <Text style={styles.title}>{t("settingsTitle")}</Text>
+            <Text style={styles.subtitle}>{t("accountDetails")}</Text>
           </View>
 
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -367,7 +369,7 @@ export default function SettingsScreen() {
                 <Icon name="mail-outline" size={18} color={colors.blue2} />
               </View>
               <View style={styles.infoCopy}>
-                <Text style={[styles.label, { color: colors.textSecondary }]}>Signed in as</Text>
+                <Text style={[styles.label, { color: colors.textSecondary }]}>{t("signedInAs")}</Text>
                 <Text style={[styles.value, { color: colors.text }]}>{user?.email || "Unknown user"}</Text>
               </View>
             </View>
@@ -377,17 +379,56 @@ export default function SettingsScreen() {
                 <Icon name="id-card-outline" size={18} color={colors.teal} />
               </View>
               <View style={styles.infoCopy}>
-                <Text style={[styles.label, { color: colors.textSecondary }]}>Display name</Text>
+                <Text style={[styles.label, { color: colors.textSecondary }]}>{t("displayName")}</Text>
                 <Text style={[styles.value, { color: colors.text }]}>{user?.displayName || "User"}</Text>
               </View>
             </View>
 
+            {/* Language Selection Row */}
             <View style={[styles.themeRow, { borderColor: colors.border }]}>
+              <View style={[styles.infoIcon, { backgroundColor: colors.primarySoft }]}>
+                <Icon name="language-outline" size={18} color={colors.blue2} />
+              </View>
+              <View style={styles.infoCopy}>
+                <Text style={[styles.label, { color: colors.textSecondary }]}>{t("language")}</Text>
+                <Text style={[styles.value, { color: colors.text }]}>
+                  {language === "en" ? t("english") : t("telugu")}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.themeModeRow}>
+              <Pressable
+                style={[
+                  styles.themeModeChip,
+                  { backgroundColor: colors.surfaceTint, borderColor: colors.border },
+                  language === "en" && { backgroundColor: colors.primary, borderColor: colors.primary },
+                ]}
+                onPress={() => setLanguage("en")}
+              >
+                <Text style={[styles.themeModeText, { color: language === "en" ? colors.white : colors.textSecondary }]}>
+                  {t("english")}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.themeModeChip,
+                  { backgroundColor: colors.surfaceTint, borderColor: colors.border },
+                  language === "te" && { backgroundColor: colors.primary, borderColor: colors.primary },
+                ]}
+                onPress={() => setLanguage("te")}
+              >
+                <Text style={[styles.themeModeText, { color: language === "te" ? colors.white : colors.textSecondary }]}>
+                  {t("telugu")}
+                </Text>
+              </Pressable>
+            </View>
+
+            <View style={[styles.themeRow, { borderColor: colors.border, borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: 8 }]}>
               <View style={[styles.infoIcon, { backgroundColor: colors.warningSoft }]}>
                 <Icon name={isDark ? "moon-outline" : "sunny-outline"} size={18} color={colors.coral} />
               </View>
               <View style={styles.infoCopy}>
-                <Text style={[styles.label, { color: colors.textSecondary }]}>Theme</Text>
+                <Text style={[styles.label, { color: colors.textSecondary }]}>{t("theme")}</Text>
                 <Text style={[styles.value, { color: colors.text }]}>
                   {colorScheme === "system" ? `System (${isDark ? "dark" : "light"})` : isDark ? "Dark mode" : "Light mode"}
                 </Text>
@@ -431,7 +472,7 @@ export default function SettingsScreen() {
               ) : (
                 <Icon name="document-text-outline" size={18} color={colors.white} />
               )}
-              <Text style={styles.exportText}>{isExporting ? "Exporting Whole Data..." : "Export Whole Data"}</Text>
+              <Text style={styles.exportText}>{isExporting ? t("exportingWholeData") : t("exportWholeData")}</Text>
             </Pressable>
 
             <View style={[styles.securityPanel, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
@@ -444,8 +485,8 @@ export default function SettingsScreen() {
                   <Icon name="sparkles-outline" size={18} color={colors.primary} />
                 </View>
                 <View style={styles.infoCopy}>
-                  <Text style={[styles.label, { color: colors.textSecondary }]}>AI Business Advisor</Text>
-                  <Text style={[styles.value, { color: colors.text }]}>Ask about collections and dues</Text>
+                  <Text style={[styles.label, { color: colors.textSecondary }]}>{t("aiAdvisor")}</Text>
+                  <Text style={[styles.value, { color: colors.text }]}>{t("aiAdvisorSub")}</Text>
                 </View>
                 <Icon name="arrow-forward" size={18} color={colors.textMuted} />
               </Pressable>
@@ -458,8 +499,8 @@ export default function SettingsScreen() {
                   <Icon name="lock-closed-outline" size={18} color={colors.error} />
                 </View>
                 <View style={styles.infoCopy}>
-                  <Text style={[styles.label, { color: colors.textSecondary }]}>Block Aadhaar</Text>
-                  <Text style={[styles.value, { color: colors.text }]}>Prevent fraudulent registrations</Text>
+                  <Text style={[styles.label, { color: colors.textSecondary }]}>{t("blockAadhaar")}</Text>
+                  <Text style={[styles.value, { color: colors.text }]}>{t("blockAadhaarSub")}</Text>
                 </View>
                 <Icon name="arrow-forward" size={18} color={colors.textMuted} />
               </Pressable>
@@ -472,8 +513,8 @@ export default function SettingsScreen() {
                   <Icon name="bulb-outline" size={18} color={colors.success} />
                 </View>
                 <View style={styles.infoCopy}>
-                  <Text style={[styles.label, { color: colors.textSecondary }]}>Insights</Text>
-                  <Text style={[styles.value, { color: colors.text }]}>Smart loan intelligence</Text>
+                  <Text style={[styles.label, { color: colors.textSecondary }]}>{t("insightsTitle")}</Text>
+                  <Text style={[styles.value, { color: colors.text }]}>{t("insightsSub")}</Text>
                 </View>
                 <Icon name="arrow-forward" size={18} color={colors.textMuted} />
               </Pressable>
@@ -485,12 +526,12 @@ export default function SettingsScreen() {
                   <Icon name="shield-checkmark-outline" size={18} color={colors.teal} />
                 </View>
                 <View style={styles.infoCopy}>
-                  <Text style={[styles.label, { color: colors.textSecondary }]}>Backup & restore</Text>
-                  <Text style={[styles.value, { color: colors.text }]}>Safe merge backup tools</Text>
+                  <Text style={[styles.label, { color: colors.textSecondary }]}>{t("backupRestore")}</Text>
+                  <Text style={[styles.value, { color: colors.text }]}>{t("backupRestoreSub")}</Text>
                 </View>
               </View>
               <Text style={[styles.securityCopy, { color: colors.textSecondary }]}>
-                Backup exports include villages, customers, loans, and payments for this signed-in account only. Restore merges records and never deletes existing records.
+                {t("backupDescription")}
               </Text>
               <View style={styles.backupRow}>
                 <Pressable
@@ -499,7 +540,7 @@ export default function SettingsScreen() {
                   disabled={isBackingUp}
                 >
                   {isBackingUp ? <ActivityIndicator color={colors.white} /> : <Icon name="cloud-download-outline" size={17} color={colors.white} />}
-                  <Text style={styles.backupBtnText}>{isBackingUp ? "Backing up..." : "JSON Backup"}</Text>
+                  <Text style={styles.backupBtnText}>{isBackingUp ? "Backing up..." : t("jsonBackup")}</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.restoreBtn, isRestoring && styles.exportBtnDisabled]}
@@ -507,7 +548,7 @@ export default function SettingsScreen() {
                   disabled={isRestoring}
                 >
                   {isRestoring ? <ActivityIndicator color={colors.blue2} /> : <Icon name="database-outline" size={17} color={colors.blue2} />}
-                  <Text style={[styles.restoreBtnText, { color: colors.blue2 }]}>{isRestoring ? "Restoring..." : "Restore"}</Text>
+                  <Text style={[styles.restoreBtnText, { color: colors.blue2 }]}>{isRestoring ? "Restoring..." : t("restore")}</Text>
                 </Pressable>
               </View>
             </View>
@@ -520,7 +561,7 @@ export default function SettingsScreen() {
               }}
             >
               <Icon name="log-out-outline" size={18} color={colors.white} />
-              <Text style={styles.logoutText}>Logout</Text>
+              <Text style={styles.logoutText}>{t("logout")}</Text>
             </Pressable>
           </View>
         </View>

@@ -23,6 +23,11 @@ import Icon from "../../src/Icon";
 import {
   getBalancingFund,
   saveBalancingFund,
+  getBalancingFundForDate,
+  saveBalancingFundForDate,
+  getAllBalancingFunds,
+  getVillages,
+  getAllActiveCustomersWithVillages,
   getInvestments,
   addInvestment,
   deleteInvestment,
@@ -34,8 +39,12 @@ import {
   Investment,
   Expense,
 } from "../../src/repository";
-import { openAccountStatementPrint } from "../../src/exports";
+import { Village } from "../../src/types";
+import { openAccountStatementPrint, ExportTransaction, ExportTotals } from "../../src/exports";
+
 import { Colors } from "../../src/theme";
+import { useLanguage } from "../../src/language-context";
+
 
 // Helper functions for date formatting & parsing in DD/MM/YYYY
 function formatDDMMYYYY(ts: number): string {
@@ -60,10 +69,35 @@ function parseDDMMYYYY(str: string): number | null {
   return date.getTime();
 }
 
+function ddmmToYyyymmdd(ddmm: string): string {
+  const parts = ddmm.split("/");
+  if (parts.length !== 3) return "";
+  return `${parts[2]}-${parts[1]}-${parts[0]}`;
+}
+
+function yyyymmddToDdmm(yyyymmdd: string): string {
+  const parts = yyyymmdd.split("-");
+  if (parts.length !== 3) return "";
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
+function getStartOfDay(ts: number): number {
+  const d = new Date(ts);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+function getEndOfDay(ts: number): number {
+  const d = new Date(ts);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
+}
+
+
 export default function AccountScreen() {
   const { user } = useAuth();
   const { colors } = useTheme();
   const router = useRouter();
+  const { t, language } = useLanguage();
+  const isTe = language === "te";
 
   // Selected Tab state: 'summary' | 'investments' | 'expenses'
   const [activeTab, setActiveTab] = useState<"summary" | "investments" | "expenses">("summary");
@@ -74,11 +108,17 @@ export default function AccountScreen() {
 
   // Core Data States
   const [bf, setBf] = useState<number>(0);
+  const [dateSpecificBfs, setDateSpecificBfs] = useState<any[]>([]);
+  const [bfDateStr, setBfDateStr] = useState<string>("");
   const [bfInput, setBfInput] = useState<string>("0");
+  const [bfPreFilledStatus, setBfPreFilledStatus] = useState<"saved" | "computed" | "default">("default");
+  
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [payments, setPayments] = useState<any[]>([]); // Collections
   const [loans, setLoans] = useState<any[]>([]);       // Payments
+  const [villages, setVillages] = useState<Village[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
 
   // Date Range inputs (DD/MM/YYYY)
   const [startDateStr, setStartDateStr] = useState<string>("");
@@ -90,6 +130,12 @@ export default function AccountScreen() {
   const [expAmount, setExpAmount] = useState<string>("");
   const [expDesc, setExpDesc] = useState<string>("");
   const [expDate, setExpDate] = useState<string>("");
+
+  // Export Modal Options State
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFormat, setExportFormat] = useState<"pdf" | "jpg">("pdf");
+  const [exportLanguage, setExportLanguage] = useState<"en" | "te">(isTe ? "te" : "en");
+  const [selectedVillageId, setSelectedVillageId] = useState<"ALL" | string>("ALL");
 
   // Default dates on mount
   useEffect(() => {
@@ -108,22 +154,31 @@ export default function AccountScreen() {
     if (!user) return;
     try {
       setLoading(true);
-      const [bfVal, invs, exps, pmts, lns] = await Promise.all([
+      const [bfVal, dateBfs, invs, exps, pmts, lns, vills, custs] = await Promise.all([
         getBalancingFund(user.uid),
+        getAllBalancingFunds(user.uid),
         getInvestments(user.uid),
         getExpenses(user.uid),
         getAllPaymentsEver(user.uid),
         getAllLoansEver(user.uid),
+        getVillages(user.uid),
+        getAllActiveCustomersWithVillages(user.uid),
       ]);
       setBf(bfVal);
-      setBfInput(bfVal.toString());
+      setDateSpecificBfs(dateBfs);
       setInvestments(invs);
       setExpenses(exps);
       setPayments(pmts);
       setLoans(lns);
+      setVillages(vills);
+      setCustomers(custs);
+
+      // Initialize balancing fund date to today
+      const todayStr = formatDDMMYYYY(Date.now());
+      setBfDateStr(todayStr);
     } catch (err: any) {
       console.error(err);
-      Alert.alert("Error Loading Account Data", err?.message ?? "Please try again.");
+      Alert.alert(t("error"), err?.message ?? "Please try again.");
     } finally {
       setLoading(false);
     }
@@ -147,21 +202,105 @@ export default function AccountScreen() {
     setter(formatted);
   };
 
+  // Balancing Fund calculation based on dates
+  const getBalancingFundForDateState = (targetDdmmStr: string) => {
+    const targetYyyymmdd = ddmmToYyyymmdd(targetDdmmStr);
+    if (!targetYyyymmdd) return { amount: 0, exists: false, isPreFilled: false };
+
+    // Check if there is a saved record
+    const savedRecord = dateSpecificBfs.find((item) => item.dateStr === targetYyyymmdd);
+    if (savedRecord) {
+      return { amount: Number(savedRecord.amount || 0), exists: true, isPreFilled: false };
+    }
+
+    // Compute from previous day's closing balance
+    const targetTs = parseDDMMYYYY(targetDdmmStr);
+    if (!targetTs) return { amount: 0, exists: false, isPreFilled: false };
+
+    const prevDayTs = targetTs - 24 * 60 * 60 * 1000;
+    const prevDayEnd = getEndOfDay(prevDayTs);
+
+    // Find the latest override on or before the previous day
+    const overridesBeforeOrOnPrev = dateSpecificBfs
+      .map((item) => ({
+        ...item,
+        timestamp: parseDDMMYYYY(yyyymmddToDdmm(item.dateStr)) ?? 0
+      }))
+      .filter((item) => item.timestamp > 0 && item.timestamp <= prevDayEnd)
+      .sort((a, b) => b.timestamp - a.timestamp); // latest first
+
+    let startBalance = bf; // fallback to global BF
+    let overrideTs: number | null = null;
+
+    if (overridesBeforeOrOnPrev.length > 0) {
+      const latestOverride = overridesBeforeOrOnPrev[0];
+      startBalance = latestOverride.amount;
+      overrideTs = getStartOfDay(latestOverride.timestamp);
+    }
+
+    const startLimit = overrideTs !== null ? overrideTs : 0;
+
+    // Sum transactions in [startLimit, prevDayEnd]
+    const sumInvs = investments
+      .filter((i) => i.date >= startLimit && i.date <= prevDayEnd)
+      .reduce((sum, i) => sum + i.amount, 0);
+
+    const sumColls = payments
+      .filter((p) => {
+        const ts = p.date instanceof Date ? p.date.getTime() : p.date;
+        return p.paymentType === "REGULAR" && ts >= startLimit && ts <= prevDayEnd;
+      })
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const sumLoans = loans
+      .filter((l) => {
+        const ts = l.date instanceof Date ? l.date.getTime() : l.date;
+        return ts >= startLimit && ts <= prevDayEnd;
+      })
+      .reduce((sum, l) => sum + l.amount, 0);
+
+    const sumExps = expenses
+      .filter((e) => e.date >= startLimit && e.date <= prevDayEnd)
+      .reduce((sum, e) => sum + e.amount, 0);
+
+    const closingBalance = startBalance + sumInvs + sumColls - sumLoans - sumExps;
+    return {
+      amount: closingBalance,
+      exists: false,
+      isPreFilled: true
+    };
+  };
+
+  // Reactively calculate bfInput & pre-filled status when date or dependencies change
+  useEffect(() => {
+    if (!bfDateStr || loading) return;
+    const res = getBalancingFundForDateState(bfDateStr);
+    setBfInput(res.amount.toString());
+    setBfPreFilledStatus(res.exists ? "saved" : (res.isPreFilled ? "computed" : "default"));
+  }, [bfDateStr, dateSpecificBfs, bf, investments, expenses, payments, loans, loading]);
+
   // Balancing Fund Save
   const handleSaveBf = async () => {
     if (!user) return;
     const amount = parseFloat(bfInput);
     if (isNaN(amount) || amount < 0) {
-      Alert.alert("Invalid Amount", "Please enter a valid non-negative starting balance.");
+      Alert.alert(t("error"), "Please enter a valid non-negative starting balance.");
+      return;
+    }
+    const yyyymmdd = ddmmToYyyymmdd(bfDateStr);
+    if (!yyyymmdd) {
+      Alert.alert(t("error"), "Please enter a valid date in DD/MM/YYYY format.");
       return;
     }
     try {
       setSubmitting(true);
-      await saveBalancingFund(user.uid, amount);
-      setBf(amount);
-      Alert.alert("Success", "Balancing Fund starting balance updated successfully!");
+      await saveBalancingFundForDate(user.uid, amount, yyyymmdd);
+      // Reload lists
+      const dateBfs = await getAllBalancingFunds(user.uid);
+      setDateSpecificBfs(dateBfs);
+      Alert.alert(t("success"), "Balancing Fund updated for " + bfDateStr);
     } catch (err: any) {
-      Alert.alert("Save Failed", err?.message ?? "An error occurred.");
+      Alert.alert(t("error"), err?.message ?? "An error occurred.");
     } finally {
       setSubmitting(false);
     }
@@ -172,12 +311,12 @@ export default function AccountScreen() {
     if (!user) return;
     const amount = parseFloat(invAmount);
     if (isNaN(amount) || amount <= 0) {
-      Alert.alert("Invalid Amount", "Please enter a valid investment amount.");
+      Alert.alert(t("error"), "Please enter a valid investment amount.");
       return;
     }
     const timestamp = parseDDMMYYYY(invDate);
     if (!timestamp) {
-      Alert.alert("Invalid Date", "Please enter a valid date in DD/MM/YYYY format.");
+      Alert.alert(t("error"), "Please enter a valid date in DD/MM/YYYY format.");
       return;
     }
     try {
@@ -187,19 +326,19 @@ export default function AccountScreen() {
       // Refresh list
       const invs = await getInvestments(user.uid);
       setInvestments(invs);
-      Alert.alert("Success", "Investment entry recorded.");
+      Alert.alert(t("success"), "Investment entry recorded.");
     } catch (err: any) {
-      Alert.alert("Add Failed", err?.message ?? "An error occurred.");
+      Alert.alert(t("error"), err?.message ?? "An error occurred.");
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDeleteInvestment = (id: string) => {
-    Alert.alert("Delete Investment", "Are you sure you want to delete this investment entry?", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("delete"), "Are you sure you want to delete this investment entry?", [
+      { text: t("cancel"), style: "cancel" },
       {
-        text: "Delete",
+        text: t("delete"),
         style: "destructive",
         onPress: async () => {
           try {
@@ -208,7 +347,7 @@ export default function AccountScreen() {
             const invs = await getInvestments(user!.uid);
             setInvestments(invs);
           } catch (err: any) {
-            Alert.alert("Error deleting", err.message);
+            Alert.alert(t("error"), err.message);
           } finally {
             setLoading(false);
           }
@@ -222,16 +361,16 @@ export default function AccountScreen() {
     if (!user) return;
     const amount = parseFloat(expAmount);
     if (isNaN(amount) || amount <= 0) {
-      Alert.alert("Invalid Amount", "Please enter a valid expense amount.");
+      Alert.alert(t("error"), "Please enter a valid expense amount.");
       return;
     }
     if (!expDesc.trim()) {
-      Alert.alert("Description Required", "Please enter a description (e.g. Petrol, Office Supplies).");
+      Alert.alert(t("error"), "Please enter a description (e.g. Petrol, Office Supplies).");
       return;
     }
     const timestamp = parseDDMMYYYY(expDate);
     if (!timestamp) {
-      Alert.alert("Invalid Date", "Please enter a valid date in DD/MM/YYYY format.");
+      Alert.alert(t("error"), "Please enter a valid date in DD/MM/YYYY format.");
       return;
     }
     try {
@@ -242,19 +381,19 @@ export default function AccountScreen() {
       // Refresh list
       const exps = await getExpenses(user.uid);
       setExpenses(exps);
-      Alert.alert("Success", "Expense entry recorded.");
+      Alert.alert(t("success"), "Expense entry recorded.");
     } catch (err: any) {
-      Alert.alert("Add Failed", err?.message ?? "An error occurred.");
+      Alert.alert(t("error"), err?.message ?? "An error occurred.");
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDeleteExpense = (id: string) => {
-    Alert.alert("Delete Expense", "Are you sure you want to delete this expense entry?", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("delete"), "Are you sure you want to delete this expense entry?", [
+      { text: t("cancel"), style: "cancel" },
       {
-        text: "Delete",
+        text: t("delete"),
         style: "destructive",
         onPress: async () => {
           try {
@@ -263,7 +402,7 @@ export default function AccountScreen() {
             const exps = await getExpenses(user!.uid);
             setExpenses(exps);
           } catch (err: any) {
-            Alert.alert("Error deleting", err.message);
+            Alert.alert(t("error"), err.message);
           } finally {
             setLoading(false);
           }
@@ -271,6 +410,11 @@ export default function AccountScreen() {
       },
     ]);
   };
+
+  // Dynamic starting balance for the selected period
+  const periodBf = useMemo(() => {
+    return getBalancingFundForDateState(startDateStr).amount;
+  }, [startDateStr, dateSpecificBfs, bf, investments, expenses, payments, loans]);
 
   // Date Range Filtering and Summary Calculations
   const calculatedSummary = useMemo(() => {
@@ -299,8 +443,8 @@ export default function AccountScreen() {
     const rangeExps = expenses.filter((e) => e.date >= startTs && e.date <= endTs);
     const sumExps = rangeExps.reduce((sum, e) => sum + e.amount, 0);
 
-    // Total = BF + Investments + Collections - Payments - Expenses
-    const netTotal = bf + sumInvs + sumColls - sumLoans - sumExps;
+    // Total = periodBf + Investments + Collections - Payments - Expenses
+    const netTotal = periodBf + sumInvs + sumColls - sumLoans - sumExps;
 
     return {
       sumInvs,
@@ -310,7 +454,7 @@ export default function AccountScreen() {
       netTotal,
       rangeExps,
     };
-  }, [bf, investments, expenses, payments, loans, startDateStr, endDateStr]);
+  }, [periodBf, investments, expenses, payments, loans, startDateStr, endDateStr]);
 
   // Monospace String Output
   const liveMonospaceBreakdown = useMemo(() => {
@@ -318,14 +462,14 @@ export default function AccountScreen() {
     const fmt = (val: number) => Math.round(val).toLocaleString("en-IN");
 
     let text = "";
-    text += `BF               =  ${fmt(bf).padStart(9)}\n`;
+    text += `BF               =  ${fmt(periodBf).padStart(9)}\n`;
     text += `Investments      =  ${fmt(sumInvs).padStart(9)}\n`;
     text += `                 ---------\n`;
-    text += `                 =  ${fmt(bf + sumInvs).padStart(9)}\n`;
+    text += `                 =  ${fmt(periodBf + sumInvs).padStart(9)}\n`;
     text += `Collections      =  ${fmt(sumColls).padStart(9)}\n`;
     text += `Payments         =  ${fmt(sumLoans).padStart(9)}\n`;
     text += `                 ---------\n`;
-    text += `                 =  ${fmt(bf + sumInvs + sumColls - sumLoans).padStart(9)}\n`;
+    text += `                 =  ${fmt(periodBf + sumInvs + sumColls - sumLoans).padStart(9)}\n`;
 
     if (rangeExps.length > 0) {
       rangeExps.forEach((exp) => {
@@ -337,35 +481,148 @@ export default function AccountScreen() {
 
     text += `Total            =  ${fmt(netTotal).padStart(9)}`;
     return text;
-  }, [bf, calculatedSummary]);
+  }, [periodBf, calculatedSummary]);
 
-  // PDF Export Trigger
+  // Trigger export options modal
   const handleExportPDF = () => {
     const startTs = parseDDMMYYYY(startDateStr);
     const endTs = parseDDMMYYYY(endDateStr);
     if (!startTs || !endTs) {
-      Alert.alert("Invalid Dates", "Please make sure date range inputs are complete and valid in DD/MM/YYYY format.");
+      Alert.alert(t("error"), "Please make sure date range inputs are complete and valid in DD/MM/YYYY format.");
       return;
     }
+    setShowExportModal(true);
+  };
 
-    const { sumInvs, sumColls, sumLoans, rangeExps, netTotal } = calculatedSummary;
-    const simpleExpenses = rangeExps.map((e) => ({ amount: e.amount, description: e.description }));
+  // Perform report generation on confirm
+  const handleConfirmExport = async () => {
+    setShowExportModal(false);
 
-    const exported = openAccountStatementPrint(
-      startDateStr,
-      endDateStr,
-      bf,
+    const startTs = parseDDMMYYYY(startDateStr);
+    const endTs = getEndOfDay(parseDDMMYYYY(endDateStr) ?? Date.now());
+    if (!startTs || !endTs) return;
+
+    // Build customer map
+    const customerMap = new Map<string, { name: string; villageId: string; numericalId: string }>();
+    customers.forEach((c) => {
+      customerMap.set(c.id, { name: c.name, villageId: c.villageId, numericalId: c.numericalId });
+    });
+
+    const isAllVillages = selectedVillageId === "ALL";
+
+    // Filter transactions
+    const filteredInvs = isAllVillages
+      ? investments.filter((i) => i.date >= startTs && i.date <= endTs)
+      : [];
+
+    const filteredColls = payments.filter((p) => {
+      const ts = p.date instanceof Date ? p.date.getTime() : p.date;
+      if (ts < startTs || ts > endTs || p.paymentType !== "REGULAR") return false;
+      if (!isAllVillages) {
+        const cust = customerMap.get(p.customerId);
+        if (!cust || cust.villageId !== selectedVillageId) return false;
+      }
+      return true;
+    });
+
+    const filteredLoans = loans.filter((l) => {
+      const ts = l.date instanceof Date ? l.date.getTime() : l.date;
+      if (ts < startTs || ts > endTs) return false;
+      if (!isAllVillages) {
+        const cust = customerMap.get(l.customerId);
+        if (!cust || cust.villageId !== selectedVillageId) return false;
+      }
+      return true;
+    });
+
+    const filteredExps = isAllVillages
+      ? expenses.filter((e) => e.date >= startTs && e.date <= endTs)
+      : [];
+
+    const transList: ExportTransaction[] = [];
+
+    filteredInvs.forEach((i) => {
+      transList.push({
+        date: i.date,
+        type: "INVESTMENT",
+        desc: exportLanguage === "te" ? "పెట్టుబడి" : "Investment",
+        amount: i.amount
+      });
+    });
+
+    filteredColls.forEach((p) => {
+      const cust = customerMap.get(p.customerId);
+      const desc = cust ? `${cust.name} (${cust.numericalId})` : (exportLanguage === "te" ? "వసూలు" : "Collection");
+      transList.push({
+        date: p.date instanceof Date ? p.date.getTime() : p.date,
+        type: "COLLECTION",
+        desc,
+        amount: p.amount
+      });
+    });
+
+    filteredLoans.forEach((l) => {
+      const cust = customerMap.get(l.customerId);
+      const desc = cust ? `${cust.name} (${cust.numericalId})` : (exportLanguage === "te" ? "రుణం" : "Loan");
+      transList.push({
+        date: l.date instanceof Date ? l.date.getTime() : l.date,
+        type: "LOAN",
+        desc,
+        amount: l.amount
+      });
+    });
+
+    filteredExps.forEach((e) => {
+      transList.push({
+        date: e.date,
+        type: "EXPENSE",
+        desc: e.description,
+        amount: e.amount
+      });
+    });
+
+    // Sort chronologically
+    transList.sort((a, b) => a.date - b.date);
+
+    // Calculate totals
+    const sumInvs = filteredInvs.reduce((sum, i) => sum + i.amount, 0);
+    const sumColls = filteredColls.reduce((sum, p) => sum + p.amount, 0);
+    const sumLoans = filteredLoans.reduce((sum, l) => sum + l.amount, 0);
+    const sumExps = filteredExps.reduce((sum, e) => sum + e.amount, 0);
+    const netTotal = periodBf + sumInvs + sumColls - sumLoans - sumExps;
+
+    const totalsObj: ExportTotals = {
       sumInvs,
       sumColls,
       sumLoans,
-      simpleExpenses,
+      sumExps,
       netTotal
+    };
+
+    const targetVillageName = isAllVillages
+      ? (exportLanguage === "te" ? "అన్ని గ్రామాలు" : "All Villages")
+      : (villages.find((v) => v.id === selectedVillageId)?.name ?? "Village");
+
+    const res = await openAccountStatementPrint(
+      startDateStr,
+      endDateStr,
+      periodBf,
+      transList,
+      totalsObj,
+      exportLanguage,
+      targetVillageName,
+      exportFormat,
+      user?.email ?? undefined
     );
 
-    if (exported) {
-      Alert.alert("Report Generated", "The printable account statement has been prepared.");
+    if (res.success) {
+      if (res.copied) {
+        Alert.alert(t("success"), exportLanguage === "te" ? "నివేదిక క్లిప్‌బోర్డ్‌కు నకలు చేయబడింది!" : "Plain text report copied to clipboard!");
+      } else {
+        Alert.alert(t("success"), exportLanguage === "te" ? "నివేదిక విజయవంతంగా రూపొందించబడింది!" : "Report generated successfully!");
+      }
     } else {
-      Alert.alert("Web Only Feature", "PDF export via browser printing is available on the Web interface.");
+      Alert.alert(t("error"), "Export failed. Please check your settings.");
     }
   };
 
@@ -384,9 +641,9 @@ export default function AccountScreen() {
                 <View style={styles.heroIconBox}>
                   <Icon name="wallet-outline" size={24} color={colors.white} />
                 </View>
-                <View>
-                  <Text style={styles.heroTitle}>Account Workspace</Text>
-                  <Text style={styles.heroSubtitle}>Manage Balancing Fund, Investments & Expenses</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.heroTitle}>{t("accountWorkspace")}</Text>
+                  <Text style={styles.heroSubtitle} numberOfLines={1}>{t("accountWorkspaceDesc")}</Text>
                 </View>
               </View>
             </View>
@@ -395,7 +652,7 @@ export default function AccountScreen() {
             <View style={styles.tabBar}>
               {(["summary", "investments", "expenses"] as const).map((tab) => {
                 const active = activeTab === tab;
-                const label = tab === "summary" ? "BF & Summary" : tab[0].toUpperCase() + tab.slice(1);
+                const label = tab === "summary" ? t("bfSummary") : (tab === "investments" ? t("investments") : t("expenses"));
                 return (
                   <Pressable
                     key={tab}
@@ -413,7 +670,7 @@ export default function AccountScreen() {
             {loading ? (
               <View style={styles.loaderContainer}>
                 <ActivityIndicator size="large" color={colors.white} />
-                <Text style={styles.loaderText}>Syncing financial data...</Text>
+                <Text style={styles.loaderText}>{t("loading")}</Text>
               </View>
             ) : (
               <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
@@ -424,19 +681,52 @@ export default function AccountScreen() {
                     
                     {/* A. Balancing Fund Configuration */}
                     <View style={styles.card}>
-                      <Text style={styles.cardTitle}>Balancing Fund (BF)</Text>
-                      <Text style={styles.cardDesc}>Enter the starting balance for your ledger books.</Text>
+                      <Text style={styles.cardTitle}>{t("balancingFund")}</Text>
+                      <Text style={styles.cardDesc}>{t("balancingFundDesc")}</Text>
                       
-                      <View style={styles.inputContainer}>
-                        <Text style={styles.inputLabel}>Starting Amount (Rs.)</Text>
-                        <TextInput
-                          style={styles.textInput}
-                          value={bfInput}
-                          onChangeText={setBfInput}
-                          keyboardType="numeric"
-                          placeholder="e.g. 100000"
-                          placeholderTextColor="#78909c"
-                        />
+                      <View style={styles.datePickerRow}>
+                        <View style={[styles.inputContainer, { flex: 1.2 }]}>
+                          <Text style={styles.inputLabel}>{t("date")}</Text>
+                          <TextInput
+                            style={styles.textInput}
+                            value={bfDateStr}
+                            onChangeText={(txt) => handleDateChange(txt, setBfDateStr)}
+                            placeholder="DD/MM/YYYY"
+                            maxLength={10}
+                            keyboardType="numeric"
+                            placeholderTextColor="#78909c"
+                          />
+                        </View>
+                        <View style={[styles.inputContainer, { flex: 1.8 }]}>
+                          <Text style={styles.inputLabel}>{t("startingAmount")}</Text>
+                          <TextInput
+                            style={styles.textInput}
+                            value={bfInput}
+                            onChangeText={setBfInput}
+                            keyboardType="numeric"
+                            placeholder="e.g. 100000"
+                            placeholderTextColor="#78909c"
+                          />
+                        </View>
+                      </View>
+
+                      {/* Status indicator under the date selector */}
+                      <View style={{ marginTop: 2, paddingHorizontal: 4 }}>
+                        {bfPreFilledStatus === "saved" && (
+                          <Text style={{ fontSize: 11, fontWeight: "700", color: "#0f766e" }}>
+                            ✓ {isTe ? "ఈ తేదీ కొరకు భద్రపరచబడిన రికార్డు" : "Saved record for this date"}
+                          </Text>
+                        )}
+                        {bfPreFilledStatus === "computed" && (
+                          <Text style={{ fontSize: 11, fontWeight: "700", color: "#b45309" }}>
+                            ℹ {isTe ? "మునుపటి ముగింపు బ్యాలెన్స్ నుండి తీసుకోబడింది" : "Pre-filled from previous day's balance"}
+                          </Text>
+                        )}
+                        {bfPreFilledStatus === "default" && (
+                          <Text style={{ fontSize: 11, fontWeight: "600", color: "#64748b" }}>
+                            ℹ {isTe ? "డిఫాల్ట్ 0 గా సెట్ చేయబడింది" : "Defaulted to 0"}
+                          </Text>
+                        )}
                       </View>
 
                       <Pressable 
@@ -445,19 +735,19 @@ export default function AccountScreen() {
                         disabled={submitting}
                       >
                         <Text style={styles.primaryButtonText}>
-                          {submitting ? "Saving..." : "Update Balancing Fund"}
+                          {submitting ? t("loading") : t("updateBalancingFund")}
                         </Text>
                       </Pressable>
                     </View>
 
                     {/* B. Date Range Selector & Summary */}
                     <View style={styles.card}>
-                      <Text style={styles.cardTitle}>Calculate Period Totals</Text>
-                      <Text style={styles.cardDesc}>Select a date range to filter and see calculations.</Text>
+                      <Text style={styles.cardTitle}>{t("calculateTotals")}</Text>
+                      <Text style={styles.cardDesc}>{t("calculateTotalsDesc")}</Text>
 
                       <View style={styles.datePickerRow}>
                         <View style={[styles.inputContainer, { flex: 1 }]}>
-                          <Text style={styles.inputLabel}>Start Date</Text>
+                          <Text style={styles.inputLabel}>{t("startDate")}</Text>
                           <TextInput
                             style={styles.textInput}
                             value={startDateStr}
@@ -469,7 +759,7 @@ export default function AccountScreen() {
                           />
                         </View>
                         <View style={[styles.inputContainer, { flex: 1 }]}>
-                          <Text style={styles.inputLabel}>End Date</Text>
+                          <Text style={styles.inputLabel}>{t("endDate")}</Text>
                           <TextInput
                             style={styles.textInput}
                             value={endDateStr}
@@ -483,13 +773,13 @@ export default function AccountScreen() {
                       </View>
 
                       <View style={styles.breakdownHeaderRow}>
-                        <Text style={styles.breakdownTitle}>Live Summary Breakdown</Text>
+                        <Text style={styles.breakdownTitle}>{t("liveSummary")}</Text>
                         <Pressable 
                           style={styles.pdfButton} 
                           onPress={handleExportPDF}
                         >
                           <Icon name="document-text-outline" size={14} color="#111827" />
-                          <Text style={styles.pdfButtonText}>Export PDF</Text>
+                          <Text style={styles.pdfButtonText}>{isTe ? "ఎగుమతి" : "Export"}</Text>
                         </Pressable>
                       </View>
 
@@ -506,11 +796,11 @@ export default function AccountScreen() {
                     
                     {/* Input card */}
                     <View style={styles.card}>
-                      <Text style={styles.cardTitle}>Add Investment</Text>
-                      <Text style={styles.cardDesc}>Record capital additions to the Balancing Fund.</Text>
+                      <Text style={styles.cardTitle}>{t("addInvestment")}</Text>
+                      <Text style={styles.cardDesc}>{t("addInvestmentDesc")}</Text>
 
                       <View style={styles.inputContainer}>
-                        <Text style={styles.inputLabel}>Investment Amount (Rs.)</Text>
+                        <Text style={styles.inputLabel}>{t("investmentAmount")}</Text>
                         <TextInput
                           style={styles.textInput}
                           value={invAmount}
@@ -522,7 +812,7 @@ export default function AccountScreen() {
                       </View>
 
                       <View style={styles.inputContainer}>
-                        <Text style={styles.inputLabel}>Date</Text>
+                        <Text style={styles.inputLabel}>{t("date")}</Text>
                         <TextInput
                           style={styles.textInput}
                           value={invDate}
@@ -540,21 +830,21 @@ export default function AccountScreen() {
                         disabled={submitting}
                       >
                         <Text style={styles.primaryButtonText}>
-                          {submitting ? "Adding..." : "Add Investment Entry"}
+                          {submitting ? t("loading") : t("addInvestmentEntry")}
                         </Text>
                       </Pressable>
                     </View>
 
                     {/* List investments */}
                     <View style={styles.card}>
-                      <Text style={styles.cardTitle}>Investment Log</Text>
+                      <Text style={styles.cardTitle}>{t("investmentLog")}</Text>
                       
                       {investments.length === 0 ? (
-                        <Text style={styles.emptyText}>No investments recorded yet.</Text>
+                        <Text style={styles.emptyText}>{t("noInvestments")}</Text>
                       ) : (
                         investments.map((item) => (
                           <View key={item.id} style={styles.logRow}>
-                            <View style={styles.logDetails}>
+                             <View style={styles.logDetails}>
                               <Text style={styles.logAmount}>+ Rs.${item.amount.toLocaleString("en-IN")}</Text>
                               <Text style={styles.logDate}>{formatDDMMYYYY(item.date)}</Text>
                             </View>
@@ -578,11 +868,11 @@ export default function AccountScreen() {
                     
                     {/* Input card */}
                     <View style={styles.card}>
-                      <Text style={styles.cardTitle}>Add Expense</Text>
-                      <Text style={styles.cardDesc}>Record company overheads and outgoings.</Text>
+                      <Text style={styles.cardTitle}>{t("addExpense")}</Text>
+                      <Text style={styles.cardDesc}>{t("addExpenseDesc")}</Text>
 
                       <View style={styles.inputContainer}>
-                        <Text style={styles.inputLabel}>Expense Amount (Rs.)</Text>
+                        <Text style={styles.inputLabel}>{t("expenseAmount")}</Text>
                         <TextInput
                           style={styles.textInput}
                           value={expAmount}
@@ -594,7 +884,7 @@ export default function AccountScreen() {
                       </View>
 
                       <View style={styles.inputContainer}>
-                        <Text style={styles.inputLabel}>Description</Text>
+                        <Text style={styles.inputLabel}>{t("description")}</Text>
                         <TextInput
                           style={styles.textInput}
                           value={expDesc}
@@ -605,7 +895,7 @@ export default function AccountScreen() {
                       </View>
 
                       <View style={styles.inputContainer}>
-                        <Text style={styles.inputLabel}>Date</Text>
+                        <Text style={styles.inputLabel}>{t("date")}</Text>
                         <TextInput
                           style={styles.textInput}
                           value={expDate}
@@ -623,17 +913,17 @@ export default function AccountScreen() {
                         disabled={submitting}
                       >
                         <Text style={styles.primaryButtonText}>
-                          {submitting ? "Adding..." : "Add Expense Entry"}
+                          {submitting ? t("loading") : t("addExpenseEntry")}
                         </Text>
                       </Pressable>
                     </View>
 
                     {/* List expenses */}
                     <View style={styles.card}>
-                      <Text style={styles.cardTitle}>Expense Log</Text>
+                      <Text style={styles.cardTitle}>{t("expenseLog")}</Text>
                       
                       {expenses.length === 0 ? (
-                        <Text style={styles.emptyText}>No expenses recorded yet.</Text>
+                        <Text style={styles.emptyText}>{t("noExpenses")}</Text>
                       ) : (
                         expenses.map((item) => (
                           <View key={item.id} style={styles.logRow}>
@@ -659,6 +949,93 @@ export default function AccountScreen() {
                 )}
 
               </ScrollView>
+            )}
+
+            {/* Custom Export Options Dialog Modal */}
+            {showExportModal && (
+              <View style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>{t("selectExportFormat")}</Text>
+                  
+                  {/* Format Choice */}
+                  <Text style={styles.modalLabel}>{isTe ? "ఆకృతి (Format)" : "Export Format"}</Text>
+                  <View style={styles.modalToggleRow}>
+                    <Pressable
+                      style={[styles.modalToggleBtn, exportFormat === "pdf" && styles.modalToggleBtnActive]}
+                      onPress={() => setExportFormat("pdf")}
+                    >
+                      <Text style={[styles.modalToggleText, exportFormat === "pdf" && styles.modalToggleTextActive]}>
+                        {t("pdfReport")}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.modalToggleBtn, exportFormat === "jpg" && styles.modalToggleBtnActive]}
+                      onPress={() => setExportFormat("jpg")}
+                    >
+                      <Text style={[styles.modalToggleText, exportFormat === "jpg" && styles.modalToggleTextActive]}>
+                        {t("jpgImage")}
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  {/* Language Choice */}
+                  <Text style={styles.modalLabel}>{t("chooseLanguage")}</Text>
+                  <View style={styles.modalToggleRow}>
+                    <Pressable
+                      style={[styles.modalToggleBtn, exportLanguage === "en" && styles.modalToggleBtnActive]}
+                      onPress={() => setExportLanguage("en")}
+                    >
+                      <Text style={[styles.modalToggleText, exportLanguage === "en" && styles.modalToggleTextActive]}>
+                        {t("english")}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.modalToggleBtn, exportLanguage === "te" && styles.modalToggleBtnActive]}
+                      onPress={() => setExportLanguage("te")}
+                    >
+                      <Text style={[styles.modalToggleText, exportLanguage === "te" && styles.modalToggleTextActive]}>
+                        {t("telugu")}
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  {/* Village Filter */}
+                  <Text style={styles.modalLabel}>{t("chooseVillage")}</Text>
+                  <View style={{ maxHeight: 110, borderWidth: 1, borderColor: "#e2e8f0", borderRadius: 10, overflow: "hidden" }}>
+                    <ScrollView style={{ backgroundColor: "#f9fafb" }} nestedScrollEnabled={true}>
+                      <Pressable
+                        style={[styles.dropdownItem, selectedVillageId === "ALL" && styles.dropdownItemActive]}
+                        onPress={() => setSelectedVillageId("ALL")}
+                      >
+                        <Text style={[styles.dropdownItemText, selectedVillageId === "ALL" && styles.dropdownItemTextActive]}>
+                          {t("allVillages")}
+                        </Text>
+                      </Pressable>
+                      {villages.map((v) => (
+                        <Pressable
+                          key={v.id}
+                          style={[styles.dropdownItem, selectedVillageId === v.id && styles.dropdownItemActive]}
+                          onPress={() => setSelectedVillageId(v.id)}
+                        >
+                          <Text style={[styles.dropdownItemText, selectedVillageId === v.id && styles.dropdownItemTextActive]}>
+                            {v.name}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </View>
+
+                  {/* Actions Buttons */}
+                  <View style={styles.modalActionsRow}>
+                    <Pressable style={styles.modalCancelBtn} onPress={() => setShowExportModal(false)}>
+                      <Text style={styles.modalCancelText}>{t("cancel")}</Text>
+                    </Pressable>
+                    <Pressable style={styles.modalConfirmBtn} onPress={handleConfirmExport}>
+                      <Text style={styles.modalConfirmText}>{t("export")}</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
             )}
 
           </KeyboardAvoidingView>
@@ -710,4 +1087,117 @@ const styles = StyleSheet.create({
   logDesc: { color: "#111827", fontSize: 14, fontWeight: "800" },
   logDate: { color: "#5f7f7b", fontSize: 11, fontWeight: "700" },
   deleteBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: "#fde7e5", alignItems: "center", justifyContent: "center" },
+
+  // Custom Export Dialog Modal Styles
+  modalOverlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(15, 23, 42, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000
+  },
+  modalContent: {
+    backgroundColor: "#ffffff",
+    borderRadius: 22,
+    padding: 20,
+    width: screenWidth * 0.85,
+    maxWidth: 360,
+    gap: 12,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#0f172a",
+    textAlign: "center",
+    marginBottom: 4
+  },
+  modalLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#0d9488",
+    textTransform: "uppercase",
+    letterSpacing: 0.05,
+    marginTop: 4
+  },
+  modalToggleRow: {
+    flexDirection: "row",
+    gap: 8
+  },
+  modalToggleBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#e2e8f0"
+  },
+  modalToggleBtnActive: {
+    backgroundColor: "#2ec4b6",
+    borderColor: "#2ec4b6"
+  },
+  modalToggleText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748b"
+  },
+  modalToggleTextActive: {
+    color: "#ffffff"
+  },
+  dropdownItem: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9"
+  },
+  dropdownItemActive: {
+    backgroundColor: "#e2fbf7"
+  },
+  dropdownItemText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#475569"
+  },
+  dropdownItemTextActive: {
+    color: "#0d9488"
+  },
+  modalActionsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 8
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center"
+  },
+  modalCancelText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#475569"
+  },
+  modalConfirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "#ff9f1c",
+    alignItems: "center"
+  },
+  modalConfirmText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#111827"
+  }
 });
+

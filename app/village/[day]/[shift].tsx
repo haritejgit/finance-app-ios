@@ -1,15 +1,17 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
-import { Dimensions, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Dimensions, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useAuth } from "../../../src/auth-context";
 import { AnimatedListItem } from "../../../src/components/AnimatedListItem";
 import { AnimatedScreen } from "../../../src/components/AnimatedScreen";
 import { useTheme } from "../../../src/theme-context";
-import { addVillage, deleteVillage, getVillages, updateVillageDayShift } from "../../../src/repository";
+import { addVillage, deleteVillage, getVillages, updateVillageDayShift, updateVillageName } from "../../../src/repository";
 import { Village } from "../../../src/types";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Icon from "../../../src/Icon";
+import { useLanguage } from "../../../src/language-context";
+import { lightImpact } from "../../../src/interactions";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 const SHIFTS = ["Morning", "Evening"] as const;
@@ -20,6 +22,7 @@ export default function VillageListScreen() {
   const shift = typeof params.shift === 'string' ? params.shift : Array.isArray(params.shift) ? params.shift[0] : "Morning";
   const { user, loading: authLoading } = useAuth();
   const { colors } = useTheme();
+  const { t } = useLanguage();
   const insets = useSafeAreaInsets();
   const [villages, setVillages] = useState<Village[]>([]);
   const [newVillageName, setNewVillageName] = useState("");
@@ -28,6 +31,7 @@ export default function VillageListScreen() {
   const [villageToDelete, setVillageToDelete] = useState<Village | null>(null);
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [villageToMove, setVillageToMove] = useState<Village | null>(null);
+  const [editVillageName, setEditVillageName] = useState("");
   const [moveDay, setMoveDay] = useState<string>("Monday");
   const [moveShift, setMoveShift] = useState<string>("Morning");
   const [moveSaving, setMoveSaving] = useState(false);
@@ -57,7 +61,9 @@ export default function VillageListScreen() {
   const filtered = useMemo(() => villages.filter((v) => v.dayOfWeek === day && v.shift === shift), [villages, day, shift]);
 
   const openMoveModal = (village: Village) => {
+    lightImpact(); // Android haptic feedback on long press hold
     setVillageToMove(village);
+    setEditVillageName(village.name);
     setMoveDay(village.dayOfWeek);
     setMoveShift(village.shift);
     setMoveModalVisible(true);
@@ -66,15 +72,22 @@ export default function VillageListScreen() {
   const closeMoveModal = () => {
     setMoveModalVisible(false);
     setVillageToMove(null);
+    setEditVillageName("");
   };
 
   const saveMove = async () => {
     if (!villageToMove) return;
     try {
       setMoveSaving(true);
+      // Update name if changed
+      if (editVillageName.trim() && editVillageName.trim() !== villageToMove.name) {
+        await updateVillageName(villageToMove.id, editVillageName.trim());
+      }
       await updateVillageDayShift(villageToMove.id, moveDay, moveShift);
       closeMoveModal();
       await reload();
+    } catch (err: any) {
+      Alert.alert(t("error"), err.message || "Failed to update village");
     } finally {
       setMoveSaving(false);
     }
@@ -120,25 +133,25 @@ export default function VillageListScreen() {
         <View style={styles.content}>
           <View style={styles.headerContainer}>
             <View style={styles.headerLeft}>
-              <Text style={styles.header}>Villages</Text>
+              <Text style={styles.header}>{t("villages")}</Text>
               <Text style={styles.sub}>{day} • {shift}</Text>
             </View>
           </View>
 
           {loading ? (
             <View style={styles.loadingContainer}>
-              <Text style={[styles.loadingText, { color: colors.text }]}>Loading villages...</Text>
+              <Text style={[styles.loadingText, { color: colors.text }]}>{t("loading")}</Text>
             </View>
           ) : (
             <>
               <View style={styles.statsContainer}>
                 <View style={[styles.statCard, { backgroundColor: colors.card }]}>
                   <Text style={[styles.statNumber, { color: colors.text }]}>{filtered.length}</Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Active Villages</Text>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t("activeVillages")}</Text>
                 </View>
                 <View style={[styles.statCard, { backgroundColor: colors.card }]}>
                   <Text style={[styles.statNumber, { color: colors.text }]}>{villages.length}</Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total Villages</Text>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t("totalVillages")}</Text>
                 </View>
               </View>
 
@@ -166,7 +179,7 @@ export default function VillageListScreen() {
                       </View>
                       <View style={styles.villageInfo}>
                         <Text style={[styles.villageName, { color: colors.text }]}>{item.name}</Text>
-                        <Text style={[styles.villageSubtext, { color: colors.textSecondary }]}>Tap to view customers</Text>
+                        <Text style={[styles.villageSubtext, { color: colors.textSecondary }]}>{t("tapToViewCustomers")}</Text>
                       </View>
                       <View style={[styles.villageIndex, { backgroundColor: colors.primary }]}>
                         <Text style={[styles.villageIndexText, { color: colors.white }]}>{index + 1}</Text>
@@ -178,8 +191,8 @@ export default function VillageListScreen() {
                 ListEmptyComponent={
                   <View style={styles.emptyContainer}>
                     <Icon name="home-outline" size={48} color="rgba(255,255,255,0.7)" />
-                    <Text style={styles.emptyTitle}>No Villages</Text>
-                    <Text style={styles.emptySubtitle}>Add a village to get started</Text>
+                    <Text style={styles.emptyTitle}>{t("noVillages")}</Text>
+                    <Text style={styles.emptySubtitle}>{t("addVillageSubtitle")}</Text>
                   </View>
                 }
               />
@@ -205,10 +218,10 @@ export default function VillageListScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.confirmDialog, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.confirmTitle, { color: colors.text }]}>Add Village</Text>
+            <Text style={[styles.confirmTitle, { color: colors.text }]}>{t("addVillageTitle")}</Text>
             <Text style={[styles.addHint, { color: colors.textSecondary }]}>{day} / {shift}</Text>
             <TextInput
-              placeholder="Village name"
+              placeholder={t("villageNamePlaceholder")}
               value={newVillageName}
               onChangeText={setNewVillageName}
               style={[styles.input, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border, color: colors.text }]}
@@ -218,14 +231,14 @@ export default function VillageListScreen() {
             />
             <View style={styles.confirmButtons}>
               <Pressable style={[styles.cancelBtn, { backgroundColor: colors.border }]} onPress={closeAddModal}>
-                <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+                <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>{t("cancel")}</Text>
               </Pressable>
               <Pressable
                 style={[styles.deleteBtn, { backgroundColor: colors.primary }, !newVillageName.trim() && styles.addBtnDisabled]}
                 onPress={saveVillage}
                 disabled={!newVillageName.trim()}
               >
-                <Text style={[styles.deleteBtnText, { color: colors.white }]}>Add</Text>
+                <Text style={[styles.deleteBtnText, { color: colors.white }]}>{t("add")}</Text>
               </Pressable>
             </View>
           </View>
@@ -241,11 +254,17 @@ export default function VillageListScreen() {
         <View style={styles.moveModalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closeMoveModal} />
           <View style={[styles.moveSheet, { backgroundColor: colors.card, paddingBottom: Math.max(insets.bottom, 16), borderColor: colors.border }]}>
-            <Text style={[styles.moveTitle, { color: colors.text }]}>Move village</Text>
-            {villageToMove && (
-              <Text style={[styles.moveVillageName, { color: colors.primary }]}>{villageToMove.name}</Text>
-            )}
-            <Text style={[styles.moveSectionLabel, { color: colors.textSecondary }]}>Day</Text>
+            <Text style={[styles.moveTitle, { color: colors.text }]}>{t("moveVillage")}</Text>
+            <TextInput
+              placeholder={t("villageNamePlaceholder")}
+              value={editVillageName}
+              onChangeText={setEditVillageName}
+              style={[styles.input, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border, color: colors.text, marginVertical: 12, width: "100%", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 }]}
+              placeholderTextColor={colors.textSecondary}
+              autoCapitalize="words"
+              autoCorrect={false}
+            />
+            <Text style={[styles.moveSectionLabel, { color: colors.textSecondary }]}>{t("day")}</Text>
             <View style={styles.moveChipWrap}>
               {DAYS.map((d) => (
                 <Pressable
@@ -259,7 +278,7 @@ export default function VillageListScreen() {
                 </Pressable>
               ))}
             </View>
-            <Text style={[styles.moveSectionLabel, { color: colors.textSecondary }]}>Shift</Text>
+            <Text style={[styles.moveSectionLabel, { color: colors.textSecondary }]}>{t("shift")}</Text>
             <View style={styles.moveShiftRow}>
               {SHIFTS.map((s) => (
                 <Pressable
@@ -276,13 +295,13 @@ export default function VillageListScreen() {
               onPress={saveMove}
               disabled={moveSaving}
             >
-              <Text style={[styles.moveSaveText, { color: colors.white }]}>{moveSaving ? "Saving…" : "Save"}</Text>
+              <Text style={[styles.moveSaveText, { color: colors.white }]}>{moveSaving ? "Saving…" : t("save")}</Text>
             </Pressable>
             <Pressable style={styles.moveCancelBtn} onPress={closeMoveModal}>
-              <Text style={[styles.moveCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+              <Text style={[styles.moveCancelText, { color: colors.textSecondary }]}>{t("cancel")}</Text>
             </Pressable>
             <Pressable style={styles.moveDeleteLink} onPress={requestDeleteFromMoveModal}>
-              <Text style={[styles.moveDeleteLinkText, { color: colors.error }]}>Delete village…</Text>
+              <Text style={[styles.moveDeleteLinkText, { color: colors.error }]}>{t("deleteVillageTitle")}…</Text>
             </Pressable>
           </View>
         </View>
@@ -296,18 +315,18 @@ export default function VillageListScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.confirmDialog, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.confirmTitle, { color: colors.text }]}>Delete Village</Text>
+            <Text style={[styles.confirmTitle, { color: colors.text }]}>{t("deleteVillageTitle")}</Text>
             <Text style={[styles.confirmMessage, { color: colors.textSecondary }]}>
-              Are you sure you want to delete {villageToDelete?.name}?
+              {t("deleteVillageConfirm")} {villageToDelete?.name}?
               {'\n\n'}
-              WARNING: All customers and their loan/payment records in this village will be permanently deleted!
+              {t("deleteVillageWarning")}
             </Text>
             <View style={styles.confirmButtons}>
               <Pressable style={[styles.cancelBtn, { backgroundColor: colors.border }]} onPress={cancelDelete}>
-                <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+                <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>{t("cancel")}</Text>
               </Pressable>
               <Pressable style={[styles.deleteBtn, { backgroundColor: '#ff4444' }]} onPress={confirmDelete}>
-                <Text style={[styles.deleteBtnText, { color: colors.white }]}>Delete</Text>
+                <Text style={[styles.deleteBtnText, { color: colors.white }]}>{t("delete")}</Text>
               </Pressable>
             </View>
           </View>
