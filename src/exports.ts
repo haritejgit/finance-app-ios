@@ -291,12 +291,16 @@ export async function openAccountStatementPrint(
     <html>
       <head>
         <title>${escapeHtml(subTitle)}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
         <style>
           body {
             margin: 0;
             padding: 30px 15px;
             font-family: system-ui, -apple-system, sans-serif;
-            background-color: #f1f5f9;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: flex-start;
@@ -308,9 +312,9 @@ export async function openAccountStatementPrint(
             width: 100%;
             max-width: 480px;
             border: 1px solid #cbd5e1;
-            border-radius: 12px;
-            padding: 30px;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            border-radius: 16px;
+            padding: 35px 30px;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.2), 0 8px 10px -6px rgb(0 0 0 / 0.2);
             box-sizing: border-box;
           }
           .header {
@@ -338,41 +342,13 @@ export async function openAccountStatementPrint(
             color: #64748b;
           }
           .ledger-content {
-            font-family: 'Courier New', Courier, Consolas, Monaco, monospace;
-            font-size: 14px;
+            font-family: 'Roboto Mono', 'Courier New', Courier, monospace;
+            font-size: 13.5px;
             line-height: 1.6;
             color: #1e293b;
-            margin: 0 0 25px 0;
+            margin: 0 0 20px 0;
             white-space: pre-wrap;
             word-break: break-all;
-          }
-          .signature-section {
-            border-top: 2px dashed #cbd5e1;
-            padding-top: 20px;
-            margin-top: 20px;
-            display: flex;
-            justify-content: space-between;
-            gap: 20px;
-          }
-          .sig-box {
-            flex: 1;
-            text-align: center;
-          }
-          .sig-line {
-            border-top: 1px solid #94a3b8;
-            width: 80%;
-            margin: 35px auto 5px auto;
-          }
-          .sig-label {
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            color: #475569;
-          }
-          .sig-date {
-            font-size: 9px;
-            color: #64748b;
-            margin-top: 4px;
           }
           .footer {
             margin-top: 25px;
@@ -412,7 +388,7 @@ export async function openAccountStatementPrint(
           }
           @media print {
             body {
-              background: #ffffff;
+              background: #ffffff !important;
               padding: 0;
             }
             #statement-card {
@@ -450,19 +426,6 @@ export async function openAccountStatementPrint(
           </div>
 
           <pre class="ledger-content">${escapeHtml(ledgerText)}</pre>
-
-          <div class="signature-section">
-            <div class="sig-box">
-              <div class="sig-line"></div>
-              <div class="sig-label">${isTe ? "ప్రతినిధి సంతకం" : "Rep Signature"}</div>
-              <div class="sig-date">${isTe ? "తేదీ" : "Date"}: _________________</div>
-            </div>
-            <div class="sig-box">
-              <div class="sig-line"></div>
-              <div class="sig-label">${isTe ? "మేనేజర్ సంతకం" : "Manager Signature"}</div>
-              <div class="sig-date">${isTe ? "తేదీ" : "Date"}: _________________</div>
-            </div>
-          </div>
 
           <div class="footer">
             <span>${isTe ? "ఫైనాన్స్ డ్యాష్‌బోర్డ్" : "Finance Dashboard"}</span>
