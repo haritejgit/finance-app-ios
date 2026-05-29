@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useCallback, useEffect, useState, useMemo } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -94,10 +94,13 @@ function getEndOfDay(ts: number): number {
 
 export default function AccountScreen() {
   const { user } = useAuth();
+  if (!user) return null;
   const { colors } = useTheme();
   const router = useRouter();
   const { t, language } = useLanguage();
   const isTe = language === "te";
+
+
 
   // Selected Tab state: 'summary' | 'investments' | 'expenses'
   const [activeTab, setActiveTab] = useState<"summary" | "investments" | "expenses">("summary");
@@ -151,7 +154,7 @@ export default function AccountScreen() {
   }, []);
 
   // Fetch all required data from Firebase
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!user) return;
     try {
       setLoading(true);
@@ -183,14 +186,14 @@ export default function AccountScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, t]);
 
   useEffect(() => {
     loadData();
-  }, [user]);
+  }, [loadData]);
 
   // Dynamic input formatting for date (DD/MM/YYYY)
-  const handleDateChange = (text: string, setter: (val: string) => void) => {
+  const handleDateChange = useCallback((text: string, setter: (val: string) => void) => {
     let cleaned = text.replace(/[^0-9]/g, "");
     if (cleaned.length > 8) cleaned = cleaned.slice(0, 8);
 
@@ -201,7 +204,7 @@ export default function AccountScreen() {
       formatted = `${cleaned.slice(0, 2)}/${cleaned.slice(2)}`;
     }
     setter(formatted);
-  };
+  }, []);
 
   // Balancing Fund calculation based on dates
   const getBalancingFundForDateState = (targetDdmmStr: string) => {
@@ -285,7 +288,7 @@ export default function AccountScreen() {
   }, [bfDateStr, dateSpecificBfs, bf, investments, expenses, payments, loans, loading]);
 
   // Balancing Fund Save
-  const handleSaveBf = async () => {
+  const handleSaveBf = useCallback(async () => {
     if (!user) return;
     const amount = parseFloat(bfInput);
     if (isNaN(amount) || amount < 0) {
@@ -309,10 +312,10 @@ export default function AccountScreen() {
     } finally {
       setSubmitting(false);
     }
-  };
+  }, [user, bfInput, bfDateStr, t]);
 
   // Investment Submit
-  const handleAddInvestment = async () => {
+  const handleAddInvestment = useCallback(async () => {
     if (!user) return;
     const amount = parseFloat(invAmount);
     if (isNaN(amount) || amount <= 0) {
@@ -337,9 +340,9 @@ export default function AccountScreen() {
     } finally {
       setSubmitting(false);
     }
-  };
+  }, [user, invAmount, invDate, t]);
 
-  const handleDeleteInvestment = (id: string) => {
+  const handleDeleteInvestment = useCallback((id: string) => {
     Alert.alert(t("delete"), "Are you sure you want to delete this investment entry?", [
       { text: t("cancel"), style: "cancel" },
       {
@@ -359,10 +362,10 @@ export default function AccountScreen() {
         },
       },
     ]);
-  };
+  }, [user, t]);
 
   // Expense Submit
-  const handleAddExpense = async () => {
+  const handleAddExpense = useCallback(async () => {
     if (!user) return;
     const amount = parseFloat(expAmount);
     if (isNaN(amount) || amount <= 0) {
@@ -392,9 +395,9 @@ export default function AccountScreen() {
     } finally {
       setSubmitting(false);
     }
-  };
+  }, [user, expAmount, expDesc, expDate, t]);
 
-  const handleDeleteExpense = (id: string) => {
+  const handleDeleteExpense = useCallback((id: string) => {
     Alert.alert(t("delete"), "Are you sure you want to delete this expense entry?", [
       { text: t("cancel"), style: "cancel" },
       {
@@ -414,7 +417,7 @@ export default function AccountScreen() {
         },
       },
     ]);
-  };
+  }, [user, t]);
 
   // Dynamic starting balance for the selected period
   const periodBf = useMemo(() => {
@@ -489,7 +492,7 @@ export default function AccountScreen() {
   }, [periodBf, calculatedSummary]);
 
   // Trigger export options modal
-  const handleExportPDF = () => {
+  const handleExportPDF = useCallback(() => {
     const startTs = parseDDMMYYYY(startDateStr);
     const endTs = parseDDMMYYYY(endDateStr);
     if (!startTs || !endTs) {
@@ -497,7 +500,7 @@ export default function AccountScreen() {
       return;
     }
     setShowExportModal(true);
-  };
+  }, [startDateStr, endDateStr, t]);
 
   // Perform report generation on confirm
   const handleConfirmExport = async () => {
