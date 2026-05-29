@@ -92,43 +92,78 @@ export default function BlockAadhaarScreen() {
       return;
     }
     if (!user) return;
-    Alert.alert("Block Aadhaar", `Block ${formatAadhaar(normalized)} from registration?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Block",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setSaving(true);
-            await blockAadhaar(normalized, reason.trim(), user.uid);
-            setAadhaar("");
-            setReason("");
-            setError("");
-            await loadBlocked();
-            setActiveTab("list");
-            Alert.alert("Blocked", "This Aadhaar number has been blocked.");
-          } catch (saveError) {
-            Alert.alert("Block failed", saveError instanceof Error ? saveError.message : "Please try again.");
-          } finally {
-            setSaving(false);
-          }
+
+    const performBlock = async () => {
+      try {
+        setSaving(true);
+        await blockAadhaar(normalized, reason.trim(), user.uid);
+        setAadhaar("");
+        setReason("");
+        setError("");
+        await loadBlocked();
+        setActiveTab("list");
+        if (Platform.OS === "web") {
+          alert("This Aadhaar number has been blocked.");
+        } else {
+          Alert.alert("Blocked", "This Aadhaar number has been blocked.");
+        }
+      } catch (saveError) {
+        if (Platform.OS === "web") {
+          alert(saveError instanceof Error ? saveError.message : "Please try again.");
+        } else {
+          Alert.alert("Block failed", saveError instanceof Error ? saveError.message : "Please try again.");
+        }
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    if (Platform.OS === "web") {
+      const confirm = window.confirm(`Block ${formatAadhaar(normalized)} from registration?`);
+      if (confirm) {
+        performBlock();
+      }
+    } else {
+      Alert.alert("Block Aadhaar", `Block ${formatAadhaar(normalized)} from registration?`, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: performBlock,
         },
-      },
-    ]);
+      ]);
+    }
   }, [aadhaar, loadBlocked, reason, user]);
 
   const confirmUnblock = useCallback((item: BlockedAadhaar) => {
-    Alert.alert("Unblock Aadhaar", `Allow ${maskAadhaar(getBlockedDigits(item))} again?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Unblock",
-        style: "destructive",
-        onPress: async () => {
-          await unblockAadhaar(item.id);
-          await loadBlocked();
+    const performUnblock = async () => {
+      try {
+        await unblockAadhaar(item.id);
+        await loadBlocked();
+      } catch (err) {
+        if (Platform.OS === "web") {
+          alert(err instanceof Error ? err.message : "Failed to unblock.");
+        } else {
+          Alert.alert("Error", err instanceof Error ? err.message : "Failed to unblock.");
+        }
+      }
+    };
+
+    if (Platform.OS === "web") {
+      const confirm = window.confirm(`Allow ${maskAadhaar(getBlockedDigits(item))} again?`);
+      if (confirm) {
+        performUnblock();
+      }
+    } else {
+      Alert.alert("Unblock Aadhaar", `Allow ${maskAadhaar(getBlockedDigits(item))} again?`, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Unblock",
+          style: "destructive",
+          onPress: performUnblock,
         },
-      },
-    ]);
+      ]);
+    }
   }, [loadBlocked]);
 
   return (
