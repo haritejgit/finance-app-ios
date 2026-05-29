@@ -4,8 +4,33 @@ import { db } from "./firebase";
 import { Customer, Loan, Payment, Village } from "./types";
 import { DAY_MS as DAY, endOfMonth, getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, money, startOfDay, startOfMonth, toMillis, weekStart } from "./business-logic";
 import { filterCustomersWithVillage } from "./utils";
+import type { Investment, Expense } from "./repository";
 
 export type CustomerState = "paid" | "pending" | "overdue" | "closed";
+
+export type MonthlyTrendPoint = {
+  label: string;
+  month: number; // 0-indexed month
+  year: number;
+  collected: number;
+  distributed: number;
+  invested: number;
+  expenses: number;
+};
+
+export type ExpenseBreakdownItem = {
+  description: string;
+  amount: number;
+  percentage: number;
+};
+
+export type PredictionItem = {
+  label: string;         // e.g. "July 2026"
+  collection: number;
+  expenses: number;
+  netCash: number;
+  confidence: number;    // 0–100
+};
 
 export type DashboardAnalytics = {
   totals: {
@@ -19,13 +44,26 @@ export type DashboardAnalytics = {
     distributedToday: number;
     collectionToday: number;
     dueMarksThisMonth: number;
+    // NEW: investment/expense-aware fields
+    totalInvestments: number;
+    totalExpenses: number;
+    monthlyInvestments: number;
+    monthlyExpenses: number;
+    previousMonthlyExpenses: number;
+    netCashPosition: number;
+    balancingFund: number;
   };
   weeklyTrend: {
     label: string;
     collection: number;
     distribution: number;
     dues: number;
+    investments: number;
+    expenses: number;
   }[];
+  monthlyTrend: MonthlyTrendPoint[];
+  expenseBreakdown: ExpenseBreakdownItem[];
+  predictions: PredictionItem[];
   recentTransactions: {
     id: string;
     customerId?: string;
@@ -67,6 +105,17 @@ async function getUserCollection<T>(userId: string, name: string): Promise<T[]> 
   return snap.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as object) })) as T[];
 }
 
+// Helper to get start/end of a specific month offset (0 = current, -1 = previous, etc.)
+function getMonthRange(offset: number): { start: number; end: number; label: string; month: number; year: number } {
+  const now = new Date();
+  const targetDate = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  const start = targetDate.getTime();
+  const endDate = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0, 23, 59, 59, 999);
+  const end = endDate.getTime();
+  const label = targetDate.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  return { start, end, label, month: targetDate.getMonth(), year: targetDate.getFullYear() };
+}
+
 export async function getDashboardAnalytics(userId: string): Promise<DashboardAnalytics> {
   const cacheKey = `${DASHBOARD_CACHE_PREFIX}${userId}:${startOfDay(Date.now())}`;
   let cached: DashboardAnalytics | null = null;
@@ -81,13 +130,25 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
   let customersRaw: Customer[];
   let loansRaw: Loan[];
   let paymentsRaw: Payment[];
+  let investmentsRaw: Investment[];
+  let expensesRaw: Expense[];
+  let bfAmount = 0;
+
   try {
-    [villages, customersRaw, loansRaw, paymentsRaw] = await Promise.all([
+    [villages, customersRaw, loansRaw, paymentsRaw, investmentsRaw, expensesRaw] = await Promise.all([
       getUserCollection<Village>(userId, "villages"),
       getUserCollection<Customer>(userId, "customers"),
       getUserCollection<Loan>(userId, "loans"),
       getUserCollection<Payment>(userId, "payments"),
+      getUserCollection<Investment>(userId, "investments"),
+      getUserCollection<Expense>(userId, "expenses"),
     ]);
+    // Get balancing fund
+    const { getDoc, doc: docRef } = await import("firebase/firestore");
+    const bfSnap = await getDoc(docRef(db, "balancingFund", userId));
+    if (bfSnap.exists()) {
+      bfAmount = Number(bfSnap.data().amount || 0);
+    }
   } catch (error) {
     if (cached) return cached;
     throw error;
@@ -154,6 +215,26 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
     .filter((loan) => loan.startDate >= todayStart && loan.startDate <= todayEnd)
     .reduce((sum, loan) => sum + loan.distributedAmount, 0);
 
+  // Investment & Expense calculations
+  const totalInvestments = investmentsRaw.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+  const totalExpenses = expensesRaw.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+  const monthlyInvestments = investmentsRaw
+    .filter((inv) => inv.date >= monthStart && inv.date <= monthEnd)
+    .reduce((sum, inv) => sum + (inv.amount || 0), 0);
+  const monthlyExpenses = expensesRaw
+    .filter((exp) => exp.date >= monthStart && exp.date <= monthEnd)
+    .reduce((sum, exp) => sum + (exp.amount || 0), 0);
+  const previousMonthlyExpenses = expensesRaw
+    .filter((exp) => exp.date >= previousMonthStart && exp.date <= previousMonthEnd)
+    .reduce((sum, exp) => sum + (exp.amount || 0), 0);
+
+  // Net cash position: BF + Investments + Collections - Distributions - Expenses
+  const totalDistributed = loans
+    .filter((loan) => customerById.has(loan.customerId))
+    .reduce((sum, loan) => sum + loan.distributedAmount, 0);
+  const netCashPosition = bfAmount + totalInvestments + totalCollection - totalDistributed - totalExpenses;
+
+  // Weekly trend (8 weeks) — now with investments and expenses
   const currentWeekStart = weekStart(Date.now());
   const weeklyTrend = Array.from({ length: 8 }, (_, index) => {
     const start = currentWeekStart - (7 - index) * 7 * DAY;
@@ -168,6 +249,85 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
         .filter((loan) => loan.startDate >= start && loan.startDate <= end && customerById.has(loan.customerId))
         .reduce((sum, loan) => sum + loan.distributedAmount, 0),
       dues: payments.filter((payment) => payment.paymentType === "DUE" && payment.paymentDate >= start && payment.paymentDate <= end).length,
+      investments: investmentsRaw
+        .filter((inv) => inv.date >= start && inv.date <= end)
+        .reduce((sum, inv) => sum + (inv.amount || 0), 0),
+      expenses: expensesRaw
+        .filter((exp) => exp.date >= start && exp.date <= end)
+        .reduce((sum, exp) => sum + (exp.amount || 0), 0),
+    };
+  });
+
+  // Monthly trend (last 6 months)
+  const monthlyTrend: MonthlyTrendPoint[] = Array.from({ length: 6 }, (_, index) => {
+    const { start, end, label, month, year } = getMonthRange(index - 5); // -5 to 0 = 6 months back to current
+    return {
+      label,
+      month,
+      year,
+      collected: regularPayments
+        .filter((p) => p.paymentDate >= start && p.paymentDate <= end)
+        .reduce((sum, p) => sum + p.amountPaid, 0),
+      distributed: loans
+        .filter((l) => l.startDate >= start && l.startDate <= end && customerById.has(l.customerId))
+        .reduce((sum, l) => sum + l.distributedAmount, 0),
+      invested: investmentsRaw
+        .filter((inv) => inv.date >= start && inv.date <= end)
+        .reduce((sum, inv) => sum + (inv.amount || 0), 0),
+      expenses: expensesRaw
+        .filter((exp) => exp.date >= start && exp.date <= end)
+        .reduce((sum, exp) => sum + (exp.amount || 0), 0),
+    };
+  });
+
+  // Expense breakdown by description (top categories)
+  const expenseMap = new Map<string, number>();
+  expensesRaw.forEach((exp) => {
+    const desc = (exp.description || "Other").trim();
+    expenseMap.set(desc, (expenseMap.get(desc) || 0) + (exp.amount || 0));
+  });
+  const expenseBreakdown: ExpenseBreakdownItem[] = Array.from(expenseMap.entries())
+    .map(([description, amount]) => ({
+      description,
+      amount,
+      percentage: totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0,
+    }))
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 8);
+
+  // 3-month predictions
+  // Use last 3 months of data for averages
+  const last3Months = monthlyTrend.slice(-3);
+  const avgCollection = last3Months.length > 0
+    ? last3Months.reduce((s, m) => s + m.collected, 0) / last3Months.length : 0;
+  const avgDistributed = last3Months.length > 0
+    ? last3Months.reduce((s, m) => s + m.distributed, 0) / last3Months.length : 0;
+  const avgExpenses = last3Months.length > 0
+    ? last3Months.reduce((s, m) => s + m.expenses, 0) / last3Months.length : 0;
+  const avgInvested = last3Months.length > 0
+    ? last3Months.reduce((s, m) => s + m.invested, 0) / last3Months.length : 0;
+
+  // Calculate consistency (coefficient of variation) for confidence
+  const collectionValues = last3Months.map((m) => m.collected);
+  const collMean = avgCollection;
+  const collStdDev = collectionValues.length > 1
+    ? Math.sqrt(collectionValues.reduce((s, v) => s + Math.pow(v - collMean, 2), 0) / collectionValues.length)
+    : 0;
+  const collectionCV = collMean > 0 ? (collStdDev / collMean) : 1;
+  const baseConfidence = Math.max(20, Math.min(95, Math.round(100 - collectionCV * 100)));
+
+  const predictions: PredictionItem[] = Array.from({ length: 3 }, (_, index) => {
+    const { label } = getMonthRange(index + 1); // next 3 months
+    const decay = 1 - (index * 0.05); // slightly reduce confidence further out
+    const projectedCollection = avgCollection * decay;
+    const projectedExpenses = avgExpenses;
+    const projectedNet = netCashPosition + (index + 1) * (avgCollection + avgInvested - avgDistributed - avgExpenses);
+    return {
+      label,
+      collection: Math.round(projectedCollection),
+      expenses: Math.round(projectedExpenses),
+      netCash: Math.round(projectedNet),
+      confidence: Math.max(15, Math.round(baseConfidence * decay)),
     };
   });
 
@@ -246,6 +406,10 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
   const currentWeekCollection = weeklyTrend[weeklyTrend.length - 1]?.collection ?? 0;
   const previousWeekCollection = weeklyTrend[weeklyTrend.length - 2]?.collection ?? 0;
   const collectionRatio = distributedThisMonth > 0 ? monthlyRevenue / distributedThisMonth : 0;
+  const expenseRatio = monthlyRevenue > 0 ? (monthlyExpenses / monthlyRevenue) * 100 : 0;
+
+  // Cash runway: months of operation at current expense rate with no new income
+  const cashRunway = avgExpenses > 0 ? Math.round(netCashPosition / avgExpenses) : 999;
 
   const insights = [
     changeText(monthlyRevenue, previousMonthlyRevenue, "Collections"),
@@ -255,6 +419,13 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
     collectionRatio > 1
       ? "Collections are ahead of this month's fresh distribution, improving cash position."
       : `Monthly recovery is at ${Math.round(collectionRatio * 100)}% of fresh distribution.`,
+    // NEW expense/investment insights
+    monthlyExpenses > 0
+      ? `Expenses consume ${expenseRatio.toFixed(1)}% of this month's collections (Rs.${Math.round(monthlyExpenses).toLocaleString("en-IN")}).`
+      : "No expenses recorded this month — great cost discipline!",
+    monthlyInvestments > 0
+      ? `Rs.${Math.round(monthlyInvestments).toLocaleString("en-IN")} invested this month, growing the capital base.`
+      : "No new investments this month.",
   ];
 
   const aiInsights = [
@@ -264,6 +435,13 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
     dueAlerts.length > 0
       ? `AI insight: ${dueAlerts[0].customerName} is the highest-priority reminder based on recency and outstanding balance.`
       : "AI insight: no urgent overdue pattern is visible in current active loans.",
+    // NEW: cash position prediction
+    cashRunway < 999
+      ? `AI prediction: at current expense rate, cash runway is approximately ${cashRunway} month${cashRunway === 1 ? "" : "s"} without new income.`
+      : "AI prediction: no significant recurring expenses detected; cash position is stable.",
+    netCashPosition > 0
+      ? `Net cash position is positive at Rs.${Math.round(netCashPosition).toLocaleString("en-IN")}. Business is solvent.`
+      : `Warning: net cash position is negative (Rs.${Math.round(Math.abs(netCashPosition)).toLocaleString("en-IN")}). Consider reducing fresh distribution or increasing collections.`,
   ];
 
   const dashboardAnalytics: DashboardAnalytics = {
@@ -278,8 +456,18 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
       distributedToday,
       collectionToday,
       dueMarksThisMonth,
+      totalInvestments,
+      totalExpenses,
+      monthlyInvestments,
+      monthlyExpenses,
+      previousMonthlyExpenses,
+      netCashPosition,
+      balancingFund: bfAmount,
     },
     weeklyTrend,
+    monthlyTrend,
+    expenseBreakdown,
+    predictions,
     recentTransactions,
     dueAlerts,
     customerStates,
@@ -323,6 +511,8 @@ export function subscribeDashboardAnalytics(
     watch("customers"),
     watch("loans"),
     watch("payments"),
+    watch("investments"),
+    watch("expenses"),
   ];
   refresh();
 
