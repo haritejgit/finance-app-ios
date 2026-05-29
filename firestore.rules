@@ -76,7 +76,9 @@ service cloud.firestore {
         validNonNegative('startDate') &&
         validString('id', 80) &&
         validString('customerId', 80) &&
-        validEnum('status', ['ACTIVE', 'CLOSED', 'RENEWED']);
+        validEnum('status', ['ACTIVE', 'CLOSED', 'RENEWED']) &&
+        validEnum('disbursement_mode', ['CASH', 'PHONE']) &&
+        validEnum('disbursementMode', ['CASH', 'PHONE']);
     }
 
     function validPaymentAmount() {
@@ -88,11 +90,35 @@ service cloud.firestore {
         validString('customerId', 80) &&
         validString('notes', 500) &&
         validEnum('paymentType', ['REGULAR', 'DUE', 'RENEWAL_CLOSURE']) &&
-        validEnum('paymentMode', ['CASH', 'PHONE']);
+        validEnum('paymentMode', ['CASH', 'PHONE']) &&
+        validEnum('type', ['CASH', 'PHONE', 'DUE']);
+    }
+
+    function validUserProfileFields() {
+      return validString('id', 80) &&
+        validString('userId', 80) &&
+        validString('email', 240) &&
+        validString('accountNotes', 20000) &&
+        validNonNegative('cashOpeningBalance') &&
+        validNonNegative('phonePeOpeningBalance') &&
+        (!request.resource.data.keys().hasAny(['walletOpeningDate']) ||
+          request.resource.data.walletOpeningDate is number ||
+          request.resource.data.walletOpeningDate is timestamp);
+    }
+
+    function validMoneyEntryFields() {
+      return validNonNegative('amount') &&
+        validNonNegative('date') &&
+        validString('id', 80) &&
+        validString('description', 500) &&
+        validString('investorName', 160) &&
+        validEnum('payment_mode', ['CASH', 'PHONE']);
     }
 
     match /users/{uid} {
-      allow read, create, update, delete: if isSignedIn() && request.auth.uid == uid;
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow create, update: if isSignedIn() && request.auth.uid == uid && validUserProfileFields();
+      allow delete: if false;
     }
 
     match /villages/{docId} {
@@ -136,15 +162,15 @@ service cloud.firestore {
 
     match /investments/{docId} {
       allow read: if ownsExistingDoc();
-      allow create: if createsOwnDoc();
-      allow update: if ownsExistingDoc() && keepsOwnerImmutable();
+      allow create: if createsOwnDoc() && validMoneyEntryFields();
+      allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validMoneyEntryFields();
       allow delete: if ownsExistingDoc();
     }
 
     match /expenses/{docId} {
       allow read: if ownsExistingDoc();
-      allow create: if createsOwnDoc();
-      allow update: if ownsExistingDoc() && keepsOwnerImmutable();
+      allow create: if createsOwnDoc() && validMoneyEntryFields();
+      allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validMoneyEntryFields();
       allow delete: if ownsExistingDoc();
     }
 

@@ -187,6 +187,7 @@ const CustomerItem = React.memo(function CustomerItem({
   onPress,
   onOpenDirections,
   onManualPay,
+  onMarkDue,
   onSaveCurrentLocation,
   status,
   isNew,
@@ -200,6 +201,7 @@ const CustomerItem = React.memo(function CustomerItem({
   onPress: (id: string) => void;
   onOpenDirections: (customer: Customer) => void;
   onManualPay: (customer: Customer, mode: PaymentMode) => void;
+  onMarkDue: (customer: Customer) => void;
   onSaveCurrentLocation: (customer: Customer) => void;
   status: PaymentStatus;
   isNew?: boolean;
@@ -315,7 +317,7 @@ const CustomerItem = React.memo(function CustomerItem({
         <Text style={styles.phoneLabel}>ph.no:- {customer.phone || "-"}</Text>
         {loan ? (
           <View style={styles.balanceRow}>
-            <Text style={styles.balanceLabel}>Balance :- </Text>
+            <Text style={styles.balanceLabel}>Rs. </Text>
             <Text style={[
               styles.balanceAmount,
               loan.balanceAmount <= 0 && styles.balanceCleared,
@@ -405,6 +407,19 @@ const CustomerItem = React.memo(function CustomerItem({
               }}
             >
               <Text selectable={false} style={styles.quickPayText}>PhonePe</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.dueCardBtn, noTextSelection, !canPay && styles.quickPayBtnDisabled]}
+              disabled={!canPay}
+              onPressIn={markActionPress}
+              onPressOut={markActionPress}
+              onPress={(e) => {
+                markActionPress(e);
+                lightImpact();
+                onMarkDue(customer);
+              }}
+            >
+              <Text selectable={false} style={styles.quickPayText}>Due</Text>
             </Pressable>
           </View>
         </View>
@@ -819,8 +834,6 @@ export default function CustomerListScreen() {
     return [...result].sort((a, b) => a.numericalId - b.numericalId);
   }, [customers, debouncedQuery, paymentStatuses, statusFilter]);
 
-  const searchIsActive = debouncedQuery.trim().length > 0;
-
   const customerStats = useMemo(() => {
     return filtered.reduce(
       (stats, customer) => {
@@ -999,6 +1012,24 @@ export default function CustomerListScreen() {
     }
   }, [activeLoans, closeManualPayment, manualPaymentCustomer]);
 
+  const markCustomerDue = useCallback(async (customer: Customer) => {
+    const loan = activeLoans[customer.id];
+    if (!loan || loan.balanceAmount <= 0) {
+      Alert.alert("No active loan", "This customer does not have an active loan to mark due.");
+      return;
+    }
+    try {
+      setPayingCustomerId(customer.id);
+      await markDue(loan, toStartOfDay(Date.now()));
+      setPaymentStatuses((current) => ({ ...current, [customer.id]: "due" }));
+      showToast("success", "Due marked", `${customer.name} has been marked due.`);
+    } catch {
+      Alert.alert("Due failed", "Could not mark this customer as due.");
+    } finally {
+      setPayingCustomerId(null);
+    }
+  }, [activeLoans]);
+
   const renderCustomer = useCallback(
     ({ item }: { item: Customer }) => (
       <CustomerItem 
@@ -1006,6 +1037,7 @@ export default function CustomerListScreen() {
         onPress={openCustomer} 
         onOpenDirections={openDirections}
         onManualPay={openManualPayment}
+        onMarkDue={markCustomerDue}
         onSaveCurrentLocation={saveCurrentLocationForCustomer}
         status={paymentStatuses[item.id] || 'none'} 
         isNew={isNewThisWeek(item.createdAt)}
@@ -1016,7 +1048,7 @@ export default function CustomerListScreen() {
         isUpdatingLocation={updatingLocationCustomerId === item.id}
       />
     ),
-    [activeLoans, lastPaymentDates, openCustomer, openDirections, openManualPayment, paymentStatuses, payingCustomerId, saveCurrentLocationForCustomer, updatingLocationCustomerId]
+    [activeLoans, lastPaymentDates, markCustomerDue, openCustomer, openDirections, openManualPayment, paymentStatuses, payingCustomerId, saveCurrentLocationForCustomer, updatingLocationCustomerId]
   );
 
   return (
@@ -1059,23 +1091,23 @@ export default function CustomerListScreen() {
           <View style={styles.routeSummary}>
             <View style={styles.routeSummaryCard}>
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Total Customers</Text>
-              <Text style={styles.routeSummaryValue}>{customerStats.total}{searchIsActive ? " (filtered)" : ""}</Text>
+              <Text style={styles.routeSummaryValue}>{customerStats.total}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Today Customers</Text>
-              <Text style={styles.routeSummaryValue}>{customerStats.today}{searchIsActive ? " (filtered)" : ""}</Text>
+              <Text style={styles.routeSummaryValue}>{customerStats.today}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Paid</Text>
-              <Text style={styles.routeSummaryValue}>{customerStats.paid}{searchIsActive ? " (filtered)" : ""}</Text>
+              <Text style={styles.routeSummaryValue}>{customerStats.paid}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Total Dues</Text>
-              <Text style={styles.routeSummaryValue}>{customerStats.dues}{searchIsActive ? " (filtered)" : ""}</Text>
+              <Text style={styles.routeSummaryValue}>{customerStats.dues}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Remaining</Text>
-              <Text style={styles.routeSummaryValue}>{customerStats.remaining}{searchIsActive ? " (filtered)" : ""}</Text>
+              <Text style={styles.routeSummaryValue}>{customerStats.remaining}</Text>
             </View>
           </View>
           <FlatList
@@ -1812,9 +1844,10 @@ const styles = StyleSheet.create({
   actionBtnsRow: { flexDirection: "column", alignItems: "center", gap: 5 },
   iconActionBtn: { width: 44, height: 32, borderRadius: 10, backgroundColor: colors.sky, borderWidth: 1, borderColor: "#bfdbfe", justifyContent: "center", alignItems: "center" },
   iconActionBtnMuted: { backgroundColor: "#f3f4f6", borderColor: "#e5e7eb" },
-  payButtonsRow: { flexDirection: "row", gap: 5, width: 104 },
+  payButtonsRow: { flexDirection: "row", gap: 5, width: 150 },
   cashPayBtn: { flex: 1, minHeight: 32, borderRadius: 10, backgroundColor: "#1565C0", justifyContent: "center", alignItems: "center", paddingHorizontal: 4 },
   phonePePayBtn: { flex: 1, minHeight: 32, borderRadius: 10, backgroundColor: "#5F259F", justifyContent: "center", alignItems: "center", paddingHorizontal: 4 },
+  dueCardBtn: { flex: 1, minHeight: 32, borderRadius: 10, backgroundColor: "#C62828", justifyContent: "center", alignItems: "center", paddingHorizontal: 4 },
   quickPayBtnDisabled: { backgroundColor: "#d1d5db" },
   quickPayText: { color: colors.white, fontWeight: "900", fontSize: 9 },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
