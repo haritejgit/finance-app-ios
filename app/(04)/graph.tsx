@@ -505,6 +505,7 @@ export default function GraphScreen() {
                     <MetricCard label="Active Loans" value={`${analytics.totals.activeLoanCount}`} sub={`${analytics.totals.customerCount} customers`} icon="people-outline" tone={Colors.lightSeaGreen} />
                     <MetricCard label="Monthly Invested" value={formatMoney(analytics.totals.monthlyInvestments)} sub="Capital this month" icon="trending-up" tone="#6366f1" />
                     <MetricCard label="Monthly Expenses" value={formatMoney(analytics.totals.monthlyExpenses)} sub="Costs this month" icon="receipt-outline" tone={Colors.danger} />
+                    <MetricCard label="PhonePe Balance" value={formatMoney(analytics.totals.phonePeWalletBalance ?? 0)} sub="Running wallet balance" icon="phone-portrait-outline" tone="#5F259F" />
                   </View>
 
                   {/* 6-Month Trend Chart */}
@@ -631,7 +632,7 @@ export default function GraphScreen() {
                           <View style={styles.rowCopy}>
                             <Text style={styles.rowTitle}>{item.customerName}</Text>
                             <Text style={styles.rowMeta}>
-                              {item.villageName} | {new Date(item.paymentDate).toLocaleDateString("en-IN")}
+                              {item.villageName} | {new Date(item.paymentDate).toLocaleDateString("en-IN")} | {item.paymentMode === "PHONE" ? "PhonePe" : "Cash"}
                             </Text>
                           </View>
                           <Text style={styles.collectionAmount}>{formatMoney(item.amountPaid)}</Text>

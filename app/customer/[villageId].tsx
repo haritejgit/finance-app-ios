@@ -29,8 +29,8 @@ import { useTheme } from "../../src/theme-context";
 import { lightImpact } from "../../src/interactions";
 import { showToast } from "../../src/notify";
 import { getCachedCoordinates, LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
-import { addCustomerWithLoan, addPayment, addPaymentsBatch, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersThisWeek, getVillageById, getCustomerLoanSummary, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, updateCustomer } from "../../src/repository";
-import { Customer, Loan, Village } from "../../src/types";
+import { addCustomerWithLoan, addPayment, addPaymentsBatch, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersThisWeek, getVillageById, getCustomerLoanSummary, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, markDue, updateCustomer } from "../../src/repository";
+import { Customer, Loan, PaymentMode, Village } from "../../src/types";
 import { weekStart } from "../../src/business-logic";
 import { validateAadhaar, validateIndianPhone, validatePositiveAmount } from "../../src/validation";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -45,6 +45,7 @@ type AddCustomerForm = {
   coName: string;
   coId: string;
   principal: string;
+  disbursementMode: PaymentMode;
   coordinates: { latitude: number; longitude: number } | null;
   aadharSubmitted: boolean;
   passportPhotoSubmitted: boolean;
@@ -59,6 +60,7 @@ function createEmptyCustomerForm(): AddCustomerForm {
     coName: "",
     coId: "",
     principal: "",
+    disbursementMode: "CASH",
     coordinates: null,
     aadharSubmitted: false,
     passportPhotoSubmitted: false,
@@ -184,7 +186,6 @@ const CustomerItem = React.memo(function CustomerItem({
   customer,
   onPress,
   onOpenDirections,
-  onQuickPay,
   onManualPay,
   onSaveCurrentLocation,
   status,
@@ -198,8 +199,7 @@ const CustomerItem = React.memo(function CustomerItem({
   customer: Customer;
   onPress: (id: string) => void;
   onOpenDirections: (customer: Customer) => void;
-  onQuickPay: (customer: Customer) => void;
-  onManualPay: (customer: Customer) => void;
+  onManualPay: (customer: Customer, mode: PaymentMode) => void;
   onSaveCurrentLocation: (customer: Customer) => void;
   status: PaymentStatus;
   isNew?: boolean;
@@ -379,23 +379,34 @@ const CustomerItem = React.memo(function CustomerItem({
               <Icon name="location" size={18} color={hasLocation ? colors.blue2 : "#9ca3af"} />
             )}
           </Pressable>
-          <Pressable
-            style={[styles.quickPayBtn, noTextSelection, !canPay && styles.quickPayBtnDisabled]}
-            disabled={!canPay}
-            onPressIn={markActionPress}
-            onPressOut={markActionPress}
-            onPress={(e) => {
-              markActionPress(e);
-              lightImpact();
-              onQuickPay(customer);
-            }}
-            onLongPress={(e) => {
-              markActionPress(e);
-              onManualPay(customer);
-            }}
-          >
-            <Text selectable={false} style={styles.quickPayText}>{isPaying ? "..." : "Pay"}</Text>
-          </Pressable>
+          <View style={styles.payButtonsRow}>
+            <Pressable
+              style={[styles.cashPayBtn, noTextSelection, !canPay && styles.quickPayBtnDisabled]}
+              disabled={!canPay}
+              onPressIn={markActionPress}
+              onPressOut={markActionPress}
+              onPress={(e) => {
+                markActionPress(e);
+                lightImpact();
+                onManualPay(customer, "CASH");
+              }}
+            >
+              <Text selectable={false} style={styles.quickPayText}>{isPaying ? "..." : "Cash"}</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.phonePePayBtn, noTextSelection, !canPay && styles.quickPayBtnDisabled]}
+              disabled={!canPay}
+              onPressIn={markActionPress}
+              onPressOut={markActionPress}
+              onPress={(e) => {
+                markActionPress(e);
+                lightImpact();
+                onManualPay(customer, "PHONE");
+              }}
+            >
+              <Text selectable={false} style={styles.quickPayText}>PhonePe</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     </Pressable>
@@ -453,7 +464,7 @@ export default function CustomerListScreen() {
   const [form, setForm] = useState<AddCustomerForm>(createEmptyCustomerForm);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const addLocationRequestRef = useRef(0);
-  const saveLocationRequestRefs = useRef<Record<string, number>>({});
+  const saveLocationRequestRef = useRef(0);
   const [updatingLocationCustomerId, setUpdatingLocationCustomerId] = useState<string | null>(null);
   const [registrationDate, setRegistrationDate] = useState(formatDateInput(Date.now()));
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -748,36 +759,36 @@ export default function CustomerListScreen() {
   }, []);
 
   const saveCurrentLocationForCustomer = useCallback(async (customer: Customer) => {
-      const requestId = (saveLocationRequestRefs.current[customer.id] || 0) + 1;
-      saveLocationRequestRefs.current[customer.id] = requestId;
-      try {
-        setUpdatingLocationCustomerId(customer.id);
-        const coordinates = await requestCurrentCoordinates();
-        if (saveLocationRequestRefs.current[customer.id] !== requestId) return;
-        const updatedCustomer: Customer = {
-          ...customer,
-          ...coordinates,
-        };
+    const requestId = saveLocationRequestRef.current + 1;
+    saveLocationRequestRef.current = requestId;
+    try {
+      setUpdatingLocationCustomerId(customer.id);
+      const coordinates = await requestCurrentCoordinates();
+      if (saveLocationRequestRef.current !== requestId) return;
+      const updatedCustomer: Customer = {
+        ...customer,
+        ...coordinates,
+      };
 
-        await updateCustomer(updatedCustomer);
-        if (saveLocationRequestRefs.current[customer.id] !== requestId) return;
-        setCustomers((current) =>
-          current.map((item) => (item.id === customer.id ? updatedCustomer : item))
-        );
-        Alert.alert("Location saved", `${customer.name}'s current location has been registered.`);
-      } catch (error) {
-        Alert.alert(
-          error instanceof Error && error.message === LOCATION_PERMISSION_DENIED ? "Location denied" : "Location failed",
-          error instanceof Error && error.message === LOCATION_PERMISSION_DENIED
-            ? "Permission to access location was denied."
-            : getLocationErrorMessage(error)
-        );
-      } finally {
-        if (saveLocationRequestRefs.current[customer.id] === requestId) {
-          setUpdatingLocationCustomerId(null);
-        }
+      await updateCustomer(updatedCustomer);
+      if (saveLocationRequestRef.current !== requestId) return;
+      setCustomers((current) =>
+        current.map((item) => (item.id === customer.id ? updatedCustomer : item))
+      );
+      Alert.alert("Location saved", `${customer.name}'s current location has been registered.`);
+    } catch (error) {
+      Alert.alert(
+        error instanceof Error && error.message === LOCATION_PERMISSION_DENIED ? "Location denied" : "Location failed",
+        error instanceof Error && error.message === LOCATION_PERMISSION_DENIED
+          ? "Permission to access location was denied."
+          : getLocationErrorMessage(error)
+      );
+    } finally {
+      if (saveLocationRequestRef.current === requestId) {
+        setUpdatingLocationCustomerId(null);
       }
-    }, []);
+    }
+  }, []);
 
   const filtered = useMemo(() => {
     const numericQuery = debouncedQuery.replace(/\D/g, "");
@@ -808,16 +819,19 @@ export default function CustomerListScreen() {
     return [...result].sort((a, b) => a.numericalId - b.numericalId);
   }, [customers, debouncedQuery, paymentStatuses, statusFilter]);
 
+  const searchIsActive = debouncedQuery.trim().length > 0;
+
   const customerStats = useMemo(() => {
     return filtered.reduce(
       (stats, customer) => {
         const status = paymentStatuses[customer.id] || "none";
         const isNew = isNewThisWeek(customer.createdAt);
+        const isCreatedToday = isToday(customer.createdAt);
         const isPaid = status === "paid";
         const isDue = status === "due";
 
         stats.total += 1;
-        if (!isNew) stats.today += 1;
+        if (isCreatedToday) stats.today += 1;
         if (isPaid) stats.paid += 1;
         if (isDue) stats.dues += 1;
         if (!isNew && !isPaid && !isDue) stats.remaining += 1;
@@ -858,39 +872,7 @@ export default function CustomerListScreen() {
     });
   }, []);
 
-  const quickPay = useCallback(async (customer: Customer) => {
-    if (!user) return;
-    const loan = activeLoans[customer.id];
-    if (!loan) {
-      Alert.alert("No active loan", "This customer does not have an active loan to mark paid.");
-      return;
-    }
-
-    const amount = getSuggestedPaymentAmount(loan);
-    if (amount <= 0) {
-      Alert.alert("Already cleared", "This loan has no remaining balance.");
-      return;
-    }
-
-    try {
-      setPayingCustomerId(customer.id);
-      await addPayment(loan, amount, toStartOfDay(Date.now()), "CASH");
-      setPaymentStatuses((current) => ({ ...current, [customer.id]: "paid" }));
-      setActiveLoans((current) => ({
-        ...current,
-        [customer.id]: {
-          ...loan,
-          balanceAmount: Math.max(0, loan.balanceAmount - amount),
-        },
-      }));
-    } catch {
-      Alert.alert("Payment failed", "Could not mark this customer as paid. Please try again.");
-    } finally {
-      setPayingCustomerId(null);
-    }
-  }, [activeLoans, user]);
-
-  const openManualPayment = useCallback((customer: Customer) => {
+  const openManualPayment = useCallback((customer: Customer, selectedMode: PaymentMode = "CASH") => {
     const loan = activeLoans[customer.id];
     if (!loan || loan.balanceAmount <= 0) {
       Alert.alert("No active loan", "This customer does not have an active loan to mark paid.");
@@ -898,7 +880,7 @@ export default function CustomerListScreen() {
     }
     setManualPaymentCustomer(customer);
     setManualPaymentAmount(getSuggestedPaymentAmount(loan).toString());
-    setManualPaymentMode("CASH");
+    setManualPaymentMode(selectedMode);
     setManualPaymentError("");
   }, [activeLoans]);
 
@@ -998,13 +980,31 @@ export default function CustomerListScreen() {
     }
   }, [activeLoans, closeManualPayment, manualPaymentAmount, manualPaymentCustomer, manualPaymentMode, user]);
 
+  const confirmManualDue = useCallback(async () => {
+    if (!manualPaymentCustomer) return;
+    const loan = activeLoans[manualPaymentCustomer.id];
+    if (!loan) {
+      setManualPaymentError("No active loan found.");
+      return;
+    }
+    try {
+      setPayingCustomerId(manualPaymentCustomer.id);
+      await markDue(loan, toStartOfDay(Date.now()));
+      setPaymentStatuses((current) => ({ ...current, [manualPaymentCustomer.id]: "due" }));
+      closeManualPayment();
+    } catch {
+      Alert.alert("Due failed", "Could not mark this customer as due.");
+    } finally {
+      setPayingCustomerId(null);
+    }
+  }, [activeLoans, closeManualPayment, manualPaymentCustomer]);
+
   const renderCustomer = useCallback(
     ({ item }: { item: Customer }) => (
       <CustomerItem 
         customer={item} 
         onPress={openCustomer} 
         onOpenDirections={openDirections}
-        onQuickPay={quickPay}
         onManualPay={openManualPayment}
         onSaveCurrentLocation={saveCurrentLocationForCustomer}
         status={paymentStatuses[item.id] || 'none'} 
@@ -1016,7 +1016,7 @@ export default function CustomerListScreen() {
         isUpdatingLocation={updatingLocationCustomerId === item.id}
       />
     ),
-    [activeLoans, lastPaymentDates, openCustomer, openDirections, openManualPayment, paymentStatuses, payingCustomerId, quickPay, saveCurrentLocationForCustomer, updatingLocationCustomerId]
+    [activeLoans, lastPaymentDates, openCustomer, openDirections, openManualPayment, paymentStatuses, payingCustomerId, saveCurrentLocationForCustomer, updatingLocationCustomerId]
   );
 
   return (
@@ -1059,23 +1059,23 @@ export default function CustomerListScreen() {
           <View style={styles.routeSummary}>
             <View style={styles.routeSummaryCard}>
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Total Customers</Text>
-              <Text style={styles.routeSummaryValue}>{customerStats.total}</Text>
+              <Text style={styles.routeSummaryValue}>{customerStats.total}{searchIsActive ? " (filtered)" : ""}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Today Customers</Text>
-              <Text style={styles.routeSummaryValue}>{customerStats.today}</Text>
+              <Text style={styles.routeSummaryValue}>{customerStats.today}{searchIsActive ? " (filtered)" : ""}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Paid</Text>
-              <Text style={styles.routeSummaryValue}>{customerStats.paid}</Text>
+              <Text style={styles.routeSummaryValue}>{customerStats.paid}{searchIsActive ? " (filtered)" : ""}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Total Dues</Text>
-              <Text style={styles.routeSummaryValue}>{customerStats.dues}</Text>
+              <Text style={styles.routeSummaryValue}>{customerStats.dues}{searchIsActive ? " (filtered)" : ""}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Remaining</Text>
-              <Text style={styles.routeSummaryValue}>{customerStats.remaining}</Text>
+              <Text style={styles.routeSummaryValue}>{customerStats.remaining}{searchIsActive ? " (filtered)" : ""}</Text>
             </View>
           </View>
           <FlatList
@@ -1472,6 +1472,25 @@ export default function CustomerListScreen() {
                   </View>
                 </View>
 
+                <Text style={[styles.label, { color: colors.text }]}>How was money given to customer?</Text>
+                <View style={styles.modeRow}>
+                  {(["CASH", "PHONE"] as const).map((disbursementMode) => (
+                    <Pressable
+                      key={disbursementMode}
+                      style={[
+                        styles.modeBtn,
+                        form.disbursementMode === disbursementMode && styles.modeBtnOn,
+                        form.disbursementMode === disbursementMode && disbursementMode === "PHONE" && styles.modeBtnPhoneOn,
+                      ]}
+                      onPress={() => setForm((f) => ({ ...f, disbursementMode }))}
+                    >
+                      <Text style={[styles.modeText, form.disbursementMode === disbursementMode && styles.modeTextOn]}>
+                        {disbursementMode === "CASH" ? "Cash" : "PhonePe"}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+
                 <Text style={[styles.label, { color: colors.text }]}>Submitted Documents</Text>
                 <Pressable
                   style={styles.checkRow}
@@ -1629,7 +1648,8 @@ export default function CustomerListScreen() {
                           coId: form.coId ? Number(form.coId) : undefined,
                         },
                         Number(form.principal || 0),
-                        parsedDate
+                        parsedDate,
+                        form.disbursementMode
                       );
                       setShowAdd(false);
                       resetAddCustomerForm();
@@ -1656,6 +1676,24 @@ export default function CustomerListScreen() {
             <View style={[styles.manualPayModal, { backgroundColor: colors.card }]}>
             <Text style={[styles.manualPayTitle, { color: colors.text }]}>Manual Payment</Text>
             <Text style={[styles.manualPaySubtitle, { color: colors.textSecondary }]}>{manualPaymentCustomer?.name}</Text>
+            <Text style={[styles.label, { color: colors.text }]}>Payment Mode</Text>
+            <View style={styles.modeRow}>
+              {(["CASH", "PHONE"] as const).map((paymentMode) => (
+                <Pressable
+                  key={paymentMode}
+                  style={[
+                    styles.modeBtn,
+                    manualPaymentMode === paymentMode && styles.modeBtnOn,
+                    manualPaymentMode === paymentMode && paymentMode === "PHONE" && styles.modeBtnPhoneOn,
+                  ]}
+                  onPress={() => setManualPaymentMode(paymentMode)}
+                >
+                  <Text style={[styles.modeText, manualPaymentMode === paymentMode && styles.modeTextOn]}>
+                    {paymentMode === "CASH" ? "Cash" : "PhonePe"}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
             <TextInput
               placeholder="Enter amount"
               placeholderTextColor={colors.textMuted}
@@ -1669,20 +1707,13 @@ export default function CustomerListScreen() {
               autoFocus
             />
             {manualPaymentError ? <Text style={styles.aadharWarning}>{manualPaymentError}</Text> : null}
-            <View style={styles.modeRow}>
-              {(["CASH", "PHONE"] as const).map((paymentMode) => (
-                <Pressable
-                  key={paymentMode}
-                  style={[styles.modeBtn, manualPaymentMode === paymentMode && styles.modeBtnOn]}
-                  onPress={() => setManualPaymentMode(paymentMode)}
-                >
-                  <Text style={[styles.modeText, manualPaymentMode === paymentMode && styles.modeTextOn]}>
-                    {paymentMode === "CASH" ? "Cash" : "Phone"}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
+            <Text style={[styles.manualPaySubtitle, { color: colors.textSecondary }]}>
+              Confirm Rs.{Number(manualPaymentAmount || 0).toLocaleString("en-IN")} payment via {manualPaymentMode === "PHONE" ? "PhonePe" : "Cash"}?
+            </Text>
             <View style={styles.manualPayActions}>
+              <Pressable style={[styles.cancelBtn, styles.dueInlineBtn]} onPress={confirmManualDue}>
+                <Text style={styles.dueInlineText}>DUE</Text>
+              </Pressable>
               <Pressable style={styles.cancelBtn} onPress={closeManualPayment}>
                 <Text style={styles.cancelTxt}>Cancel</Text>
               </Pressable>
@@ -1781,9 +1812,11 @@ const styles = StyleSheet.create({
   actionBtnsRow: { flexDirection: "column", alignItems: "center", gap: 5 },
   iconActionBtn: { width: 44, height: 32, borderRadius: 10, backgroundColor: colors.sky, borderWidth: 1, borderColor: "#bfdbfe", justifyContent: "center", alignItems: "center" },
   iconActionBtnMuted: { backgroundColor: "#f3f4f6", borderColor: "#e5e7eb" },
-  quickPayBtn: { width: 44, height: 32, borderRadius: 10, backgroundColor: colors.paidGreen, justifyContent: "center", alignItems: "center" },
+  payButtonsRow: { flexDirection: "row", gap: 5, width: 104 },
+  cashPayBtn: { flex: 1, minHeight: 32, borderRadius: 10, backgroundColor: "#1565C0", justifyContent: "center", alignItems: "center", paddingHorizontal: 4 },
+  phonePePayBtn: { flex: 1, minHeight: 32, borderRadius: 10, backgroundColor: "#5F259F", justifyContent: "center", alignItems: "center", paddingHorizontal: 4 },
   quickPayBtnDisabled: { backgroundColor: "#d1d5db" },
-  quickPayText: { color: colors.white, fontWeight: "900", fontSize: 11 },
+  quickPayText: { color: colors.white, fontWeight: "900", fontSize: 9 },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyText: { color: colors.white, fontSize: 18, fontWeight: "700", marginBottom: 6 },
@@ -1924,7 +1957,10 @@ const styles = StyleSheet.create({
   modeRow: { flexDirection: "row", gap: 10 },
   modeBtn: { flex: 1, borderWidth: 1, borderColor: "#d2d8e1", borderRadius: 12, padding: 12, alignItems: "center", backgroundColor: colors.white },
   modeBtnOn: { backgroundColor: colors.blue2, borderColor: colors.blue2 },
+  modeBtnPhoneOn: { backgroundColor: "#5F259F", borderColor: "#5F259F" },
   modeText: { color: colors.gray, fontWeight: "800" },
   modeTextOn: { color: colors.white },
   manualPayActions: { flexDirection: "row", gap: 10, marginTop: 8 },
+  dueInlineBtn: { borderColor: "#fecaca", backgroundColor: "#fee2e2" },
+  dueInlineText: { color: "#C62828", fontWeight: "900", fontSize: 14 },
 });

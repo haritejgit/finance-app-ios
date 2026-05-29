@@ -102,7 +102,7 @@ const PaymentHistory = memo(function PaymentHistory({
             <Text style={[styles.paymentMode, { color: colors.textSecondary }]}>Cash Payment</Text>
           )}
           {p.paymentMode === "PHONE" && (
-            <Text style={[styles.paymentMode, { color: colors.textSecondary }]}>Phone Payment</Text>
+            <Text style={[styles.paymentMode, { color: colors.textSecondary }]}>PhonePe Payment</Text>
           )}
           {/* Edit/Delete buttons for regular payments only */}
           {p.paymentType === "REGULAR" && onEdit && onDelete && (
@@ -460,6 +460,8 @@ export default function ProfileScreen() {
       percent: Math.min((paid / loan.totalPayable) * 100, 100),
     };
   }, [loan]);
+
+  const disbursementMode = (loan?.disbursement_mode ?? loan?.disbursementMode ?? "CASH") as PaymentMode;
 
   const paymentTimeline = useMemo(() => {
     if (!loan) return [] as { index: number; date: number; status: "paid" | "overdue" | "upcoming"; amount: number }[];
@@ -819,6 +821,20 @@ export default function ProfileScreen() {
             ) : null}
 
             {loan ? (
+              <View style={[styles.disbursementRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.disbursementLabel, { color: colors.textSecondary }]}>Disbursed via:</Text>
+                <Text
+                  style={[
+                    styles.disbursementBadge,
+                    { backgroundColor: disbursementMode === "PHONE" ? "#5F259F" : "#1565C0" },
+                  ]}
+                >
+                  {disbursementMode === "PHONE" ? "PhonePe" : "Cash"}
+                </Text>
+              </View>
+            ) : null}
+
+            {loan ? (
               <View style={[styles.timelineCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <Text style={[styles.timelineTitle, { color: colors.text }]}>Payment Timeline</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.timelineRow}>
@@ -971,6 +987,22 @@ export default function ProfileScreen() {
         <KeyboardAvoidingView style={styles.modalWrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <View style={[styles.modal, { backgroundColor: colors.card }]}>
             <Text style={[styles.modalTitle, { color: colors.text }]}>Record Payment</Text>
+            <Text style={[styles.sectionLabel, { color: colors.text }]}>Payment Mode</Text>
+            <View style={styles.modeRow}>
+              {(["CASH", "PHONE"] as const).map((m) => (
+                <Pressable
+                  key={m}
+                  onPress={() => setMode(m)}
+                  style={[
+                    styles.chip,
+                    mode === m && styles.chipOn,
+                    mode === m && m === "PHONE" && styles.chipPhoneOn,
+                  ]}
+                >
+                  <Text style={mode === m ? styles.chipOnText : styles.chipText}>{m === "PHONE" ? "PhonePe" : "Cash"}</Text>
+                </Pressable>
+              ))}
+            </View>
             <TextInput placeholder="Amount" placeholderTextColor={colors.textMuted} value={amount} onChangeText={setAmount} style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]} keyboardType="numeric" />
             {Platform.OS === 'web' ? (
               <input
@@ -1049,13 +1081,9 @@ export default function ProfileScreen() {
               </View>
             )}
             {!!paymentDateError && <Text style={styles.errorText}>{paymentDateError}</Text>}
-            <View style={styles.row}>
-              {(["CASH", "PHONE"] as const).map((m) => (
-                <Pressable key={m} onPress={() => setMode(m)} style={[styles.chip, mode === m && styles.chipOn]}>
-                  <Text style={mode === m ? styles.chipOnText : styles.chipText}>{m}</Text>
-                </Pressable>
-              ))}
-            </View>
+            <Text style={[styles.paymentMode, { color: colors.textSecondary }]}>
+              Confirm Rs.{Number(amount || 0).toLocaleString("en-IN")} payment via {mode === "PHONE" ? "PhonePe" : "Cash"}?
+            </Text>
             <Pressable
               style={styles.primary}
               onPress={confirmPayment}
@@ -1698,8 +1726,9 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: "#d2d8e1", borderRadius: 12, padding: 12 },
   chip: { flex: 1, borderWidth: 1, borderColor: "#d2d8e1", borderRadius: 12, alignItems: "center", padding: 12 },
   chipOn: { backgroundColor: "#e8f0ff", borderColor: colors.blue2 },
+  chipPhoneOn: { backgroundColor: "#5F259F", borderColor: "#5F259F" },
   chipText: { color: "#555" },
-  chipOnText: { color: colors.blue2, fontWeight: "700" },
+  chipOnText: { color: colors.white, fontWeight: "700" },
   primary: { backgroundColor: colors.blue2, borderRadius: 12, padding: 14, alignItems: "center" },
   primaryText: { color: colors.white, fontWeight: "700" },
   errorText: { color: "#b91c1c", fontSize: 12, marginTop: -4 },
@@ -1739,6 +1768,9 @@ const styles = StyleSheet.create({
   modeBtnActive: { backgroundColor: colors.blue2, borderColor: colors.blue2 },
   modeText: { color: "#666", fontWeight: "600" },
   modeTextActive: { color: colors.white },
+  disbursementRow: { borderRadius: 16, borderWidth: 1, padding: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", shadowColor: "#0f172a", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  disbursementLabel: { fontSize: 13, fontWeight: "800" },
+  disbursementBadge: { overflow: "hidden", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, color: colors.white, fontSize: 12, fontWeight: "900" },
   locationUpdateSection: { backgroundColor: "#f8f9fa", borderRadius: 12, padding: 16, marginVertical: 8, borderWidth: 1, borderColor: "#e0e0e0" },
   locationLabel: { fontSize: 14, fontWeight: "600", color: "#333", marginBottom: 8 },
   locationCoords: { fontSize: 14, color: "#28a745", marginBottom: 12, fontFamily: Platform.OS === "ios" ? "Courier" : "monospace" },

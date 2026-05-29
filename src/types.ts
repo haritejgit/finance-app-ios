@@ -3,6 +3,20 @@ export type LoanStatus = "ACTIVE" | "CLOSED" | "RENEWED";
 export type PaymentType = "REGULAR" | "DUE" | "RENEWAL_CLOSURE";
 export type PaymentMode = "CASH" | "PHONE";
 
+export type UserProfile = {
+  id: string;
+  userId?: string;
+  email?: string;
+  // PRIVATE — never export
+  accountNotes?: string;
+  // PRIVATE — never export
+  cashOpeningBalance?: number;
+  // PRIVATE — never export
+  phonePeOpeningBalance?: number;
+  // PRIVATE — never export
+  walletOpeningDate?: number | unknown;
+};
+
 export type Village = {
   id: string;
   name: string;
@@ -37,23 +51,11 @@ export type Loan = {
   interestAmount: number;
   totalPayable: number;
   balanceAmount: number;
-  coId?: number;
-  villageId: string;
-  userId: string;
-  isActive: boolean;
-  createdAt: number;
-};
-
-export type Loan = {
-  id: string;
-  customerId: string;
-  principalAmount: number;
-  interestAmount: number;
-  totalPayable: number;
-  balanceAmount: number;
   userId: string;
   startDate: number;
   status: LoanStatus;
+  disbursement_mode?: PaymentMode;
+  disbursementMode?: PaymentMode;
 };
 
 export type Payment = {
@@ -65,16 +67,27 @@ export type Payment = {
   weekNumber: number;
   paymentType: PaymentType;
   paymentMode: PaymentMode;
+  type?: PaymentMode | "DUE";
   notes?: string;
   userId: string;
 };
 
-export type AccountNote = {
+export type Investment = {
   id: string;
-  customerId: string;
-  content: string;
-  createdAt: number;
-  updatedAt?: number;
+  userId: string;
+  amount: number;
+  date: number;
+  investorName?: string;
+  payment_mode?: PaymentMode;
+};
+
+export type Expense = {
+  id: string;
+  userId: string;
+  amount: number;
+  description: string;
+  date: number;
+  payment_mode?: PaymentMode;
 };
 
 export type BlockedAadhaar = {

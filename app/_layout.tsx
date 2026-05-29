@@ -62,7 +62,7 @@ function RootLayoutContent() {
       {isOffline && (
         <View style={{ backgroundColor: "#FF9800", paddingVertical: 6, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>
-            You're offline - data may not be current
+            You are offline - data may not be current
           </Text>
         </View>
       )}

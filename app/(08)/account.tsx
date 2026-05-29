@@ -38,11 +38,15 @@ import {
   updateExpense,
   getAllPaymentsEver,
   getAllLoansEver,
+  getUserProfile,
+  saveAccountNotes,
+  saveWalletOpeningBalances,
   Investment,
   Expense,
 } from "../../src/repository";
-import { Village } from "../../src/types";
+import { PaymentMode, UserProfile, Village } from "../../src/types";
 import { openAccountStatementPrint, ExportTransaction, ExportTotals } from "../../src/exports";
+import { calculateWalletBalances } from "../../src/wallet-balances";
 
 import { Colors } from "../../src/theme";
 import { useLanguage } from "../../src/language-context";
@@ -103,8 +107,10 @@ export default function AccountScreen() {
   const { t, language } = useLanguage();
   const isTe = language === "te";
 
-  // Selected Tab state: 'summary' | 'investments' | 'expenses' | 'notes'
-  const [activeTab, setActiveTab] = useState<"summary" | "investments" | "expenses" | "notes">("summary");
+
+
+  // Selected Tab state: 'summary' | 'investments' | 'expenses'
+  const [activeTab, setActiveTab] = useState<"summary" | "investments" | "expenses">("summary");
 
   // Loading States
   const [loading, setLoading] = useState(true);
@@ -124,7 +130,7 @@ export default function AccountScreen() {
   const [loans, setLoans] = useState<any[]>([]);       // Payments
   const [villages, setVillages] = useState<Village[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
-  const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   // Date Range inputs (DD/MM/YYYY)
   const [startDateStr, setStartDateStr] = useState<string>("");
@@ -137,23 +143,29 @@ export default function AccountScreen() {
   const [expAmount, setExpAmount] = useState<string>("");
   const [expDesc, setExpDesc] = useState<string>("");
   const [expDate, setExpDate] = useState<string>("");
+  const [invPaymentMode, setInvPaymentMode] = useState<PaymentMode>("CASH");
+  const [expPaymentMode, setExpPaymentMode] = useState<PaymentMode>("CASH");
+  const [cashOpeningInput, setCashOpeningInput] = useState<string>("0");
+  const [phoneOpeningInput, setPhoneOpeningInput] = useState<string>("0");
+  const [walletOpeningDateInput, setWalletOpeningDateInput] = useState<string>("");
+  const [editingWallet, setEditingWallet] = useState(false);
+  const [notesEditing, setNotesEditing] = useState(false);
+  const [accountNotesInput, setAccountNotesInput] = useState("");
+  const [notesStatus, setNotesStatus] = useState<"idle" | "saved" | "error">("idle");
 
   // Edit Expense Modal State
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
-  // Notes state
-  const [notes, setNotes] = useState<AccountNote[]>([]);
-  const [showNoteModal, setShowNoteModal] = useState(false);
-  const [noteContent, setNoteContent] = useState("");
-  const [editingNote, setEditingNote] = useState<AccountNote | null>(null);
   const [editExpAmount, setEditExpAmount] = useState<string>("");
   const [editExpDesc, setEditExpDesc] = useState<string>("");
   const [editExpDate, setEditExpDate] = useState<string>("");
+  const [editExpPaymentMode, setEditExpPaymentMode] = useState<PaymentMode>("CASH");
 
   // Edit Investment Modal State
   const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null);
   const [editInvAmount, setEditInvAmount] = useState<string>("");
   const [editInvDate, setEditInvDate] = useState<string>("");
   const [editInvName, setEditInvName] = useState<string>("");
+  const [editInvPaymentMode, setEditInvPaymentMode] = useState<PaymentMode>("CASH");
 
   // Export Modal Options State
   const [showExportModal, setShowExportModal] = useState(false);
@@ -178,7 +190,7 @@ export default function AccountScreen() {
     if (!user) return;
     try {
       setLoading(true);
-      const [bfVal, dateBfs, invs, exps, pmts, lns, vills, custs] = await Promise.all([
+      const [bfVal, dateBfs, invs, exps, pmts, lns, vills, custs, profile] = await Promise.all([
         getBalancingFund(user.uid),
         getAllBalancingFunds(user.uid),
         getInvestments(user.uid),
@@ -187,6 +199,7 @@ export default function AccountScreen() {
         getAllLoansEver(user.uid),
         getVillages(user.uid),
         getAllActiveCustomersWithVillages(user.uid),
+        getUserProfile(user.uid),
       ]);
       setBf(bfVal);
       setDateSpecificBfs(dateBfs);
@@ -196,6 +209,13 @@ export default function AccountScreen() {
       setLoans(lns);
       setVillages(vills);
       setCustomers(custs);
+      setUserProfile(profile);
+      // PRIVATE — never export
+      setAccountNotesInput(profile.accountNotes ?? "");
+      setCashOpeningInput(String(profile.cashOpeningBalance ?? 0));
+      setPhoneOpeningInput(String(profile.phonePeOpeningBalance ?? 0));
+      setWalletOpeningDateInput(formatDDMMYYYY((profile.walletOpeningDate as number) || Date.now()));
+      setEditingWallet(!profile.walletOpeningDate);
 
       // Initialize balancing fund date to today
       const todayStr = formatDDMMYYYY(Date.now());
@@ -210,14 +230,10 @@ export default function AccountScreen() {
 
   useEffect(() => {
     loadData();
-    // If notes tab is active, also load notes
-    if (activeTab === "notes" && selectedCustomer) {
-      getAccountNotes(user!.uid, selectedCustomer.id).then(setNotes).catch(console.error);
-    }
-  }, [loadData, activeTab, selectedCustomer]);
+  }, [loadData]);
 
   // Dynamic input formatting for date (DD/MM/YYYY)
-  const handleDateChange = (text: string, setter: (val: string) => void) => {
+  const handleDateChange = useCallback((text: string, setter: (val: string) => void) => {
     let cleaned = text.replace(/[^0-9]/g, "");
     if (cleaned.length > 8) cleaned = cleaned.slice(0, 8);
 
@@ -228,7 +244,7 @@ export default function AccountScreen() {
       formatted = `${cleaned.slice(0, 2)}/${cleaned.slice(2)}`;
     }
     setter(formatted);
-  };
+  }, []);
 
   // Balancing Fund calculation based on dates
   const getBalancingFundForDateState = (targetDdmmStr: string) => {
@@ -354,9 +370,10 @@ export default function AccountScreen() {
     }
     try {
       setSubmitting(true);
-      await addInvestment(user.uid, amount, timestamp, invName.trim() || undefined);
+      await addInvestment(user.uid, amount, timestamp, invName.trim() || undefined, invPaymentMode);
       setInvAmount("");
       setInvName("");
+      setInvPaymentMode("CASH");
       // Refresh list
       const invs = await getInvestments(user.uid);
       setInvestments(invs);
@@ -366,7 +383,7 @@ export default function AccountScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [user, invAmount, invDate, invName, t]);
+  }, [user, invAmount, invDate, invName, invPaymentMode, t]);
 
   const handleDeleteInvestment = useCallback((id: string) => {
     Alert.alert(t("delete"), "Are you sure you want to delete this investment entry?", [
@@ -409,9 +426,10 @@ export default function AccountScreen() {
     }
     try {
       setSubmitting(true);
-      await addExpense(user.uid, amount, expDesc, timestamp);
+      await addExpense(user.uid, amount, expDesc, timestamp, expPaymentMode);
       setExpAmount("");
       setExpDesc("");
+      setExpPaymentMode("CASH");
       // Refresh list
       const exps = await getExpenses(user.uid);
       setExpenses(exps);
@@ -421,7 +439,7 @@ export default function AccountScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [user, expAmount, expDesc, expDate, t]);
+  }, [user, expAmount, expDesc, expDate, expPaymentMode, t]);
 
   const handleDeleteExpense = useCallback((id: string) => {
     Alert.alert(t("delete"), "Are you sure you want to delete this expense entry?", [
@@ -451,6 +469,7 @@ export default function AccountScreen() {
     setEditExpAmount(expense.amount.toString());
     setEditExpDesc(expense.description);
     setEditExpDate(formatDDMMYYYY(expense.date));
+    setEditExpPaymentMode(expense.payment_mode === "PHONE" ? "PHONE" : "CASH");
   }, []);
 
   const handleUpdateExpense = useCallback(async () => {
@@ -471,7 +490,7 @@ export default function AccountScreen() {
     }
     try {
       setSubmitting(true);
-      await updateExpense(editingExpense.id, amount, editExpDesc.trim(), timestamp);
+      await updateExpense(editingExpense.id, amount, editExpDesc.trim(), timestamp, editExpPaymentMode);
       setEditingExpense(null);
       const exps = await getExpenses(user.uid);
       setExpenses(exps);
@@ -481,7 +500,7 @@ export default function AccountScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [user, editingExpense, editExpAmount, editExpDesc, editExpDate, t]);
+  }, [user, editingExpense, editExpAmount, editExpDesc, editExpDate, editExpPaymentMode, t]);
 
   // Edit Investment
   const handleEditInvestment = useCallback((investment: Investment) => {
@@ -489,6 +508,7 @@ export default function AccountScreen() {
     setEditInvAmount(investment.amount.toString());
     setEditInvDate(formatDDMMYYYY(investment.date));
     setEditInvName(investment.investorName || "");
+    setEditInvPaymentMode(investment.payment_mode === "PHONE" ? "PHONE" : "CASH");
   }, []);
 
   const handleUpdateInvestment = useCallback(async () => {
@@ -505,7 +525,7 @@ export default function AccountScreen() {
     }
     try {
       setSubmitting(true);
-      await updateInvestment(editingInvestment.id, amount, timestamp, editInvName.trim());
+      await updateInvestment(editingInvestment.id, amount, timestamp, editInvName.trim(), editInvPaymentMode);
       setEditingInvestment(null);
       const invs = await getInvestments(user.uid);
       setInvestments(invs);
@@ -515,7 +535,7 @@ export default function AccountScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [user, editingInvestment, editInvAmount, editInvDate, editInvName, t]);
+  }, [user, editingInvestment, editInvAmount, editInvDate, editInvName, editInvPaymentMode, t]);
 
   // Dynamic starting balance for the selected period
   const periodBf = useMemo(() => {
@@ -561,6 +581,50 @@ export default function AccountScreen() {
       rangeExps,
     };
   }, [periodBf, investments, expenses, payments, loans, startDateStr, endDateStr]);
+
+  const walletBalances = useMemo(() => {
+    if (!userProfile) return null;
+    return calculateWalletBalances(userProfile, loans as any[], payments as any[], expenses, investments);
+  }, [expenses, investments, loans, payments, userProfile]);
+
+  const handleSaveWalletBalances = useCallback(async () => {
+    if (!user) return;
+    const cashOpening = Number(cashOpeningInput);
+    const phoneOpening = Number(phoneOpeningInput);
+    const openingDate = parseDDMMYYYY(walletOpeningDateInput);
+    if (!Number.isFinite(cashOpening) || !Number.isFinite(phoneOpening) || !openingDate) {
+      Alert.alert(t("error"), "Enter valid Cash, PhonePe, and balance date values.");
+      return;
+    }
+    try {
+      setSubmitting(true);
+      await saveWalletOpeningBalances(user.uid, cashOpening, phoneOpening, openingDate);
+      const profile = await getUserProfile(user.uid);
+      setUserProfile(profile);
+      setEditingWallet(false);
+      Alert.alert(t("success"), "Wallet balances saved.");
+    } catch (err: any) {
+      Alert.alert(t("error"), err?.message ?? "Could not save wallet balances.");
+    } finally {
+      setSubmitting(false);
+    }
+  }, [cashOpeningInput, phoneOpeningInput, walletOpeningDateInput, t, user]);
+
+  const handleSaveNotes = useCallback(async () => {
+    if (!user) return;
+    try {
+      setNotesStatus("idle");
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      // PRIVATE — never export
+      await saveAccountNotes(user.uid, accountNotesInput);
+      setUserProfile((current) => ({ ...(current ?? { id: user.uid, userId: user.uid }), accountNotes: accountNotesInput }));
+      setNotesEditing(false);
+      setNotesStatus("saved");
+      setTimeout(() => setNotesStatus("idle"), 2000);
+    } catch {
+      setNotesStatus("error");
+    }
+  }, [accountNotesInput, user]);
 
   // Monospace String Output
   const liveMonospaceBreakdown = useMemo(() => {
@@ -763,9 +827,9 @@ export default function AccountScreen() {
 
             {/* Tabs Selector */}
             <View style={styles.tabBar}>
-              {(["summary", "investments", "expenses", "notes"] as const).map((tab) => {
+              {(["summary", "investments", "expenses"] as const).map((tab) => {
                 const active = activeTab === tab;
-                const label = tab === "summary" ? t("bfSummary") : (tab === "investments" ? t("investments") : (tab === "expenses" ? t("expenses") : t("notes")));
+                const label = tab === "summary" ? t("bfSummary") : (tab === "investments" ? t("investments") : t("expenses"));
                 return (
                   <Pressable
                     key={tab}
@@ -853,6 +917,97 @@ export default function AccountScreen() {
                       </Pressable>
                     </View>
 
+                    <View style={styles.card}>
+                      <Text style={styles.cardTitle}>My Wallet Balances</Text>
+                      <Text style={styles.cardDesc}>Enter your current balances - the app tracks everything from here</Text>
+                      {walletBalances && !editingWallet ? (
+                        <View style={styles.walletSavedRow}>
+                          <Text style={styles.walletSavedText}>
+                            Cash: Rs.{Math.round(walletBalances.cash.opening).toLocaleString("en-IN")} | PhonePe: Rs.{Math.round(walletBalances.phonePe.opening).toLocaleString("en-IN")} - as of {formatDDMMYYYY(walletBalances.openingDate)}
+                          </Text>
+                          <Pressable style={styles.smallEditBtn} onPress={() => setEditingWallet(true)}>
+                            <Text style={styles.smallEditText}>Edit</Text>
+                          </Pressable>
+                        </View>
+                      ) : (
+                        <>
+                          <View style={styles.datePickerRow}>
+                            <View style={[styles.inputContainer, { flex: 1 }]}>
+                              <Text style={styles.inputLabel}>Cash in Hand (Rs.)</Text>
+                              <TextInput style={styles.textInput} value={cashOpeningInput} onChangeText={setCashOpeningInput} keyboardType="numeric" placeholder="0" placeholderTextColor="#78909c" />
+                            </View>
+                            <View style={[styles.inputContainer, { flex: 1 }]}>
+                              <Text style={styles.inputLabel}>PhonePe Balance (Rs.)</Text>
+                              <TextInput style={styles.textInput} value={phoneOpeningInput} onChangeText={setPhoneOpeningInput} keyboardType="numeric" placeholder="0" placeholderTextColor="#78909c" />
+                            </View>
+                          </View>
+                          <View style={styles.inputContainer}>
+                            <Text style={styles.inputLabel}>Balances as of</Text>
+                            <TextInput style={styles.textInput} value={walletOpeningDateInput} onChangeText={(txt) => handleDateChange(txt, setWalletOpeningDateInput)} placeholder="DD/MM/YYYY" maxLength={10} keyboardType="numeric" placeholderTextColor="#78909c" />
+                          </View>
+                          <Pressable style={[styles.primaryButton, submitting && styles.btnDisabled]} onPress={handleSaveWalletBalances} disabled={submitting}>
+                            <Text style={styles.primaryButtonText}>Save Wallet Balances</Text>
+                          </Pressable>
+                        </>
+                      )}
+                      {walletBalances ? (
+                        <>
+                          <View style={styles.totalFundsCard}>
+                            <Text style={styles.totalFundsLabel}>Total Available</Text>
+                            <Text style={[styles.totalFundsValue, { color: walletBalances.totalAvailable >= 0 ? "#2E7D32" : "#C62828" }]}>
+                              Rs.{Math.round(walletBalances.totalAvailable).toLocaleString("en-IN")}
+                            </Text>
+                          </View>
+                          <View style={styles.walletCardsRow}>
+                            {([
+                              ["Cash", walletBalances.cash, "#1565C0"],
+                              ["PhonePe", walletBalances.phonePe, "#5F259F"],
+                            ] as const).map(([label, wallet, tone]) => (
+                              <View key={label} style={styles.walletCard}>
+                                <Text style={[styles.walletCardTitle, { color: tone }]}>{label}</Text>
+                                <Text style={[styles.walletCardValue, { color: wallet.current >= 0 ? "#2E7D32" : "#C62828" }]}>
+                                  Rs.{Math.round(wallet.current).toLocaleString("en-IN")}
+                                </Text>
+                                <Text style={styles.walletCardSub}>Since {formatDDMMYYYY(walletBalances.openingDate)}</Text>
+                                <Text style={styles.walletBreakdown}>
+                                  Opening: Rs.{Math.round(wallet.opening).toLocaleString("en-IN")} | Disbursed: -Rs.{Math.round(wallet.disbursed).toLocaleString("en-IN")} | Collected: +Rs.{Math.round(wallet.collected).toLocaleString("en-IN")} | Expenses: -Rs.{Math.round(wallet.expenses).toLocaleString("en-IN")} | Investments: -Rs.{Math.round(wallet.investments).toLocaleString("en-IN")}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        </>
+                      ) : null}
+                    </View>
+
+                    <View style={styles.card}>
+                      <Text style={styles.cardTitle}>My Notes</Text>
+                      <Text style={styles.cardDesc}>Write anything - for your eyes only</Text>
+                      {notesEditing || !(userProfile?.accountNotes || "").trim() ? (
+                        <>
+                          <TextInput
+                            style={[styles.textInput, styles.notesInput]}
+                            value={accountNotesInput}
+                            onChangeText={setAccountNotesInput}
+                            placeholder="Write notes about accounts, customers, reminders..."
+                            placeholderTextColor="#78909c"
+                            multiline
+                            numberOfLines={4}
+                          />
+                          {notesStatus === "error" ? <Text style={styles.notesError}>Save failed - try again</Text> : null}
+                          <Pressable style={styles.primaryButton} onPress={handleSaveNotes}>
+                            <Text style={styles.primaryButtonText}>{notesStatus === "saved" ? "Saved ✓" : "Save"}</Text>
+                          </Pressable>
+                        </>
+                      ) : (
+                        <>
+                          <Text style={styles.notesReadOnly}>{userProfile?.accountNotes}</Text>
+                          <Pressable style={styles.smallEditBtn} onPress={() => setNotesEditing(true)}>
+                            <Text style={styles.smallEditText}>Edit</Text>
+                          </Pressable>
+                        </>
+                      )}
+                    </View>
+
                     {/* B. Date Range Selector & Summary */}
                     <View style={styles.card}>
                       <Text style={styles.cardTitle}>{t("calculateTotals")}</Text>
@@ -925,6 +1080,26 @@ export default function AccountScreen() {
                       </View>
 
                       <View style={styles.inputContainer}>
+                        <Text style={styles.inputLabel}>Paid via</Text>
+                        <View style={styles.paymentModeRow}>
+                          {(["CASH", "PHONE"] as const).map((paymentMode) => (
+                            <Pressable
+                              key={paymentMode}
+                              style={[
+                                styles.paymentModeBtn,
+                                invPaymentMode === paymentMode && { backgroundColor: paymentMode === "PHONE" ? "#5F259F" : "#1565C0", borderColor: paymentMode === "PHONE" ? "#5F259F" : "#1565C0" },
+                              ]}
+                              onPress={() => setInvPaymentMode(paymentMode)}
+                            >
+                              <Text style={[styles.paymentModeText, invPaymentMode === paymentMode && styles.paymentModeTextOn]}>
+                                {paymentMode === "PHONE" ? "PhonePe" : "Cash"}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      </View>
+
+                      <View style={styles.inputContainer}>
                         <Text style={styles.inputLabel}>{t("investorName")}</Text>
                         <TextInput
                           style={styles.textInput}
@@ -974,6 +1149,7 @@ export default function AccountScreen() {
                                 <Text style={styles.logDesc}>{item.investorName}</Text>
                               ) : null}
                               <Text style={styles.logDate}>{formatDDMMYYYY(item.date)}</Text>
+                              <Text style={styles.logDate}>Paid via {item.payment_mode === "PHONE" ? "PhonePe" : "Cash"}</Text>
                             </View>
                             <View style={{ flexDirection: "row", gap: 6 }}>
                               <Pressable 
@@ -1017,6 +1193,26 @@ export default function AccountScreen() {
                           placeholder="e.g. 1300"
                           placeholderTextColor="#78909c"
                         />
+                      </View>
+
+                      <View style={styles.inputContainer}>
+                        <Text style={styles.inputLabel}>Paid via</Text>
+                        <View style={styles.paymentModeRow}>
+                          {(["CASH", "PHONE"] as const).map((paymentMode) => (
+                            <Pressable
+                              key={paymentMode}
+                              style={[
+                                styles.paymentModeBtn,
+                                expPaymentMode === paymentMode && { backgroundColor: paymentMode === "PHONE" ? "#5F259F" : "#1565C0", borderColor: paymentMode === "PHONE" ? "#5F259F" : "#1565C0" },
+                              ]}
+                              onPress={() => setExpPaymentMode(paymentMode)}
+                            >
+                              <Text style={[styles.paymentModeText, expPaymentMode === paymentMode && styles.paymentModeTextOn]}>
+                                {paymentMode === "PHONE" ? "PhonePe" : "Cash"}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
                       </View>
 
                       <View style={styles.inputContainer}>
@@ -1069,6 +1265,7 @@ export default function AccountScreen() {
                               </Text>
                               <Text style={styles.logDesc}>{item.description}</Text>
                               <Text style={styles.logDate}>{formatDDMMYYYY(item.date)}</Text>
+                              <Text style={styles.logDate}>Paid via {item.payment_mode === "PHONE" ? "PhonePe" : "Cash"}</Text>
                             </View>
                             <View style={{ flexDirection: "row", gap: 6 }}>
                               <Pressable 
@@ -1202,6 +1399,26 @@ export default function AccountScreen() {
                   </View>
 
                   <View style={styles.inputContainer}>
+                    <Text style={styles.modalLabel}>Paid via</Text>
+                    <View style={styles.paymentModeRow}>
+                      {(["CASH", "PHONE"] as const).map((paymentMode) => (
+                        <Pressable
+                          key={paymentMode}
+                          style={[
+                            styles.paymentModeBtn,
+                            editExpPaymentMode === paymentMode && { backgroundColor: paymentMode === "PHONE" ? "#5F259F" : "#1565C0", borderColor: paymentMode === "PHONE" ? "#5F259F" : "#1565C0" },
+                          ]}
+                          onPress={() => setEditExpPaymentMode(paymentMode)}
+                        >
+                          <Text style={[styles.paymentModeText, editExpPaymentMode === paymentMode && styles.paymentModeTextOn]}>
+                            {paymentMode === "PHONE" ? "PhonePe" : "Cash"}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+
+                  <View style={styles.inputContainer}>
                     <Text style={styles.modalLabel}>{t("description")}</Text>
                     <TextInput
                       style={[styles.textInput, { borderColor: "#e2e8f0" }]}
@@ -1259,6 +1476,26 @@ export default function AccountScreen() {
                       placeholder="e.g. 50000"
                       placeholderTextColor="#78909c"
                     />
+                  </View>
+
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.modalLabel}>Paid via</Text>
+                    <View style={styles.paymentModeRow}>
+                      {(["CASH", "PHONE"] as const).map((paymentMode) => (
+                        <Pressable
+                          key={paymentMode}
+                          style={[
+                            styles.paymentModeBtn,
+                            editInvPaymentMode === paymentMode && { backgroundColor: paymentMode === "PHONE" ? "#5F259F" : "#1565C0", borderColor: paymentMode === "PHONE" ? "#5F259F" : "#1565C0" },
+                          ]}
+                          onPress={() => setEditInvPaymentMode(paymentMode)}
+                        >
+                          <Text style={[styles.paymentModeText, editInvPaymentMode === paymentMode && styles.paymentModeTextOn]}>
+                            {paymentMode === "PHONE" ? "PhonePe" : "Cash"}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
                   </View>
 
                   <View style={styles.inputContainer}>
@@ -1335,6 +1572,26 @@ const styles = StyleSheet.create({
   inputContainer: { gap: 6 },
   inputLabel: { color: "#426c67", fontSize: 12, fontWeight: "800", textTransform: "uppercase" },
   textInput: { backgroundColor: "#f6fffe", borderWidth: 1, borderColor: "#d8f7f4", borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, fontSize: 15, color: "#111827" },
+  notesInput: { minHeight: 108, maxHeight: 300, textAlignVertical: "top" },
+  notesReadOnly: { color: "#111827", fontSize: 14, lineHeight: 21, fontWeight: "600", backgroundColor: "#f6fffe", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#d8f7f4" },
+  notesError: { color: "#C62828", fontSize: 12, fontWeight: "800" },
+  smallEditBtn: { alignSelf: "flex-start", borderRadius: 999, backgroundColor: "#E3F2FD", borderWidth: 1, borderColor: "#1565C0", paddingHorizontal: 12, paddingVertical: 7 },
+  smallEditText: { color: "#1565C0", fontSize: 12, fontWeight: "900" },
+  walletSavedRow: { gap: 8 },
+  walletSavedText: { color: "#111827", fontSize: 13, fontWeight: "800", lineHeight: 19 },
+  totalFundsCard: { borderRadius: 14, backgroundColor: "#F5F9FF", borderWidth: 1, borderColor: "#dbeafe", padding: 14, gap: 4 },
+  totalFundsLabel: { color: "#546E7A", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
+  totalFundsValue: { fontSize: 24, fontWeight: "900" },
+  walletCardsRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  walletCard: { flex: 1, minWidth: 150, borderRadius: 14, backgroundColor: "#ffffff", borderWidth: 1, borderColor: "#dbeafe", padding: 12, gap: 5 },
+  walletCardTitle: { fontSize: 13, fontWeight: "900" },
+  walletCardValue: { fontSize: 20, fontWeight: "900" },
+  walletCardSub: { color: "#546E7A", fontSize: 11, fontWeight: "800" },
+  walletBreakdown: { color: "#546E7A", fontSize: 10, lineHeight: 15, fontWeight: "700" },
+  paymentModeRow: { flexDirection: "row", gap: 8 },
+  paymentModeBtn: { flex: 1, borderRadius: 999, backgroundColor: "#F5F9FF", borderWidth: 1, borderColor: "#d2d8e1", paddingVertical: 10, alignItems: "center" },
+  paymentModeText: { color: "#64748b", fontSize: 13, fontWeight: "900" },
+  paymentModeTextOn: { color: "#ffffff" },
   primaryButton: { backgroundColor: "#ff9f1c", borderRadius: 12, paddingVertical: 14, alignItems: "center", justifyContent: "center" },
   btnDisabled: { opacity: 0.7 },
   primaryButtonText: { color: "#111827", fontSize: 15, fontWeight: "900" },
@@ -1465,4 +1722,3 @@ const styles = StyleSheet.create({
     color: "#111827"
   }
 });
-

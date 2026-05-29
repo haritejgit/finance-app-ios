@@ -5,6 +5,7 @@ import { Customer, Loan, Payment, Village } from "./types";
 import { DAY_MS as DAY, endOfMonth, getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, money, startOfDay, startOfMonth, toMillis, weekStart } from "./business-logic";
 import { filterCustomersWithVillage } from "./utils";
 import type { Investment, Expense } from "./repository";
+import { calculateWalletBalances } from "./wallet-balances";
 
 export type CustomerState = "paid" | "pending" | "overdue" | "closed";
 
@@ -53,6 +54,9 @@ export type DashboardAnalytics = {
     previousMonthlyExpenses: number;
     netCashPosition: number;
     balancingFund: number;
+    cashWalletBalance: number;
+    phonePeWalletBalance: number;
+    totalWalletFunds: number;
   };
   weeklyTrend: {
     label: string;
@@ -134,6 +138,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
   let investmentsRaw: Investment[];
   let expensesRaw: Expense[];
   let bfAmount = 0;
+  let userProfile: any = {};
 
   try {
     [villages, customersRaw, loansRaw, paymentsRaw, investmentsRaw, expensesRaw] = await Promise.all([
@@ -146,10 +151,15 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
     ]);
     // Get balancing fund
     const { getDoc, doc: docRef } = await import("firebase/firestore");
-    const bfSnap = await getDoc(docRef(db, "balancingFund", userId));
+    const [bfSnap, userSnap] = await Promise.all([
+      getDoc(docRef(db, "balancingFund", userId)),
+      getDoc(docRef(db, "users", userId)),
+    ]);
     if (bfSnap.exists()) {
       bfAmount = Number(bfSnap.data().amount || 0);
     }
+    // PRIVATE — never export
+    userProfile = userSnap.exists() ? userSnap.data() : {};
   } catch (error) {
     if (cached) return cached;
     throw error;
@@ -234,6 +244,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
     .filter((loan) => customerById.has(loan.customerId))
     .reduce((sum, loan) => sum + loan.distributedAmount, 0);
   const netCashPosition = bfAmount + totalInvestments + totalCollection - totalDistributed - totalExpenses;
+  const walletBalances = calculateWalletBalances(userProfile, loans as any[], payments as any[], expensesRaw, investmentsRaw);
 
   // Weekly trend (8 weeks) — now with investments and expenses
   const currentWeekStart = weekStart(Date.now());
@@ -465,6 +476,9 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
       previousMonthlyExpenses,
       netCashPosition,
       balancingFund: bfAmount,
+      cashWalletBalance: walletBalances.cash.current,
+      phonePeWalletBalance: walletBalances.phonePe.current,
+      totalWalletFunds: walletBalances.totalAvailable,
     },
     weeklyTrend,
     monthlyTrend,

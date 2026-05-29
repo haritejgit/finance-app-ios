@@ -1,73 +1,56 @@
-Create a comprehensive Finance Management Android Application using Kotlin and Jetpack Compose. The app is designed for field agents to track weekly loan collections, customer profiles, and generate detailed reports.
+Build a near-identical clone of Karthikeya Finance Management, a React Native / Expo field-agent app for weekly micro-loan collection across villages.
 
-### Tech Stack Requirements:
-- Language: Kotlin
-- UI Framework: Jetpack Compose
-- Dependency Injection: Hilt
-- Local Database: Room (with multi-user support via userId)
-- Authentication: Firebase Auth (Email/Password with verification & Google Sign-In)
-- Storage/Backend: Firebase Firestore (for user profile sync)
-- Maps: Google Maps Compose & Play Services Location (for tagging customer houses)
-- Reporting: Apache POI (for advanced Excel generation)
+Project overview:
+Use React Native with Expo SDK 54, TypeScript, expo-router, Firebase Auth, and Cloud Firestore. The live web app is karthikeya-finance.web.app. The app is used by a field finance agent to organize villages by day and shift, register customers, disburse micro-loans, collect weekly payments, mark dues, renew loans, export reports, and monitor funds.
 
-### Core Features & Business Logic:
+Color palette:
+Primary Blue #1565C0, Dark Navy #0D1B2A, Accent #1976D2, Light Tint #E3F2FD, Green #2E7D32, Red #C62828, Orange #C55A11, Purple/PhonePe #5F259F, Card BG #F5F9FF, Text Secondary #546E7A. Main gradient: 135deg from #1565C0 to #0D1B2A.
 
-1. Multi-User Data Isolation:
-   - Every entity (Village, Customer, Loan, Payment) must have a `userId` field.
-   - All database queries must filter by the currently logged-in user's UID to ensure privacy and data isolation.
+Screens:
+Login and Signup (`app/(01)/login.tsx`, `app/(01)/index.tsx`): email/password auth, Google sign-in, forgot password.
+Dashboard/Shift Selection (`app/(02)/shift-selection.tsx`): Mon-Sun day picker, Morning/Evening shift picker, today collection/disbursement cards.
+Village List (`app/village/[day]/[shift].tsx`): add/delete villages scoped to selected day and shift.
+Customer List (`app/customer/[villageId].tsx`): searchable customer cards, stats bar filtered by search, GPS actions, document status, dual pay buttons: Cash blue and PhonePe purple. Payment modal defaults from tapped button and lets user switch mode.
+Add/Edit Customer: name, phone, Aadhaar, GPS/location description, co-applicant, auto book number, principal, registration date, submitted documents, and loan disbursement mode Cash/PhonePe.
+Customer Profile (`app/profile/[customerId].tsx`): profile details, loan status, repayment progress, civil score, payment history, payment edit/delete, disbursement mode badge, PAY/DUE/RENEW flows.
+Payment Modal: unified payment entry for Cash/PhonePe; mode toggle at top; saves payment `type` as CASH or PHONE while retaining existing compatibility fields; DUE saves type DUE.
+Reports (`app/(03)/reports.tsx`): date range reports with Excel/PDF/image style exports and private-field exclusions.
+Analytics (`app/(04)/graph.tsx`): financial dashboard with collections, disbursements, investments, expenses, dues, recent payments, wallet balances, and charts.
+Accounts/Settings (`app/(08)/account.tsx`): balancing fund, wallet opening balances, running Cash/PhonePe balances, private notes, investments, expenses, export controls.
 
-2. Authentication:
-   - Login and Signup screens.
-   - Support for "Forgot Password" flow.
-   - Google Sign-In integration using Credential Manager / One Tap.
-   - Email verification required for email-based accounts.
+Data models:
+UserProfile: id, userId, email, accountNotes?, cashOpeningBalance?, phonePeOpeningBalance?, walletOpeningDate?.
+Village: id, name, dayOfWeek, shift, userId.
+Customer: id, numericalId, name, phone, aadhar, locationDesc, latitude?, longitude?, aadharSubmitted?, passportPhotoSubmitted?, coName?, coId?, villageId, userId, isActive, createdAt.
+Loan: id, customerId, principalAmount, interestAmount, totalPayable, balanceAmount, userId, startDate, status ACTIVE/CLOSED/RENEWED, disbursement_mode? CASH/PHONE.
+Payment: id, loanId, customerId?, amountPaid, paymentDate, weekNumber, paymentType REGULAR/DUE/RENEWAL_CLOSURE, paymentMode CASH/PHONE, type CASH/PHONE/DUE, notes?, userId.
+Expense: id, userId, amount, description, date, payment_mode? CASH/PHONE.
+Investment: id, userId, amount, date, investorName?, payment_mode? CASH/PHONE.
 
-3. Dashboard (Shift Selection):
-   - Welcome header displaying the user's name.
-   - A summary card showing "Total Collection Today" (Sum of all payments made by all customers across all villages for the current date).
-   - Selection of "Collection Day" (Monday-Sunday) and "Shift" (Morning/Evening).
+Firestore schema:
+`users/{userId}` stores private account notes and wallet opening fields.
+`villages/{id}` stores route organization.
+`customers/{id}` stores customer identity, documents, location, and route ownership.
+`loans/{id}` stores principal/interest/payable/balance/status/disbursement mode.
+`payments/{id}` stores collections, dues, renewal closures, and payment mode/type.
+`expenses/{id}` and `investments/{id}` store operational outflows by wallet mode.
+`balancingFund/{id}` stores legacy/current fund overrides.
+`blockedAadhaar/{id}` stores blocked Aadhaar records.
 
-4. Village & Customer Management:
-   - Add/Delete Villages mapped to specific days AND specific shifts (Morning/Evening).
-   - Add Customers within a village with: Name, Phone, Aadhar, Location Description, and C/O Name/ID.
-   - Location Tagging: Ability to capture current GPS coordinates or pick a location manually on a Google Map.
-   - Numerical ID (Book No): Automatic generation of a unique ID for each customer. IDs must reset to 1 for every unique combination of Day and Shift.
-   - Customer Search: Filter by name, ID, phone, or C/O ID.
+Business rules:
+Interest is 20%: `principal * 1.2 = totalPayable`.
+Book number resets per village/day/shift route.
+Civil score starts at 600, adds +10 for on-time payment, subtracts -30 for DUE, clamped 300-900. Labels: Poor <600, Good 600-750, Excellent >750.
+Excel colors: Orange #C55A11 for new loans, black for payments, red fill + white text for dues, purple #5F259F for remaining balance. Apply 2% deduction on total disbursed column.
+Payment modes: CASH #1565C0, PHONE #5F259F, DUE #C62828.
+Disbursement modes: CASH default for old loans, PHONE for PhonePe disbursement.
+Wallet balance uses walletOpeningDate as cutoff. Cash = cashOpeningBalance - cash loans + cash payments - cash expenses - cash investments. PhonePe = phonePeOpeningBalance - PhonePe loans + PhonePe payments - PhonePe expenses - PhonePe investments.
 
-5. Loan & Payment Logic:
-   - Loan Creation: When a customer is added, automatically create a loan with 20% interest (Principal + 20% = Total Payable).
-   - Custom Start Date: Allow choosing the exact date money was disbursed during registration. Date picker must restrict selections to only the day matching the current shift (e.g., only Mondays if in a Monday shift).
-   - Payment Modes: Default to "CASH", but also support "PHONE".
-   - Actions:
-     - "PAY": Record an installment.
-     - "DUE": Mark a missed payment (records 0 amount with type "DUE").
-     - "RENEW": Clear existing balance and start a new loan with a new principal amount and a customizable renewal date.
-   - Atomic Transactions: Recording a payment must update the loan balance in a single database transaction.
+Export rules:
+Include operational loan/payment/report data. Never export accountNotes, cashOpeningBalance, phonePeOpeningBalance, walletOpeningDate, or any field marked `// PRIVATE — never export`. Hide private UI with an export flag before screenshot/PDF capture when needed.
 
-6. Customer Profile & Civil Score:
-   - Detailed profile view with active loan status and progress bar.
-   - Civil Score Calculator: Dynamic score (300-900) based on payment history (Regular payments increase score, "DUE" marks decrease it). Status labels: Poor (<600), Good (600-750), Excellent (>750).
+Architecture:
+Use MVVM-style screen hooks and repository helpers. All Firestore queries must filter by userId. Realtime listeners must unsubscribe in `useEffect` cleanup. Use expo-router file-based navigation. Keep derived financial calculations in memoized utilities.
 
-7. Weekly Collection Excel Report:
-   - Generate a .xlsx file saved to the public Downloads folder.
-   - Layout: Create separate sheets for each day of the week, strictly ordered (Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday).
-   - Header Formatting:
-     - Row 1: Cell A1 contains the Day Name (e.g., "Sunday") in **Bold**.
-     - Row 2: Column Headers [ID, C/O, Name, "Village, Phone and Aadhar", Weekly Dates...] in **Bold**.
-   - Columns: Weekly increments of dates starting from the report start date.
-   - Automatic "Due" Identification: Logic must automatically check every week a loan was active; if no payment is found, the cell must be marked "Due" with a Red Fill and White Text.
-   - Formatting & Color Coding:
-     - Orange Text (#C55A11): For new loan amounts taken.
-     - Black Text: For regular installments paid.
-     - Red Fill + White Text: For "Due" status.
-     - Purple Text (#7030A0): For remaining previous balance.
-     - Renewal Cell: Multi-line cell (Alt+Enter) showing Purple balance (top) and Orange new amount (bottom).
-   - Totals Summary at the bottom of each sheet:
-     - "TOTAL DISBURSED (ORANGE)": Sum of all new loans for the column, but with a **2% reduction applied** (deduct 2Rs for every 100Rs).
-     - "TOTAL COLLECTED (BLACK)": Sum of all regular payments for the column.
-
-### Architecture & UI:
-- Follow MVVM pattern with Clean Architecture principles.
-- Use a single `NavHost` with a sealed class for Screen routes.
-- UI Style: Modern Material 3, Blue/Navy gradient backgrounds, rounded cards (24dp), and high-contrast typography.
-- Ensure "Blink-free" UI by utilizing SavedStateHandle in ViewModels and reactive Room Flows.
+UI specs:
+Use 16dp cards, 24dp modals, elevation 4/shadowOpacity 0.1, 20-24px bold headers, 14-16px body text, and Indian rupee formatting (`₹1,23,456` or `Rs.1,23,456` consistently with local screen style). Prefer skeleton loading states. Dual payment buttons are side by side and equal width: Cash #1565C0, PhonePe #5F259F.

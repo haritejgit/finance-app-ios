@@ -1,88 +1,57 @@
-# Project Context: Village Finance Management App (Native Android)
+# Karthikeya Finance Management - AI Context
 
-## Project Overview
-A specialized Ledger and Loan Management application for field employees to track micro-loans across villages. Designed for offline-first reliability and easy ledger tracking.
+Purpose: React Native / Expo field-agent tool for weekly micro-loan collection across villages. Target users are finance agents who register customers, disburse small loans, collect weekly payments, mark dues, renew loans, export reports, and reconcile available funds.
 
-## Tech Stack
-- **Frontend:** Kotlin with Jetpack Compose (Modern UI)
-- **Local Database:** Room (for offline data persistence)
-- **Remote Backend:** Supabase (Auth, PostgreSQL for sync, Edge Functions)
-- **Dependency Injection:** Hilt
-- **Excel Export:** Apache POI or Simple-Excel-Kotlin
-- **Architecture:** MVVM (Model-View-ViewModel)
+Tech stack: React Native, Expo SDK 54, TypeScript, expo-router, Firebase Auth, Cloud Firestore, Firebase Hosting, Excel/PDF export helpers. This is not an Android/Kotlin-first app, though old native files remain in the repo.
 
----
+Firestore schema:
+- `users/{userId}`: id, userId, email?, accountNotes?, cashOpeningBalance?, phonePeOpeningBalance?, walletOpeningDate?. Private fields must never be exported.
+- `villages/{id}`: id, name, dayOfWeek, shift, userId.
+- `customers/{id}`: id, numericalId, name, phone, aadhar, locationDesc, latitude?, longitude?, aadharSubmitted?, passportPhotoSubmitted?, coName?, coId?, villageId, userId, isActive, createdAt.
+- `loans/{id}`: id, customerId, principalAmount, interestAmount, totalPayable, balanceAmount, userId, startDate, status, disbursement_mode?.
+- `payments/{id}`: id, loanId, customerId?, amountPaid, paymentDate, weekNumber, paymentType, paymentMode, type, notes?, userId.
+- `expenses/{id}`: id, userId, amount, description, date, payment_mode?.
+- `investments/{id}`: id, userId, amount, date, investorName?, payment_mode?.
+- `balancingFund/{id}`: legacy/current balancing fund overrides.
+- `blockedAadhaar/{id}`: aadhaar/aadhaarNumber, reason, blockedAt/blocked_at, blockedBy/blocked_by.
 
-## Database Schema (Local Room & Remote Supabase)
+Screen map:
+- `app/(01)/login.tsx`: authentication.
+- `app/(02)/shift-selection.tsx`: day/shift dashboard.
+- `app/village/[day]/[shift].tsx`: villages for a route.
+- `app/customer/[villageId].tsx`: customer list, search, stats, add customer, dual Cash/PhonePe pay buttons.
+- `app/profile/[customerId].tsx`: profile, loan status, payment history, edit/delete payments, DUE/RENEW.
+- `app/(03)/reports.tsx`: report generation and exports.
+- `app/(04)/graph.tsx`: analytics dashboard.
+- `app/(08)/account.tsx`: balancing fund, wallets, notes, expenses, investments.
 
-### 1. Villages
-- `id`: UUID (PK)
-- `name`: String
-- `employee_id`: UUID (FK to auth.users)
-- `day_of_week`: Enum (Monday, Tuesday, etc.)
+Business rules:
+Interest is 20%; total payable equals `principalAmount * 1.2`. Book numbers are route-scoped. Civil score starts at 600, +10 for good payments, -30 for DUE, clamped 300-900. Excel report disbursement uses a 2% deduction in the requested total-disbursed column. DUE records do not count as collections.
 
-### 2. Customers
-- `id`: UUID (PK)
-- `numerical_id`: Int (Reusable "Book Number")
-- `name`: String
-- `phone`: String
-- `aadhar`: String
-- `location_desc`: String
-- `co_name`: String (Optional)
-- `village_id`: UUID (FK)
-- `is_active`: Boolean (Default: true)
+Data flow:
+Screens collect form input, call repository functions in `src/repository.ts`, write/read Firestore, then update local state or reload. Analytics reads all user-scoped records and derives dashboard values in `src/finance-analytics.ts`. Wallet balances are calculated in `src/wallet-balances.ts`.
 
-### 3. Loans
-- `id`: UUID (PK)
-- `customer_id`: UUID (FK)
-- `principal_amount`: Double (e.g., 5000)
-- `interest_amount`: Double (Default 20% = 1000)
-- `total_payable`: Double (6000)
-- `balance_amount`: Double
-- `start_date`: Long (Timestamp)
-- `status`: String ("ACTIVE", "CLOSED", "RENEWED")
+Export architecture:
+Exports are built from explicit transaction lists and totals in `src/exports.ts`. Private fields are not part of export payloads. Treat fields marked `// PRIVATE — never export` as settings-only.
 
-### 4. Payments (Ledger Entries)
-- `id`: UUID (PK)
-- `loan_id`: UUID (FK)
-- `amount_paid`: Double
-- `payment_date`: Long
-- `week_number`: Int (Calculated relative to loan start)
+Bugs fixed:
+Location state is reset and scoped by customer/form instance to avoid stale GPS saves. Search-filtered customer list stats now calculate from the filtered list and show a filtered marker when search is active.
 
----
+Privacy rules:
+`accountNotes`, `cashOpeningBalance`, `phonePeOpeningBalance`, and `walletOpeningDate` must never appear in PDF, Excel, image, or share exports. Add `// PRIVATE — never export` wherever these fields are read.
 
-## Core Logic Implementation
+Analytics logic:
+Payments, loans, customers, villages, expenses, and investments are filtered by userId. Payment mode uses `type`/`paymentMode` values CASH, PHONE, DUE. Disbursement mode uses `loans.disbursement_mode`, default CASH. Missing `payment_mode` on old expenses/investments is treated as CASH.
 
-### 1. The Flexible Ledger (Logic)
-- **View:** A vertical list representing weeks.
-- **Color Coding:** 
-    - If `sum(payments)` for a week >= target: **Green**
-    - If `sum(payments)` for a week < target and date passed: **Red**
-- **Flexibility:** Users can tap any week to add any amount. The `balance_amount` in the `Loans` table is updated reactively.
+Wallet balance logic:
+Cash = cashOpeningBalance - Cash loan principals since walletOpeningDate + Cash collections since walletOpeningDate - Cash expenses - Cash investments.
+PhonePe = phonePeOpeningBalance - PhonePe loan principals since walletOpeningDate + PhonePe collections since walletOpeningDate - PhonePe expenses - PhonePe investments.
 
-### 2. Numerical ID Management
-- When a loan is "CLOSED" (Balance = 0) and the user marks the customer as inactive, that `numerical_id` is added to a "Available IDs" pool.
-- New customers pull the smallest available integer.
+Payment mode handling:
+Customer cards show two equal pay buttons: Cash (#1565C0) and PhonePe (#5F259F). Both open the same modal with a mode toggle. Cash saves type CASH, PhonePe saves type PHONE, DUE saves type DUE.
 
-### 3. Loan Renewal
-- User selects "Renew".
-- Current `balance_amount` is fetched.
-- New `principal` is added. 
-- New `total_payable` = `old_balance` + (`new_principal` * 1.2).
-- The old loan is marked "RENEWED" and linked to the new loan ID for history tracking.
+Disbursement handling:
+New loan registration asks how money was given. Save `disbursement_mode` as CASH or PHONE. Old loans default to CASH in displays, analytics, and wallet calculations.
 
----
-
-## Android Project Structure
-- `data/`: Room entities, DAOs, Supabase repositories.
-- `domain/`: UseCases (CalculateInterest, RenewLoan, ExportExcel).
-- `ui/`: 
-    - `auth/`: Login/Register screens.
-    - `dashboard/`: Day/Shift/Village selection.
-    - `village/`: Customer list and Village management.
-    - `customer/`: Profile, Ledger view, Payment entry.
-    - `reports/`: Date picker and Excel generation logic.
-
-## Reports (Excel)
-- Uses a `ContentProvider` to save the generated `.xlsx` file to the device's "Downloads" folder.
-- Filter: `WHERE payment_date BETWEEN start_date AND end_date`.
+Color tokens:
+Primary Blue #1565C0, Dark Navy #0D1B2A, Accent #1976D2, Light Tint #E3F2FD, Green #2E7D32, Red #C62828, Orange #C55A11, PhonePe Purple #5F259F, Card BG #F5F9FF, Text Secondary #546E7A.

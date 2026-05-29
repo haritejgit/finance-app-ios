@@ -10,6 +10,7 @@ import {
   limit,
   orderBy,
   query,
+  runTransaction,
   startAfter,
   serverTimestamp,
   setDoc,
@@ -20,7 +21,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { BlockedAadhaar, Customer, Loan, Payment, PaymentMode, Village, AccountNote } from "./types";
+import { BlockedAadhaar, Customer, Expense, Investment, Loan, Payment, PaymentMode, UserProfile, Village } from "./types";
 import { getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, loanWeekNumber, money, toMillis, weekStart } from "./business-logic";
 import { filterCustomersWithVillage } from "./utils";
 
@@ -33,7 +34,10 @@ const coll = {
   balancingFund: collection(db, "balancingFund"),
   investments: collection(db, "investments"),
   expenses: collection(db, "expenses"),
+  users: collection(db, "users"),
 };
+
+export type { Expense, Investment };
 
 // Simple in-memory cache for better performance
 const cache = new Map<string, { data: any; timestamp: number }>();
@@ -64,6 +68,10 @@ function clearCache() {
 
 function stripUndefined<T extends Record<string, any>>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
+}
+
+function normalizeMode(value?: string | null): PaymentMode {
+  return value === "PHONE" ? "PHONE" : "CASH";
 }
 
 function normalizeAadhar(aadhar?: string) {
@@ -365,7 +373,8 @@ export async function addCustomerWithLoan(
   shift: string,
   input: Omit<Customer, "id" | "userId" | "villageId" | "numericalId" | "isActive" | "createdAt">,
   principalAmount: number,
-  startDate: number
+  startDate: number,
+  disbursementMode: PaymentMode = "CASH"
 ) {
   assertPositiveAmount(principalAmount, "Loan amount");
   const sanitizedInput = sanitizeCustomerInput(input);
@@ -394,6 +403,8 @@ export async function addCustomerWithLoan(
     userId,
     startDate,
     status: "ACTIVE",
+    disbursement_mode: normalizeMode(disbursementMode),
+    disbursementMode: normalizeMode(disbursementMode),
   };
   await setDoc(doc(db, "loans", loan.id), stripUndefined(loan));
   clearCache();
@@ -453,6 +464,8 @@ export async function updateLoan(loan: Loan, newPrincipalAmount: number, newStar
     totalPayable: totalPayable,
     balanceAmount: newBalanceAmount,
     startDate: newStartDate,
+    disbursement_mode: normalizeMode(loan.disbursement_mode ?? loan.disbursementMode),
+    disbursementMode: normalizeMode(loan.disbursement_mode ?? loan.disbursementMode),
   };
   
   await setDoc(doc(db, "loans", loan.id), stripUndefined(updatedLoan));
@@ -576,6 +589,7 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
 
 export async function addPayment(loan: Loan, amountPaid: number, paymentDate: number, mode: PaymentMode) {
   assertPositiveAmount(amountPaid, "Payment amount");
+  const paymentMode = normalizeMode(mode);
   const payment: Payment = {
     id: id(),
     loanId: loan.id,
@@ -584,14 +598,20 @@ export async function addPayment(loan: Loan, amountPaid: number, paymentDate: nu
     paymentDate,
     weekNumber: loanWeekNumber(loan.startDate, paymentDate),
     paymentType: "REGULAR",
-    paymentMode: mode,
+    paymentMode,
+    type: paymentMode,
     userId: loan.userId,
   };
-  await setDoc(doc(db, "payments", payment.id), stripUndefined(payment));
-  const newBalance = Math.max(0, loan.balanceAmount - amountPaid);
-  await updateDoc(doc(db, "loans", loan.id), {
-    balanceAmount: newBalance,
-    status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+  await runTransaction(db, async (transaction) => {
+    const loanRef = doc(db, "loans", loan.id);
+    const loanSnap = await transaction.get(loanRef);
+    const liveLoan = loanSnap.exists() ? (loanSnap.data() as Loan) : loan;
+    const newBalance = Math.max(0, money(liveLoan.balanceAmount) - amountPaid);
+    transaction.set(doc(db, "payments", payment.id), stripUndefined(payment));
+    transaction.update(loanRef, {
+      balanceAmount: newBalance,
+      status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+    });
   });
   clearCache();
 }
@@ -603,6 +623,7 @@ export async function addPaymentsBatch(
   const batch = writeBatch(db);
   entries.forEach(({ loan, amountPaid, paymentDate, mode }) => {
     assertPositiveAmount(amountPaid, "Payment amount");
+    const paymentMode = normalizeMode(mode);
     const payment: Payment = {
       id: id(),
       loanId: loan.id,
@@ -611,7 +632,8 @@ export async function addPaymentsBatch(
       paymentDate,
       weekNumber: loanWeekNumber(loan.startDate, paymentDate),
       paymentType: "REGULAR",
-      paymentMode: mode,
+      paymentMode,
+      type: paymentMode,
       userId: loan.userId,
     };
     const newBalance = Math.max(0, loan.balanceAmount - amountPaid);
@@ -633,7 +655,8 @@ export async function updatePayment(payment: Payment, newAmount: number, newDate
     ...payment,
     amountPaid: newAmount,
     paymentDate: newDate,
-    paymentMode: newMode,
+    paymentMode: normalizeMode(newMode),
+    type: normalizeMode(newMode),
   };
   await updateDoc(doc(db, "payments", payment.id), stripUndefined(updatedPayment));
   
@@ -677,6 +700,7 @@ export async function markDue(loan: Loan, paymentDate: number) {
     weekNumber: loanWeekNumber(loan.startDate, paymentDate),
     paymentType: "DUE",
     paymentMode: "CASH",
+    type: "DUE",
     userId: loan.userId,
   };
   await setDoc(doc(db, "payments", payment.id), stripUndefined(payment));
@@ -695,6 +719,7 @@ export async function renewLoan(loan: Loan, newPrincipal: number, date: number) 
       weekNumber: loanWeekNumber(loan.startDate, date),
       paymentType: "RENEWAL_CLOSURE",
       paymentMode: "CASH",
+      type: "CASH",
       notes: "Loan renewed - old balance cleared",
       userId: loan.userId,
     };
@@ -713,6 +738,8 @@ export async function renewLoan(loan: Loan, newPrincipal: number, date: number) 
     userId: loan.userId,
     startDate: date,
     status: "ACTIVE",
+    disbursement_mode: normalizeMode(loan.disbursement_mode ?? loan.disbursementMode),
+    disbursementMode: normalizeMode(loan.disbursement_mode ?? loan.disbursementMode),
   };
   await setDoc(doc(db, "loans", newLoan.id), stripUndefined(newLoan));
   clearCache();
@@ -744,10 +771,14 @@ function getWeekKey(date: Date): string {
 export type AllPaymentEver = {
   id: string;
   amount: number;
+  amountPaid?: number;
   date: Date;
+  paymentDate?: number;
   customerId?: string;
   loanId?: string;
   paymentType?: Payment["paymentType"];
+  paymentMode?: PaymentMode;
+  type?: Payment["type"];
 };
 
 export type AllLoanEver = {
@@ -756,6 +787,10 @@ export type AllLoanEver = {
   date: Date;
   status: string;
   customerId?: string;
+  principalAmount?: number;
+  startDate?: number;
+  disbursement_mode?: PaymentMode;
+  disbursementMode?: PaymentMode;
 };
 
 export type WeeklyChartPoint = {
@@ -783,10 +818,14 @@ export const getAllPaymentsEver = async (userId?: string): Promise<AllPaymentEve
     return {
       id: docSnap.id,
       amount: money(d.amountPaid ?? d.amount_paid ?? d.amount),
+      amountPaid: money(d.amountPaid ?? d.amount_paid ?? d.amount),
       date: new Date(millis || Date.now()),
+      paymentDate: millis || Date.now(),
       customerId: d.customerId ?? d.customer_id ?? customerIdByLoanId.get(d.loanId ?? d.loan_id),
       loanId: d.loanId ?? d.loan_id,
       paymentType: d.paymentType ?? d.type,
+      paymentMode: d.paymentMode ?? (d.type === "PHONE" ? "PHONE" : "CASH"),
+      type: d.type,
     };
   }).filter((payment) => !eligibleCustomerIds || (!!payment.customerId && eligibleCustomerIds.has(payment.customerId)));
 };
@@ -803,9 +842,13 @@ export const getAllLoansEver = async (userId?: string): Promise<AllLoanEver[]> =
     return {
       id: docSnap.id,
       amount: getLoanDistributedAmount(d),
+      principalAmount: getLoanPrincipalAmount(d),
       date: new Date(millis || Date.now()),
+      startDate: millis || Date.now(),
       status: d.status || "ACTIVE",
       customerId: d.customerId ?? d.customer_id,
+      disbursement_mode: d.disbursement_mode ?? d.disbursementMode ?? "CASH",
+      disbursementMode: d.disbursementMode ?? d.disbursement_mode ?? "CASH",
     };
   }).filter((loan) => !eligibleCustomerIds || (!!loan.customerId && eligibleCustomerIds.has(loan.customerId)));
   const seen = new Set<string>();
@@ -952,6 +995,15 @@ export async function getPaymentsByDate(userId: string, startDate: number, endDa
 
 export async function updateCustomer(customer: Customer) {
   const sanitized = sanitizeCustomerInput(customer);
+  // FIX: location scoped per-customer to prevent stale closure bug
+  if ((sanitized as any).locationCustomerId && (sanitized as any).locationCustomerId !== customer.id) {
+    console.warn("Skipping mismatched customer location save", {
+      customerId: customer.id,
+      locationCustomerId: (sanitized as any).locationCustomerId,
+    });
+    sanitized.latitude = undefined;
+    sanitized.longitude = undefined;
+  }
   await updateDoc(doc(db, "customers", customer.id), {
     ...stripUndefined(sanitized),
     latitude: sanitized.latitude === undefined ? deleteField() : sanitized.latitude,
@@ -1107,14 +1159,6 @@ export async function getAllBalancingFunds(userId: string): Promise<any[]> {
   return snap.docs.map((docSnap) => docSnap.data());
 }
 
-export type Investment = {
-  id: string;
-  userId: string;
-  amount: number;
-  date: number;
-  investorName?: string;
-};
-
 export async function getInvestments(userId: string): Promise<Investment[]> {
   const q = query(coll.investments, where("userId", "==", userId));
   const snap = await getDocs(q);
@@ -1122,14 +1166,19 @@ export async function getInvestments(userId: string): Promise<Investment[]> {
     .sort((a, b) => b.date - a.date);
 }
 
-export async function addInvestment(userId: string, amount: number, date: number, investorName?: string): Promise<Investment> {
+export async function addInvestment(userId: string, amount: number, date: number, investorName?: string, paymentMode: PaymentMode = "CASH"): Promise<Investment> {
+  return addInvestmentWithMode(userId, amount, date, investorName, paymentMode);
+}
+
+export async function addInvestmentWithMode(userId: string, amount: number, date: number, investorName?: string, paymentMode: PaymentMode = "CASH"): Promise<Investment> {
   assertPositiveAmount(amount, "Investment amount");
   const investment: Investment = {
     id: id(),
     userId,
     amount,
     date,
-    investorName: investorName || ""
+    investorName: investorName || "",
+    payment_mode: normalizeMode(paymentMode),
   };
   await setDoc(doc(db, "investments", investment.id), stripUndefined(investment));
   clearCache();
@@ -1141,25 +1190,18 @@ export async function deleteInvestment(investmentId: string): Promise<void> {
   clearCache();
 }
 
-export async function updateInvestment(investmentId: string, amount: number, date: number, investorName?: string): Promise<void> {
+export async function updateInvestment(investmentId: string, amount: number, date: number, investorName?: string, paymentMode: PaymentMode = "CASH"): Promise<void> {
   assertPositiveAmount(amount, "Investment amount");
   const ref = doc(db, "investments", investmentId);
   await updateDoc(ref, {
     amount,
     date,
     investorName: investorName || "",
+    payment_mode: normalizeMode(paymentMode),
     updatedAt: Date.now()
   });
   clearCache();
 }
-
-export type Expense = {
-  id: string;
-  userId: string;
-  amount: number;
-  description: string;
-  date: number;
-};
 
 export async function getExpenses(userId: string): Promise<Expense[]> {
   const q = query(coll.expenses, where("userId", "==", userId));
@@ -1168,7 +1210,7 @@ export async function getExpenses(userId: string): Promise<Expense[]> {
     .sort((a, b) => b.date - a.date);
 }
 
-export async function addExpense(userId: string, amount: number, description: string, date: number): Promise<Expense> {
+export async function addExpense(userId: string, amount: number, description: string, date: number, paymentMode: PaymentMode = "CASH"): Promise<Expense> {
   assertPositiveAmount(amount, "Expense amount");
   const cleanedDescription = cleanText(description);
   if (!cleanedDescription) throw new Error("Description is required.");
@@ -1177,7 +1219,8 @@ export async function addExpense(userId: string, amount: number, description: st
     userId,
     amount,
     description: cleanedDescription,
-    date
+    date,
+    payment_mode: normalizeMode(paymentMode),
   };
   await setDoc(doc(db, "expenses", expense.id), stripUndefined(expense));
   clearCache();
@@ -1189,7 +1232,7 @@ export async function deleteExpense(expenseId: string): Promise<void> {
   clearCache();
 }
 
-export async function updateExpense(expenseId: string, amount: number, description: string, date: number): Promise<void> {
+export async function updateExpense(expenseId: string, amount: number, description: string, date: number, paymentMode: PaymentMode = "CASH"): Promise<void> {
   assertPositiveAmount(amount, "Expense amount");
   const cleanedDescription = cleanText(description);
   if (!cleanedDescription) throw new Error("Description is required.");
@@ -1199,47 +1242,50 @@ export async function updateExpense(expenseId: string, amount: number, descripti
     amount,
     description: cleanedDescription,
     date,
+    payment_mode: normalizeMode(paymentMode),
     updatedAt: Date.now()
   });
   clearCache();
-};
+}
 
-// ==================== Account Notes CRUD ====================
-
-/** Add a new note for a specific customer */
-export async function addAccountNote(userId: string, customerId: string, content: string): Promise<AccountNote> {
-  const cleaned = cleanText(content);
-  if (!cleaned) throw new Error("Note content is required.");
-  const note: AccountNote = {
-    id: id(),
-    customerId,
-    content: cleaned,
-    createdAt: Date.now()
+export async function getUserProfile(userId: string): Promise<UserProfile> {
+  const snap = await getDoc(doc(db, "users", userId));
+  const data = snap.exists() ? (snap.data() as Partial<UserProfile>) : {};
+  return {
+    id: userId,
+    userId,
+    ...data,
+    accountNotes: data.accountNotes ?? "",
+    cashOpeningBalance: Number(data.cashOpeningBalance || 0),
+    phonePeOpeningBalance: Number(data.phonePeOpeningBalance || 0),
   };
-  await setDoc(doc(db, `customers/${customerId}/notes/${note.id}`), stripUndefined(note));
-  clearCache();
-  return note;
 }
 
-/** Retrieve all notes for a customer */
-export async function getAccountNotes(userId: string, customerId: string): Promise<AccountNote[]> {
-  const notesCol = collection(db, `customers/${customerId}/notes`);
-  const snap = await getDocs(notesCol);
-  return snap.docs.map(d => d.data() as AccountNote).sort((a, b) => b.createdAt - a.createdAt);
-}
-
-/** Update an existing note */
-export async function updateAccountNote(userId: string, customerId: string, noteId: string, content: string): Promise<void> {
-  const cleaned = cleanText(content);
-  if (!cleaned) throw new Error("Note content is required.");
-  const ref = doc(db, `customers/${customerId}/notes/${noteId}`);
-  await updateDoc(ref, { content: cleaned, updatedAt: Date.now() });
+export async function saveAccountNotes(userId: string, accountNotes: string): Promise<void> {
+  // PRIVATE — never export
+  await setDoc(doc(db, "users", userId), { id: userId, userId, accountNotes, updatedAt: Date.now() }, { merge: true });
   clearCache();
 }
 
-/** Delete a note */
-export async function deleteAccountNote(userId: string, customerId: string, noteId: string): Promise<void> {
-  await deleteDoc(doc(db, `customers/${customerId}/notes/${noteId}`));
+export async function saveWalletOpeningBalances(
+  userId: string,
+  cashOpeningBalance: number,
+  phonePeOpeningBalance: number,
+  walletOpeningDate: number
+): Promise<void> {
+  // PRIVATE — never export
+  await setDoc(
+    doc(db, "users", userId),
+    {
+      id: userId,
+      userId,
+      cashOpeningBalance,
+      phonePeOpeningBalance,
+      walletOpeningDate,
+      phonePeOpeningDate: deleteField(),
+      updatedAt: Date.now(),
+    },
+    { merge: true }
+  );
   clearCache();
 }
-
