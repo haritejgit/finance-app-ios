@@ -20,7 +20,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { BlockedAadhaar, Customer, Loan, Payment, PaymentMode, Village } from "./types";
+import { BlockedAadhaar, Customer, Loan, Payment, PaymentMode, Village, AccountNote } from "./types";
 import { getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, loanWeekNumber, money, toMillis, weekStart } from "./business-logic";
 import { filterCustomersWithVillage } from "./utils";
 
@@ -1202,4 +1202,44 @@ export async function updateExpense(expenseId: string, amount: number, descripti
     updatedAt: Date.now()
   });
   clearCache();
+};
+
+// ==================== Account Notes CRUD ====================
+
+/** Add a new note for a specific customer */
+export async function addAccountNote(userId: string, customerId: string, content: string): Promise<AccountNote> {
+  const cleaned = cleanText(content);
+  if (!cleaned) throw new Error("Note content is required.");
+  const note: AccountNote = {
+    id: id(),
+    customerId,
+    content: cleaned,
+    createdAt: Date.now()
+  };
+  await setDoc(doc(db, `customers/${customerId}/notes/${note.id}`), stripUndefined(note));
+  clearCache();
+  return note;
 }
+
+/** Retrieve all notes for a customer */
+export async function getAccountNotes(userId: string, customerId: string): Promise<AccountNote[]> {
+  const notesCol = collection(db, `customers/${customerId}/notes`);
+  const snap = await getDocs(notesCol);
+  return snap.docs.map(d => d.data() as AccountNote).sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/** Update an existing note */
+export async function updateAccountNote(userId: string, customerId: string, noteId: string, content: string): Promise<void> {
+  const cleaned = cleanText(content);
+  if (!cleaned) throw new Error("Note content is required.");
+  const ref = doc(db, `customers/${customerId}/notes/${noteId}`);
+  await updateDoc(ref, { content: cleaned, updatedAt: Date.now() });
+  clearCache();
+}
+
+/** Delete a note */
+export async function deleteAccountNote(userId: string, customerId: string, noteId: string): Promise<void> {
+  await deleteDoc(doc(db, `customers/${customerId}/notes/${noteId}`));
+  clearCache();
+}
+

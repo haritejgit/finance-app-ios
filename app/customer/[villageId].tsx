@@ -453,7 +453,7 @@ export default function CustomerListScreen() {
   const [form, setForm] = useState<AddCustomerForm>(createEmptyCustomerForm);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const addLocationRequestRef = useRef(0);
-  const saveLocationRequestRef = useRef(0);
+  const saveLocationRequestRefs = useRef<Record<string, number>>({});
   const [updatingLocationCustomerId, setUpdatingLocationCustomerId] = useState<string | null>(null);
   const [registrationDate, setRegistrationDate] = useState(formatDateInput(Date.now()));
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -748,36 +748,36 @@ export default function CustomerListScreen() {
   }, []);
 
   const saveCurrentLocationForCustomer = useCallback(async (customer: Customer) => {
-    const requestId = saveLocationRequestRef.current + 1;
-    saveLocationRequestRef.current = requestId;
-    try {
-      setUpdatingLocationCustomerId(customer.id);
-      const coordinates = await requestCurrentCoordinates();
-      if (saveLocationRequestRef.current !== requestId) return;
-      const updatedCustomer: Customer = {
-        ...customer,
-        ...coordinates,
-      };
+      const requestId = (saveLocationRequestRefs.current[customer.id] || 0) + 1;
+      saveLocationRequestRefs.current[customer.id] = requestId;
+      try {
+        setUpdatingLocationCustomerId(customer.id);
+        const coordinates = await requestCurrentCoordinates();
+        if (saveLocationRequestRefs.current[customer.id] !== requestId) return;
+        const updatedCustomer: Customer = {
+          ...customer,
+          ...coordinates,
+        };
 
-      await updateCustomer(updatedCustomer);
-      if (saveLocationRequestRef.current !== requestId) return;
-      setCustomers((current) =>
-        current.map((item) => (item.id === customer.id ? updatedCustomer : item))
-      );
-      Alert.alert("Location saved", `${customer.name}'s current location has been registered.`);
-    } catch (error) {
-      Alert.alert(
-        error instanceof Error && error.message === LOCATION_PERMISSION_DENIED ? "Location denied" : "Location failed",
-        error instanceof Error && error.message === LOCATION_PERMISSION_DENIED
-          ? "Permission to access location was denied."
-          : getLocationErrorMessage(error)
-      );
-    } finally {
-      if (saveLocationRequestRef.current === requestId) {
-        setUpdatingLocationCustomerId(null);
+        await updateCustomer(updatedCustomer);
+        if (saveLocationRequestRefs.current[customer.id] !== requestId) return;
+        setCustomers((current) =>
+          current.map((item) => (item.id === customer.id ? updatedCustomer : item))
+        );
+        Alert.alert("Location saved", `${customer.name}'s current location has been registered.`);
+      } catch (error) {
+        Alert.alert(
+          error instanceof Error && error.message === LOCATION_PERMISSION_DENIED ? "Location denied" : "Location failed",
+          error instanceof Error && error.message === LOCATION_PERMISSION_DENIED
+            ? "Permission to access location was denied."
+            : getLocationErrorMessage(error)
+        );
+      } finally {
+        if (saveLocationRequestRefs.current[customer.id] === requestId) {
+          setUpdatingLocationCustomerId(null);
+        }
       }
-    }
-  }, []);
+    }, []);
 
   const filtered = useMemo(() => {
     const numericQuery = debouncedQuery.replace(/\D/g, "");
@@ -809,7 +809,7 @@ export default function CustomerListScreen() {
   }, [customers, debouncedQuery, paymentStatuses, statusFilter]);
 
   const customerStats = useMemo(() => {
-    return customers.reduce(
+    return filtered.reduce(
       (stats, customer) => {
         const status = paymentStatuses[customer.id] || "none";
         const isNew = isNewThisWeek(customer.createdAt);
@@ -825,7 +825,7 @@ export default function CustomerListScreen() {
       },
       { total: 0, today: 0, paid: 0, dues: 0, remaining: 0 }
     );
-  }, [customers, paymentStatuses]);
+  }, [filtered, paymentStatuses]);
 
   const quickCollectCustomers = useMemo(
     () => customers.filter((customer) => {

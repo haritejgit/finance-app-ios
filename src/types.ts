@@ -37,6 +37,20 @@ export type Loan = {
   interestAmount: number;
   totalPayable: number;
   balanceAmount: number;
+  coId?: number;
+  villageId: string;
+  userId: string;
+  isActive: boolean;
+  createdAt: number;
+};
+
+export type Loan = {
+  id: string;
+  customerId: string;
+  principalAmount: number;
+  interestAmount: number;
+  totalPayable: number;
+  balanceAmount: number;
   userId: string;
   startDate: number;
   status: LoanStatus;
@@ -53,6 +67,14 @@ export type Payment = {
   paymentMode: PaymentMode;
   notes?: string;
   userId: string;
+};
+
+export type AccountNote = {
+  id: string;
+  customerId: string;
+  content: string;
+  createdAt: number;
+  updatedAt?: number;
 };
 
 export type BlockedAadhaar = {

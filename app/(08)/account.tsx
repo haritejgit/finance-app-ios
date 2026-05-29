@@ -103,10 +103,8 @@ export default function AccountScreen() {
   const { t, language } = useLanguage();
   const isTe = language === "te";
 
-
-
-  // Selected Tab state: 'summary' | 'investments' | 'expenses'
-  const [activeTab, setActiveTab] = useState<"summary" | "investments" | "expenses">("summary");
+  // Selected Tab state: 'summary' | 'investments' | 'expenses' | 'notes'
+  const [activeTab, setActiveTab] = useState<"summary" | "investments" | "expenses" | "notes">("summary");
 
   // Loading States
   const [loading, setLoading] = useState(true);
@@ -126,6 +124,7 @@ export default function AccountScreen() {
   const [loans, setLoans] = useState<any[]>([]);       // Payments
   const [villages, setVillages] = useState<Village[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
 
   // Date Range inputs (DD/MM/YYYY)
   const [startDateStr, setStartDateStr] = useState<string>("");
@@ -141,6 +140,11 @@ export default function AccountScreen() {
 
   // Edit Expense Modal State
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  // Notes state
+  const [notes, setNotes] = useState<AccountNote[]>([]);
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [noteContent, setNoteContent] = useState("");
+  const [editingNote, setEditingNote] = useState<AccountNote | null>(null);
   const [editExpAmount, setEditExpAmount] = useState<string>("");
   const [editExpDesc, setEditExpDesc] = useState<string>("");
   const [editExpDate, setEditExpDate] = useState<string>("");
@@ -206,10 +210,14 @@ export default function AccountScreen() {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    // If notes tab is active, also load notes
+    if (activeTab === "notes" && selectedCustomer) {
+      getAccountNotes(user!.uid, selectedCustomer.id).then(setNotes).catch(console.error);
+    }
+  }, [loadData, activeTab, selectedCustomer]);
 
   // Dynamic input formatting for date (DD/MM/YYYY)
-  const handleDateChange = useCallback((text: string, setter: (val: string) => void) => {
+  const handleDateChange = (text: string, setter: (val: string) => void) => {
     let cleaned = text.replace(/[^0-9]/g, "");
     if (cleaned.length > 8) cleaned = cleaned.slice(0, 8);
 
@@ -220,7 +228,7 @@ export default function AccountScreen() {
       formatted = `${cleaned.slice(0, 2)}/${cleaned.slice(2)}`;
     }
     setter(formatted);
-  }, []);
+  };
 
   // Balancing Fund calculation based on dates
   const getBalancingFundForDateState = (targetDdmmStr: string) => {
@@ -755,9 +763,9 @@ export default function AccountScreen() {
 
             {/* Tabs Selector */}
             <View style={styles.tabBar}>
-              {(["summary", "investments", "expenses"] as const).map((tab) => {
+              {(["summary", "investments", "expenses", "notes"] as const).map((tab) => {
                 const active = activeTab === tab;
-                const label = tab === "summary" ? t("bfSummary") : (tab === "investments" ? t("investments") : t("expenses"));
+                const label = tab === "summary" ? t("bfSummary") : (tab === "investments" ? t("investments") : (tab === "expenses" ? t("expenses") : t("notes")));
                 return (
                   <Pressable
                     key={tab}
