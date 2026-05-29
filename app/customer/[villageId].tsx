@@ -402,7 +402,11 @@ const CustomerItem = React.memo(function CustomerItem({
               if (!hasLocation) onSaveCurrentLocation(customer);
             }}
           >
-            {isUpdatingLocation ? <ActivityIndicator size="small" color="#9ca3af" /> : <Text selectable={false} style={styles.cardActionText}>O</Text>}
+            {isUpdatingLocation ? (
+              <ActivityIndicator size="small" color="#9ca3af" />
+            ) : (
+              <Icon name="location" size={15} color={colors.white} />
+            )}
           </Pressable>
           <Pressable
             accessibilityLabel={`PhonePe payment for ${customer.name}`}
@@ -588,7 +592,7 @@ export default function CustomerListScreen() {
     const timeout = setTimeout(async () => {
       try {
         if (normalizedAadhar.length === 12) {
-          const blocked = await isAadhaarBlocked(normalizedAadhar);
+          const blocked = await isAadhaarBlocked(normalizedAadhar, user.uid);
           if (cancelled) return;
           if (blocked) {
             setAadharBlocked(true);
@@ -664,12 +668,12 @@ export default function CustomerListScreen() {
     }));
     setAadhaarReview(result);
     if (scannedAadhaar.length === 12) {
-      const blocked = await isAadhaarBlocked(scannedAadhaar);
+      const blocked = await isAadhaarBlocked(scannedAadhaar, user?.uid);
       setAadharBlocked(blocked);
       setAadharWarning(blocked ? "This Aadhaar is blocked. Cannot register." : "");
     }
     showToast("success", "Aadhaar scanned", "Review the filled details before saving.");
-  }, []);
+  }, [user?.uid]);
 
   useEffect(() => {
     if (scannerOpen && Platform.OS !== "web" && !cameraPermission?.granted) {
@@ -1641,7 +1645,7 @@ export default function CustomerListScreen() {
                       // Check if customer already exists by Aadhar
                       const normalizedAadhar = normalizeAadhar(form.aadhar);
                       if (normalizedAadhar) {
-                        if (await isAadhaarBlocked(normalizedAadhar)) {
+                        if (await isAadhaarBlocked(normalizedAadhar, user.uid)) {
                           setAadharBlocked(true);
                           setAadharWarning("This Aadhaar is blocked. Cannot register.");
                           Alert.alert("Aadhaar Blocked", "This Aadhaar card has been blocked. Registration cannot proceed.");

@@ -62,15 +62,20 @@ export default function BlockAadhaarScreen() {
   const [saving, setSaving] = useState(false);
 
   const loadBlocked = useCallback(async () => {
+    if (!user) {
+      setBlocked([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      setBlocked(await getBlockedAadhaars());
+      setBlocked(await getBlockedAadhaars(user.uid));
     } catch {
       Alert.alert("Unable to load", "Blocked Aadhaar records could not be loaded.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useFocusEffect(
     useCallback(() => {

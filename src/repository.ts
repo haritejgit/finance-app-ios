@@ -865,10 +865,10 @@ export const getWeeklyChartData = async (userId?: string): Promise<WeeklyChartPo
   const twelveWeeksAgoMs = Date.now() - 12 * 7 * 24 * 60 * 60 * 1000;
 
   const paymentsQuery = userId
-    ? query(coll.payments, where("userId", "==", userId), where("paymentDate", ">=", twelveWeeksAgoMs))
+    ? query(coll.payments, where("userId", "==", userId), limit(1500))
     : query(coll.payments);
   const loansQuery = userId
-    ? query(coll.loans, where("userId", "==", userId), where("startDate", ">=", twelveWeeksAgoMs))
+    ? query(coll.loans, where("userId", "==", userId), limit(1500))
     : query(coll.loans);
   const [eligibleCustomerIds, paymentsSnap, loansSnap] = await Promise.all([
     userId ? getEligibleCustomerIds(userId) : Promise.resolve(null),
@@ -887,7 +887,8 @@ export const getWeeklyChartData = async (userId?: string): Promise<WeeklyChartPo
       date: new Date(millis || Date.now()),
       customerId: d.customerId ?? d.customer_id,
     };
-  }).filter((loan) => !eligibleCustomerIds || (!!loan.customerId && eligibleCustomerIds.has(loan.customerId)));
+  }).filter((loan) => loan.date.getTime() >= twelveWeeksAgoMs)
+    .filter((loan) => !eligibleCustomerIds || (!!loan.customerId && eligibleCustomerIds.has(loan.customerId)));
 
   const customerIdByLoanId = new Map(loansRaw.map((l) => [l.id, l.customerId]));
 
@@ -902,7 +903,8 @@ export const getWeeklyChartData = async (userId?: string): Promise<WeeklyChartPo
       customerId: d.customerId ?? d.customer_id ?? customerIdByLoanId.get(d.loanId ?? d.loan_id),
       paymentType: d.paymentType ?? d.type,
     };
-  }).filter((payment) => !eligibleCustomerIds || (!!payment.customerId && eligibleCustomerIds.has(payment.customerId)));
+  }).filter((payment) => payment.date.getTime() >= twelveWeeksAgoMs)
+    .filter((payment) => !eligibleCustomerIds || (!!payment.customerId && eligibleCustomerIds.has(payment.customerId)));
 
   const weekMap: Record<string, { collected: number; distributed: number; date: Date }> = {};
 
@@ -1087,22 +1089,27 @@ export async function blockAadhaar(aadhaar: string, reason: string, userId: stri
     blocked_at: serverTimestamp(),
     blockedBy: userId,
     blocked_by: userId,
+    userId,
   });
 }
 
-export async function isAadhaarBlocked(aadhaar: string): Promise<boolean> {
+export async function isAadhaarBlocked(aadhaar: string, userId?: string): Promise<boolean> {
   const normalizedAadhaar = normalizeAadhar(aadhaar);
   if (normalizedAadhaar.length !== 12) return false;
-  const q = query(coll.blockedAadhaar, where("aadhaarNumber", "==", normalizedAadhaar), limit(1));
+  const q = userId
+    ? query(coll.blockedAadhaar, where("aadhaarNumber", "==", normalizedAadhaar), where("userId", "==", userId), limit(1))
+    : query(coll.blockedAadhaar, where("aadhaarNumber", "==", normalizedAadhaar), limit(1));
   const snap = await getDocs(q);
   if (!snap.empty) return true;
-  const legacyQ = query(coll.blockedAadhaar, where("aadhaar", "==", normalizedAadhaar), limit(1));
+  const legacyQ = userId
+    ? query(coll.blockedAadhaar, where("aadhaar", "==", normalizedAadhaar), where("userId", "==", userId), limit(1))
+    : query(coll.blockedAadhaar, where("aadhaar", "==", normalizedAadhaar), limit(1));
   const legacySnap = await getDocs(legacyQ);
   return !legacySnap.empty;
 }
 
-export async function getBlockedAadhaars(): Promise<BlockedAadhaar[]> {
-  const snap = await getDocs(query(coll.blockedAadhaar, limit(500)));
+export async function getBlockedAadhaars(userId?: string): Promise<BlockedAadhaar[]> {
+  const snap = await getDocs(userId ? query(coll.blockedAadhaar, where("userId", "==", userId), limit(500)) : query(coll.blockedAadhaar, limit(500)));
   return snap.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as Omit<BlockedAadhaar, "id">) }));
 }
 

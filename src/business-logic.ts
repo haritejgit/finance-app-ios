@@ -64,7 +64,8 @@ export function getLoanDistributedAmount(loan: Partial<Loan> & Record<string, an
 }
 
 export function isRealCollectionPayment(payment: Record<string, any>): boolean {
-  return (payment.paymentType ?? payment.type ?? "REGULAR") === "REGULAR";
+  const kind = payment.paymentType ?? payment.type ?? "REGULAR";
+  return kind === "REGULAR" || kind === "CASH" || kind === "PHONE";
 }
 
 export function loanWeekIndex(loanStartDate: number, targetDate: number): number {

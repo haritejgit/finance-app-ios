@@ -294,11 +294,11 @@ export default function ProfileScreen() {
     setEditAadhaarBlocked(false);
     setEditAadhaarWarning("");
     if (normalized.length === 12) {
-      const blocked = await isAadhaarBlocked(normalized);
+      const blocked = await isAadhaarBlocked(normalized, user?.uid);
       setEditAadhaarBlocked(blocked);
       setEditAadhaarWarning(blocked ? "This Aadhaar is blocked. Customer edits cannot be saved with this number." : "");
     }
-  }, []);
+  }, [user?.uid]);
 
   // Function to open Google Maps with customer location
   const openGoogleMaps = () => {
@@ -651,7 +651,7 @@ export default function ProfileScreen() {
     setEditLocationStatus("");
 
     if (normalizedAadhar) {
-      if (await isAadhaarBlocked(normalizedAadhar)) {
+      if (await isAadhaarBlocked(normalizedAadhar, user.uid)) {
         setEditAadhaarBlocked(true);
         setEditAadhaarWarning("This Aadhaar is blocked. Customer edits cannot be saved with this number.");
         Alert.alert("Aadhaar Blocked", "This Aadhaar card has been blocked. Customer registration cannot proceed.");

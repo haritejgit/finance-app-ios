@@ -115,6 +115,14 @@ service cloud.firestore {
         validEnum('payment_mode', ['CASH', 'PHONE']);
     }
 
+    function validBlockedAadhaarFields() {
+      return validString('aadhaarNumber', 12) &&
+        validString('aadhaar', 12) &&
+        validString('reason', 500) &&
+        validString('blockedBy', 80) &&
+        validString('blocked_by', 80);
+    }
+
     match /users/{uid} {
       allow read: if isSignedIn() && request.auth.uid == uid;
       allow create, update: if isSignedIn() && request.auth.uid == uid && validUserProfileFields();
@@ -150,7 +158,10 @@ service cloud.firestore {
     }
 
     match /blockedAadhaar/{docId} {
-      allow read, write: if request.auth != null;
+      allow read: if ownsExistingDoc();
+      allow create: if createsOwnDoc() && validBlockedAadhaarFields();
+      allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validBlockedAadhaarFields();
+      allow delete: if ownsExistingDoc();
     }
 
     match /balancingFund/{docId} {
