@@ -94,7 +94,6 @@ function getEndOfDay(ts: number): number {
 
 export default function AccountScreen() {
   const { user } = useAuth();
-  if (!user) return null;
   const { colors } = useTheme();
   const router = useRouter();
   const { t, language } = useLanguage();
@@ -633,6 +632,8 @@ export default function AccountScreen() {
       Alert.alert(t("error"), "Export failed. Please check your settings.");
     }
   };
+
+  if (!user) return null;
 
   return (
     <AnimatedScreen style={styles.root}>
