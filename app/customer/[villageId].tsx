@@ -319,12 +319,12 @@ const CustomerItem = React.memo(function CustomerItem({
         </View>
 
         {loan ? (
-          <>
-            {/* Balance amount only - no label */}
+          <View style={styles.amountStatusRow}>
+            {/* Balance amount */}
             <Text style={[styles.cardAmount, loan.balanceAmount <= 0 && styles.balanceCleared]}>
               Rs.{Math.round(loan.balanceAmount).toLocaleString("en-IN")}
             </Text>
-            {/* Doc badges - only shown when a doc is missing */}
+            {/* Doc badges inline - only when a doc is missing */}
             {(didntPayLastWeek || !customer.aadharSubmitted || !customer.passportPhotoSubmitted) && (
               <View style={styles.docStatusGroup}>
                 {didntPayLastWeek && (
@@ -344,7 +344,7 @@ const CustomerItem = React.memo(function CustomerItem({
                 )}
               </View>
             )}
-          </>
+          </View>
         ) : null}
 
         {/* Address Row - green if location saved, grey if not */}
