@@ -216,36 +216,43 @@ const CustomerItem = React.memo(function CustomerItem({
   const lastActionPressAtRef = useRef(0);
   const hasLocation = hasCoordinates(customer);
   const canPay = !!loan && loan.balanceAmount > 0 && !isPaying;
-  const { colors } = useTheme();
+  const didntPayLastWeek = !!loan && loan.status === "ACTIVE" && loan.startDate < weekStart(Date.now()) && !paidLastWeek;
   
-  // Badge only shows for customers whose loan started before the current week with no payment in the previous week
-  const currentMonday = weekStart(Date.now());
-  const didntPayLastWeek = !!loan && loan.status === "ACTIVE" && loan.startDate < currentMonday && !paidLastWeek;
-  
+  const getStatusBadge = useCallback(() => {
+    switch (status) {
+      case 'paid':
+        return <View style={styles.statusBadgeContainer}><Icon name="checkmark" size={12} color="#666666" /><Text style={styles.statusBadgePaidGrey}> PAID</Text></View>;
+      case 'due':
+        return <View style={styles.statusBadgeContainer}><Icon name="close" size={12} color="#dc3545" /><Text style={styles.statusBadgeDue}> DUE</Text></View>;
+      default:
+        return null;
+    }
+  }, [status]);
+
   const getBackgroundColor = useCallback(() => {
     if (status === 'due') {
-      return '#fecaca'; // Soft light red
+      return '#f8d7da'; // Soft light red
     }
     if (isNew) {
-      return '#f3f4f6'; // Light grey for customers added today
+      return '#E0E7FF'; // Soft indigo/grey tint for new
     }
     switch (status) {
       case 'paid':
-        return '#dcfce7'; // Soft light green for paid status
+        return '#f5f5f5'; // Light grey for paid status
       default:
-        return '#FFFFFF'; // Pure white
+        return '#F5F9FF'; // Premium light blue tint (Card BG)
     }
   }, [status, isNew]);
 
   const getBorderColor = useCallback(() => {
     if (status === 'due') {
-      return '#dc3545'; // Bold red border
+      return '#dc3545'; // Red border
     }
     if (status === 'paid') {
-      return '#16a34a'; // Bold green border
+      return '#999999'; // Grey border
     }
-    return colors.ink; // Theme-aware ink/navy border
-  }, [status, colors.ink]);
+    return '#0D1B2A'; // Premium Dark Navy border
+  }, [status]);
 
   const markActionPress = useCallback((event?: { stopPropagation?: () => void }) => {
     event?.stopPropagation?.();
@@ -269,196 +276,180 @@ const CustomerItem = React.memo(function CustomerItem({
         {
           backgroundColor: getBackgroundColor(),
           borderColor: getBorderColor(),
-          borderWidth: 2,
+          borderWidth: 1.5,
         },
       ]}
       onPress={openCustomer}
     >
-      {/* Column 1: Left Badge Info */}
-      <View style={styles.leftCol}>
-        <View style={styles.idBox}>
-          <Text style={styles.idText}>{customer.numericalId}</Text>
-        </View>
-        {customer.coId ? (
-          <View style={styles.coPill}>
-            <Text style={styles.coPillText}>c/o: {customer.coId}</Text>
-          </View>
-        ) : null}
-        {customer.coName ? (
-          <Text style={styles.coNameUnder} numberOfLines={1}>
-            {customer.coName}
-          </Text>
-        ) : null}
+      {/* Left Column: ID Badge + C/O details */}
+      <View style={styles.leftColumn}>
+        <CustomerIdBadge 
+          numericalId={customer.numericalId} 
+          id={customer.id} 
+          style={styles.premiumBadge}
+          textStyle={styles.premiumBadgeText}
+        />
+        <Text style={styles.coText} numberOfLines={1}>C/o No</Text>
+        <Text style={styles.coText} numberOfLines={1}>{customer.coId || "-"}</Text>
+        <Text style={styles.coText} numberOfLines={1}>C/o Name</Text>
+        <Text style={styles.coText} numberOfLines={1}>{customer.coName || "-"}</Text>
       </View>
 
-      {/* Left Divider */}
-      <View style={styles.divider} />
-
-      {/* Column 2: Center Details */}
-      <View style={styles.centerCol}>
-        <Text style={[styles.cardName, status === "paid" ? { color: "#0B5D34" } : { color: "#111827" }]} numberOfLines={1}>
+      {/* Center Column: Name, Mobile, Balance & Icons, Location description */}
+      <View style={styles.centerContent}>
+        <Text
+          style={[
+            styles.name,
+            status === "paid" && styles.namePaid,
+            status === "due" && styles.nameDue,
+          ]}
+          numberOfLines={1}
+        >
           {customer.name}
         </Text>
-
-        <View style={styles.phoneIconRow}>
-          <Icon name="call" size={12} color="#6B7280" />
-          <Text style={styles.cardPhone}>{customer.phone || "-"}</Text>
-
-          {/* Doc Status Badges */}
-          <View style={styles.docStatusGroup}>
-            {!(customer.aadharSubmitted && customer.passportPhotoSubmitted) ? (
-              <>
-                <View style={[styles.docMiniBadge, customer.aadharSubmitted ? styles.docMiniOk : styles.docMiniMissing]}>
-                  <Icon name="id-card" size={10} color={customer.aadharSubmitted ? "#2563EB" : "#9CA3AF"} />
-                </View>
-                <View style={[styles.docMiniBadge, customer.passportPhotoSubmitted ? styles.docMiniOk : styles.docMiniMissing]}>
-                  <Icon name="camera" size={10} color={customer.passportPhotoSubmitted ? "#059669" : "#9CA3AF"} />
-                </View>
-              </>
-            ) : null}
-            {didntPayLastWeek ? (
-              <View style={[styles.docMiniBadge, styles.docMiniWarn]}>
-                <Icon name="calendar-outline" size={10} color="#D97706" />
-              </View>
-            ) : null}
-          </View>
-        </View>
-
+        
+        <Text style={styles.phoneLabel}>
+          {customer.phone || "xxxxxxxxxx"}
+        </Text>
+        
         {loan ? (
-          <View style={styles.amountStatusRow}>
-            <Text style={styles.cardAmount}>
-              ₹{Math.round(loan.balanceAmount).toLocaleString("en-IN")}
+          <View style={styles.balanceRow}>
+            <Text style={[
+              styles.balanceAmount,
+              loan.balanceAmount <= 0 && styles.balanceCleared,
+            ]}>
+              Rs.{Math.round(loan.balanceAmount).toLocaleString("en-IN")}
             </Text>
-            {status === "paid" ? (
-              <View style={styles.pillPaid}>
-                <Icon name="checkmark" size={9} color="#059669" />
-                <Text style={styles.pillPaidText}> Paid</Text>
+
+            <View style={styles.statusIconsRow}>
+              {/* Document/Notes List icon */}
+              <View style={styles.squareIconBox}>
+                <Icon name="document-text-outline" size={13} color="#0D1B2A" />
               </View>
-            ) : status === "due" ? (
-              <View style={styles.pillDue}>
-                <Icon name="close" size={9} color="#DC2626" />
-                <Text style={styles.pillDueText}> Due</Text>
-              </View>
-            ) : null}
+              {/* Aadhaar warning triangle */}
+              {!customer.aadharSubmitted && (
+                <View style={styles.squareIconBox}>
+                  <Icon name="warning" size={12} color="#0D1B2A" />
+                </View>
+              )}
+              {/* Photo warning triangle */}
+              {!customer.passportPhotoSubmitted && (
+                <View style={styles.squareIconBox}>
+                  <Icon name="warning" size={12} color="#0D1B2A" />
+                </View>
+              )}
+              {/* Last week missed indicator */}
+              {didntPayLastWeek && (
+                <View style={[styles.squareIconBox, { borderColor: "#dc3545" }]}>
+                  <Icon name="warning" size={12} color="#dc3545" />
+                </View>
+              )}
+            </View>
           </View>
         ) : null}
-
-        {/* Address & Direction Row */}
-        <View style={styles.addressBox}>
-          <View style={styles.pinContainer}>
-            <Icon name="location" size={13} color={hasLocation ? "#059669" : "#9CA3AF"} />
-          </View>
-          <View style={styles.addressTexts}>
-            <Text style={styles.addressDesc} numberOfLines={2}>
-              {customer.locationDesc || "No address details available"}
-            </Text>
-          </View>
+        
+        <View style={styles.locationContainer}>
           <Pressable
+            accessibilityLabel={`Open directions for ${customer.name}`}
+            style={[styles.locationIconBox, !hasLocation && styles.locationIconBoxMuted]}
             disabled={isUpdatingLocation}
-            style={styles.viewMapButton}
+            onPressIn={markActionPress}
+            onPressOut={markActionPress}
             onPress={(e) => {
               markActionPress(e);
               lightImpact();
-              if (hasLocation) {
-                onOpenDirections(customer);
-              } else {
-                onSaveCurrentLocation(customer);
-              }
+              if (hasLocation) onOpenDirections(customer);
             }}
             onLongPress={(e) => {
               markActionPress(e);
-              if (!hasLocation) {
-                onSaveCurrentLocation(customer);
-              }
+              if (!hasLocation) onSaveCurrentLocation(customer);
             }}
           >
             {isUpdatingLocation ? (
-              <ActivityIndicator size="small" color="#059669" />
+              <ActivityIndicator size="small" color="#0D1B2A" />
             ) : (
-              <Text style={styles.viewMapText}>
-                {hasLocation ? "↗ View on Map" : "Save Location"}
-              </Text>
+              <Icon name="location" size={13} color="#0D1B2A" />
             )}
           </Pressable>
+          <Text style={styles.locationText} numberOfLines={1}>
+            ({customer.locationDesc || "Loc Description"})
+          </Text>
         </View>
+
+        {isNew ? <Text style={styles.statusBadgeNew}>NEW</Text> : null}
+        {getStatusBadge()}
       </View>
 
-      {/* Right Divider */}
-      <View style={styles.divider} />
-
-      {/* Column 3: Right Actions Stack */}
-      <View style={styles.rightCol}>
+      {/* Right Column: Actions Stack */}
+      <View style={styles.rightActionsColumn}>
         {/* Cash Row */}
-        <View style={styles.actionRow}>
-          <Pressable
-            accessibilityLabel={`Cash payment for ${customer.name}`}
-            style={[styles.actionBtn, styles.btnCash, !canPay && styles.quickPayBtnDisabled]}
-            disabled={!canPay}
-            onPressIn={markActionPress}
-            onPressOut={markActionPress}
-            onPress={(e) => {
-              markActionPress(e);
-              lightImpact();
-              onQuickPay(customer, "CASH");
-            }}
-            onLongPress={(e) => {
-              markActionPress(e);
-              lightImpact();
-              onManualPay(customer, "CASH");
-            }}
-          >
-            <Icon name="cash" size={14} color="#FFFFFF" />
-          </Pressable>
+        <Pressable
+          accessibilityLabel={`Cash payment for ${customer.name}`}
+          style={[styles.actionRow, !canPay && styles.actionRowDisabled]}
+          disabled={!canPay}
+          onPressIn={markActionPress}
+          onPressOut={markActionPress}
+          onPress={(e) => {
+            markActionPress(e);
+            lightImpact();
+            onQuickPay(customer, "CASH");
+          }}
+          onLongPress={(e) => {
+            markActionPress(e);
+            lightImpact();
+            onManualPay(customer, "CASH");
+          }}
+        >
+          <View style={styles.actionIconSquare}>
+            <Icon name="cash-outline" size={15} color="#0D1B2A" />
+          </View>
           <Text style={styles.actionLabel}>Cash</Text>
-          <Text style={styles.letterCash}>C</Text>
-        </View>
+        </Pressable>
 
-        {/* PhonePe Row */}
-        <View style={styles.actionRow}>
-          <Pressable
-            accessibilityLabel={`PhonePe payment for ${customer.name}`}
-            style={[styles.actionBtn, styles.btnPhone, !canPay && styles.quickPayBtnDisabled]}
-            disabled={!canPay}
-            onPressIn={markActionPress}
-            onPressOut={markActionPress}
-            onPress={(e) => {
-              markActionPress(e);
-              lightImpact();
-              onQuickPay(customer, "PHONE");
-            }}
-            onLongPress={(e) => {
-              markActionPress(e);
-              lightImpact();
-              onManualPay(customer, "PHONE");
-            }}
-          >
-            <View style={styles.phonePeLogo}>
-              <Text style={styles.phonePeLogoText}>पे</Text>
+        {/* Phonepe Row */}
+        <Pressable
+          accessibilityLabel={`PhonePe payment for ${customer.name}`}
+          style={[styles.actionRow, !canPay && styles.actionRowDisabled]}
+          disabled={!canPay}
+          onPressIn={markActionPress}
+          onPressOut={markActionPress}
+          onPress={(e) => {
+            markActionPress(e);
+            lightImpact();
+            onQuickPay(customer, "PHONE");
+          }}
+          onLongPress={(e) => {
+            markActionPress(e);
+            lightImpact();
+            onManualPay(customer, "PHONE");
+          }}
+        >
+          <View style={styles.actionIconSquare}>
+            <View style={styles.phonepeLogoCircle}>
+              <Text style={styles.phonepeLogoChar}>पे</Text>
             </View>
-          </Pressable>
-          <Text style={styles.actionLabel}>PhonePe</Text>
-          <Text style={styles.letterPhone}>P</Text>
-        </View>
+          </View>
+          <Text style={styles.actionLabel}>Phonepe</Text>
+        </Pressable>
 
         {/* Due Row */}
-        <View style={styles.actionRow}>
-          <Pressable
-            accessibilityLabel={`Mark ${customer.name} due`}
-            style={[styles.actionBtn, styles.btnDue, !canPay && styles.quickPayBtnDisabled]}
-            disabled={!canPay}
-            onPressIn={markActionPress}
-            onPressOut={markActionPress}
-            onPress={(e) => {
-              markActionPress(e);
-              lightImpact();
-              onMarkDue(customer);
-            }}
-          >
-            <Icon name="document-text-outline" size={14} color="#FFFFFF" />
-          </Pressable>
+        <Pressable
+          accessibilityLabel={`Mark ${customer.name} due`}
+          style={[styles.actionRow, !canPay && styles.actionRowDisabled]}
+          disabled={!canPay}
+          onPressIn={markActionPress}
+          onPressOut={markActionPress}
+          onPress={(e) => {
+            markActionPress(e);
+            lightImpact();
+            onMarkDue(customer);
+          }}
+        >
+          <View style={styles.actionIconSquare}>
+            <Icon name="document-text-outline" size={15} color="#0D1B2A" />
+          </View>
           <Text style={styles.actionLabel}>Due</Text>
-          <Text style={styles.letterDue}>D</Text>
-        </View>
+        </Pressable>
       </View>
     </Pressable>
   );
@@ -1876,274 +1867,170 @@ const styles = StyleSheet.create({
   routeSummaryValue: { color: colors.white, fontSize: 14, fontWeight: "900", marginTop: 1 },
   list: { flex: 1 },
   listContent: { paddingBottom: 20 },
-  item: { backgroundColor: colors.white, borderRadius: 16, padding: 12, marginBottom: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4 },
-  leftCol: {
+  item: { 
+    borderRadius: 20, 
+    padding: 14, 
+    marginBottom: 12, 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 12, 
+    shadowColor: "#0f172a", 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.08, 
+    shadowRadius: 8, 
+    elevation: 3, 
+    borderWidth: 1.5,
+  },
+  leftColumn: { 
+    alignItems: "center", 
+    gap: 4, 
+    minWidth: 72, 
+    maxWidth: 90,
+  },
+  premiumBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: "transparent",
+    borderWidth: 1.5,
+    borderColor: "#0D1B2A",
     alignItems: "center",
     justifyContent: "center",
-    width: 65,
   },
-  idBox: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    backgroundColor: "#0B5D34",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  idText: {
-    color: "#FFFFFF",
+  premiumBadgeText: {
+    color: "#0D1B2A",
     fontSize: 22,
-    fontWeight: "900",
+    fontWeight: "bold",
   },
-  coPill: {
-    marginTop: 6,
-    backgroundColor: "#FFF2E6",
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    alignSelf: "center",
-  },
-  coPillText: {
-    color: "#D97706",
-    fontSize: 9,
-    fontWeight: "800",
-  },
-  coNameUnder: {
-    fontSize: 10,
-    color: "#1F2937",
-    fontWeight: "800",
-    marginTop: 4,
-    textAlign: "center",
+  coText: { 
+    fontSize: 9, 
+    color: "#0D1B2A", 
+    fontWeight: "800", 
+    textAlign: "center", 
     width: "100%",
   },
-  divider: {
-    width: 1,
-    backgroundColor: "#F3F4F6",
-    marginVertical: 4,
-  },
-  centerCol: {
-    flex: 1,
-    paddingHorizontal: 10,
-    justifyContent: "flex-start",
-    gap: 3,
-  },
-  cardName: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#0B5D34",
-  },
-  phoneIconRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  centerContent: { 
+    flex: 1, 
+    paddingHorizontal: 4,
     gap: 4,
-    flexWrap: "wrap",
   },
-  cardPhone: {
-    fontSize: 11,
-    color: "#4B5563",
-    fontWeight: "700",
+  name: { 
+    fontWeight: "bold", 
+    fontSize: 20, 
+    color: "#0D1B2A",
   },
-  docStatusGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginLeft: 6,
+  namePaid: { 
+    color: "#16803a", 
   },
-  docMiniBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  nameDue: { 
+    color: "#dc3545", 
+  },
+  phoneLabel: { 
+    fontSize: 13, 
+    color: "#0D1B2A", 
+    fontWeight: "600",
+    letterSpacing: 0.5,
+  },
+  balanceRow: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 8, 
+  },
+  balanceAmount: { 
+    fontSize: 16, 
+    color: "#0D1B2A", 
+    fontWeight: "bold", 
+  },
+  balanceCleared: { 
+    color: "#16a34a", 
+  },
+  statusIconsRow: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 5, 
+  },
+  squareIconBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: "#0D1B2A",
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "transparent",
   },
-  docMiniOk: {
-    backgroundColor: "#EBF5FF",
-  },
-  docMiniMissing: {
-    backgroundColor: "#F3F4F6",
-  },
-  docMiniWarn: {
-    backgroundColor: "#FEF3C7",
-  },
-  amountStatusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
+  locationContainer: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 6, 
     marginTop: 2,
   },
-  cardAmount: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: "#0B5D34",
-  },
-  pillPaid: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#E8F5E9",
-    borderColor: "#C8E6C9",
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  pillPaidText: {
-    fontSize: 9,
-    color: "#059669",
-    fontWeight: "800",
-  },
-  pillDue: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFEBEE",
-    borderColor: "#FFCDD2",
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  pillDueText: {
-    fontSize: 9,
-    color: "#DC2626",
-    fontWeight: "800",
-  },
-  addressBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F9FCF9",
-    borderColor: "#E8F2E8",
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 6,
-    marginTop: 4,
-    gap: 6,
-  },
-  pinContainer: {
-    width: 26,
-    height: 26,
+  locationIconBox: {
+    width: 24,
+    height: 24,
     borderRadius: 6,
-    backgroundColor: "#E8F5E9",
-    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "#0D1B2A",
     alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
   },
-  addressTexts: {
+  locationIconBoxMuted: {
+    opacity: 0.5,
+  },
+  locationText: { 
+    fontSize: 12, 
+    color: "#0D1B2A", 
+    fontWeight: "600", 
+    fontStyle: "italic",
     flex: 1,
-    gap: 1,
   },
-  addressDesc: {
-    fontSize: 10,
-    color: "#1F2937",
-    fontWeight: "700",
-    lineHeight: 12,
-  },
-  addressSub: {
-    fontSize: 8,
-    color: "#6B7280",
-    fontWeight: "600",
-  },
-  viewMapButton: {
-    backgroundColor: "#E8F5E9",
-    borderWidth: 1,
-    borderColor: "#C8E6C9",
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  viewMapText: {
-    color: "#059669",
-    fontSize: 9,
-    fontWeight: "800",
-  },
-  rightCol: {
-    width: 96,
-    gap: 6,
-    justifyContent: "center",
-    paddingLeft: 6,
+  rightActionsColumn: { 
+    alignItems: "flex-start", 
+    gap: 8, 
+    width: 95,
   },
   actionRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 6,
+    width: "100%",
   },
-  actionBtn: {
-    width: 28,
-    height: 28,
+  actionRowDisabled: {
+    opacity: 0.38,
+  },
+  actionIconSquare: {
+    width: 32,
+    height: 32,
     borderRadius: 8,
-    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "#0D1B2A",
     alignItems: "center",
-  },
-  btnDue: {
-    backgroundColor: "#DC2626",
-  },
-  btnCash: {
-    backgroundColor: "#059669",
-  },
-  btnPhone: {
-    backgroundColor: "#5F259F",
-  },
-  phonePeLogo: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: "#FFFFFF",
     justifyContent: "center",
-    alignItems: "center",
-  },
-  phonePeLogoText: {
-    color: "#5F259F",
-    fontSize: 10,
-    fontWeight: "900",
-    lineHeight: 11,
+    backgroundColor: "transparent",
   },
   actionLabel: {
-    fontSize: 10,
-    color: "#4B5563",
+    color: "#0D1B2A",
+    fontSize: 13,
     fontWeight: "700",
-    flex: 1,
-    marginLeft: 6,
   },
-  letterDue: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#DC2626",
-    textAlign: "right",
+  phonepeLogoCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#5F259F",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  letterCash: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#059669",
-    textAlign: "right",
+  phonepeLogoChar: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "bold",
   },
-  letterPhone: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#5F259F",
-    textAlign: "right",
-  },
-  idContainer: { alignItems: "center", gap: 3, minWidth: 64, maxWidth: 84 },
-  coText: { fontSize: 8, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.3, marginTop: 2 },
-  coValue: { fontSize: 10, fontWeight: "700" },
-  centerContent: { flex: 1, paddingLeft: 4, gap: 2 },
-  name: { fontWeight: "900", fontSize: 16 },
-  namePaid: { color: "#16a34a" },
-  nameDue: { color: "#dc3545" },
-  phoneText: { fontSize: 12, fontWeight: "600" },
-  balanceRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
-  balanceAmount: { fontSize: 14, fontWeight: "900" },
-  balanceCleared: { color: "#16a34a" },
-  locationContainer: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
-  locationIconBadge: { width: 24, height: 24, borderRadius: 6, borderWidth: 1.5, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
-  locationDescText: { fontSize: 10, fontWeight: "700", flex: 1 },
-  centerStatusIconsRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  borderedStatusIcon: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
-  rightActionsColumn: { flexDirection: "column", gap: 6, alignItems: "flex-start", justifyContent: "center", paddingLeft: 4, minWidth: 96 },
-  actionRowBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 1 },
-  actionRowBtnDisabled: { opacity: 0.35 },
-  squareActionIcon: { width: 28, height: 28, borderRadius: 6, borderWidth: 1.5, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
-  phonepeIconWrapper: { width: 18, height: 18, borderRadius: 9, backgroundColor: "#5F259F", alignItems: "center", justifyContent: "center" },
-  phonepeTextChar: { color: "#FFFFFF", fontSize: 10, fontWeight: "900", marginTop: -2 },
-  actionLabelText: { fontSize: 12, fontWeight: "800" },
+  statusBadgeContainer: { flexDirection: "row", alignItems: "center", marginTop: 3, alignSelf: "flex-start" },
+  statusBadgePaidGrey: { fontSize: 9, color: "#666666", fontWeight: "700", backgroundColor: "#f5f5f5", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#999999" },
+  statusBadgeDue: { fontSize: 9, color: "#dc3545", fontWeight: "700", backgroundColor: "#f8d7da", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start" },
+  statusBadgeNew: { fontSize: 9, color: "#374151", fontWeight: "700", marginTop: 3, backgroundColor: "#f3f4f6", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#9ca3af" },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyText: { color: colors.white, fontSize: 18, fontWeight: "700", marginBottom: 6 },

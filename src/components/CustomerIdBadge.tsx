@@ -2,15 +2,25 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useColors } from "../theme-context";
 
-export function CustomerIdBadge({ numericalId, id }: { numericalId?: number; id?: string }) {
+export function CustomerIdBadge({ 
+  numericalId, 
+  id,
+  style,
+  textStyle
+}: { 
+  numericalId?: number; 
+  id?: string;
+  style?: any;
+  textStyle?: any;
+}) {
   const colors = useColors();
   const badgeLabel = Number.isInteger(numericalId)
     ? String(numericalId).padStart(2, "0")
     : String(id ?? "0").slice(0, 2).padStart(2, "0");
 
   return (
-    <View style={[styles.badge, { borderColor: colors.ink }]}>
-      <Text style={[styles.text, { color: colors.ink }]}>{badgeLabel}</Text>
+    <View style={[styles.badge, { borderColor: colors.ink }, style]}>
+      <Text style={[styles.text, { color: colors.ink }, textStyle]}>{badgeLabel}</Text>
     </View>
   );
 }
