@@ -240,15 +240,14 @@ const CustomerItem = React.memo(function CustomerItem({
     if (status === 'due') {
       return '#f8d7da'; // Light red
     }
+    if (status !== 'paid') {
+      return '#000000'; // Black for unpaid (including none)
+    }
     if (isNew) {
       return '#e5e7eb'; // Visible grey for customers added today
     }
-    switch (status) {
-      case 'paid':
-        return '#f5f5f5'; // Light grey for paid status
-      default:
-        return '#FFFFFF'; // Plain white
-    }
+    // Paid status
+    return '#f5f5f5'; // Light grey for paid status
   }, [status, isNew]);
 
   const getBorderColor = useCallback(() => {
@@ -370,7 +369,7 @@ const CustomerItem = React.memo(function CustomerItem({
         {/* Address & Direction Row */}
         <View style={styles.addressBox}>
           <View style={styles.pinContainer}>
-            <Icon name="location" size={13} color="#059669" />
+            <Icon name="location" size={13} color={hasLocation ? "#059669" : "#9CA3AF"} />
           </View>
           <View style={styles.addressTexts}>
             <Text style={styles.addressDesc} numberOfLines={2}>
@@ -412,26 +411,6 @@ const CustomerItem = React.memo(function CustomerItem({
 
       {/* Column 3: Right Actions Stack */}
       <View style={styles.rightCol}>
-        {/* Due Row */}
-        <View style={styles.actionRow}>
-          <Pressable
-            accessibilityLabel={`Mark ${customer.name} due`}
-            style={[styles.actionBtn, styles.btnDue, !canPay && styles.quickPayBtnDisabled]}
-            disabled={!canPay}
-            onPressIn={markActionPress}
-            onPressOut={markActionPress}
-            onPress={(e) => {
-              markActionPress(e);
-              lightImpact();
-              onMarkDue(customer);
-            }}
-          >
-            <Icon name="document-text-outline" size={14} color="#FFFFFF" />
-          </Pressable>
-          <Text style={styles.actionLabel}>Due</Text>
-          <Text style={styles.letterDue}>D</Text>
-        </View>
-
         {/* Cash Row */}
         <View style={styles.actionRow}>
           <Pressable
@@ -482,6 +461,26 @@ const CustomerItem = React.memo(function CustomerItem({
           </Pressable>
           <Text style={styles.actionLabel}>PhonePe</Text>
           <Text style={styles.letterPhone}>P</Text>
+        </View>
+
+        {/* Due Row */}
+        <View style={styles.actionRow}>
+          <Pressable
+            accessibilityLabel={`Mark ${customer.name} due`}
+            style={[styles.actionBtn, styles.btnDue, !canPay && styles.quickPayBtnDisabled]}
+            disabled={!canPay}
+            onPressIn={markActionPress}
+            onPressOut={markActionPress}
+            onPress={(e) => {
+              markActionPress(e);
+              lightImpact();
+              onMarkDue(customer);
+            }}
+          >
+            <Icon name="document-text-outline" size={14} color="#FFFFFF" />
+          </Pressable>
+          <Text style={styles.actionLabel}>Due</Text>
+          <Text style={styles.letterDue}>D</Text>
         </View>
       </View>
     </Pressable>
