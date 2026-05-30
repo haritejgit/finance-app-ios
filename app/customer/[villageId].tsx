@@ -216,53 +216,36 @@ const CustomerItem = React.memo(function CustomerItem({
   const lastActionPressAtRef = useRef(0);
   const hasLocation = hasCoordinates(customer);
   const canPay = !!loan && loan.balanceAmount > 0 && !isPaying;
-  const paidRatio = loan?.totalPayable ? Math.max(0, Math.min(1, 1 - loan.balanceAmount / loan.totalPayable)) : 0;
-  const progressPercent = Math.min(paidRatio * 100, 100);
+  const { colors } = useTheme();
+  
   // Badge only shows for customers whose loan started before the current week with no payment in the previous week
   const currentMonday = weekStart(Date.now());
   const didntPayLastWeek = !!loan && loan.status === "ACTIVE" && loan.startDate < currentMonday && !paidLastWeek;
-  const missingDocs = [
-    customer.aadharSubmitted === false ? "Aadhar not submitted" : "",
-    customer.passportPhotoSubmitted === false ? "Passport photo not submitted" : "",
-  ].filter(Boolean);
-  const getStatusBadge = useCallback(() => {
-    switch (status) {
-      case 'paid':
-        return <View style={styles.statusBadgeContainer}><Icon name="checkmark" size={12} color="#666666" /><Text style={styles.statusBadgePaidGrey}> PAID</Text></View>;
-      case 'due':
-        return <View style={styles.statusBadgeContainer}><Icon name="close" size={12} color="#dc3545" /><Text style={styles.statusBadgeDue}> DUE</Text></View>;
-      default:
-        return null;
-    }
-  }, [status]);
-
+  
   const getBackgroundColor = useCallback(() => {
     if (status === 'due') {
-      return '#f8d7da'; // Light red
-    }
-    if (status !== 'paid') {
-      return '#000000'; // Black for unpaid (including none)
+      return '#fecaca'; // Soft light red
     }
     if (isNew) {
-      return '#e5e7eb'; // Visible grey for customers added today
+      return '#f3f4f6'; // Light grey for customers added today
     }
-    // Paid status
-    return '#f5f5f5'; // Light grey for paid status
+    switch (status) {
+      case 'paid':
+        return '#dcfce7'; // Soft light green for paid status
+      default:
+        return '#FFFFFF'; // Pure white
+    }
   }, [status, isNew]);
 
   const getBorderColor = useCallback(() => {
-    if (isNew && status !== 'due') {
-      return '#9ca3af';
+    if (status === 'due') {
+      return '#dc3545'; // Bold red border
     }
-    switch (status) {
-      case 'paid':
-        return '#999999'; // Grey border for new payments
-      case 'due':
-        return '#dc3545'; // Red border
-      default:
-        return 'transparent';
+    if (status === 'paid') {
+      return '#16a34a'; // Bold green border
     }
-  }, [status, isNew]);
+    return colors.ink; // Theme-aware ink/navy border
+  }, [status, colors.ink]);
 
   const markActionPress = useCallback((event?: { stopPropagation?: () => void }) => {
     event?.stopPropagation?.();
@@ -285,14 +268,8 @@ const CustomerItem = React.memo(function CustomerItem({
         noTextSelection,
         {
           backgroundColor: getBackgroundColor(),
-          borderColor: getBorderColor() === "transparent" ? "#E5E7EB" : getBorderColor(),
-          borderWidth: 1,
-          borderLeftWidth: 1,
-          flexDirection: 'row',
-          alignItems: 'stretch',
-          padding: 10,
-          borderRadius: 18,
-          gap: 0,
+          borderColor: getBorderColor(),
+          borderWidth: 2,
         },
       ]}
       onPress={openCustomer}
@@ -2145,43 +2122,28 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   idContainer: { alignItems: "center", gap: 3, minWidth: 64, maxWidth: 84 },
-  coIdBadge: { fontSize: 9, textAlign: "center", backgroundColor: "#fff3e0", color: "#f57c00", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 6, fontWeight: "700" },
-  coNameBadge: { fontSize: 8, color: "#6B7280", fontWeight: "700", marginTop: 2, textAlign: "center", width: "100%" },
-  centerContent: { flex: 1, paddingLeft: 2 },
-  name: { fontWeight: "900", fontSize: 15, color: "#111827" },
-  namePaid: { color: "#16803a" },
+  coText: { fontSize: 8, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.3, marginTop: 2 },
+  coValue: { fontSize: 10, fontWeight: "700" },
+  centerContent: { flex: 1, paddingLeft: 4, gap: 2 },
+  name: { fontWeight: "900", fontSize: 16 },
+  namePaid: { color: "#16a34a" },
   nameDue: { color: "#dc3545" },
-  phoneLabel: { fontSize: 11, color: "#4B5563", fontWeight: "600", marginTop: 2 },
-  balanceRow: { flexDirection: "row", alignItems: "center", marginTop: 3, gap: 4 },
-  balanceLabel: { fontSize: 11, color: "#4B5563", fontWeight: "700" },
-  balanceAmount: { fontSize: 12, color: colors.blue2, fontWeight: "800" },
-  balanceCleared: { color: colors.success },
-  locationDescText: { fontSize: 11, color: "#6B7280", fontWeight: "700", marginTop: 3, fontStyle: "italic" },
-  statusBadgeContainer: { flexDirection: "row", alignItems: "center", marginTop: 3, alignSelf: "flex-start" },
-  statusBadgePaidGrey: { fontSize: 9, color: "#666666", fontWeight: "700", backgroundColor: "#f5f5f5", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#999999" },
-  statusBadgeDue: { fontSize: 9, color: "#dc3545", fontWeight: "700", backgroundColor: "#f8d7da", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start" },
-  statusBadgeNew: { fontSize: 9, color: "#374151", fontWeight: "700", marginTop: 3, backgroundColor: "#f3f4f6", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#9ca3af" },
-  itemActions: { alignItems: "center", gap: 6, width: 74 },
-  statusIconsRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 4 },
-  statusIconOk: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#dcfce7", alignItems: "center", justifyContent: "center" },
-  statusIconMissing: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#f3f4f6", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#e5e7eb" },
-  statusIconWarn: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#fee2e2", alignItems: "center", justifyContent: "center" },
-  actionBtnsRow: { flexDirection: "column", alignItems: "center", gap: 5 },
-  cardActionGrid: { width: 70, flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center", justifyContent: "center" },
-  cardActionBtn: { width: 31, height: 31, borderRadius: 9, alignItems: "center", justifyContent: "center", borderWidth: 1 },
-  cardActionDue: { backgroundColor: "#C62828", borderColor: "#C62828" },
-  cardActionCash: { backgroundColor: "#1565C0", borderColor: "#1565C0" },
-  cardActionOpen: { backgroundColor: "#1976D2", borderColor: "#1976D2" },
-  cardActionPhone: { backgroundColor: "#5F259F", borderColor: "#5F259F" },
-  cardActionText: { color: colors.white, fontWeight: "900", fontSize: 13 },
-  iconActionBtn: { width: 44, height: 32, borderRadius: 10, backgroundColor: colors.sky, borderWidth: 1, borderColor: "#bfdbfe", justifyContent: "center", alignItems: "center" },
-  iconActionBtnMuted: { backgroundColor: "#f3f4f6", borderColor: "#e5e7eb" },
-  payButtonsRow: { flexDirection: "row", gap: 5, width: 150 },
-  cashPayBtn: { flex: 1, minHeight: 32, borderRadius: 10, backgroundColor: "#1565C0", justifyContent: "center", alignItems: "center", paddingHorizontal: 4 },
-  phonePePayBtn: { flex: 1, minHeight: 32, borderRadius: 10, backgroundColor: "#5F259F", justifyContent: "center", alignItems: "center", paddingHorizontal: 4 },
-  dueCardBtn: { flex: 1, minHeight: 32, borderRadius: 10, backgroundColor: "#C62828", justifyContent: "center", alignItems: "center", paddingHorizontal: 4 },
-  quickPayBtnDisabled: { backgroundColor: "#d1d5db" },
-  quickPayText: { color: colors.white, fontWeight: "900", fontSize: 9 },
+  phoneText: { fontSize: 12, fontWeight: "600" },
+  balanceRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
+  balanceAmount: { fontSize: 14, fontWeight: "900" },
+  balanceCleared: { color: "#16a34a" },
+  locationContainer: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
+  locationIconBadge: { width: 24, height: 24, borderRadius: 6, borderWidth: 1.5, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
+  locationDescText: { fontSize: 10, fontWeight: "700", flex: 1 },
+  centerStatusIconsRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  borderedStatusIcon: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
+  rightActionsColumn: { flexDirection: "column", gap: 6, alignItems: "flex-start", justifyContent: "center", paddingLeft: 4, minWidth: 96 },
+  actionRowBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 1 },
+  actionRowBtnDisabled: { opacity: 0.35 },
+  squareActionIcon: { width: 28, height: 28, borderRadius: 6, borderWidth: 1.5, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
+  phonepeIconWrapper: { width: 18, height: 18, borderRadius: 9, backgroundColor: "#5F259F", alignItems: "center", justifyContent: "center" },
+  phonepeTextChar: { color: "#FFFFFF", fontSize: 10, fontWeight: "900", marginTop: -2 },
+  actionLabelText: { fontSize: 12, fontWeight: "800" },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyText: { color: colors.white, fontSize: 18, fontWeight: "700", marginBottom: 6 },
