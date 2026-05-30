@@ -252,9 +252,9 @@ const CustomerItem = React.memo(function CustomerItem({
       return '#dc3545'; // Red border
     }
     if (status === 'paid') {
-      return '#999999'; // Grey border
+      return '#D1D5DB'; // Subtle grey border for paid
     }
-    return '#0D1B2A'; // Premium Dark Navy border
+    return '#E2E8F0'; // Very subtle default border
   }, [status]);
 
   const markActionPress = useCallback((event?: { stopPropagation?: () => void }) => {
@@ -351,7 +351,10 @@ const CustomerItem = React.memo(function CustomerItem({
         <View style={styles.addressRow}>
           <Pressable
             disabled={isUpdatingLocation}
-            style={[styles.locationIconSquare, { borderColor: hasLocation ? "#059669" : "#9CA3AF" }]}
+            style={[styles.locationIconSquare, {
+              backgroundColor: hasLocation ? "#1A3C34" : "#9CA3AF",
+              borderColor: hasLocation ? "#1A3C34" : "#9CA3AF",
+            }]}
             onPress={(e) => {
               markActionPress(e);
               lightImpact();
@@ -369,9 +372,9 @@ const CustomerItem = React.memo(function CustomerItem({
             }}
           >
             {isUpdatingLocation ? (
-              <ActivityIndicator size="small" color={hasLocation ? "#059669" : "#9CA3AF"} />
+              <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Icon name="location" size={13} color={hasLocation ? "#059669" : "#9CA3AF"} />
+              <Icon name="location" size={13} color={hasLocation ? "#0ABFBC" : "#FFFFFF"} />
             )}
           </Pressable>
           <Text style={styles.addressDesc} numberOfLines={1}>
@@ -403,7 +406,7 @@ const CustomerItem = React.memo(function CustomerItem({
             onManualPay(customer, "CASH");
           }}
         >
-          <View style={[styles.actionIconSquare, { borderColor: "#059669" }]}>
+          <View style={[styles.actionIconSquare, { backgroundColor: "#0ABFBC", borderColor: "#0ABFBC" }]}>
             <Text style={styles.rupeeChar}>₹</Text>
           </View>
         </Pressable>
@@ -444,8 +447,8 @@ const CustomerItem = React.memo(function CustomerItem({
             onMarkDue(customer);
           }}
         >
-          <View style={[styles.actionIconSquare, { borderColor: "#DC2626" }]}>
-            <Icon name="document-text-outline" size={15} color="#DC2626" />
+          <View style={[styles.actionIconSquare, { backgroundColor: "#DC2626", borderColor: "#DC2626" }]}>
+            <Icon name="document-text-outline" size={15} color="#FFFFFF" />
           </View>
         </Pressable>
       </View>
@@ -1868,17 +1871,18 @@ const styles = StyleSheet.create({
   item: { 
     backgroundColor: colors.white, 
     borderRadius: 16, 
-    padding: 12, 
-    marginBottom: 10, 
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    marginBottom: 8, 
     flexDirection: "row", 
     alignItems: "center", 
-    gap: 10, 
+    gap: 8, 
     shadowColor: "#0f172a", 
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowOpacity: 0.1, 
-    shadowRadius: 10, 
-    elevation: 4,
-    borderWidth: 1.5,
+    shadowOffset: { width: 0, height: 3 }, 
+    shadowOpacity: 0.08, 
+    shadowRadius: 8, 
+    elevation: 3,
+    borderWidth: 1,
   },
   leftCol: {
     alignItems: "center",
@@ -1886,20 +1890,20 @@ const styles = StyleSheet.create({
     width: 65,
   },
   premiumBadge: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    backgroundColor: "#0B5D34", // forest green solid background
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: "#0B5D34",
     justifyContent: "center",
     alignItems: "center",
   },
   premiumBadgeText: {
-    color: "#FFFFFF", // white number
-    fontSize: 22,
+    color: "#FFFFFF",
+    fontSize: 18,
     fontWeight: "900",
   },
   coPill: {
-    marginTop: 6,
+    marginTop: 4,
     backgroundColor: "#FFF2E6",
     borderRadius: 10,
     paddingHorizontal: 6,
@@ -1915,15 +1919,15 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: "#1F2937",
     fontWeight: "800",
-    marginTop: 4,
+    marginTop: 2,
     textAlign: "center",
     width: "100%",
   },
   centerCol: {
     flex: 1,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     justifyContent: "flex-start",
-    gap: 3,
+    gap: 2,
   },
   cardName: {
     fontSize: 14,
@@ -1936,10 +1940,10 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   phoneCircleBadge: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: "#374151",
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#0ABFBC",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -1951,8 +1955,8 @@ const styles = StyleSheet.create({
   amountStatusRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    marginTop: 2,
+    gap: 5,
+    marginTop: 0,
   },
   balanceLabelText: {
     fontSize: 11,
@@ -1962,7 +1966,7 @@ const styles = StyleSheet.create({
   cardAmount: {
     fontSize: 13,
     fontWeight: "900",
-    color: "#059669", // beautiful green balance!
+    color: "#0ABFBC", // teal like source
   },
   balanceCleared: {
     color: "#16a34a",
@@ -2003,9 +2007,8 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: "#0D1B2A",
-    backgroundColor: "transparent",
+    borderWidth: 0,
+    backgroundColor: "#1A3C34",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -2050,7 +2053,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   rupeeChar: {
-    color: "#059669",
+    color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "bold",
   },
