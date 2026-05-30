@@ -288,81 +288,132 @@ const CustomerItem = React.memo(function CustomerItem({
           backgroundColor: getBackgroundColor(),
           borderColor: getBorderColor() === "transparent" ? "#E5E7EB" : getBorderColor(),
           borderWidth: 1,
-          borderLeftWidth: 4,
+          borderLeftWidth: 1,
+          flexDirection: 'row',
+          alignItems: 'stretch',
+          padding: 10,
+          borderRadius: 18,
+          gap: 0,
         },
       ]}
       onPress={openCustomer}
     >
-      {/* Left: ID + C/O ID + C/O Name */}
-      <View style={styles.idContainer}>
-        <CustomerIdBadge numericalId={customer.numericalId} id={customer.id} />
+      {/* Column 1: Left Badge Info */}
+      <View style={styles.leftCol}>
+        <View style={styles.idBox}>
+          <Text style={styles.idText}>{customer.numericalId}</Text>
+        </View>
         {customer.coId ? (
-          <Text style={styles.coIdBadge}>c/o: {customer.coId}</Text>
-        ) : null}
-        {customer.coName ? (
-          <Text style={styles.coNameBadge} numberOfLines={1}>{customer.coName}</Text>
-        ) : null}
-      </View>
-
-      {/* Center: Name, Phone, Balance, Icons, Location description */}
-      <View style={styles.centerContent}>
-        <Text
-          style={[
-            styles.name,
-            status === "paid" && styles.namePaid,
-            status === "due" && styles.nameDue,
-          ]}
-          numberOfLines={1}
-        >
-          {customer.name}
-        </Text>
-        <Text style={styles.phoneLabel}>ph.no:- {customer.phone || "-"}</Text>
-        {loan ? (
-          <View style={styles.balanceRow}>
-            <Text style={[
-              styles.balanceAmount,
-              loan.balanceAmount <= 0 && styles.balanceCleared,
-            ]}>
-              Rs. {Math.round(loan.balanceAmount).toLocaleString("en-IN")}
-            </Text>
-
-            {/* Status icons row side-by-side with Balance */}
-            <View style={[styles.statusIconsRow, { marginLeft: 6, marginBottom: 0 }]}>
-              {/* Last week missed indicator */}
-              {didntPayLastWeek ? (
-                <View style={styles.statusIconWarn}>
-                  <Icon name="alert-circle" size={14} color="#dc3545" />
-                </View>
-              ) : null}
-              {/* Document status icons (only show if not both submitted) */}
-              {!(customer.aadharSubmitted && customer.passportPhotoSubmitted) ? (
-                <>
-                  {/* Aadhar doc icon */}
-                  <View style={customer.aadharSubmitted ? styles.statusIconOk : styles.statusIconMissing}>
-                    <Icon name="id-card" size={13} color={customer.aadharSubmitted ? "#16a34a" : "#9ca3af"} />
-                  </View>
-                  {/* Photo doc icon */}
-                  <View style={customer.passportPhotoSubmitted ? styles.statusIconOk : styles.statusIconMissing}>
-                    <Icon name="camera" size={13} color={customer.passportPhotoSubmitted ? "#16a34a" : "#9ca3af"} />
-                  </View>
-                </>
-              ) : null}
-            </View>
+          <View style={styles.coPill}>
+            <Text style={styles.coPillText}>c/o: {customer.coId}</Text>
           </View>
         ) : null}
-        {customer.locationDesc ? (
-          <Text style={styles.locationDescText} numberOfLines={1}>[{customer.locationDesc}]</Text>
+        {customer.coName ? (
+          <Text style={styles.coNameUnder} numberOfLines={1}>
+            {customer.coName}
+          </Text>
         ) : null}
-        {isNew ? <Text style={styles.statusBadgeNew}>NEW</Text> : null}
-        {getStatusBadge()}
       </View>
 
-      {/* Right: Actions Stack */}
-      <View style={styles.itemActions}>
-        <View style={styles.cardActionGrid}>
+      {/* Left Divider */}
+      <View style={styles.divider} />
+
+      {/* Column 2: Center Details */}
+      <View style={styles.centerCol}>
+        <Text style={styles.cardName} numberOfLines={1}>
+          {customer.name}
+        </Text>
+
+        <View style={styles.phoneIconRow}>
+          <Icon name="call" size={12} color="#6B7280" />
+          <Text style={styles.cardPhone}>{customer.phone || "-"}</Text>
+
+          {/* Doc Status Badges */}
+          <View style={styles.docStatusGroup}>
+            <View style={[styles.docMiniBadge, customer.aadharSubmitted ? styles.docMiniOk : styles.docMiniMissing]}>
+              <Icon name="id-card" size={10} color={customer.aadharSubmitted ? "#2563EB" : "#9CA3AF"} />
+            </View>
+            <View style={[styles.docMiniBadge, customer.passportPhotoSubmitted ? styles.docMiniOk : styles.docMiniMissing]}>
+              <Icon name="camera" size={10} color={customer.passportPhotoSubmitted ? "#059669" : "#9CA3AF"} />
+            </View>
+            {didntPayLastWeek ? (
+              <View style={[styles.docMiniBadge, styles.docMiniWarn]}>
+                <Icon name="calendar-outline" size={10} color="#D97706" />
+              </View>
+            ) : null}
+          </View>
+        </View>
+
+        {loan ? (
+          <View style={styles.amountStatusRow}>
+            <Text style={styles.cardAmount}>
+              ₹{Math.round(loan.balanceAmount).toLocaleString("en-IN")}
+            </Text>
+            {status === "paid" ? (
+              <View style={styles.pillPaid}>
+                <Icon name="checkmark" size={9} color="#059669" />
+                <Text style={styles.pillPaidText}> Paid</Text>
+              </View>
+            ) : status === "due" ? (
+              <View style={styles.pillDue}>
+                <Icon name="close" size={9} color="#DC2626" />
+                <Text style={styles.pillDueText}> Due</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        {/* Address & Direction Row */}
+        <View style={styles.addressBox}>
+          <View style={styles.pinContainer}>
+            <Icon name="location" size={13} color="#059669" />
+          </View>
+          <View style={styles.addressTexts}>
+            <Text style={styles.addressDesc} numberOfLines={2}>
+              {customer.locationDesc || "No address details available"}
+            </Text>
+            <Text style={styles.addressSub}>Tap to open in Google Maps</Text>
+          </View>
+          <Pressable
+            disabled={isUpdatingLocation}
+            style={styles.viewMapButton}
+            onPress={(e) => {
+              markActionPress(e);
+              lightImpact();
+              if (hasLocation) {
+                onOpenDirections(customer);
+              } else {
+                onSaveCurrentLocation(customer);
+              }
+            }}
+            onLongPress={(e) => {
+              markActionPress(e);
+              if (!hasLocation) {
+                onSaveCurrentLocation(customer);
+              }
+            }}
+          >
+            {isUpdatingLocation ? (
+              <ActivityIndicator size="small" color="#059669" />
+            ) : (
+              <Text style={styles.viewMapText}>
+                {hasLocation ? "↗ View on Map" : "Save Location"}
+              </Text>
+            )}
+          </Pressable>
+        </View>
+      </View>
+
+      {/* Right Divider */}
+      <View style={styles.divider} />
+
+      {/* Column 3: Right Actions Stack */}
+      <View style={styles.rightCol}>
+        {/* Due Row */}
+        <View style={styles.actionRow}>
           <Pressable
             accessibilityLabel={`Mark ${customer.name} due`}
-            style={[styles.cardActionBtn, styles.cardActionDue, !canPay && styles.quickPayBtnDisabled]}
+            style={[styles.actionBtn, styles.btnDue, !canPay && styles.quickPayBtnDisabled]}
             disabled={!canPay}
             onPressIn={markActionPress}
             onPressOut={markActionPress}
@@ -372,11 +423,17 @@ const CustomerItem = React.memo(function CustomerItem({
               onMarkDue(customer);
             }}
           >
-            <Text selectable={false} style={styles.cardActionText}>D</Text>
+            <Icon name="document-text-outline" size={14} color="#FFFFFF" />
           </Pressable>
+          <Text style={styles.actionLabel}>Due</Text>
+          <Text style={styles.letterDue}>D</Text>
+        </View>
+
+        {/* Cash Row */}
+        <View style={styles.actionRow}>
           <Pressable
             accessibilityLabel={`Cash payment for ${customer.name}`}
-            style={[styles.cardActionBtn, styles.cardActionCash, !canPay && styles.quickPayBtnDisabled]}
+            style={[styles.actionBtn, styles.btnCash, !canPay && styles.quickPayBtnDisabled]}
             disabled={!canPay}
             onPressIn={markActionPress}
             onPressOut={markActionPress}
@@ -391,33 +448,17 @@ const CustomerItem = React.memo(function CustomerItem({
               onManualPay(customer, "CASH");
             }}
           >
-            <Text selectable={false} style={styles.cardActionText}>{isPaying ? "..." : "C"}</Text>
+            <Icon name="cash" size={14} color="#FFFFFF" />
           </Pressable>
-          <Pressable
-            accessibilityLabel={`Open directions for ${customer.name}`}
-            style={[styles.cardActionBtn, styles.cardActionOpen, !hasLocation && styles.iconActionBtnMuted]}
-            disabled={isUpdatingLocation}
-            onPressIn={markActionPress}
-            onPressOut={markActionPress}
-            onPress={(e) => {
-              markActionPress(e);
-              lightImpact();
-              if (hasLocation) onOpenDirections(customer);
-            }}
-            onLongPress={(e) => {
-              markActionPress(e);
-              if (!hasLocation) onSaveCurrentLocation(customer);
-            }}
-          >
-            {isUpdatingLocation ? (
-              <ActivityIndicator size="small" color="#9ca3af" />
-            ) : (
-              <Icon name="location" size={15} color={colors.white} />
-            )}
-          </Pressable>
+          <Text style={styles.actionLabel}>Cash</Text>
+          <Text style={styles.letterCash}>C</Text>
+        </View>
+
+        {/* PhonePe Row */}
+        <View style={styles.actionRow}>
           <Pressable
             accessibilityLabel={`PhonePe payment for ${customer.name}`}
-            style={[styles.cardActionBtn, styles.cardActionPhone, !canPay && styles.quickPayBtnDisabled]}
+            style={[styles.actionBtn, styles.btnPhone, !canPay && styles.quickPayBtnDisabled]}
             disabled={!canPay}
             onPressIn={markActionPress}
             onPressOut={markActionPress}
@@ -432,8 +473,12 @@ const CustomerItem = React.memo(function CustomerItem({
               onManualPay(customer, "PHONE");
             }}
           >
-            <Text selectable={false} style={styles.cardActionText}>P</Text>
+            <View style={styles.phonePeLogo}>
+              <Text style={styles.phonePeLogoText}>पे</Text>
+            </View>
           </Pressable>
+          <Text style={styles.actionLabel}>PhonePe</Text>
+          <Text style={styles.letterPhone}>P</Text>
         </View>
       </View>
     </Pressable>
@@ -1852,7 +1897,252 @@ const styles = StyleSheet.create({
   routeSummaryValue: { color: colors.white, fontSize: 14, fontWeight: "900", marginTop: 1 },
   list: { flex: 1 },
   listContent: { paddingBottom: 20 },
-  item: { backgroundColor: colors.white, borderRadius: 16, padding: 12, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4, borderLeftWidth: 4, borderLeftColor: colors.teal },
+  item: { backgroundColor: colors.white, borderRadius: 16, padding: 12, marginBottom: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4 },
+  leftCol: {
+    alignItems: "center",
+    justifyContent: "flex-start",
+    width: 65,
+    paddingTop: 4,
+  },
+  idBox: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+    backgroundColor: "#0B5D34",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  idText: {
+    color: "#FFFFFF",
+    fontSize: 22,
+    fontWeight: "900",
+  },
+  coPill: {
+    marginTop: 6,
+    backgroundColor: "#FFF2E6",
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    alignSelf: "center",
+  },
+  coPillText: {
+    color: "#D97706",
+    fontSize: 9,
+    fontWeight: "800",
+  },
+  coNameUnder: {
+    fontSize: 10,
+    color: "#1F2937",
+    fontWeight: "800",
+    marginTop: 4,
+    textAlign: "center",
+    width: "100%",
+  },
+  divider: {
+    width: 1,
+    backgroundColor: "#F3F4F6",
+    marginVertical: 4,
+  },
+  centerCol: {
+    flex: 1,
+    paddingHorizontal: 10,
+    justifyContent: "flex-start",
+    gap: 3,
+  },
+  cardName: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0B5D34",
+  },
+  phoneIconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flexWrap: "wrap",
+  },
+  cardPhone: {
+    fontSize: 11,
+    color: "#4B5563",
+    fontWeight: "700",
+  },
+  docStatusGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginLeft: 6,
+  },
+  docMiniBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  docMiniOk: {
+    backgroundColor: "#EBF5FF",
+  },
+  docMiniMissing: {
+    backgroundColor: "#F3F4F6",
+  },
+  docMiniWarn: {
+    backgroundColor: "#FEF3C7",
+  },
+  amountStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
+  },
+  cardAmount: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#0B5D34",
+  },
+  pillPaid: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#E8F5E9",
+    borderColor: "#C8E6C9",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  pillPaidText: {
+    fontSize: 9,
+    color: "#059669",
+    fontWeight: "800",
+  },
+  pillDue: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFEBEE",
+    borderColor: "#FFCDD2",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  pillDueText: {
+    fontSize: 9,
+    color: "#DC2626",
+    fontWeight: "800",
+  },
+  addressBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F9FCF9",
+    borderColor: "#E8F2E8",
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 6,
+    marginTop: 4,
+    gap: 6,
+  },
+  pinContainer: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    backgroundColor: "#E8F5E9",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  addressTexts: {
+    flex: 1,
+    gap: 1,
+  },
+  addressDesc: {
+    fontSize: 10,
+    color: "#1F2937",
+    fontWeight: "700",
+    lineHeight: 12,
+  },
+  addressSub: {
+    fontSize: 8,
+    color: "#6B7280",
+    fontWeight: "600",
+  },
+  viewMapButton: {
+    backgroundColor: "#E8F5E9",
+    borderWidth: 1,
+    borderColor: "#C8E6C9",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  viewMapText: {
+    color: "#059669",
+    fontSize: 9,
+    fontWeight: "800",
+  },
+  rightCol: {
+    width: 96,
+    gap: 6,
+    justifyContent: "center",
+    paddingLeft: 6,
+  },
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  actionBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  btnDue: {
+    backgroundColor: "#DC2626",
+  },
+  btnCash: {
+    backgroundColor: "#059669",
+  },
+  btnPhone: {
+    backgroundColor: "#5F259F",
+  },
+  phonePeLogo: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  phonePeLogoText: {
+    color: "#5F259F",
+    fontSize: 10,
+    fontWeight: "900",
+    lineHeight: 11,
+  },
+  actionLabel: {
+    fontSize: 10,
+    color: "#4B5563",
+    fontWeight: "700",
+    flex: 1,
+    marginLeft: 6,
+  },
+  letterDue: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#DC2626",
+    textAlign: "right",
+  },
+  letterCash: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#059669",
+    textAlign: "right",
+  },
+  letterPhone: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#5F259F",
+    textAlign: "right",
+  },
   idContainer: { alignItems: "center", gap: 3, minWidth: 64, maxWidth: 84 },
   coIdBadge: { fontSize: 9, textAlign: "center", backgroundColor: "#fff3e0", color: "#f57c00", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 6, fontWeight: "700" },
   coNameBadge: { fontSize: 8, color: "#6B7280", fontWeight: "700", marginTop: 2, textAlign: "center", width: "100%" },
