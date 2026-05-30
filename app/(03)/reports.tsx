@@ -167,19 +167,39 @@ export default function ReportsScreen() {
       // Create Excel workbook
       const wb = XLSX.utils.book_new();
       
-      // Create worksheet with payment data
-      const paymentData = reportData.map(p => ({
-        'Date': new Date(p.paymentDate).toLocaleDateString('en-US', { 
-          year: 'numeric', 
-          month: '2-digit', 
-          day: '2-digit' 
-        }),
-        'Amount': p.amountPaid,
-        'Type': p.paymentType,
-        'Mode': p.paymentMode,
-        'Customer ID': p.customerId || '',
-        'Payment Date Full': new Date(p.paymentDate).toLocaleString()
-      }));
+      // Group same-day payments per customer so that split payments
+      // (e.g. Rs.300 Cash + Rs.200 PhonePe on the same day) appear as
+      // one row showing the combined total (Rs.500, Mode: CASH+PHONE).
+      const groupedPayments = new Map<string, any>();
+      for (const p of reportData) {
+        const d = new Date(p.paymentDate);
+        d.setHours(0, 0, 0, 0);
+        const key = `${p.customerId ?? 'unknown'}_${d.getTime()}`;
+        if (groupedPayments.has(key)) {
+          const g = groupedPayments.get(key);
+          g.amountPaid += (p.amountPaid || 0);
+          if (g.paymentMode !== p.paymentMode) {
+            g.paymentMode = 'CASH+PHONE';
+          }
+        } else {
+          groupedPayments.set(key, { ...p, amountPaid: p.amountPaid || 0 });
+        }
+      }
+      
+      // Create worksheet with merged payment data
+      const paymentData = Array.from(groupedPayments.values())
+        .sort((a, b) => b.paymentDate - a.paymentDate)
+        .map(p => ({
+          'Date': new Date(p.paymentDate).toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: '2-digit', 
+            day: '2-digit' 
+          }),
+          'Amount': p.amountPaid,
+          'Type': p.paymentType,
+          'Mode': p.paymentMode,
+          'Customer ID': p.customerId || '',
+        }));
       
       // Add payment data worksheet
       const wsPayments = XLSX.utils.json_to_sheet(paymentData);
