@@ -315,16 +315,18 @@ const CustomerItem = React.memo(function CustomerItem({
         </View>
 
         {loan ? (
-          <View style={styles.amountStatusRow}>
-            <Text style={styles.balanceLabelText}>Balance :- </Text>
-            <Text style={[
-              styles.cardAmount,
-              loan.balanceAmount <= 0 && styles.balanceCleared,
-            ]}>
-              Rs.{Math.round(loan.balanceAmount).toLocaleString("en-IN")}
-            </Text>
-
-            {/* Doc Status Badges */}
+          <>
+            {/* Balance row - label + amount only */}
+            <View style={styles.amountStatusRow}>
+              <Text style={styles.balanceLabelText}>Balance :- </Text>
+              <Text style={[
+                styles.cardAmount,
+                loan.balanceAmount <= 0 && styles.balanceCleared,
+              ]}>
+                Rs.{Math.round(loan.balanceAmount).toLocaleString("en-IN")}
+              </Text>
+            </View>
+            {/* Doc Status Badges - own row below balance */}
             <View style={styles.docStatusGroup}>
               {didntPayLastWeek && (
                 <View style={[styles.docMiniSquare, { borderColor: "#dc3545" }]}>
@@ -338,11 +340,11 @@ const CustomerItem = React.memo(function CustomerItem({
                 <Icon name={customer.passportPhotoSubmitted ? "camera" : "warning"} size={11} color={customer.passportPhotoSubmitted ? "#059669" : "#4B5563"} />
               </View>
             </View>
-          </View>
+          </>
         ) : null}
 
-        {/* Address & Direction Row */}
-        <View style={styles.addressBox}>
+        {/* Address Row - simplified, no background box */}
+        <View style={styles.addressRow}>
           <Pressable
             disabled={isUpdatingLocation}
             style={[styles.locationIconSquare, !hasLocation && styles.locationIconSquareMuted]}
@@ -369,7 +371,7 @@ const CustomerItem = React.memo(function CustomerItem({
             )}
           </Pressable>
           <Text style={styles.addressDesc} numberOfLines={1}>
-            [{customer.locationDesc || "No address details available"}]
+            [{customer.locationDesc || "Loc Description"}]
           </Text>
         </View>
       </View>
@@ -1923,7 +1925,7 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   cardName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "800",
     color: "#111827",
   },
@@ -1957,7 +1959,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   cardAmount: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: "900",
     color: "#059669", // beautiful green balance!
   },
@@ -1968,7 +1970,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    marginLeft: 6,
+    marginTop: 3,
   },
   docMiniSquare: {
     width: 20,
@@ -1989,6 +1991,12 @@ const styles = StyleSheet.create({
     padding: 6,
     marginTop: 4,
     gap: 6,
+  },
+  addressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+    gap: 5,
   },
   locationIconSquare: {
     width: 26,
