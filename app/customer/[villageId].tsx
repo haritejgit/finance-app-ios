@@ -320,7 +320,7 @@ const CustomerItem = React.memo(function CustomerItem({
 
       {/* Column 2: Center Details */}
       <View style={styles.centerCol}>
-        <Text style={styles.cardName} numberOfLines={1}>
+        <Text style={[styles.cardName, status === "paid" ? { color: "#0B5D34" } : { color: "#111827" }]} numberOfLines={1}>
           {customer.name}
         </Text>
 
@@ -330,12 +330,16 @@ const CustomerItem = React.memo(function CustomerItem({
 
           {/* Doc Status Badges */}
           <View style={styles.docStatusGroup}>
-            <View style={[styles.docMiniBadge, customer.aadharSubmitted ? styles.docMiniOk : styles.docMiniMissing]}>
-              <Icon name="id-card" size={10} color={customer.aadharSubmitted ? "#2563EB" : "#9CA3AF"} />
-            </View>
-            <View style={[styles.docMiniBadge, customer.passportPhotoSubmitted ? styles.docMiniOk : styles.docMiniMissing]}>
-              <Icon name="camera" size={10} color={customer.passportPhotoSubmitted ? "#059669" : "#9CA3AF"} />
-            </View>
+            {!(customer.aadharSubmitted && customer.passportPhotoSubmitted) ? (
+              <>
+                <View style={[styles.docMiniBadge, customer.aadharSubmitted ? styles.docMiniOk : styles.docMiniMissing]}>
+                  <Icon name="id-card" size={10} color={customer.aadharSubmitted ? "#2563EB" : "#9CA3AF"} />
+                </View>
+                <View style={[styles.docMiniBadge, customer.passportPhotoSubmitted ? styles.docMiniOk : styles.docMiniMissing]}>
+                  <Icon name="camera" size={10} color={customer.passportPhotoSubmitted ? "#059669" : "#9CA3AF"} />
+                </View>
+              </>
+            ) : null}
             {didntPayLastWeek ? (
               <View style={[styles.docMiniBadge, styles.docMiniWarn]}>
                 <Icon name="calendar-outline" size={10} color="#D97706" />
@@ -372,7 +376,6 @@ const CustomerItem = React.memo(function CustomerItem({
             <Text style={styles.addressDesc} numberOfLines={2}>
               {customer.locationDesc || "No address details available"}
             </Text>
-            <Text style={styles.addressSub}>Tap to open in Google Maps</Text>
           </View>
           <Pressable
             disabled={isUpdatingLocation}
@@ -1900,9 +1903,8 @@ const styles = StyleSheet.create({
   item: { backgroundColor: colors.white, borderRadius: 16, padding: 12, marginBottom: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4 },
   leftCol: {
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "center",
     width: 65,
-    paddingTop: 4,
   },
   idBox: {
     width: 50,
