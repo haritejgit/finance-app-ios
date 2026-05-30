@@ -1158,7 +1158,7 @@ interface Payment {
                 }
               } else if (weekPayments.length > 0) {
                 const regularPayment = weekPayments
-                  .filter((payment) => payment.paymentType === 'REGULAR')
+                  .filter((payment) => isRealCollectionPayment(payment))
                   .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
 
                 if (regularPayment > 0) {

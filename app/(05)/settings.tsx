@@ -15,7 +15,7 @@ import Icon from "../../src/Icon";
 import { Customer, Loan, Payment, Village } from "../../src/types";
 import { createBackupSnapshot, makeBackupFilename, parseBackupSnapshot, restoreBackupSnapshot } from "../../src/backup";
 import { downloadTextFile } from "../../src/exports";
-import { toMillis, money, startOfDay } from "../../src/business-logic";
+import { toMillis, money, startOfDay, isRealCollectionPayment } from "../../src/business-logic";
 import { useLanguage } from "../../src/language-context";
 
 const BUSINESS_START_DATE = new Date(2026, 3, 1).getTime();
@@ -202,7 +202,7 @@ export default function SettingsScreen() {
                 }
 
                 const regularPayment = weekPayments
-                  .filter((payment) => payment.paymentType === "REGULAR")
+                  .filter((payment) => isRealCollectionPayment(payment))
                   .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
                 if (regularPayment > 0) {
                   weeklyCollected[weekIndex] += regularPayment;

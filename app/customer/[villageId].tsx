@@ -186,6 +186,7 @@ const CustomerItem = React.memo(function CustomerItem({
   customer,
   onPress,
   onOpenDirections,
+  onQuickPay,
   onManualPay,
   onMarkDue,
   onSaveCurrentLocation,
@@ -200,6 +201,7 @@ const CustomerItem = React.memo(function CustomerItem({
   customer: Customer;
   onPress: (id: string) => void;
   onOpenDirections: (customer: Customer) => void;
+  onQuickPay: (customer: Customer, mode: PaymentMode) => void;
   onManualPay: (customer: Customer, mode: PaymentMode) => void;
   onMarkDue: (customer: Customer) => void;
   onSaveCurrentLocation: (customer: Customer) => void;
@@ -213,7 +215,7 @@ const CustomerItem = React.memo(function CustomerItem({
 }) {
   const lastActionPressAtRef = useRef(0);
   const hasLocation = hasCoordinates(customer);
-  const canPay = !!loan && loan.balanceAmount > 0 && status !== "paid" && !isPaying;
+  const canPay = !!loan && loan.balanceAmount > 0 && !isPaying;
   const paidRatio = loan?.totalPayable ? Math.max(0, Math.min(1, 1 - loan.balanceAmount / loan.totalPayable)) : 0;
   const progressPercent = Math.min(paidRatio * 100, 100);
   // Badge only shows for customers whose loan started before the current week with no payment in the previous week
@@ -381,6 +383,11 @@ const CustomerItem = React.memo(function CustomerItem({
             onPress={(e) => {
               markActionPress(e);
               lightImpact();
+              onQuickPay(customer, "CASH");
+            }}
+            onLongPress={(e) => {
+              markActionPress(e);
+              lightImpact();
               onManualPay(customer, "CASH");
             }}
           >
@@ -415,6 +422,11 @@ const CustomerItem = React.memo(function CustomerItem({
             onPressIn={markActionPress}
             onPressOut={markActionPress}
             onPress={(e) => {
+              markActionPress(e);
+              lightImpact();
+              onQuickPay(customer, "PHONE");
+            }}
+            onLongPress={(e) => {
               markActionPress(e);
               lightImpact();
               onManualPay(customer, "PHONE");
@@ -885,17 +897,54 @@ export default function CustomerListScreen() {
     });
   }, []);
 
-  const openManualPayment = useCallback((customer: Customer, selectedMode: PaymentMode = "CASH") => {
+  const openManualPayment = useCallback((customer: Customer, selectedMode: PaymentMode = "CASH") =>
+  {
     const loan = activeLoans[customer.id];
     if (!loan || loan.balanceAmount <= 0) {
       Alert.alert("No active loan", "This customer does not have an active loan to mark paid.");
       return;
     }
     setManualPaymentCustomer(customer);
-    setManualPaymentAmount(getSuggestedPaymentAmount(loan).toString());
+    setManualPaymentAmount("");
     setManualPaymentMode(selectedMode);
     setManualPaymentError("");
   }, [activeLoans]);
+
+  const handleQuickPay = useCallback((customer: Customer, mode: PaymentMode) => {
+    const loan = activeLoans[customer.id];
+    if (!loan || loan.balanceAmount <= 0) {
+      Alert.alert("No active loan", "This customer does not have an active loan to mark paid.");
+      return;
+    }
+    const suggested = getSuggestedPaymentAmount(loan);
+    const modeLabel = mode === "PHONE" ? "PhonePe" : "Cash";
+    Alert.alert(
+      `${modeLabel} Payment`,
+      `Pay Rs.${suggested.toLocaleString("en-IN")} via ${modeLabel} for ${customer.name}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Confirm",
+          onPress: async () => {
+            if (!user) return;
+            try {
+              setPayingCustomerId(customer.id);
+              await addPayment(loan, suggested, toStartOfDay(Date.now()), mode);
+              setPaymentStatuses((current) => ({ ...current, [customer.id]: "paid" }));
+              setActiveLoans((current) => ({
+                ...current,
+                [customer.id]: { ...loan, balanceAmount: Math.max(0, loan.balanceAmount - suggested) },
+              }));
+            } catch {
+              Alert.alert("Payment failed", "Could not save this payment. Please try again.");
+            } finally {
+              setPayingCustomerId(null);
+            }
+          },
+        },
+      ]
+    );
+  }, [activeLoans, user]);
 
   const openQuickCollect = useCallback(() => {
     const nextValues: Record<string, { selected: boolean; amount: string }> = {};
@@ -1036,6 +1085,7 @@ export default function CustomerListScreen() {
         customer={item} 
         onPress={openCustomer} 
         onOpenDirections={openDirections}
+        onQuickPay={handleQuickPay}
         onManualPay={openManualPayment}
         onMarkDue={markCustomerDue}
         onSaveCurrentLocation={saveCurrentLocationForCustomer}
@@ -1048,7 +1098,7 @@ export default function CustomerListScreen() {
         isUpdatingLocation={updatingLocationCustomerId === item.id}
       />
     ),
-    [activeLoans, lastPaymentDates, markCustomerDue, openCustomer, openDirections, openManualPayment, paymentStatuses, payingCustomerId, saveCurrentLocationForCustomer, updatingLocationCustomerId]
+    [activeLoans, lastPaymentDates, markCustomerDue, openCustomer, openDirections, openManualPayment, handleQuickPay, paymentStatuses, payingCustomerId, saveCurrentLocationForCustomer, updatingLocationCustomerId]
   );
 
   return (
@@ -1706,26 +1756,10 @@ export default function CustomerListScreen() {
       <Modal visible={!!manualPaymentCustomer} transparent animationType="slide" onRequestClose={closeManualPayment}>
         <KeyboardAvoidingView style={styles.modalWrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
             <View style={[styles.manualPayModal, { backgroundColor: colors.card }]}>
-            <Text style={[styles.manualPayTitle, { color: colors.text }]}>Manual Payment</Text>
+            <Text style={[styles.manualPayTitle, { color: colors.text }]}>
+              {manualPaymentMode === "PHONE" ? "PhonePe" : "Cash"} Payment
+            </Text>
             <Text style={[styles.manualPaySubtitle, { color: colors.textSecondary }]}>{manualPaymentCustomer?.name}</Text>
-            <Text style={[styles.label, { color: colors.text }]}>Payment Mode</Text>
-            <View style={styles.modeRow}>
-              {(["CASH", "PHONE"] as const).map((paymentMode) => (
-                <Pressable
-                  key={paymentMode}
-                  style={[
-                    styles.modeBtn,
-                    manualPaymentMode === paymentMode && styles.modeBtnOn,
-                    manualPaymentMode === paymentMode && paymentMode === "PHONE" && styles.modeBtnPhoneOn,
-                  ]}
-                  onPress={() => setManualPaymentMode(paymentMode)}
-                >
-                  <Text style={[styles.modeText, manualPaymentMode === paymentMode && styles.modeTextOn]}>
-                    {paymentMode === "CASH" ? "Cash" : "PhonePe"}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
             <TextInput
               placeholder="Enter amount"
               placeholderTextColor={colors.textMuted}
