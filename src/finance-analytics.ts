@@ -1,10 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { collection, getDocs, limit, onSnapshot, query, where, type Unsubscribe } from "firebase/firestore";
+import { collection, doc, getDocs, limit, onSnapshot, query, where, type Unsubscribe } from "firebase/firestore";
 import { db } from "./firebase";
 import { Customer, Loan, Payment, Village } from "./types";
 import { DAY_MS as DAY, endOfMonth, getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, money, startOfDay, startOfMonth, toMillis, weekStart } from "./business-logic";
 import { filterCustomersWithVillage } from "./utils";
 import type { Investment, Expense } from "./repository";
+import { calculateWalletBalances } from "./wallet-balances";
 
 export type CustomerState = "paid" | "pending" | "overdue" | "closed";
 
@@ -258,8 +259,9 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
     .filter((loan) => customerById.has(loan.customerId))
     .reduce((sum, loan) => sum + loan.distributedAmount, 0);
   const netCashPosition = bfAmount + totalInvestments + totalCollection - totalDistributed - totalExpenses;
-  const cashWalletBalance = Number(userProfile.cashOpeningBalance ?? 0) || 0;
-  const phonePeWalletBalance = Number(userProfile.phonePeOpeningBalance ?? 0) || 0;
+  const walletBalances = calculateWalletBalances(userProfile, loans as any[], payments as any[], expensesRaw, investmentsRaw);
+  const cashWalletBalance = walletBalances.cash.current;
+  const phonePeWalletBalance = walletBalances.phonePe.current;
 
   // Weekly trend (8 weeks) — now with investments and expenses
   const currentWeekStart = weekStart(Date.now());
@@ -584,6 +586,7 @@ export function subscribeDashboardAnalytics(
     watch("payments"),
     watch("investments"),
     watch("expenses"),
+    onSnapshot(doc(db, "users", userId), refresh, (error) => onError?.(error)),
   ];
   refresh();
 

@@ -595,11 +595,6 @@ export default function AccountScreen() {
     if (!userProfile) return null;
     return calculateWalletBalances(userProfile, loans as any[], payments as any[], expenses, investments);
   }, [expenses, investments, loans, payments, userProfile]);
-  const manualWalletBalances = useMemo(() => ({
-    cash: Number(userProfile?.cashOpeningBalance ?? 0) || 0,
-    phonePe: Number(userProfile?.phonePeOpeningBalance ?? 0) || 0,
-    total: (Number(userProfile?.cashOpeningBalance ?? 0) || 0) + (Number(userProfile?.phonePeOpeningBalance ?? 0) || 0),
-  }), [userProfile]);
 
   const handleSaveWalletBalances = useCallback(async () => {
     if (!user) return;
@@ -1012,7 +1007,7 @@ export default function AccountScreen() {
                       {walletBalances && !editingWallet ? (
                         <View style={styles.walletSavedRow}>
                           <Text style={styles.walletSavedText}>
-                            Cash: Rs.{Math.round(manualWalletBalances.cash).toLocaleString("en-IN")} | PhonePe: Rs.{Math.round(manualWalletBalances.phonePe).toLocaleString("en-IN")} - as of {formatDDMMYYYY(walletBalances.openingDate)}
+                            Opening Cash: Rs.{Math.round(walletBalances.cash.opening).toLocaleString("en-IN")} | Opening PhonePe: Rs.{Math.round(walletBalances.phonePe.opening).toLocaleString("en-IN")} - as of {formatDDMMYYYY(walletBalances.openingDate)}
                           </Text>
                           <Pressable style={styles.smallEditBtn} onPress={() => setEditingWallet(true)}>
                             <Text style={styles.smallEditText}>Edit</Text>
@@ -1042,25 +1037,25 @@ export default function AccountScreen() {
                       {walletBalances ? (
                         <>
                           <View style={styles.totalFundsCard}>
-                            <Text style={styles.totalFundsLabel}>Total Available</Text>
-                            <Text style={[styles.totalFundsValue, { color: manualWalletBalances.total >= 0 ? "#2E7D32" : "#C62828" }]}>
-                              Rs.{Math.round(manualWalletBalances.total).toLocaleString("en-IN")}
+                            <Text style={styles.totalFundsLabel}>Current Available</Text>
+                            <Text style={[styles.totalFundsValue, { color: walletBalances.totalAvailable >= 0 ? "#2E7D32" : "#C62828" }]}>
+                              Rs.{Math.round(walletBalances.totalAvailable).toLocaleString("en-IN")}
                             </Text>
-                            <Text style={styles.walletCardSub}>Manual wallet balances only</Text>
+                            <Text style={styles.walletCardSub}>Updates from collections, loans, expenses, and investments</Text>
                           </View>
                           <View style={styles.walletCardsRow}>
                             {([
-                              ["Cash", manualWalletBalances.cash, "#1565C0"],
-                              ["PhonePe", manualWalletBalances.phonePe, "#5F259F"],
-                            ] as const).map(([label, currentBalance, tone]) => (
+                              ["Cash", walletBalances.cash, "#1565C0"],
+                              ["PhonePe", walletBalances.phonePe, "#5F259F"],
+                            ] as const).map(([label, wallet, tone]) => (
                               <View key={label} style={styles.walletCard}>
                                 <Text style={[styles.walletCardTitle, { color: tone }]}>{label}</Text>
-                                <Text style={[styles.walletCardValue, { color: currentBalance >= 0 ? "#2E7D32" : "#C62828" }]}>
-                                  Rs.{Math.round(currentBalance).toLocaleString("en-IN")}
+                                <Text style={[styles.walletCardValue, { color: wallet.current >= 0 ? "#2E7D32" : "#C62828" }]}>
+                                  Rs.{Math.round(wallet.current).toLocaleString("en-IN")}
                                 </Text>
                                 <Text style={styles.walletCardSub}>Since {formatDDMMYYYY(walletBalances.openingDate)}</Text>
                                 <Text style={styles.walletBreakdown}>
-                                  Manual value. Calculate Period Totals are read-only and do not overwrite this wallet.
+                                  Opening: Rs.{Math.round(wallet.opening).toLocaleString("en-IN")} | Disbursed: -Rs.{Math.round(wallet.disbursed).toLocaleString("en-IN")} | Collected: +Rs.{Math.round(wallet.collected).toLocaleString("en-IN")} | Expenses: -Rs.{Math.round(wallet.expenses).toLocaleString("en-IN")} | Investments: -Rs.{Math.round(wallet.investments).toLocaleString("en-IN")}
                                 </Text>
                               </View>
                             ))}
