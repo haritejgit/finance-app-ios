@@ -1233,7 +1233,7 @@ export default function AccountScreen() {
                                   {"\n"}+ Collected: +Rs.{Math.round(wallet.collected).toLocaleString("en-IN")}
                                   {"\n"}- Lent out: -Rs.{Math.round(wallet.disbursed).toLocaleString("en-IN")}
                                   {"\n"}- Expenses: -Rs.{Math.round(wallet.expenses).toLocaleString("en-IN")}
-                                  {label === "Cash" ? `\n- Invested: -Rs.${Math.round(wallet.investments).toLocaleString("en-IN")}` : ""}
+                                  {label === "Cash" ? `\n+ Invested: +Rs.${Math.round(wallet.investments).toLocaleString("en-IN")}` : ""}
                                 </Text>
                               </View>
                             ))}

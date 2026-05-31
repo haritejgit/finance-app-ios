@@ -32,7 +32,9 @@ function buildBreakdown(opening: number, disbursed: number, collected: number, e
     collected,
     expenses,
     investments,
-    current: opening - disbursed + collected - expenses - investments,
+    // Investments are capital injections INTO the wallet (money received), so they ADD to balance.
+    // Formula: opening + collected + investments - disbursed - expenses
+    current: opening + collected + investments - disbursed - expenses,
   };
 }
 
