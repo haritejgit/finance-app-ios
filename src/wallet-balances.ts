@@ -38,8 +38,8 @@ function buildBreakdown(opening: number, disbursed: number, collected: number, e
 
 export function calculateWalletBalances(
   profile: Pick<UserProfile, "cashOpeningBalance" | "phonePeOpeningBalance" | "walletOpeningDate">,
-  loans: Array<Loan & Record<string, any>>,
-  payments: Array<Payment & Record<string, any>>,
+  loans: (Loan & Record<string, any>)[],
+  payments: (Payment & Record<string, any>)[],
   expenses: Expense[],
   investments: Investment[]
 ): WalletBalances {

@@ -92,6 +92,12 @@ function assertPositiveAmount(value: number, label: string) {
   }
 }
 
+function assertNonNegativeAmount(value: number, label: string) {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`${label} must be zero or greater.`);
+  }
+}
+
 function sanitizeCustomerInput<T extends Partial<Customer>>(input: T): T {
   return {
     ...input,
@@ -801,8 +807,8 @@ export type WeeklyChartPoint = {
 
 export const getAllPaymentsEver = async (userId?: string): Promise<AllPaymentEver[]> => {
   const [snap, loansSnap, eligibleCustomerIds] = await Promise.all([
-    getDocs(userId ? query(coll.payments, where("userId", "==", userId)) : coll.payments),
-    userId ? getDocs(query(coll.loans, where("userId", "==", userId))) : Promise.resolve(null),
+    getDocs(userId ? query(coll.payments, where("userId", "==", userId), limit(1500)) : query(coll.payments, limit(1500))),
+    userId ? getDocs(query(coll.loans, where("userId", "==", userId), limit(1500))) : Promise.resolve(null),
     userId ? getEligibleCustomerIds(userId) : Promise.resolve(null),
   ]);
   const customerIdByLoanId = new Map(
@@ -832,7 +838,7 @@ export const getAllPaymentsEver = async (userId?: string): Promise<AllPaymentEve
 
 export const getAllLoansEver = async (userId?: string): Promise<AllLoanEver[]> => {
   const [snap, eligibleCustomerIds] = await Promise.all([
-    getDocs(userId ? query(coll.loans, where("userId", "==", userId)) : coll.loans),
+    getDocs(userId ? query(coll.loans, where("userId", "==", userId), limit(1500)) : query(coll.loans, limit(1500))),
     userId ? getEligibleCustomerIds(userId) : Promise.resolve(null),
   ]);
   const loans = snap.docs.map((docSnap) => {
@@ -1167,7 +1173,7 @@ export async function getAllBalancingFunds(userId: string): Promise<any[]> {
 }
 
 export async function getInvestments(userId: string): Promise<Investment[]> {
-  const q = query(coll.investments, where("userId", "==", userId));
+  const q = query(coll.investments, where("userId", "==", userId), limit(1000));
   const snap = await getDocs(q);
   return snap.docs.map((docSnap) => docSnap.data() as Investment)
     .sort((a, b) => b.date - a.date);
@@ -1179,12 +1185,13 @@ export async function addInvestment(userId: string, amount: number, date: number
 
 export async function addInvestmentWithMode(userId: string, amount: number, date: number, investorName?: string, paymentMode: PaymentMode = "CASH"): Promise<Investment> {
   assertPositiveAmount(amount, "Investment amount");
+  const cleanedInvestorName = cleanText(investorName);
   const investment: Investment = {
     id: id(),
     userId,
     amount,
     date,
-    investorName: investorName || "",
+    investorName: cleanedInvestorName || "",
     payment_mode: normalizeMode(paymentMode),
   };
   await setDoc(doc(db, "investments", investment.id), stripUndefined(investment));
@@ -1199,11 +1206,12 @@ export async function deleteInvestment(investmentId: string): Promise<void> {
 
 export async function updateInvestment(investmentId: string, amount: number, date: number, investorName?: string, paymentMode: PaymentMode = "CASH"): Promise<void> {
   assertPositiveAmount(amount, "Investment amount");
+  const cleanedInvestorName = cleanText(investorName);
   const ref = doc(db, "investments", investmentId);
   await updateDoc(ref, {
     amount,
     date,
-    investorName: investorName || "",
+    investorName: cleanedInvestorName || "",
     payment_mode: normalizeMode(paymentMode),
     updatedAt: Date.now()
   });
@@ -1211,7 +1219,7 @@ export async function updateInvestment(investmentId: string, amount: number, dat
 }
 
 export async function getExpenses(userId: string): Promise<Expense[]> {
-  const q = query(coll.expenses, where("userId", "==", userId));
+  const q = query(coll.expenses, where("userId", "==", userId), limit(1000));
   const snap = await getDocs(q);
   return snap.docs.map((docSnap) => docSnap.data() as Expense)
     .sort((a, b) => b.date - a.date);
@@ -1280,6 +1288,8 @@ export async function saveWalletOpeningBalances(
   phonePeOpeningBalance: number,
   walletOpeningDate: number
 ): Promise<void> {
+  assertNonNegativeAmount(cashOpeningBalance, "Cash balance");
+  assertNonNegativeAmount(phonePeOpeningBalance, "PhonePe balance");
   // PRIVATE — never export
   await setDoc(
     doc(db, "users", userId),

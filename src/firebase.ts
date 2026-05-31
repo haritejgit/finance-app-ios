@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { enableIndexedDbPersistence, getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -24,3 +24,9 @@ const app = initializeApp(firebaseConfig);
 // Note: Firebase v11 uses IndexedDB in React Native. Auth state persists automatically.
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+if (typeof window !== "undefined") {
+  enableIndexedDbPersistence(db).catch(() => {
+    // Persistence can be unavailable in private windows or another active tab.
+  });
+}

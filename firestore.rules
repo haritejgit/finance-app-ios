@@ -22,9 +22,21 @@ service cloud.firestore {
         (request.resource.data[field] is number && request.resource.data[field] >= 0);
     }
 
+    function validPositive(field) {
+      return !request.resource.data.keys().hasAny([field]) ||
+        (request.resource.data[field] is number && request.resource.data[field] > 0);
+    }
+
     function validString(field, maxLength) {
       return !request.resource.data.keys().hasAny([field]) ||
         (request.resource.data[field] is string && request.resource.data[field].size() <= maxLength);
+    }
+
+    function validRequiredString(field, maxLength) {
+      return request.resource.data.keys().hasAny([field]) &&
+        request.resource.data[field] is string &&
+        request.resource.data[field].size() > 0 &&
+        request.resource.data[field].size() <= maxLength;
     }
 
     function validOptionalBoolean(field) {
@@ -46,14 +58,14 @@ service cloud.firestore {
 
     function validVillageFields() {
       return validString('id', 80) &&
-        validString('name', 120) &&
+        validRequiredString('name', 120) &&
         validString('dayOfWeek', 20) &&
         validEnum('shift', ['Morning', 'Evening']);
     }
 
     function validCustomerFields() {
       return validString('id', 80) &&
-        validString('name', 160) &&
+        validRequiredString('name', 160) &&
         validString('phone', 24) &&
         validString('aadhar', 20) &&
         validString('locationDesc', 300) &&
@@ -69,9 +81,9 @@ service cloud.firestore {
     }
 
     function validLoanAmounts() {
-      return validNonNegative('principalAmount') &&
-        validNonNegative('interestAmount') &&
-        validNonNegative('totalPayable') &&
+      return validPositive('principalAmount') &&
+        validPositive('interestAmount') &&
+        validPositive('totalPayable') &&
         validNonNegative('balanceAmount') &&
         validNonNegative('startDate') &&
         validString('id', 80) &&
@@ -107,12 +119,25 @@ service cloud.firestore {
     }
 
     function validMoneyEntryFields() {
-      return validNonNegative('amount') &&
+      return validPositive('amount') &&
         validNonNegative('date') &&
         validString('id', 80) &&
         validString('description', 500) &&
         validString('investorName', 160) &&
         validEnum('payment_mode', ['CASH', 'PHONE']);
+    }
+
+    function validExpenseFields() {
+      return validMoneyEntryFields() && validRequiredString('description', 500);
+    }
+
+    function validAiSuggestionsFields() {
+      return validString('id', 80) &&
+        validString('userId', 80) &&
+        validNonNegative('lastUpdated') &&
+        validNonNegative('updatedAt') &&
+        (!request.resource.data.keys().hasAny(['suggestions']) ||
+          request.resource.data.suggestions is list);
     }
 
     function validBlockedAadhaarFields() {
@@ -180,9 +205,16 @@ service cloud.firestore {
 
     match /expenses/{docId} {
       allow read: if ownsExistingDoc();
-      allow create: if createsOwnDoc() && validMoneyEntryFields();
-      allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validMoneyEntryFields();
+      allow create: if createsOwnDoc() && validExpenseFields();
+      allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validExpenseFields();
       allow delete: if ownsExistingDoc();
+    }
+
+    match /aiSuggestions/{docId} {
+      allow read: if ownsExistingDoc() && request.auth.uid == docId;
+      allow create: if createsOwnDoc() && request.auth.uid == docId && validAiSuggestionsFields();
+      allow update: if ownsExistingDoc() && keepsOwnerImmutable() && request.auth.uid == docId && validAiSuggestionsFields();
+      allow delete: if ownsExistingDoc() && request.auth.uid == docId;
     }
 
     match /{document=**} {

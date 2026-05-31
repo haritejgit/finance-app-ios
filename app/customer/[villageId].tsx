@@ -1,13 +1,12 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
   FlatList,
   KeyboardAvoidingView,
   Linking,
@@ -115,15 +114,6 @@ function getSuggestedPaymentAmount(loan?: Loan) {
   const standardAmount = Math.max(1, Math.round(loan.principalAmount / 10));
   return Math.min(standardAmount, loan.balanceAmount);
 }
-
-function loanHealthScore(loan?: Loan, lastPaymentDate?: number): number {
-  if (!loan || loan.balanceAmount <= 0) return 100;
-  const missedWeeks = lastPaymentDate ? Math.max(0, Math.floor((Date.now() - lastPaymentDate) / (7 * 24 * 60 * 60 * 1000))) : 1;
-  const daysOverdue = lastPaymentDate ? Math.max(0, Math.floor((Date.now() - lastPaymentDate) / (24 * 60 * 60 * 1000)) - 7) : 7;
-  return Math.max(0, Math.min(100, 100 - missedWeeks * 15 - daysOverdue * 2));
-}
-
-
 
 function toStartOfDay(ts: number) {
   const d = new Date(ts);
@@ -247,16 +237,6 @@ const CustomerItem = React.memo(function CustomerItem({
     }
   }, [status, isNew]);
 
-  const getBorderColor = useCallback(() => {
-    if (status === 'due') {
-      return '#dc3545'; // Red border
-    }
-    if (status === 'paid') {
-      return '#D1D5DB'; // Subtle grey border for paid
-    }
-    return '#E2E8F0'; // Very subtle default border
-  }, [status]);
-
   const markActionPress = useCallback((event?: { stopPropagation?: () => void }) => {
     event?.stopPropagation?.();
     lastActionPressAtRef.current = Date.now();
@@ -278,8 +258,6 @@ const CustomerItem = React.memo(function CustomerItem({
         noTextSelection,
         {
           backgroundColor: getBackgroundColor(),
-          borderColor: getBorderColor(),
-          borderWidth: 1.5,
         },
       ]}
       onPress={openCustomer}
@@ -328,17 +306,17 @@ const CustomerItem = React.memo(function CustomerItem({
             {(didntPayLastWeek || !customer.aadharSubmitted || !customer.passportPhotoSubmitted) && (
               <View style={styles.docStatusGroup}>
                 {didntPayLastWeek && (
-                  <View style={[styles.docMiniSquare, { borderColor: "#dc3545" }]}>
+                  <View style={styles.docMiniSquare}>
                     <Icon name="warning" size={11} color="#dc3545" />
                   </View>
                 )}
                 {!customer.aadharSubmitted && (
-                  <View style={[styles.docMiniSquare, { borderColor: "#dc3545" }]}>
+                  <View style={styles.docMiniSquare}>
                     <Icon name="id-card" size={11} color="#dc3545" />
                   </View>
                 )}
                 {!customer.passportPhotoSubmitted && (
-                  <View style={[styles.docMiniSquare, { borderColor: "#4B5563" }]}>
+                  <View style={styles.docMiniSquare}>
                     <Icon name="warning" size={11} color="#4B5563" />
                   </View>
                 )}
@@ -353,7 +331,6 @@ const CustomerItem = React.memo(function CustomerItem({
             disabled={isUpdatingLocation}
             style={[styles.locationIconSquare, {
               backgroundColor: hasLocation ? "#1A3C34" : "#9CA3AF",
-              borderColor: hasLocation ? "#1A3C34" : "#9CA3AF",
             }]}
             onPress={(e) => {
               markActionPress(e);
@@ -406,7 +383,7 @@ const CustomerItem = React.memo(function CustomerItem({
             onManualPay(customer, "CASH");
           }}
         >
-          <View style={[styles.actionIconSquare, { backgroundColor: "#0ABFBC", borderColor: "#0ABFBC" }]}>
+          <View style={[styles.actionIconSquare, { backgroundColor: "#0ABFBC" }]}>
             <Text style={styles.rupeeChar}>₹</Text>
           </View>
         </Pressable>
@@ -429,7 +406,7 @@ const CustomerItem = React.memo(function CustomerItem({
             onManualPay(customer, "PHONE");
           }}
         >
-          <View style={[styles.actionIconSquare, { borderColor: "#5F259F", backgroundColor: "#5F259F" }]}>
+          <View style={[styles.actionIconSquare, { backgroundColor: "#5F259F" }]}>
             <Text style={styles.phonepeLogoChar}>पे</Text>
           </View>
         </Pressable>
@@ -447,7 +424,7 @@ const CustomerItem = React.memo(function CustomerItem({
             onMarkDue(customer);
           }}
         >
-          <View style={[styles.actionIconSquare, { backgroundColor: "#DC2626", borderColor: "#DC2626" }]}>
+          <View style={[styles.actionIconSquare, { backgroundColor: "#DC2626" }]}>
             <Icon name="document-text-outline" size={15} color="#FFFFFF" />
           </View>
         </Pressable>
@@ -1870,53 +1847,53 @@ const styles = StyleSheet.create({
   listContent: { paddingBottom: 20 },
   item: { 
     backgroundColor: colors.white, 
-    borderRadius: 16, 
-    paddingVertical: 7,
-    paddingHorizontal: 10,
-    marginBottom: 8, 
+    borderRadius: 14, 
+    paddingVertical: 6,
+    paddingHorizontal: 9,
+    marginBottom: 7, 
     flexDirection: "row", 
     alignItems: "center", 
-    gap: 8, 
+    gap: 7, 
     shadowColor: "#0f172a", 
     shadowOffset: { width: 0, height: 3 }, 
     shadowOpacity: 0.08, 
     shadowRadius: 8, 
     elevation: 3,
-    borderWidth: 1,
   },
   leftCol: {
     alignItems: "center",
     justifyContent: "center",
-    width: 65,
+    width: 58,
   },
   premiumBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 9,
     backgroundColor: "#0B5D34",
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 0,
   },
   premiumBadgeText: {
     color: "#FFFFFF",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "900",
   },
   coPill: {
-    marginTop: 4,
+    marginTop: 3,
     backgroundColor: "#FFF2E6",
     borderRadius: 10,
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
     paddingVertical: 2,
     alignSelf: "center",
   },
   coPillText: {
     color: "#D97706",
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "800",
   },
   coNameUnder: {
-    fontSize: 10,
+    fontSize: 9,
     color: "#1F2937",
     fontWeight: "800",
     marginTop: 2,
@@ -1925,12 +1902,12 @@ const styles = StyleSheet.create({
   },
   centerCol: {
     flex: 1,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     justifyContent: "flex-start",
     gap: 2,
   },
   cardName: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "800",
     color: "#111827",
   },
@@ -1940,15 +1917,15 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   phoneCircleBadge: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 15,
+    height: 15,
+    borderRadius: 7.5,
     backgroundColor: "#0ABFBC",
     justifyContent: "center",
     alignItems: "center",
   },
   cardPhone: {
-    fontSize: 11,
+    fontSize: 10,
     color: "#4B5563",
     fontWeight: "700",
   },
@@ -1964,7 +1941,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   cardAmount: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "900",
     color: "#0ABFBC", // teal like source
   },
@@ -1974,14 +1951,13 @@ const styles = StyleSheet.create({
   docStatusGroup: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    marginTop: 3,
+    gap: 3,
+    marginTop: 2,
   },
   docMiniSquare: {
-    width: 20,
-    height: 20,
+    width: 18,
+    height: 18,
     borderRadius: 5,
-    borderWidth: 1.5,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FFFFFF",
@@ -1994,7 +1970,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 10,
     padding: 6,
-    marginTop: 4,
+    marginTop: 3,
     gap: 6,
   },
   addressRow: {
@@ -2004,8 +1980,8 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   locationIconSquare: {
-    width: 26,
-    height: 26,
+    width: 24,
+    height: 24,
     borderRadius: 6,
     borderWidth: 0,
     backgroundColor: "#1A3C34",
@@ -2016,7 +1992,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   addressDesc: {
-    fontSize: 10,
+    fontSize: 9,
     color: "#1F2937",
     fontWeight: "700",
     lineHeight: 12,
@@ -2029,8 +2005,8 @@ const styles = StyleSheet.create({
     height: "90%",
   },
   rightCol: {
-    width: 44,
-    gap: 8,
+    width: 38,
+    gap: 6,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -2044,22 +2020,21 @@ const styles = StyleSheet.create({
     opacity: 0.38,
   },
   actionIconSquare: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    borderWidth: 1.5,
+    width: 25,
+    height: 25,
+    borderRadius: 7,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FFFFFF",
   },
   rupeeChar: {
     color: "#FFFFFF",
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "bold",
   },
   phonepeLogoChar: {
     color: "#FFFFFF",
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "bold",
   },
   actionLabel: {
@@ -2069,9 +2044,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statusBadgeContainer: { flexDirection: "row", alignItems: "center", marginTop: 2, alignSelf: "flex-start" },
-  statusBadgePaidGrey: { fontSize: 9, color: "#666666", fontWeight: "700", backgroundColor: "#f5f5f5", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#999999" },
-  statusBadgeDue: { fontSize: 9, color: "#dc3545", fontWeight: "700", backgroundColor: "#f8d7da", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start" },
-  statusBadgeNew: { fontSize: 9, color: "#4F46E5", fontWeight: "700", backgroundColor: "#EEF2FF", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#4F46E5" },
+  statusBadgePaidGrey: { fontSize: 8, color: "#666666", fontWeight: "700", backgroundColor: "#f5f5f5", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start" },
+  statusBadgeDue: { fontSize: 8, color: "#dc3545", fontWeight: "700", backgroundColor: "#f8d7da", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start" },
+  statusBadgeNew: { fontSize: 8, color: "#4F46E5", fontWeight: "700", backgroundColor: "#EEF2FF", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start" },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyText: { color: colors.white, fontSize: 18, fontWeight: "700", marginBottom: 6 },

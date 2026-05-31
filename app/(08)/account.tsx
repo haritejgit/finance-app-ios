@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-  FlatList,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -22,8 +21,6 @@ import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import Icon from "../../src/Icon";
 import {
   getBalancingFund,
-  saveBalancingFund,
-  getBalancingFundForDate,
   saveBalancingFundForDate,
   getAllBalancingFunds,
   getVillages,
@@ -48,7 +45,6 @@ import { PaymentMode, UserProfile, Village } from "../../src/types";
 import { openAccountStatementPrint, ExportTransaction, ExportTotals } from "../../src/exports";
 import { calculateWalletBalances } from "../../src/wallet-balances";
 
-import { Colors } from "../../src/theme";
 import { useLanguage } from "../../src/language-context";
 
 
@@ -121,7 +117,6 @@ export default function AccountScreen() {
   const [dateSpecificBfs, setDateSpecificBfs] = useState<any[]>([]);
   const [bfDateStr, setBfDateStr] = useState<string>("");
   const [bfInput, setBfInput] = useState<string>("0");
-  const [bfPreFilledStatus, setBfPreFilledStatus] = useState<"saved" | "computed" | "default">("default");
   const [lastBfDate, setLastBfDate] = useState<string>("");
   
   const [investments, setInvestments] = useState<Investment[]>([]);
@@ -247,7 +242,7 @@ export default function AccountScreen() {
   }, []);
 
   // Balancing Fund calculation based on dates
-  const getBalancingFundForDateState = (targetDdmmStr: string) => {
+  const getBalancingFundForDateState = useCallback((targetDdmmStr: string) => {
     const targetYyyymmdd = ddmmToYyyymmdd(targetDdmmStr);
     if (!targetYyyymmdd) return { amount: 0, exists: false, isPreFilled: false };
 
@@ -314,7 +309,7 @@ export default function AccountScreen() {
       exists: false,
       isPreFilled: true
     };
-  };
+  }, [bf, dateSpecificBfs, expenses, investments, loans, payments]);
 
   // Reactively calculate bfInput & pre-filled status when date or dependencies change
   useEffect(() => {
@@ -325,8 +320,7 @@ export default function AccountScreen() {
       setBfInput(res.amount.toString());
       setLastBfDate(bfDateStr);
     }
-    setBfPreFilledStatus(res.exists ? "saved" : (res.isPreFilled ? "computed" : "default"));
-  }, [bfDateStr, dateSpecificBfs, bf, investments, expenses, payments, loans, loading]);
+  }, [bfDateStr, getBalancingFundForDateState, lastBfDate, loading]);
 
   // Balancing Fund Save
   const handleSaveBf = useCallback(async () => {
@@ -540,7 +534,7 @@ export default function AccountScreen() {
   // Dynamic starting balance for the selected period
   const periodBf = useMemo(() => {
     return getBalancingFundForDateState(startDateStr).amount;
-  }, [startDateStr, dateSpecificBfs, bf, investments, expenses, payments, loans]);
+  }, [startDateStr, getBalancingFundForDateState]);
 
   // Date Range Filtering and Summary Calculations
   const calculatedSummary = useMemo(() => {
@@ -568,6 +562,20 @@ export default function AccountScreen() {
     // Filter Expenses
     const rangeExps = expenses.filter((e) => e.date >= startTs && e.date <= endTs);
     const sumExps = rangeExps.reduce((sum, e) => sum + e.amount, 0);
+    const expenseTotals = Array.from(
+      rangeExps.reduce((map, expense) => {
+        const label = (expense.description || "Other").trim() || "Other";
+        const key = label.toLocaleLowerCase("en-IN");
+        const existing = map.get(key);
+        map.set(key, {
+          description: existing?.description ?? label,
+          amount: (existing?.amount ?? 0) + (Number(expense.amount) || 0),
+        });
+        return map;
+      }, new Map<string, { description: string; amount: number }>())
+    )
+      .map(([, value]) => value)
+      .sort((a, b) => b.amount - a.amount);
 
     // Total = periodBf + Investments + Collections - Payments - Expenses
     const netTotal = periodBf + sumInvs + sumColls - sumLoans - sumExps;
@@ -579,6 +587,7 @@ export default function AccountScreen() {
       sumExps,
       netTotal,
       rangeExps,
+      expenseTotals,
     };
   }, [periodBf, investments, expenses, payments, loans, startDateStr, endDateStr]);
 
@@ -586,6 +595,11 @@ export default function AccountScreen() {
     if (!userProfile) return null;
     return calculateWalletBalances(userProfile, loans as any[], payments as any[], expenses, investments);
   }, [expenses, investments, loans, payments, userProfile]);
+  const manualWalletBalances = useMemo(() => ({
+    cash: Number(userProfile?.cashOpeningBalance ?? 0) || 0,
+    phonePe: Number(userProfile?.phonePeOpeningBalance ?? 0) || 0,
+    total: (Number(userProfile?.cashOpeningBalance ?? 0) || 0) + (Number(userProfile?.phonePeOpeningBalance ?? 0) || 0),
+  }), [userProfile]);
 
   const handleSaveWalletBalances = useCallback(async () => {
     if (!user) return;
@@ -628,7 +642,7 @@ export default function AccountScreen() {
 
   // Monospace String Output
   const liveMonospaceBreakdown = useMemo(() => {
-    const { sumInvs, sumColls, sumLoans, rangeExps, netTotal } = calculatedSummary;
+    const { sumInvs, sumColls, sumLoans, expenseTotals, netTotal } = calculatedSummary;
     const fmt = (val: number) => Math.round(val).toLocaleString("en-IN");
 
     let text = "";
@@ -643,8 +657,8 @@ export default function AccountScreen() {
     text += `                 ---------\n`;
     text += `                 =  ${fmt((sumInvs > 0 ? periodBf + sumInvs : periodBf) + sumColls - sumLoans).padStart(9)}\n`;
 
-    if (rangeExps.length > 0) {
-      rangeExps.forEach((exp) => {
+    if (expenseTotals.length > 0) {
+      expenseTotals.forEach((exp) => {
         const desc = `${exp.description} (Expense)`.slice(0, 16).padEnd(16);
         text += `${desc} =  ${fmt(exp.amount).padStart(9)}\n`;
       });
@@ -998,7 +1012,7 @@ export default function AccountScreen() {
                       {walletBalances && !editingWallet ? (
                         <View style={styles.walletSavedRow}>
                           <Text style={styles.walletSavedText}>
-                            Cash: Rs.{Math.round(walletBalances.cash.opening).toLocaleString("en-IN")} | PhonePe: Rs.{Math.round(walletBalances.phonePe.opening).toLocaleString("en-IN")} - as of {formatDDMMYYYY(walletBalances.openingDate)}
+                            Cash: Rs.{Math.round(manualWalletBalances.cash).toLocaleString("en-IN")} | PhonePe: Rs.{Math.round(manualWalletBalances.phonePe).toLocaleString("en-IN")} - as of {formatDDMMYYYY(walletBalances.openingDate)}
                           </Text>
                           <Pressable style={styles.smallEditBtn} onPress={() => setEditingWallet(true)}>
                             <Text style={styles.smallEditText}>Edit</Text>
@@ -1029,23 +1043,24 @@ export default function AccountScreen() {
                         <>
                           <View style={styles.totalFundsCard}>
                             <Text style={styles.totalFundsLabel}>Total Available</Text>
-                            <Text style={[styles.totalFundsValue, { color: walletBalances.totalAvailable >= 0 ? "#2E7D32" : "#C62828" }]}>
-                              Rs.{Math.round(walletBalances.totalAvailable).toLocaleString("en-IN")}
+                            <Text style={[styles.totalFundsValue, { color: manualWalletBalances.total >= 0 ? "#2E7D32" : "#C62828" }]}>
+                              Rs.{Math.round(manualWalletBalances.total).toLocaleString("en-IN")}
                             </Text>
+                            <Text style={styles.walletCardSub}>Manual wallet balances only</Text>
                           </View>
                           <View style={styles.walletCardsRow}>
                             {([
-                              ["Cash", walletBalances.cash, "#1565C0"],
-                              ["PhonePe", walletBalances.phonePe, "#5F259F"],
-                            ] as const).map(([label, wallet, tone]) => (
+                              ["Cash", manualWalletBalances.cash, "#1565C0"],
+                              ["PhonePe", manualWalletBalances.phonePe, "#5F259F"],
+                            ] as const).map(([label, currentBalance, tone]) => (
                               <View key={label} style={styles.walletCard}>
                                 <Text style={[styles.walletCardTitle, { color: tone }]}>{label}</Text>
-                                <Text style={[styles.walletCardValue, { color: wallet.current >= 0 ? "#2E7D32" : "#C62828" }]}>
-                                  Rs.{Math.round(wallet.current).toLocaleString("en-IN")}
+                                <Text style={[styles.walletCardValue, { color: currentBalance >= 0 ? "#2E7D32" : "#C62828" }]}>
+                                  Rs.{Math.round(currentBalance).toLocaleString("en-IN")}
                                 </Text>
                                 <Text style={styles.walletCardSub}>Since {formatDDMMYYYY(walletBalances.openingDate)}</Text>
                                 <Text style={styles.walletBreakdown}>
-                                  Opening: Rs.{Math.round(wallet.opening).toLocaleString("en-IN")} | Disbursed: -Rs.{Math.round(wallet.disbursed).toLocaleString("en-IN")} | Collected: +Rs.{Math.round(wallet.collected).toLocaleString("en-IN")} | Expenses: -Rs.{Math.round(wallet.expenses).toLocaleString("en-IN")} | Investments: -Rs.{Math.round(wallet.investments).toLocaleString("en-IN")}
+                                  Manual value. Calculate Period Totals are read-only and do not overwrite this wallet.
                                 </Text>
                               </View>
                             ))}

@@ -1,11 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { collection, getDocs, onSnapshot, query, where, type Unsubscribe } from "firebase/firestore";
+import { collection, getDocs, limit, onSnapshot, query, where, type Unsubscribe } from "firebase/firestore";
 import { db } from "./firebase";
 import { Customer, Loan, Payment, Village } from "./types";
 import { DAY_MS as DAY, endOfMonth, getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, money, startOfDay, startOfMonth, toMillis, weekStart } from "./business-logic";
 import { filterCustomersWithVillage } from "./utils";
 import type { Investment, Expense } from "./repository";
-import { calculateWalletBalances } from "./wallet-balances";
 
 export type CustomerState = "paid" | "pending" | "overdue" | "closed";
 
@@ -57,6 +56,9 @@ export type DashboardAnalytics = {
     cashWalletBalance: number;
     phonePeWalletBalance: number;
     totalWalletFunds: number;
+    repaidThisMonth: number;
+    activeLentOut: number;
+    outstandingDues: number;
   };
   weeklyTrend: {
     label: string;
@@ -67,7 +69,19 @@ export type DashboardAnalytics = {
     expenses: number;
   }[];
   monthlyTrend: MonthlyTrendPoint[];
+  dailyCashFlow: {
+    label: string;
+    date: number;
+    inflow: number;
+    outflow: number;
+    net: number;
+  }[];
   expenseBreakdown: ExpenseBreakdownItem[];
+  customerHealth: {
+    activeCustomers: number;
+    overdueCustomers: number;
+    onTimePaymentRate: number;
+  };
   predictions: PredictionItem[];
   recentTransactions: {
     id: string;
@@ -106,7 +120,7 @@ function changeText(current: number, previous: number, label: string) {
 }
 
 async function getUserCollection<T>(userId: string, name: string): Promise<T[]> {
-  const snap = await getDocs(query(collection(db, name), where("userId", "==", userId)));
+  const snap = await getDocs(query(collection(db, name), where("userId", "==", userId), limit(2000)));
   return snap.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as object) })) as T[];
 }
 
@@ -244,7 +258,8 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
     .filter((loan) => customerById.has(loan.customerId))
     .reduce((sum, loan) => sum + loan.distributedAmount, 0);
   const netCashPosition = bfAmount + totalInvestments + totalCollection - totalDistributed - totalExpenses;
-  const walletBalances = calculateWalletBalances(userProfile, loans as any[], payments as any[], expensesRaw, investmentsRaw);
+  const cashWalletBalance = Number(userProfile.cashOpeningBalance ?? 0) || 0;
+  const phonePeWalletBalance = Number(userProfile.phonePeOpeningBalance ?? 0) || 0;
 
   // Weekly trend (8 weeks) — now with investments and expenses
   const currentWeekStart = weekStart(Date.now());
@@ -292,14 +307,41 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
     };
   });
 
-  // Expense breakdown by description (top categories)
-  const expenseMap = new Map<string, number>();
+  const dailyCashFlow = Array.from({ length: 30 }, (_, index) => {
+    const start = todayStart - (29 - index) * DAY;
+    const end = start + DAY - 1;
+    const inflow = regularPayments
+      .filter((payment) => payment.paymentDate >= start && payment.paymentDate <= end)
+      .reduce((sum, payment) => sum + payment.amountPaid, 0);
+    const outflow =
+      loans
+        .filter((loan) => loan.startDate >= start && loan.startDate <= end && customerById.has(loan.customerId))
+        .reduce((sum, loan) => sum + loan.distributedAmount, 0) +
+      expensesRaw
+        .filter((expense) => expense.date >= start && expense.date <= end)
+        .reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0);
+    return {
+      label: new Date(start).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+      date: start,
+      inflow,
+      outflow,
+      net: inflow - outflow,
+    };
+  });
+
+  // Expense breakdown by description/category, merged case-insensitively.
+  const expenseMap = new Map<string, { description: string; amount: number }>();
   expensesRaw.forEach((exp) => {
     const desc = (exp.description || "Other").trim();
-    expenseMap.set(desc, (expenseMap.get(desc) || 0) + (exp.amount || 0));
+    const key = desc.toLocaleLowerCase("en-IN");
+    const existing = expenseMap.get(key);
+    expenseMap.set(key, {
+      description: existing?.description ?? desc,
+      amount: (existing?.amount ?? 0) + (Number(exp.amount) || 0),
+    });
   });
-  const expenseBreakdown: ExpenseBreakdownItem[] = Array.from(expenseMap.entries())
-    .map(([description, amount]) => ({
+  const expenseBreakdown: ExpenseBreakdownItem[] = Array.from(expenseMap.values())
+    .map(({ description, amount }) => ({
       description,
       amount,
       percentage: totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0,
@@ -411,6 +453,10 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
       customerStates[payment.customerId] = "paid";
     }
   });
+  const overdueCustomers = Object.values(customerStates).filter((state) => state === "overdue").length;
+  const openCustomers = Object.values(customerStates).filter((state) => state === "paid" || state === "pending" || state === "overdue").length;
+  const onTimeCustomers = Object.values(customerStates).filter((state) => state === "paid" || state === "pending").length;
+  const onTimePaymentRate = openCustomers > 0 ? Math.round((onTimeCustomers / openCustomers) * 100) : 100;
 
   const dueMarksThisMonth = payments.filter(
     (payment) => payment.paymentType === "DUE" && payment.paymentDate >= monthStart && payment.paymentDate <= monthEnd
@@ -476,13 +522,22 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
       previousMonthlyExpenses,
       netCashPosition,
       balancingFund: bfAmount,
-      cashWalletBalance: walletBalances.cash.current,
-      phonePeWalletBalance: walletBalances.phonePe.current,
-      totalWalletFunds: walletBalances.totalAvailable,
+      cashWalletBalance,
+      phonePeWalletBalance,
+      totalWalletFunds: cashWalletBalance + phonePeWalletBalance,
+      repaidThisMonth: monthlyRevenue,
+      activeLentOut: pendingAmount,
+      outstandingDues: dueAlerts.reduce((sum, alert) => sum + alert.dueAmount, 0),
     },
     weeklyTrend,
     monthlyTrend,
+    dailyCashFlow,
     expenseBreakdown,
+    customerHealth: {
+      activeCustomers: customers.length,
+      overdueCustomers,
+      onTimePaymentRate,
+    },
     predictions,
     recentTransactions,
     dueAlerts,
@@ -520,7 +575,7 @@ export function subscribeDashboardAnalytics(
   };
 
   const watch = (name: string) =>
-    onSnapshot(query(collection(db, name), where("userId", "==", userId)), refresh, (error) => onError?.(error));
+    onSnapshot(query(collection(db, name), where("userId", "==", userId), limit(2000)), refresh, (error) => onError?.(error));
 
   const unsubs = [
     watch("villages"),

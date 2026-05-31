@@ -26,7 +26,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../src/firebase';
-import { getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, money, toMillis, startOfDay } from "../../src/business-logic";
+import { getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, toMillis, startOfDay } from "../../src/business-logic";
 
 // Lazy load heavy XLSX library
 let XLSX: any = null;

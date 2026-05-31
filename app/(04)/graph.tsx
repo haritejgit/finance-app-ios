@@ -1,5 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -28,6 +29,7 @@ import Icon from "../../src/Icon";
 import { getWeeklyChartData, type WeeklyChartPoint } from "../../src/repository";
 import { formatAmountInKM } from "../../src/utils";
 import { Gradients, Colors } from "../../src/theme";
+import { db } from "../../src/firebase";
 
 function formatMoney(value: number) {
   return `Rs.${Math.round(value || 0).toLocaleString("en-IN")}`;
@@ -117,6 +119,29 @@ function InsightCard({ insight, index }: { insight: string; index: number }) {
 
 // ——— Chart Components ———
 
+type AnalyticsPeriod = "week" | "month" | "quarter";
+
+const PERIOD_OPTIONS: { key: AnalyticsPeriod; label: string }[] = [
+  { key: "week", label: "This Week" },
+  { key: "month", label: "This Month" },
+  { key: "quarter", label: "Last 3 Months" },
+];
+
+function PeriodSelector({ value, onChange }: { value: AnalyticsPeriod; onChange: (period: AnalyticsPeriod) => void }) {
+  return (
+    <View style={styles.periodSelector}>
+      {PERIOD_OPTIONS.map((option) => {
+        const active = value === option.key;
+        return (
+          <Pressable key={option.key} style={[styles.periodChip, active && styles.periodChipOn]} onPress={() => onChange(option.key)}>
+            <Text style={[styles.periodChipText, active && styles.periodChipTextOn]}>{option.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 function MonthlyTrendChart({ data }: { data: MonthlyTrendPoint[] }) {
   const maxValue = Math.max(
     ...data.map((m) => Math.max(m.collected, m.distributed, m.invested, m.expenses)),
@@ -194,6 +219,33 @@ function ExpenseBreakdownChart({ data }: { data: ExpenseBreakdownItem[] }) {
           </Text>
         </View>
       ))}
+    </View>
+  );
+}
+
+function CashFlowTrendChart({ data }: { data: DashboardAnalytics["dailyCashFlow"] }) {
+  const maxValue = Math.max(...data.map((item) => Math.abs(item.net)), 1);
+  return (
+    <View style={styles.cashFlowTrend}>
+      {data.map((item) => {
+        const positive = item.net >= 0;
+        return (
+          <View key={item.date} style={styles.cashFlowTrendColumn}>
+            <View style={styles.cashFlowBaseline}>
+              <View
+                style={[
+                  styles.cashFlowTrendBar,
+                  {
+                    height: Math.max(4, (Math.abs(item.net) / maxValue) * 86),
+                    backgroundColor: positive ? Colors.lightSeaGreen : Colors.danger,
+                  },
+                ]}
+              />
+            </View>
+            <Text style={styles.cashFlowTrendLabel}>{item.label.split(" ")[0]}</Text>
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -319,6 +371,10 @@ export default function GraphScreen() {
   const [weeklyChartData, setWeeklyChartData] = useState<WeeklyChartPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [period, setPeriod] = useState<AnalyticsPeriod>("month");
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [aiSuggestionsUpdatedAt, setAiSuggestionsUpdatedAt] = useState<number | null>(null);
+  const [aiRefreshing, setAiRefreshing] = useState(false);
 
   const load = useCallback(async (showLoader = true) => {
     if (!user) {
@@ -387,6 +443,60 @@ export default function GraphScreen() {
   }, [analytics]);
 
   const insightList = analytics ? analytics.insights.concat(analytics.aiInsights).slice(0, 7) : [];
+  const visibleMonthlyTrend = useMemo(() => {
+    if (!analytics) return [];
+    return analytics.monthlyTrend.slice(period === "quarter" ? -4 : -1);
+  }, [analytics, period]);
+  const visibleCashFlow = useMemo(() => {
+    if (!analytics) return [];
+    return analytics.dailyCashFlow.slice(period === "week" ? -7 : -30);
+  }, [analytics, period]);
+  const periodLabel = period === "week" ? "this week" : period === "month" ? "this month" : "the last 3 months";
+  const aiUpdatedLabel = useMemo(() => {
+    if (!aiSuggestionsUpdatedAt) return "Last updated: never";
+    const hours = Math.max(0, Math.floor((Date.now() - aiSuggestionsUpdatedAt) / (60 * 60 * 1000)));
+    return hours <= 0 ? "Last updated: just now" : `Last updated: ${hours} hour${hours === 1 ? "" : "s"} ago`;
+  }, [aiSuggestionsUpdatedAt]);
+
+  const saveAiSuggestions = useCallback(async (force = false) => {
+    if (!user || !analytics) return;
+    const ref = doc(db, "aiSuggestions", user.uid);
+    try {
+      setAiRefreshing(true);
+      const snap = await getDoc(ref);
+      const data = snap.exists() ? snap.data() : null;
+      const lastUpdated = Number(data?.lastUpdated ?? 0) || 0;
+      const fresh = Date.now() - lastUpdated < 24 * 60 * 60 * 1000;
+      const cooledDown = Date.now() - lastUpdated >= 60 * 60 * 1000;
+      if (!force && fresh && Array.isArray(data?.suggestions)) {
+        setAiSuggestions(data.suggestions.slice(0, 4));
+        setAiSuggestionsUpdatedAt(lastUpdated);
+        return;
+      }
+      if (force && !cooledDown) {
+        Alert.alert("Refresh cooling down", "AI suggestions can be refreshed once every hour.");
+        if (Array.isArray(data?.suggestions)) {
+          setAiSuggestions(data.suggestions.slice(0, 4));
+          setAiSuggestionsUpdatedAt(lastUpdated);
+        }
+        return;
+      }
+      const suggestions = analytics.aiInsights.slice(0, 4);
+      const nextUpdatedAt = Date.now();
+      await setDoc(ref, { id: user.uid, userId: user.uid, suggestions, lastUpdated: nextUpdatedAt, updatedAt: nextUpdatedAt }, { merge: true });
+      setAiSuggestions(suggestions);
+      setAiSuggestionsUpdatedAt(nextUpdatedAt);
+    } catch {
+      setAiSuggestions(analytics.aiInsights.slice(0, 4));
+      setAiSuggestionsUpdatedAt(Date.now());
+    } finally {
+      setAiRefreshing(false);
+    }
+  }, [analytics, user]);
+
+  useEffect(() => {
+    saveAiSuggestions(false);
+  }, [saveAiSuggestions]);
 
   const sendRiskReminder = useCallback((alert: DashboardAnalytics["dueAlerts"][number]) => {
     const digits = alert.phone.replace(/\D/g, "");
@@ -456,6 +566,8 @@ export default function GraphScreen() {
                 />
               )}
 
+              <PeriodSelector value={period} onChange={setPeriod} />
+
               {/* Lifetime Grid — 5 cards: Distributed, Collected, Invested, Expenses, Net */}
               <View style={styles.lifetimeGrid}>
                 <LifetimeCard
@@ -510,14 +622,22 @@ export default function GraphScreen() {
 
                   {/* 6-Month Trend Chart */}
                   <Section
-                    title="6-Month Trend"
-                    subtitle="Collections, distributions, investments & expenses"
+                    title="Income vs Expenses"
+                    subtitle={`Collections received versus expenses paid for ${periodLabel}`}
                   >
-                    {analytics.monthlyTrend.length > 0 ? (
-                      <MonthlyTrendChart data={analytics.monthlyTrend} />
+                    {visibleMonthlyTrend.length > 0 ? (
+                      <MonthlyTrendChart data={visibleMonthlyTrend} />
                     ) : (
                       <Text style={styles.empty}>No monthly data available yet.</Text>
                     )}
+                  </Section>
+
+                  <Section title="Investment Tracker" subtitle="Active lending and repayment position">
+                    <View style={styles.metricGrid}>
+                      <MetricCard label="Currently Lent" value={formatMoney(analytics.totals.activeLentOut)} sub="Active loan balance" icon="wallet-outline" tone={Colors.amberGlow} />
+                      <MetricCard label="Repaid This Month" value={formatMoney(analytics.totals.repaidThisMonth)} sub="Customer collections" icon="cash-outline" tone={Colors.lightSeaGreen} />
+                      <MetricCard label="Outstanding Dues" value={formatMoney(analytics.totals.outstandingDues)} sub="Due marks pending" icon="alert-circle-outline" tone={Colors.danger} />
+                    </View>
                   </Section>
 
                   {/* Expense Breakdown */}
@@ -530,6 +650,22 @@ export default function GraphScreen() {
                       <ExpenseBreakdownChart data={analytics.expenseBreakdown} />
                     </Section>
                   )}
+
+                  <Section title="Transaction Trend" subtitle="Daily cash flow: collections in minus expenses and lending out">
+                    {visibleCashFlow.length ? (
+                      <CashFlowTrendChart data={visibleCashFlow} />
+                    ) : (
+                      <Text style={styles.empty}>No cash flow data available yet.</Text>
+                    )}
+                  </Section>
+
+                  <Section title="Customer Health" subtitle="Active customer quality and payment behavior">
+                    <View style={styles.metricGrid}>
+                      <MetricCard label="Active Customers" value={`${analytics.customerHealth.activeCustomers}`} sub="Visible route customers" icon="people-outline" tone={Colors.lightSeaGreen} />
+                      <MetricCard label="Overdue" value={`${analytics.customerHealth.overdueCustomers}`} sub="Customers with due marks" icon="alert-circle-outline" tone={Colors.danger} />
+                      <MetricCard label="On-Time Rate" value={`${analytics.customerHealth.onTimePaymentRate}%`} sub="Open customers without recent dues" icon="analytics-outline" tone={Colors.honeyBronze} />
+                    </View>
+                  </Section>
 
                   {/* 3-Month Predictions */}
                   {analytics.predictions.length > 0 && (
@@ -555,15 +691,20 @@ export default function GraphScreen() {
                   <Section
                     title="Business Insights"
                     subtitle="Generated from your transactions & financial data"
-                    action={<Text style={styles.sectionBadge}>{insightList.length} signals</Text>}
+                    action={
+                      <Pressable style={styles.refreshAiButton} onPress={() => saveAiSuggestions(true)} disabled={aiRefreshing}>
+                        <Icon name="refresh-outline" size={14} color={Colors.nearBlack} />
+                      </Pressable>
+                    }
                   >
                     <View style={styles.insightGrid}>
-                      {insightList.length ? (
-                        insightList.map((insight, index) => <InsightCard key={insight} insight={insight} index={index} />)
+                      {(aiSuggestions.length ? aiSuggestions : insightList).length ? (
+                        (aiSuggestions.length ? aiSuggestions : insightList).map((insight, index) => <InsightCard key={insight} insight={insight} index={index} />)
                       ) : (
                         <Text style={styles.empty}>Insights will appear after analytics data is available.</Text>
                       )}
                     </View>
+                    <Text style={styles.aiUpdatedText}>{aiUpdatedLabel}</Text>
                   </Section>
 
                   {/* Weekly Money Movement */}
@@ -687,6 +828,11 @@ const styles = StyleSheet.create({
   netPillGood: { backgroundColor: Colors.frozenWater },
   netPillRisk: { backgroundColor: "#fde7e5" },
   netPillText: { fontSize: 12, fontWeight: "900" },
+  periodSelector: { flexDirection: "row", gap: 8, backgroundColor: "rgba(255,255,255,0.16)", borderRadius: 14, padding: 5 },
+  periodChip: { flex: 1, minHeight: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
+  periodChipOn: { backgroundColor: Colors.white },
+  periodChipText: { color: "rgba(255,255,255,0.82)", fontSize: 11, fontWeight: "900" },
+  periodChipTextOn: { color: Colors.nearBlack },
 
   // Cash Position Card
   cashPositionCard: {
@@ -749,6 +895,11 @@ const styles = StyleSheet.create({
   metricLabel: { color: Colors.textMuted, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
   metricValue: { color: Colors.nearBlack, fontSize: 19, lineHeight: 24, fontWeight: "900", marginTop: 2 },
   metricSub: { color: Colors.textMuted, fontSize: 11, fontWeight: "800", marginTop: 1 },
+  cashFlowTrend: { height: 126, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 3 },
+  cashFlowTrendColumn: { flex: 1, alignItems: "center", gap: 5 },
+  cashFlowBaseline: { height: 92, justifyContent: "flex-end", alignItems: "center" },
+  cashFlowTrendBar: { width: 7, borderTopLeftRadius: 5, borderTopRightRadius: 5 },
+  cashFlowTrendLabel: { color: Colors.textMuted, fontSize: 8, fontWeight: "800" },
 
   // Section
   section: { borderRadius: 20, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.borderLight, padding: 14, gap: 12 },
@@ -757,6 +908,8 @@ const styles = StyleSheet.create({
   sectionTitle: { color: Colors.nearBlack, fontSize: 19, lineHeight: 23, fontWeight: "900" },
   sectionSub: { color: Colors.textMuted, fontSize: 11, fontWeight: "800", marginTop: 2 },
   sectionBadge: { overflow: "hidden", borderRadius: 999, backgroundColor: Colors.frozenWater, color: Colors.lightSeaGreen, paddingHorizontal: 10, paddingVertical: 6, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
+  refreshAiButton: { width: 34, height: 34, borderRadius: 12, backgroundColor: Colors.frozenWater, alignItems: "center", justifyContent: "center" },
+  aiUpdatedText: { color: Colors.textMuted, fontSize: 10, fontWeight: "800", marginTop: -4 },
 
   // Insights
   insightGrid: { gap: 9 },

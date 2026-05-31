@@ -1,5 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { router, useFocusEffect, useRouter } from "expo-router";
+import { router, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -391,6 +391,12 @@ export default function ShiftSelectionScreen() {
                         <Icon name="arrow-forward" size={18} color={Colors.nearBlack} />
                       </LinearGradient>
                     </Pressable>
+
+                    <View style={styles.walletRouteSummary}>
+                      <Text style={styles.walletRouteText}>Cash: {formatMoney(totals?.cashWalletBalance ?? 0)}</Text>
+                      <View style={styles.walletRouteDot} />
+                      <Text style={styles.walletRouteText}>PhonePe: {formatMoney(totals?.phonePeWalletBalance ?? 0)}</Text>
+                    </View>
                   </DashboardPanel>
 
                   <View style={styles.metricGrid}>
@@ -701,6 +707,9 @@ const styles = StyleSheet.create({
   shiftTextOn: { color: Colors.white },
   primaryAction: { borderRadius: 12, paddingVertical: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
   primaryActionText: { color: Colors.nearBlack, fontWeight: "900", fontSize: 15 },
+  walletRouteSummary: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 2 },
+  walletRouteText: { color: Colors.textMuted, fontSize: 11, fontWeight: "800" },
+  walletRouteDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.borderLight },
   metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   metricCard: { flexGrow: 1, flexBasis: "47%", minWidth: 150, minHeight: 116, borderRadius: 16, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.borderLight, padding: 13 },
   metricIcon: { width: 33, height: 33, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 9 },
