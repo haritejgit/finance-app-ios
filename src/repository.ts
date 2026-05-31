@@ -8,6 +8,7 @@ import {
   getDoc,
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
   runTransaction,
@@ -19,6 +20,7 @@ import {
   writeBatch,
   type DocumentReference,
   type QueryDocumentSnapshot,
+  type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { BlockedAadhaar, Customer, Expense, Investment, Loan, Payment, PaymentMode, UserProfile, Village } from "./types";
@@ -1305,4 +1307,159 @@ export async function saveWalletOpeningBalances(
     { merge: true }
   );
   clearCache();
+}
+
+/**
+ * subscribeWalletData — sets up real-time onSnapshot listeners for all collections
+ * that feed into the Live Calculated Balance. Calls `callback` with the latest
+ * raw arrays whenever any collection changes.
+ *
+ * Returns a single cleanup / unsubscribe function — call it on component unmount.
+ *
+ * IMPORTANT: this function only reads data; it NEVER writes to the wallet fields.
+ */
+export function subscribeWalletData(
+  userId: string,
+  callback: (data: {
+    expenses: Expense[];
+    payments: AllPaymentEver[];
+    loans: AllLoanEver[];
+    investments: Investment[];
+    userProfile: UserProfile;
+  }) => void,
+  onError?: (err: unknown) => void
+): Unsubscribe {
+  // Shared mutable cache — updated independently by each listener
+  const state: {
+    expenses: Expense[];
+    payments: AllPaymentEver[];
+    loans: AllLoanEver[];
+    investments: Investment[];
+    userProfile: UserProfile;
+  } = {
+    expenses: [],
+    payments: [],
+    loans: [],
+    investments: [],
+    userProfile: { id: userId, userId },
+  };
+
+  // Debounce so that multiple simultaneous snapshots only trigger one recalc
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let cancelled = false;
+
+  const notify = () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      if (!cancelled) callback({ ...state });
+    }, 100);
+  };
+
+  const handleError = (err: unknown) => {
+    if (!cancelled) onError?.(err);
+  };
+
+  // Listener: expenses
+  const unsubExpenses = onSnapshot(
+    query(coll.expenses, where("userId", "==", userId), limit(1500)),
+    (snap) => {
+      state.expenses = snap.docs
+        .map((d) => d.data() as Expense)
+        .sort((a, b) => b.date - a.date);
+      notify();
+    },
+    handleError
+  );
+
+  // Listener: investments
+  const unsubInvestments = onSnapshot(
+    query(coll.investments, where("userId", "==", userId), limit(1500)),
+    (snap) => {
+      state.investments = snap.docs
+        .map((d) => d.data() as Investment)
+        .sort((a, b) => b.date - a.date);
+      notify();
+    },
+    handleError
+  );
+
+  // Listener: payments — mapped to AllPaymentEver shape
+  const unsubPayments = onSnapshot(
+    query(coll.payments, where("userId", "==", userId), limit(1500)),
+    (snap) => {
+      state.payments = snap.docs.map((docSnap) => {
+        const d = docSnap.data() as any;
+        const rawDate = d.date ?? d.payment_date ?? d.paymentDate;
+        const millis = toMillis(rawDate);
+        return {
+          id: docSnap.id,
+          amount: money(d.amountPaid ?? d.amount_paid ?? d.amount),
+          amountPaid: money(d.amountPaid ?? d.amount_paid ?? d.amount),
+          date: new Date(millis || Date.now()),
+          paymentDate: millis || Date.now(),
+          customerId: d.customerId ?? d.customer_id,
+          loanId: d.loanId ?? d.loan_id,
+          paymentType: d.paymentType ?? d.type,
+          paymentMode: d.paymentMode ?? (d.type === "PHONE" ? "PHONE" : "CASH"),
+          type: d.type,
+        } as AllPaymentEver;
+      });
+      notify();
+    },
+    handleError
+  );
+
+  // Listener: loans — mapped to AllLoanEver shape
+  const unsubLoans = onSnapshot(
+    query(coll.loans, where("userId", "==", userId), limit(1500)),
+    (snap) => {
+      state.loans = snap.docs.map((docSnap) => {
+        const d = docSnap.data() as any;
+        const rawDate = d.start_date ?? d.startDate ?? d.createdAt;
+        const millis = toMillis(rawDate);
+        return {
+          id: docSnap.id,
+          amount: getLoanDistributedAmount(d),
+          principalAmount: getLoanPrincipalAmount(d),
+          date: new Date(millis || Date.now()),
+          startDate: millis || Date.now(),
+          status: d.status || "ACTIVE",
+          customerId: d.customerId ?? d.customer_id,
+          disbursement_mode: d.disbursement_mode ?? d.disbursementMode ?? "CASH",
+          disbursementMode: d.disbursementMode ?? d.disbursement_mode ?? "CASH",
+        } as AllLoanEver;
+      });
+      notify();
+    },
+    handleError
+  );
+
+  // Listener: user profile (wallet snapshot lives here)
+  const unsubUser = onSnapshot(
+    doc(db, "users", userId),
+    (snap) => {
+      const data = snap.exists() ? (snap.data() as Partial<UserProfile>) : {};
+      state.userProfile = {
+        id: userId,
+        userId,
+        ...data,
+        accountNotes: data.accountNotes ?? "",
+        cashOpeningBalance: Number(data.cashOpeningBalance || 0),
+        phonePeOpeningBalance: Number(data.phonePeOpeningBalance || 0),
+      };
+      notify();
+    },
+    handleError
+  );
+
+  // Return single cleanup function
+  return () => {
+    cancelled = true;
+    if (debounceTimer) clearTimeout(debounceTimer);
+    unsubExpenses();
+    unsubInvestments();
+    unsubPayments();
+    unsubLoans();
+    unsubUser();
+  };
 }

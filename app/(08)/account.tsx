@@ -38,6 +38,7 @@ import {
   getUserProfile,
   saveAccountNotes,
   saveWalletOpeningBalances,
+  subscribeWalletData,
   Investment,
   Expense,
 } from "../../src/repository";
@@ -127,6 +128,17 @@ export default function AccountScreen() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
+  // ─── Live wallet data (driven by onSnapshot — NEVER written by calculations) ───
+  // Completely separate from the one-shot states above.
+  // These drive the "Live Balance" display section only.
+  const [liveExpenses, setLiveExpenses] = useState<Expense[]>([]);
+  const [livePayments, setLivePayments] = useState<any[]>([]);
+  const [liveLoans, setLiveLoans] = useState<any[]>([]);
+  const [liveInvestments, setLiveInvestments] = useState<Investment[]>([]);
+  const [liveUserProfile, setLiveUserProfile] = useState<UserProfile | null>(null);
+  const [walletDataLoading, setWalletDataLoading] = useState(true);
+  const [walletLoadError, setWalletLoadError] = useState<string | null>(null);
+
   // Date Range inputs (DD/MM/YYYY)
   const [startDateStr, setStartDateStr] = useState<string>("");
   const [endDateStr, setEndDateStr] = useState<string>("");
@@ -180,12 +192,14 @@ export default function AccountScreen() {
     setExpDate(formatDDMMYYYY(today.getTime()));
   }, []);
 
-  // Fetch all required data from Firebase
+  // Fetch Balancing Fund + villages + customers + export-related data (one-shot).
+  // NOTE: Wallet data (expenses, payments, loans, investments, userProfile) is now
+  // handled by the subscribeWalletData() real-time listener below.
   const loadData = useCallback(async () => {
     if (!user) return;
     try {
       setLoading(true);
-      const [bfVal, dateBfs, invs, exps, pmts, lns, vills, custs, profile] = await Promise.all([
+      const [bfVal, dateBfs, invs, exps, pmts, lns, vills, custs] = await Promise.all([
         getBalancingFund(user.uid),
         getAllBalancingFunds(user.uid),
         getInvestments(user.uid),
@@ -194,7 +208,6 @@ export default function AccountScreen() {
         getAllLoansEver(user.uid),
         getVillages(user.uid),
         getAllActiveCustomersWithVillages(user.uid),
-        getUserProfile(user.uid),
       ]);
       setBf(bfVal);
       setDateSpecificBfs(dateBfs);
@@ -204,13 +217,6 @@ export default function AccountScreen() {
       setLoans(lns);
       setVillages(vills);
       setCustomers(custs);
-      setUserProfile(profile);
-      // PRIVATE â€” never export
-      setAccountNotesInput(profile.accountNotes ?? "");
-      setCashOpeningInput(String(profile.cashOpeningBalance ?? 0));
-      setPhoneOpeningInput(String(profile.phonePeOpeningBalance ?? 0));
-      setWalletOpeningDateInput(formatDDMMYYYY((profile.walletOpeningDate as number) || Date.now()));
-      setEditingWallet(!profile.walletOpeningDate);
 
       // Initialize balancing fund date to today
       const todayStr = formatDDMMYYYY(Date.now());
@@ -226,6 +232,62 @@ export default function AccountScreen() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // ─── Real-time wallet data subscription ────────────────────────────────────
+  // Sets up onSnapshot listeners for expenses, payments, loans, investments, and
+  // user profile. The callback receives fresh data and updates ONLY the
+  // live* display state — it NEVER calls setCashOpeningInput or setPhoneOpeningInput
+  // after the initial mount (which seeds the manual input fields from Firestore).
+  useEffect(() => {
+    if (!user) return;
+    setWalletDataLoading(true);
+    setWalletLoadError(null);
+
+    let isFirstCallback = true;
+
+    const unsubscribe = subscribeWalletData(
+      user.uid,
+      (data) => {
+        // ONLY update live display state — these drive Section B (Live Balance)
+        setLiveExpenses(data.expenses);
+        setLivePayments(data.payments);
+        setLiveLoans(data.loans);
+        setLiveInvestments(data.investments);
+        setLiveUserProfile(data.userProfile);
+
+        if (isFirstCallback) {
+          isFirstCallback = false;
+          setWalletDataLoading(false);
+          // Seed manual snapshot input fields from saved Firestore values (ONE TIME ONLY)
+          // PRIVATE — never export
+          setCashOpeningInput(String(data.userProfile.cashOpeningBalance ?? 0));
+          setPhoneOpeningInput(String(data.userProfile.phonePeOpeningBalance ?? 0));
+          setWalletOpeningDateInput(
+            data.userProfile.walletOpeningDate
+              ? formatDDMMYYYY(data.userProfile.walletOpeningDate as number)
+              : formatDDMMYYYY(Date.now())
+          );
+          setEditingWallet(!data.userProfile.walletOpeningDate);
+          // Also seed the legacy userProfile for export/notes features
+          setUserProfile(data.userProfile);
+          setAccountNotesInput(data.userProfile.accountNotes ?? "");
+        } else {
+          // Subsequent live updates: refresh display profile ONLY, not manual fields
+          setUserProfile(data.userProfile);
+        }
+      },
+      (err) => {
+        console.error("Wallet data subscription error:", err);
+        setWalletLoadError("Could not load balance. Tap to retry.");
+        setWalletDataLoading(false);
+      }
+    );
+
+    // Cleanup: unsubscribe all 5 listeners when component unmounts or user changes
+    return () => {
+      unsubscribe();
+    };
+  }, [user]);
 
   // Dynamic input formatting for date (DD/MM/YYYY)
   const handleDateChange = useCallback((text: string, setter: (val: string) => void) => {
@@ -591,10 +653,32 @@ export default function AccountScreen() {
     };
   }, [periodBf, investments, expenses, payments, loans, startDateStr, endDateStr]);
 
+  // ─── Live Calculated Wallet Balance (DISPLAY ONLY) ───────────────────────
+  // Derived from real-time onSnapshot data. NEVER writes back to Firestore
+  // or to cashOpeningInput / phoneOpeningInput.
+  //
+  // Formula:
+  //   calculatedCash = snapshot.cash
+  //     + SUM(cash collections received after snapshot.setAt)
+  //     - SUM(cash expenses after snapshot.setAt)
+  //     - SUM(cash amounts invested/lent after snapshot.setAt)
+  //
+  //   calculatedPhonePe = snapshot.phonepe
+  //     + SUM(phonepe collections received after snapshot.setAt)
+  //     - SUM(phonepe expenses after snapshot.setAt)
+  //
+  // The walletOpeningDate in liveUserProfile acts as snapshot.setAt.
   const walletBalances = useMemo(() => {
-    if (!userProfile) return null;
-    return calculateWalletBalances(userProfile, loans as any[], payments as any[], expenses, investments);
-  }, [expenses, investments, loans, payments, userProfile]);
+    if (!liveUserProfile) return null;
+    // calculateWalletBalances is a pure read-only function — no side effects
+    return calculateWalletBalances(
+      liveUserProfile,
+      liveLoans as any[],
+      livePayments as any[],
+      liveExpenses,
+      liveInvestments
+    );
+  }, [liveExpenses, liveInvestments, liveLoans, livePayments, liveUserProfile]);
 
   const handleSaveWalletBalances = useCallback(async () => {
     if (!user) return;
@@ -1001,13 +1085,54 @@ export default function AccountScreen() {
                       </Pressable>
                     </View>
 
+                    {/* ═══════════════════════════════════════════════════════════
+                        MY WALLET BALANCES CARD
+                        Section A: Manual Snapshot Entry (user-controlled, independent fields)
+                        Section B: Live Calculated Balance (read-only display)
+                        These two sections are COMPLETELY INDEPENDENT.
+                    ═══════════════════════════════════════════════════════════ */}
                     <View style={styles.card}>
                       <Text style={styles.cardTitle}>My Wallet Balances</Text>
-                      <Text style={styles.cardDesc}>Enter your current balances - the app tracks everything from here</Text>
-                      {walletBalances && !editingWallet ? (
+
+                      {/* ── SECTION A: Wallet Snapshot (Manual Entry) ── */}
+                      <View style={styles.walletSectionHeader}>
+                        <View style={[styles.walletSectionBadge, { backgroundColor: "#e3f2fd" }]}>
+                          <Text style={[styles.walletSectionBadgeText, { color: "#1565C0" }]}>A</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.walletSectionTitle}>Wallet Snapshot</Text>
+                          <Text style={styles.walletSectionDesc}>Enter your current physical balances</Text>
+                        </View>
+                      </View>
+
+                      {walletDataLoading ? (
+                        <View style={styles.walletLoadingRow}>
+                          <ActivityIndicator size="small" color="#2ec4b6" />
+                          <Text style={styles.walletLoadingText}>Loading wallet data…</Text>
+                        </View>
+                      ) : walletLoadError ? (
+                        <Pressable style={styles.walletErrorRow} onPress={() => {
+                          setWalletDataLoading(true);
+                          setWalletLoadError(null);
+                        }}>
+                          <Icon name="alert-circle-outline" size={16} color="#C62828" />
+                          <Text style={styles.walletErrorText}>{walletLoadError}</Text>
+                        </Pressable>
+                      ) : !liveUserProfile?.walletOpeningDate && !editingWallet ? (
+                        <Pressable style={styles.walletEmptyPrompt} onPress={() => setEditingWallet(true)}>
+                          <Icon name="wallet-outline" size={20} color="#5f7f7b" />
+                          <Text style={styles.walletEmptyText}>Set your starting balance to begin tracking</Text>
+                        </Pressable>
+                      ) : !editingWallet ? (
                         <View style={styles.walletSavedRow}>
                           <Text style={styles.walletSavedText}>
-                            Opening Cash: Rs.{Math.round(walletBalances.cash.opening).toLocaleString("en-IN")} | Opening PhonePe: Rs.{Math.round(walletBalances.phonePe.opening).toLocaleString("en-IN")} - as of {formatDDMMYYYY(walletBalances.openingDate)}
+                            Cash: Rs.{Math.round(liveUserProfile?.cashOpeningBalance ?? 0).toLocaleString("en-IN")}{"  "}|
+                            {" "}PhonePe: Rs.{Math.round(liveUserProfile?.phonePeOpeningBalance ?? 0).toLocaleString("en-IN")}
+                          </Text>
+                          <Text style={styles.walletSavedDate}>
+                            Last updated: {liveUserProfile?.walletOpeningDate
+                              ? formatDDMMYYYY(liveUserProfile.walletOpeningDate as number)
+                              : "—"}
                           </Text>
                           <Pressable style={styles.smallEditBtn} onPress={() => setEditingWallet(true)}>
                             <Text style={styles.smallEditText}>Edit</Text>
@@ -1016,38 +1141,87 @@ export default function AccountScreen() {
                       ) : (
                         <>
                           <View style={styles.datePickerRow}>
+                            {/* Cash field — ONLY updates cashOpeningInput, independent */}
                             <View style={[styles.inputContainer, { flex: 1 }]}>
                               <Text style={styles.inputLabel}>Cash in Hand (Rs.)</Text>
-                              <TextInput style={styles.textInput} value={cashOpeningInput} onChangeText={setCashOpeningInput} keyboardType="numeric" placeholder="0" placeholderTextColor="#78909c" />
+                              <TextInput
+                                style={styles.textInput}
+                                value={cashOpeningInput}
+                                onChangeText={setCashOpeningInput}
+                                keyboardType="numeric"
+                                placeholder="0"
+                                placeholderTextColor="#78909c"
+                              />
                             </View>
+                            {/* PhonePe field — ONLY updates phoneOpeningInput, independent */}
                             <View style={[styles.inputContainer, { flex: 1 }]}>
                               <Text style={styles.inputLabel}>PhonePe Balance (Rs.)</Text>
-                              <TextInput style={styles.textInput} value={phoneOpeningInput} onChangeText={setPhoneOpeningInput} keyboardType="numeric" placeholder="0" placeholderTextColor="#78909c" />
+                              <TextInput
+                                style={styles.textInput}
+                                value={phoneOpeningInput}
+                                onChangeText={setPhoneOpeningInput}
+                                keyboardType="numeric"
+                                placeholder="0"
+                                placeholderTextColor="#78909c"
+                              />
                             </View>
                           </View>
                           <View style={styles.inputContainer}>
-                            <Text style={styles.inputLabel}>Balances as of</Text>
-                            <TextInput style={styles.textInput} value={walletOpeningDateInput} onChangeText={(txt) => handleDateChange(txt, setWalletOpeningDateInput)} placeholder="DD/MM/YYYY" maxLength={10} keyboardType="numeric" placeholderTextColor="#78909c" />
+                            <Text style={styles.inputLabel}>Balances as of (DD/MM/YYYY)</Text>
+                            <TextInput
+                              style={styles.textInput}
+                              value={walletOpeningDateInput}
+                              onChangeText={(txt) => handleDateChange(txt, setWalletOpeningDateInput)}
+                              placeholder="DD/MM/YYYY"
+                              maxLength={10}
+                              keyboardType="numeric"
+                              placeholderTextColor="#78909c"
+                            />
                           </View>
-                          <Pressable style={[styles.primaryButton, submitting && styles.btnDisabled]} onPress={handleSaveWalletBalances} disabled={submitting}>
-                            <Text style={styles.primaryButtonText}>Save Wallet Balances</Text>
+                          <Pressable
+                            style={[styles.primaryButton, submitting && styles.btnDisabled]}
+                            onPress={handleSaveWalletBalances}
+                            disabled={submitting}
+                          >
+                            <Text style={styles.primaryButtonText}>Save Wallet Snapshot</Text>
                           </Pressable>
                         </>
                       )}
-                      {walletBalances ? (
+
+                      {/* ── SECTION B: Live Calculated Balance (Read-Only) ── */}
+                      <View style={styles.walletDivider} />
+                      <View style={styles.walletSectionHeader}>
+                        <View style={[styles.walletSectionBadge, { backgroundColor: "#e8f5e9" }]}>
+                          <Text style={[styles.walletSectionBadgeText, { color: "#2E7D32" }]}>B</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.walletSectionTitle}>Live Balance</Text>
+                          <Text style={styles.walletSectionDesc}>Calculated from all your activity</Text>
+                        </View>
+                        <View style={styles.walletLiveDot} />
+                      </View>
+
+                      {walletDataLoading ? (
+                        <View style={styles.walletLoadingRow}>
+                          <ActivityIndicator size="small" color="#2ec4b6" />
+                          <Text style={styles.walletLoadingText}>Calculating…</Text>
+                        </View>
+                      ) : !walletBalances ? (
+                        <Text style={styles.walletEmptyText}>Save a starting snapshot above to see live balance</Text>
+                      ) : (
                         <>
                           <View style={styles.totalFundsCard}>
-                            <Text style={styles.totalFundsLabel}>Current Available</Text>
+                            <Text style={styles.totalFundsLabel}>Total Available (Cash + PhonePe)</Text>
                             <Text style={[styles.totalFundsValue, { color: walletBalances.totalAvailable >= 0 ? "#2E7D32" : "#C62828" }]}>
                               Rs.{Math.round(walletBalances.totalAvailable).toLocaleString("en-IN")}
                             </Text>
-                            <Text style={styles.walletCardSub}>Updates from collections, loans, expenses, and investments</Text>
+                            <Text style={styles.walletCardSub}>Auto-updated from your transactions</Text>
                           </View>
                           <View style={styles.walletCardsRow}>
                             {([
-                              ["Cash", walletBalances.cash, "#1565C0"],
-                              ["PhonePe", walletBalances.phonePe, "#5F259F"],
-                            ] as const).map(([label, wallet, tone]) => (
+                              ["Cash", walletBalances.cash, "#1565C0"] as const,
+                              ["PhonePe", walletBalances.phonePe, "#5F259F"] as const,
+                            ]).map(([label, wallet, tone]) => (
                               <View key={label} style={styles.walletCard}>
                                 <Text style={[styles.walletCardTitle, { color: tone }]}>{label}</Text>
                                 <Text style={[styles.walletCardValue, { color: wallet.current >= 0 ? "#2E7D32" : "#C62828" }]}>
@@ -1055,13 +1229,18 @@ export default function AccountScreen() {
                                 </Text>
                                 <Text style={styles.walletCardSub}>Since {formatDDMMYYYY(walletBalances.openingDate)}</Text>
                                 <Text style={styles.walletBreakdown}>
-                                  Opening: Rs.{Math.round(wallet.opening).toLocaleString("en-IN")} | Disbursed: -Rs.{Math.round(wallet.disbursed).toLocaleString("en-IN")} | Collected: +Rs.{Math.round(wallet.collected).toLocaleString("en-IN")} | Expenses: -Rs.{Math.round(wallet.expenses).toLocaleString("en-IN")} | Investments: -Rs.{Math.round(wallet.investments).toLocaleString("en-IN")}
+                                  Opening: Rs.{Math.round(wallet.opening).toLocaleString("en-IN")}
+                                  {"\n"}+ Collected: +Rs.{Math.round(wallet.collected).toLocaleString("en-IN")}
+                                  {"\n"}- Lent out: -Rs.{Math.round(wallet.disbursed).toLocaleString("en-IN")}
+                                  {"\n"}- Expenses: -Rs.{Math.round(wallet.expenses).toLocaleString("en-IN")}
+                                  {label === "Cash" ? `\n- Invested: -Rs.${Math.round(wallet.investments).toLocaleString("en-IN")}` : ""}
                                 </Text>
                               </View>
                             ))}
                           </View>
+                          <Text style={styles.walletAutoNote}>🔄 Auto-updated from your transactions</Text>
                         </>
-                      ) : null}
+                      )}
                     </View>
                   </View>
                 )}
@@ -1602,6 +1781,22 @@ const styles = StyleSheet.create({
   walletCardValue: { fontSize: 20, fontWeight: "900" },
   walletCardSub: { color: "#546E7A", fontSize: 11, fontWeight: "800" },
   walletBreakdown: { color: "#546E7A", fontSize: 10, lineHeight: 15, fontWeight: "700" },
+  // Wallet section styles — two-section A/B layout
+  walletSectionHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
+  walletSectionBadge: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  walletSectionBadgeText: { fontSize: 13, fontWeight: "900" },
+  walletSectionTitle: { color: "#111827", fontSize: 14, fontWeight: "900" },
+  walletSectionDesc: { color: "#5f7f7b", fontSize: 11, fontWeight: "700" },
+  walletDivider: { height: 1, backgroundColor: "#d8f7f4", marginVertical: 8 },
+  walletLiveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#2ec4b6" },
+  walletLoadingRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10 },
+  walletLoadingText: { color: "#5f7f7b", fontSize: 13, fontWeight: "700" },
+  walletErrorRow: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#fff7f7", borderRadius: 10, padding: 10, borderWidth: 1, borderColor: "#fecaca" },
+  walletErrorText: { color: "#C62828", fontSize: 13, fontWeight: "800", flex: 1 },
+  walletEmptyPrompt: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#f0fffe", borderRadius: 12, padding: 14, borderWidth: 1, borderColor: "#d8f7f4" },
+  walletEmptyText: { color: "#5f7f7b", fontSize: 13, fontWeight: "700", flex: 1 },
+  walletSavedDate: { color: "#5f7f7b", fontSize: 11, fontWeight: "700" },
+  walletAutoNote: { color: "#5f7f7b", fontSize: 11, fontWeight: "700", textAlign: "center", marginTop: 4 },
   blockAadhaarCard: { borderColor: "#fecaca", backgroundColor: "#fff7f7" },
   blockAadhaarHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
   blockAadhaarIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#fee2e2" },
