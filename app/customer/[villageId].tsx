@@ -1998,7 +1998,7 @@ const styles = StyleSheet.create({
     height: "90%",
   },
   rightCol: {
-    width: 38,
+    width: 52,
     gap: 6,
     justifyContent: "center",
     alignItems: "center",
@@ -2013,21 +2013,21 @@ const styles = StyleSheet.create({
     opacity: 0.38,
   },
   actionIconSquare: {
-    width: 25,
-    height: 25,
-    borderRadius: 7,
+    width: 42,
+    height: 28,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FFFFFF",
   },
   rupeeChar: {
     color: "#FFFFFF",
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "bold",
   },
   phonepeLogoChar: {
     color: "#FFFFFF",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "bold",
   },
   actionLabel: {
