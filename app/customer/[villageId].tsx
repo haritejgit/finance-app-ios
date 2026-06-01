@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Image,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -34,8 +33,6 @@ import { Customer, Loan, PaymentMode, Village } from "../../src/types";
 import { weekStart } from "../../src/business-logic";
 import { validateAadhaar, validateIndianPhone, validatePositiveAmount } from "../../src/validation";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-
-const passportPlaceholderImg = require("../../assets/passport_placeholder.png");
 
 const noTextSelection = Platform.OS === "web" ? ({ userSelect: "none", WebkitUserSelect: "none" } as any) : undefined;
 
@@ -320,7 +317,7 @@ const CustomerItem = React.memo(function CustomerItem({
                 )}
                 {!customer.passportPhotoSubmitted && (
                   <View style={styles.docMiniSquare}>
-                    <Image source={passportPlaceholderImg} style={styles.passportPlaceholderMini} />
+                    <Icon name="person" size={11} color="#4B5563" />
                   </View>
                 )}
               </View>
@@ -1964,11 +1961,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FFFFFF",
-  },
-  passportPlaceholderMini: {
-    width: 12,
-    height: 12,
-    resizeMode: "contain",
   },
   addressBox: {
     flexDirection: "row",
