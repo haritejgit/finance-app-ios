@@ -903,40 +903,33 @@ export default function CustomerListScreen() {
     setManualPaymentError("");
   }, [activeLoans]);
 
-  const handleQuickPay = useCallback((customer: Customer, mode: PaymentMode) => {
+  const handleQuickPay = useCallback(async (customer: Customer, mode: PaymentMode) => {
     const loan = activeLoans[customer.id];
     if (!loan || loan.balanceAmount <= 0) {
       Alert.alert("No active loan", "This customer does not have an active loan to mark paid.");
       return;
     }
     const suggested = getSuggestedPaymentAmount(loan);
-    const modeLabel = mode === "PHONE" ? "PhonePe" : "Cash";
-    Alert.alert(
-      `${modeLabel} Payment`,
-      `Pay Rs.${suggested.toLocaleString("en-IN")} via ${modeLabel} for ${customer.name}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Confirm",
-          onPress: async () => {
-            if (!user) return;
-            try {
-              setPayingCustomerId(customer.id);
-              await addPayment(loan, suggested, toStartOfDay(Date.now()), mode);
-              setPaymentStatuses((current) => ({ ...current, [customer.id]: "paid" }));
-              setActiveLoans((current) => ({
-                ...current,
-                [customer.id]: { ...loan, balanceAmount: Math.max(0, loan.balanceAmount - suggested) },
-              }));
-            } catch {
-              Alert.alert("Payment failed", "Could not save this payment. Please try again.");
-            } finally {
-              setPayingCustomerId(null);
-            }
-          },
-        },
-      ]
-    );
+    if (!user) return;
+
+    try {
+      setPayingCustomerId(customer.id);
+      await addPayment(loan, suggested, toStartOfDay(Date.now()), mode);
+      setPaymentStatuses((current) => ({ ...current, [customer.id]: "paid" }));
+      setActiveLoans((current) => ({
+        ...current,
+        [customer.id]: { ...loan, balanceAmount: Math.max(0, loan.balanceAmount - suggested) },
+      }));
+      showToast(
+        "success",
+        "✅ Payment Registered!",
+        `Paid Rs.${suggested.toLocaleString("en-IN")} via ${mode === "PHONE" ? "PhonePe" : "Cash"} for ${customer.name}`
+      );
+    } catch {
+      Alert.alert("Payment failed", "Could not save this payment. Please try again.");
+    } finally {
+      setPayingCustomerId(null);
+    }
   }, [activeLoans, user]);
 
   const openQuickCollect = useCallback(() => {
