@@ -1165,7 +1165,7 @@ interface Payment {
               if (loanStartingThisWeek) {
                 const renewalPayment = weekPayments.find((payment) => payment.paymentType === 'RENEWAL_CLOSURE');
                 const principalAmount = getLoanPrincipalAmount(loanStartingThisWeek as any);
-                const displayedAmount = principalAmount;
+                const displayedAmount = loanStartingThisWeek.totalPayable || (principalAmount * 1.2);
                 weeklyDisbursed[weekIdx] += getLoanDistributedAmount(loanStartingThisWeek as any);
 
                 if (renewalPayment) {
