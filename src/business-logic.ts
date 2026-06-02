@@ -54,13 +54,17 @@ export function getLoanPrincipalAmount(loan: Partial<Loan> & Record<string, any>
   return money(loan.principalAmount ?? loan.principal_amount ?? loan.loanAmount ?? loan.amount);
 }
 
-export function getNetDistributedAmount(amount: number): number {
-  const principal = money(amount);
+export function calculateDisbursedAmount(loanAmount: number): number {
+  const principal = money(loanAmount);
   return Math.max(0, principal - Math.floor(principal / 1000) * 20);
 }
 
+export function getNetDistributedAmount(amount: number): number {
+  return calculateDisbursedAmount(amount);
+}
+
 export function getLoanDistributedAmount(loan: Partial<Loan> & Record<string, any>): number {
-  return getNetDistributedAmount(getLoanPrincipalAmount(loan));
+  return calculateDisbursedAmount(getLoanPrincipalAmount(loan));
 }
 
 export function isRealCollectionPayment(payment: Record<string, any>): boolean {

@@ -1,5 +1,5 @@
 import { Expense, Investment, Loan, Payment, PaymentMode, UserProfile } from "./types";
-import { getLoanPrincipalAmount, isRealCollectionPayment, money, toMillis } from "./business-logic";
+import { getLoanDistributedAmount, isRealCollectionPayment, money, toMillis } from "./business-logic";
 
 type WalletBreakdown = {
   opening: number;
@@ -58,7 +58,7 @@ export function calculateWalletBalances(
   const sumLoans = (mode: PaymentMode) =>
     walletLoans
       .filter((loan) => modeOrCash(loan.disbursement_mode ?? loan.disbursementMode) === mode)
-      .reduce((sum, loan) => sum + getLoanPrincipalAmount(loan), 0);
+      .reduce((sum, loan) => sum + getLoanDistributedAmount(loan), 0);
 
   const sumPayments = (mode: PaymentMode) =>
     walletPayments

@@ -685,16 +685,26 @@ export async function updatePayment(payment: Payment, newAmount: number, newDate
 export async function deletePayment(payment: Payment) {
   await deleteDoc(doc(db, "payments", payment.id));
   
-  // Restore loan balance
-  const loanSnap = await getDoc(doc(db, "loans", payment.loanId));
-  if (loanSnap.exists()) {
+  // DUE entries are zero-value ledger marks and must not affect loan balance.
+  const amountPaid = money(payment.amountPaid);
+  const isDue = payment.paymentType === "DUE" || payment.type === "DUE";
+  const loanSnap = amountPaid > 0 && !isDue ? await getDoc(doc(db, "loans", payment.loanId)) : null;
+  if (loanSnap?.exists()) {
     const loan = loanSnap.data() as Loan;
-    const newBalance = loan.balanceAmount + payment.amountPaid;
+    const newBalance = loan.balanceAmount + amountPaid;
     await updateDoc(doc(db, "loans", payment.loanId), {
       balanceAmount: newBalance,
       status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
     });
   }
+  clearCache();
+}
+
+export async function deleteDuePayment(payment: Payment) {
+  if (payment.paymentType !== "DUE" && payment.type !== "DUE") {
+    throw new Error("Only DUE entries can be deleted here.");
+  }
+  await deleteDoc(doc(db, "payments", payment.id));
   clearCache();
 }
 

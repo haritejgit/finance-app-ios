@@ -12,7 +12,7 @@ Dashboard/Shift Selection (`app/(02)/shift-selection.tsx`): Mon-Sun day picker, 
 Village List (`app/village/[day]/[shift].tsx`): add/delete villages scoped to selected day and shift.
 Customer List (`app/customer/[villageId].tsx`): searchable customer cards, stats bar filtered by search, GPS actions, document status, dual pay buttons: Cash blue and PhonePe purple. Payment modal defaults from tapped button and lets user switch mode.
 Add/Edit Customer: name, phone, Aadhaar, GPS/location description, co-applicant, auto book number, principal, registration date, submitted documents, and loan disbursement mode Cash/PhonePe.
-Customer Profile (`app/profile/[customerId].tsx`): profile details, loan status, repayment progress, civil score, payment history, payment edit/delete, disbursement mode badge, PAY/DUE/RENEW flows.
+Customer Profile (`app/profile/[customerId].tsx`): profile details, loan status, repayment progress, civil score, payment history, payment edit, DUE-only delete, disbursement mode badge, PAY/DUE/RENEW flows.
 Payment Modal: unified payment entry for Cash/PhonePe; mode toggle at top; saves payment `type` as CASH or PHONE while retaining existing compatibility fields; DUE saves type DUE.
 Reports (`app/(03)/reports.tsx`): date range reports with Excel/PDF/image style exports and private-field exclusions.
 Analytics (`app/(04)/graph.tsx`): financial dashboard with collections, disbursements, investments, expenses, dues, recent payments, wallet balances, and charts.
@@ -39,12 +39,17 @@ Firestore schema:
 
 Business rules:
 Interest is 20%: `principal * 1.2 = totalPayable`.
+Cash actually handed to the customer is reduced by Rs.20 per Rs.1,000 of principal:
+`calculateDisbursedAmount(loanAmount) = loanAmount - (Math.floor(loanAmount / 1000) * 20)`.
+Loan principal, interest, total payable, and repayment balance stay based on the full principal. Wallet deductions, disbursed totals, and route/dashboard distribution summaries use the reduced cash-to-hand amount.
 Book number resets per village/day/shift route.
 Civil score starts at 600, adds +10 for on-time payment, subtracts -30 for DUE, clamped 300-900. Labels: Poor <600, Good 600-750, Excellent >750.
 Excel colors: Orange #C55A11 for new loans, black for payments, red fill + white text for dues, purple #5F259F for remaining balance. Apply 2% deduction on total disbursed column.
 Payment modes: CASH #1565C0, PHONE #5F259F, DUE #C62828.
 Disbursement modes: CASH default for old loans, PHONE for PhonePe disbursement.
-Wallet balance uses walletOpeningDate as cutoff. Cash = cashOpeningBalance - cash loans + cash payments - cash expenses - cash investments. PhonePe = phonePeOpeningBalance - PhonePe loans + PhonePe payments - PhonePe expenses - PhonePe investments.
+Wallet balance uses walletOpeningDate as cutoff. Cash loan deductions and PhonePe loan deductions use the reduced cash-to-hand disbursement amount, not full principal. Cash = cashOpeningBalance - cash disbursements + cash payments - cash expenses + cash investments. PhonePe = phonePeOpeningBalance - PhonePe disbursements + PhonePe payments - PhonePe expenses + PhonePe investments.
+
+DUE entries are zero-amount ledger marks. The profile ledger shows a delete action only for DUE entries; deleting one removes the payment document and does not change loan balance. Regular payment records do not show a delete action.
 
 Export rules:
 Include operational loan/payment/report data. Never export accountNotes, cashOpeningBalance, phonePeOpeningBalance, walletOpeningDate, or any field marked `// PRIVATE — never export`. Hide private UI with an export flag before screenshot/PDF capture when needed.

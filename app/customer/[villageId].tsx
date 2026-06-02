@@ -30,7 +30,7 @@ import { showToast } from "../../src/notify";
 import { getCachedCoordinates, LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
 import { addCustomerWithLoan, addPayment, addPaymentsBatch, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersThisWeek, getVillageById, getCustomerLoanSummary, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, markDue, updateCustomer } from "../../src/repository";
 import { Customer, Loan, PaymentMode, Village } from "../../src/types";
-import { weekStart } from "../../src/business-logic";
+import { calculateDisbursedAmount, weekStart } from "../../src/business-logic";
 import { validateAadhaar, validateIndianPhone, validatePositiveAmount } from "../../src/validation";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -515,6 +515,7 @@ export default function CustomerListScreen() {
   const [aadhaarReview, setAadhaarReview] = useState<AadhaarScanResult | null>(null);
   const [scannedData, setScannedData] = useState<AadhaarScanResult | null>(null);
   const [formErrors, setFormErrors] = useState<{ phone?: string; aadhar?: string; principal?: string }>({});
+  const cashToHand = useMemo(() => calculateDisbursedAmount(Number(form.principal || 0)), [form.principal]);
 
   const reload = useCallback(async (preserveScroll = false) => {
     if (!user || !villageId) {
@@ -1541,6 +1542,12 @@ export default function CustomerListScreen() {
                 </View>
 
                 <Text style={[styles.label, { color: colors.text }]}>How was money given to customer?</Text>
+                {Number(form.principal || 0) > 0 ? (
+                  <View style={styles.cashToHandCard}>
+                    <Text style={styles.cashToHandLabel}>Cash to hand</Text>
+                    <Text style={styles.cashToHandValue}>{"\u20B9"}{cashToHand.toLocaleString("en-IN")}</Text>
+                  </View>
+                ) : null}
                 <View style={styles.modeRow}>
                   {(["CASH", "PHONE"] as const).map((disbursementMode) => (
                     <Pressable
@@ -1837,7 +1844,7 @@ const styles = StyleSheet.create({
   routeSummaryLabel: { color: "rgba(255,255,255,0.72)", fontSize: 8, fontWeight: "800", textTransform: "uppercase", textAlign: "center" },
   routeSummaryValue: { color: colors.white, fontSize: 14, fontWeight: "900", marginTop: 1 },
   list: { flex: 1 },
-  listContent: { paddingBottom: 20 },
+  listContent: { flexGrow: 1, paddingBottom: 116 },
   item: { 
     backgroundColor: colors.white, 
     borderRadius: 14, 
@@ -2062,6 +2069,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 8,
     elevation: 6,
+    zIndex: 20,
   },
   fabIcon: { color: colors.white, fontSize: 24, fontWeight: '300' },
   quickCollectFab: {
@@ -2079,6 +2087,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 8,
     elevation: 6,
+    zIndex: 20,
   },
   quickCollectFabText: { color: colors.white, fontSize: 12, fontWeight: "900" },
   modal: { flex: 1, backgroundColor: "#f7f9fc" },
@@ -2098,6 +2107,9 @@ const styles = StyleSheet.create({
   quickCollectMeta: { color: "#666", fontSize: 11, fontWeight: "700", marginTop: 2 },
   quickCollectInput: { width: 86, borderRadius: 10, borderWidth: 1, borderColor: "#d2d8e1", color: "#111827", paddingHorizontal: 10, paddingVertical: 9, fontSize: 14 },
   formScrollContent: { paddingBottom: 20 },
+  cashToHandCard: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#ECFDF5", borderColor: "#A7F3D0", borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 10 },
+  cashToHandLabel: { color: "#047857", fontSize: 12, fontWeight: "900", textTransform: "uppercase" },
+  cashToHandValue: { color: "#064E3B", fontSize: 18, fontWeight: "900" },
   privacyBanner: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#EFF6FF", borderColor: "#BFDBFE", borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 14 },
   privacyText: { flex: 1, color: colors.ink, fontSize: 12, lineHeight: 17, fontWeight: "600" },
   privacyOkBtn: { borderRadius: 999, backgroundColor: colors.blue1, paddingHorizontal: 12, paddingVertical: 7 },

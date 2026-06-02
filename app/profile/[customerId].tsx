@@ -27,7 +27,7 @@ import { LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates
 import {
   addPayment,
   deleteCustomer,
-  deletePayment,
+  deleteDuePayment,
   getActiveLoan,
   getCustomerByAadhar,
   getCustomerById,
@@ -104,14 +104,17 @@ const PaymentHistory = memo(function PaymentHistory({
           {p.paymentMode === "PHONE" && (
             <Text style={[styles.paymentMode, { color: colors.textSecondary }]}>PhonePe Payment</Text>
           )}
-          {/* Edit/Delete buttons for regular payments only */}
-          {p.paymentType === "REGULAR" && onEdit && onDelete && (
+          {p.paymentType === "REGULAR" && onEdit && (
             <View style={styles.paymentActions}>
               <Pressable style={styles.editPaymentBtn} onPress={() => onEdit(p)}>
                 <Text style={styles.editPaymentBtnText}>Edit</Text>
               </Pressable>
+            </View>
+          )}
+          {p.paymentType === "DUE" && onDelete && (
+            <View style={styles.paymentActions}>
               <Pressable style={styles.deletePaymentBtn} onPress={() => onDelete(p)}>
-                <Text style={styles.deletePaymentBtnText}>Delete</Text>
+                <Icon name="trash-outline" size={14} color={colors.white} />
               </Pressable>
             </View>
           )}
@@ -619,6 +622,10 @@ export default function ProfileScreen() {
 
   // Payment delete handlers
   const openDeletePaymentConfirm = (payment: any) => {
+    if (payment.paymentType !== "DUE" && payment.type !== "DUE") {
+      Alert.alert("Delete unavailable", "Only DUE entries can be deleted from the ledger.");
+      return;
+    }
     setDeletingPayment(payment);
     setDeletePaymentConfirmOpen(true);
   };
@@ -704,7 +711,7 @@ export default function ProfileScreen() {
 
   const confirmDeletePayment = async () => {
     if (!deletingPayment) return;
-    await deletePayment(deletingPayment);
+    await deleteDuePayment(deletingPayment);
     closeDeletePaymentConfirm();
     await reload();
   };
@@ -1533,10 +1540,9 @@ export default function ProfileScreen() {
       <Modal visible={deletePaymentConfirmOpen} transparent animationType="fade">
         <View style={styles.modalWrap}>
           <View style={[styles.modal, { maxHeight: 200 }]}>
-            <Text style={styles.modalTitle}>Delete Payment</Text>
+            <Text style={styles.modalTitle}>Delete Due Entry</Text>
             <Text style={{ marginBottom: 20, textAlign: "center" }}>
-              Are you sure you want to delete this payment of Rs.{deletingPayment?.amountPaid?.toFixed(2)}?
-              This will restore the loan balance.
+              Delete this due entry? This removes only the DUE mark and will not change the loan balance.
             </Text>
             <View style={styles.modalButtons}>
               <Pressable style={styles.cancelModalBtn} onPress={closeDeletePaymentConfirm}>
