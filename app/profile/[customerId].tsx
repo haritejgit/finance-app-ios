@@ -28,6 +28,7 @@ import {
   addPayment,
   deleteCustomer,
   deleteDuePayment,
+  deletePayment,
   getActiveLoan,
   getCustomerByAadhar,
   getCustomerById,
@@ -104,10 +105,13 @@ const PaymentHistory = memo(function PaymentHistory({
           {p.paymentMode === "PHONE" && (
             <Text style={[styles.paymentMode, { color: colors.textSecondary }]}>PhonePe Payment</Text>
           )}
-          {p.paymentType === "REGULAR" && onEdit && (
+          {p.paymentType === "REGULAR" && onEdit && onDelete && (
             <View style={styles.paymentActions}>
               <Pressable style={styles.editPaymentBtn} onPress={() => onEdit(p)}>
                 <Text style={styles.editPaymentBtnText}>Edit</Text>
+              </Pressable>
+              <Pressable style={styles.deletePaymentBtn} onPress={() => onDelete(p)}>
+                <Text style={styles.deletePaymentBtnText}>Delete</Text>
               </Pressable>
             </View>
           )}
@@ -622,10 +626,6 @@ export default function ProfileScreen() {
 
   // Payment delete handlers
   const openDeletePaymentConfirm = (payment: any) => {
-    if (payment.paymentType !== "DUE" && payment.type !== "DUE") {
-      Alert.alert("Delete unavailable", "Only DUE entries can be deleted from the ledger.");
-      return;
-    }
     setDeletingPayment(payment);
     setDeletePaymentConfirmOpen(true);
   };
@@ -711,7 +711,12 @@ export default function ProfileScreen() {
 
   const confirmDeletePayment = async () => {
     if (!deletingPayment) return;
-    await deleteDuePayment(deletingPayment);
+    const isDue = deletingPayment.paymentType === "DUE" || deletingPayment.type === "DUE";
+    if (isDue) {
+      await deleteDuePayment(deletingPayment);
+    } else {
+      await deletePayment(deletingPayment);
+    }
     closeDeletePaymentConfirm();
     await reload();
   };
@@ -1540,9 +1545,13 @@ export default function ProfileScreen() {
       <Modal visible={deletePaymentConfirmOpen} transparent animationType="fade">
         <View style={styles.modalWrap}>
           <View style={[styles.modal, { maxHeight: 200 }]}>
-            <Text style={styles.modalTitle}>Delete Due Entry</Text>
+            <Text style={styles.modalTitle}>
+              {deletingPayment?.paymentType === "DUE" || deletingPayment?.type === "DUE" ? "Delete Due Entry" : "Delete Payment"}
+            </Text>
             <Text style={{ marginBottom: 20, textAlign: "center" }}>
-              Delete this due entry? This removes only the DUE mark and will not change the loan balance.
+              {deletingPayment?.paymentType === "DUE" || deletingPayment?.type === "DUE"
+                ? "Delete this due entry? This removes only the DUE mark and will not change the loan balance."
+                : `Are you sure you want to delete this payment of Rs.${deletingPayment?.amountPaid?.toFixed(2)}? This will restore the loan balance.`}
             </Text>
             <View style={styles.modalButtons}>
               <Pressable style={styles.cancelModalBtn} onPress={closeDeletePaymentConfirm}>

@@ -54,7 +54,7 @@ Disbursement handling:
 New loan registration asks how money was given and shows `Cash to hand` using the Rs.20-per-Rs.1,000 deduction. Save `disbursement_mode` as CASH or PHONE. Old loans default to CASH in displays, analytics, and wallet calculations.
 
 DUE handling:
-DUE payments are zero-amount ledger marks. The profile ledger shows a trash action only for DUE entries; confirming deletion removes the payment document and does not change loan balance. Regular payments do not show a delete action.
+DUE payments are zero-amount ledger marks. The profile ledger supports delete for both regular payments and DUE entries. Confirming regular payment deletion restores the loan balance; confirming DUE deletion removes only the payment document and does not change loan balance.
 
 Color tokens:
 Primary Blue #1565C0, Dark Navy #0D1B2A, Accent #1976D2, Light Tint #E3F2FD, Green #2E7D32, Red #C62828, Orange #C55A11, PhonePe Purple #5F259F, Card BG #F5F9FF, Text Secondary #546E7A.

@@ -12,7 +12,7 @@ Dashboard/Shift Selection (`app/(02)/shift-selection.tsx`): Mon-Sun day picker, 
 Village List (`app/village/[day]/[shift].tsx`): add/delete villages scoped to selected day and shift.
 Customer List (`app/customer/[villageId].tsx`): searchable customer cards, stats bar filtered by search, GPS actions, document status, dual pay buttons: Cash blue and PhonePe purple. Payment modal defaults from tapped button and lets user switch mode.
 Add/Edit Customer: name, phone, Aadhaar, GPS/location description, co-applicant, auto book number, principal, registration date, submitted documents, and loan disbursement mode Cash/PhonePe.
-Customer Profile (`app/profile/[customerId].tsx`): profile details, loan status, repayment progress, civil score, payment history, payment edit, DUE-only delete, disbursement mode badge, PAY/DUE/RENEW flows.
+Customer Profile (`app/profile/[customerId].tsx`): profile details, loan status, repayment progress, civil score, payment history, payment edit/delete, DUE delete, disbursement mode badge, PAY/DUE/RENEW flows.
 Payment Modal: unified payment entry for Cash/PhonePe; mode toggle at top; saves payment `type` as CASH or PHONE while retaining existing compatibility fields; DUE saves type DUE.
 Reports (`app/(03)/reports.tsx`): date range reports with Excel/PDF/image style exports and private-field exclusions.
 Analytics (`app/(04)/graph.tsx`): financial dashboard with collections, disbursements, investments, expenses, dues, recent payments, wallet balances, and charts.
@@ -49,7 +49,7 @@ Payment modes: CASH #1565C0, PHONE #5F259F, DUE #C62828.
 Disbursement modes: CASH default for old loans, PHONE for PhonePe disbursement.
 Wallet balance uses walletOpeningDate as cutoff. Cash loan deductions and PhonePe loan deductions use the reduced cash-to-hand disbursement amount, not full principal. Cash = cashOpeningBalance - cash disbursements + cash payments - cash expenses + cash investments. PhonePe = phonePeOpeningBalance - PhonePe disbursements + PhonePe payments - PhonePe expenses + PhonePe investments.
 
-DUE entries are zero-amount ledger marks. The profile ledger shows a delete action only for DUE entries; deleting one removes the payment document and does not change loan balance. Regular payment records do not show a delete action.
+DUE entries are zero-amount ledger marks. The profile ledger delete action supports regular payments and DUE entries. Deleting a regular payment restores the loan balance; deleting a DUE entry removes only the payment document and does not change loan balance.
 
 Export rules:
 Include operational loan/payment/report data. Never export accountNotes, cashOpeningBalance, phonePeOpeningBalance, walletOpeningDate, or any field marked `// PRIVATE — never export`. Hide private UI with an export flag before screenshot/PDF capture when needed.

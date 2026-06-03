@@ -274,7 +274,19 @@ let ledgerText = "";
 
     const exps = transactions.filter((t) => t.type === "EXPENSE");
     if (exps.length > 0) {
+      const expenseMap = new Map<string, { desc: string; amount: number }>();
       exps.forEach((exp) => {
+        const label = (exp.desc || "Other").trim() || "Other";
+        const key = label.toLowerCase();
+        const existing = expenseMap.get(key);
+        expenseMap.set(key, {
+          desc: existing?.desc ?? label,
+          amount: (existing?.amount ?? 0) + (Number(exp.amount) || 0),
+        });
+      });
+      const groupedExps = Array.from(expenseMap.values()).sort((a, b) => b.amount - a.amount);
+
+      groupedExps.forEach((exp) => {
         const lblExp = `${exp.desc} (${isTe ? "ఖర్చులు" : "Expenses"})`;
         ledgerText += `${formatLine(lblExp, formatVal(exp.amount))}\n`;
       });
@@ -568,7 +580,19 @@ const formatLine = (label: string, value: string, symbol: string = "="): string 
 
     const exps = transactions.filter((t) => t.type === "EXPENSE");
     if (exps.length > 0) {
+      const expenseMap = new Map<string, { desc: string; amount: number }>();
       exps.forEach((exp) => {
+        const label = (exp.desc || "Other").trim() || "Other";
+        const key = label.toLowerCase();
+        const existing = expenseMap.get(key);
+        expenseMap.set(key, {
+          desc: existing?.desc ?? label,
+          amount: (existing?.amount ?? 0) + (Number(exp.amount) || 0),
+        });
+      });
+      const groupedExps = Array.from(expenseMap.values()).sort((a, b) => b.amount - a.amount);
+
+      groupedExps.forEach((exp) => {
         const lblExp = `${exp.desc} (${isTe ? "ఖర్చులు" : "Expenses"})`;
         output += `${formatLine(lblExp, formatVal(exp.amount))}\n`;
       });
