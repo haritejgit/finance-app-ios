@@ -115,7 +115,7 @@ export default function AIScreen() {
         },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
-          max_tokens: 700,
+          max_tokens: 1500,
           system: `${SYSTEM_PROMPT}\n\nCurrent dashboard context: ${JSON.stringify({
             totals: context?.totals,
             recentTransactions: context?.recentTransactions?.slice(0, 5),
@@ -147,10 +147,15 @@ export default function AIScreen() {
 
   const clearChat = useCallback(() => {
     if (!messages.length) return;
-    Alert.alert("Clear chat", "Remove all messages from this chat?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Clear", style: "destructive", onPress: () => setMessages([]) },
-    ]);
+    if (Platform.OS === "web") {
+      const confirm = window.confirm("Remove all messages from this chat?");
+      if (confirm) setMessages([]);
+    } else {
+      Alert.alert("Clear chat", "Remove all messages from this chat?", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Clear", style: "destructive", onPress: () => setMessages([]) },
+      ]);
+    }
   }, [messages.length]);
 
   return (

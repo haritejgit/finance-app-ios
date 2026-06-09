@@ -25,7 +25,7 @@ Business context:
 
 User question: "${userQuery}"
 
-Reply in 2-3 short, practical sentences. Be specific to micro-lending in India. No generic advice.
+Reply with a detailed, comprehensive, and practical answer. Be specific to micro-lending in India. No generic advice.
 `;
 
 export const askGemini = async (query: string, stats: BusinessStats): Promise<string> => {
@@ -39,7 +39,7 @@ export const askGemini = async (query: string, stats: BusinessStats): Promise<st
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: buildPrompt(query, stats) }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 300 },
+        generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
       }),
     });
     const data = await res.json();

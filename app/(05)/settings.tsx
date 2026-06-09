@@ -317,28 +317,43 @@ export default function SettingsScreen() {
       try {
         const raw = await file.text();
         const snapshot = parseBackupSnapshot(raw, user.uid);
-        Alert.alert(
-          "Restore Backup",
-          "This will merge matching records into your account. It will not delete existing production records.",
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Restore",
-              style: "default",
-              onPress: async () => {
-                try {
-                  setIsRestoring(true);
-                  const restored = await restoreBackupSnapshot(snapshot, user.uid);
-                  Alert.alert("Restore Complete", `${restored} records were safely merged.`);
-                } catch (error: any) {
-                  Alert.alert("Restore Failed", error?.message ?? "Could not restore backup.");
-                } finally {
-                  setIsRestoring(false);
-                }
+        if (Platform.OS === "web") {
+          const confirm = window.confirm("This will merge matching records into your account. It will not delete existing production records. Proceed with Restore?");
+          if (confirm) {
+            try {
+              setIsRestoring(true);
+              const restored = await restoreBackupSnapshot(snapshot, user.uid);
+              alert(`${restored} records were safely merged.`);
+            } catch (error: any) {
+              alert(error?.message ?? "Could not restore backup.");
+            } finally {
+              setIsRestoring(false);
+            }
+          }
+        } else {
+          Alert.alert(
+            "Restore Backup",
+            "This will merge matching records into your account. It will not delete existing production records.",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Restore",
+                style: "default",
+                onPress: async () => {
+                  try {
+                    setIsRestoring(true);
+                    const restored = await restoreBackupSnapshot(snapshot, user.uid);
+                    Alert.alert("Restore Complete", `${restored} records were safely merged.`);
+                  } catch (error: any) {
+                    Alert.alert("Restore Failed", error?.message ?? "Could not restore backup.");
+                  } finally {
+                    setIsRestoring(false);
+                  }
+                },
               },
-            },
-          ]
-        );
+            ]
+          );
+        }
       } catch (error: any) {
         Alert.alert("Invalid Backup", error?.message ?? "This file is not a valid Finance Manager backup.");
       }

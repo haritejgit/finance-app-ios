@@ -442,25 +442,34 @@ export default function AccountScreen() {
   }, [user, invAmount, invDate, invName, invPaymentMode, t]);
 
   const handleDeleteInvestment = useCallback((id: string) => {
-    Alert.alert(t("delete"), "Are you sure you want to delete this investment entry?", [
-      { text: t("cancel"), style: "cancel" },
-      {
-        text: t("delete"),
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setLoading(true);
-            await deleteInvestment(id);
-            const invs = await getInvestments(user!.uid);
-            setInvestments(invs);
-          } catch (err: any) {
-            Alert.alert(t("error"), err.message);
-          } finally {
-            setLoading(false);
-          }
+    const doDelete = async () => {
+      try {
+        setLoading(true);
+        await deleteInvestment(id);
+        const invs = await getInvestments(user!.uid);
+        setInvestments(invs);
+      } catch (err: any) {
+        Alert.alert(t("error"), err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (Platform.OS === "web") {
+      const confirm = window.confirm("Are you sure you want to delete this investment entry?");
+      if (confirm) {
+        doDelete();
+      }
+    } else {
+      Alert.alert(t("delete"), "Are you sure you want to delete this investment entry?", [
+        { text: t("cancel"), style: "cancel" },
+        {
+          text: t("delete"),
+          style: "destructive",
+          onPress: doDelete,
         },
-      },
-    ]);
+      ]);
+    }
   }, [user, t]);
 
   // Expense Submit
@@ -498,25 +507,34 @@ export default function AccountScreen() {
   }, [user, expAmount, expDesc, expDate, expPaymentMode, t]);
 
   const handleDeleteExpense = useCallback((id: string) => {
-    Alert.alert(t("delete"), "Are you sure you want to delete this expense entry?", [
-      { text: t("cancel"), style: "cancel" },
-      {
-        text: t("delete"),
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setLoading(true);
-            await deleteExpense(id);
-            const exps = await getExpenses(user!.uid);
-            setExpenses(exps);
-          } catch (err: any) {
-            Alert.alert(t("error"), err.message);
-          } finally {
-            setLoading(false);
-          }
+    const doDelete = async () => {
+      try {
+        setLoading(true);
+        await deleteExpense(id);
+        const exps = await getExpenses(user!.uid);
+        setExpenses(exps);
+      } catch (err: any) {
+        Alert.alert(t("error"), err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (Platform.OS === "web") {
+      const confirm = window.confirm("Are you sure you want to delete this expense entry?");
+      if (confirm) {
+        doDelete();
+      }
+    } else {
+      Alert.alert(t("delete"), "Are you sure you want to delete this expense entry?", [
+        { text: t("cancel"), style: "cancel" },
+        {
+          text: t("delete"),
+          style: "destructive",
+          onPress: doDelete,
         },
-      },
-    ]);
+      ]);
+    }
   }, [user, t]);
 
   // Edit Expense

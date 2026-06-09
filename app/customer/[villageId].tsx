@@ -1155,10 +1155,10 @@ export default function CustomerListScreen() {
             style={styles.list}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
-            initialNumToRender={30}
-            maxToRenderPerBatch={20}
-            windowSize={10}
-            removeClippedSubviews={false}
+            initialNumToRender={15}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            removeClippedSubviews={true}
             onScroll={(e) => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
             scrollEventThrottle={100}
             ListEmptyComponent={
