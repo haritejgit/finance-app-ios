@@ -58,6 +58,16 @@ function formatDDMMYYYY(ts: number): string {
   return `${day}/${month}/${year}`;
 }
 
+function formatDateTime(ts: number): string {
+  const d = new Date(ts);
+  const day = `${d.getDate()}`.padStart(2, "0");
+  const month = `${d.getMonth() + 1}`.padStart(2, "0");
+  const year = d.getFullYear();
+  const hours = `${d.getHours()}`.padStart(2, "0");
+  const minutes = `${d.getMinutes()}`.padStart(2, "0");
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+}
+
 function parseDDMMYYYY(str: string): number | null {
   const trimmed = str.trim();
   const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(trimmed);
@@ -774,12 +784,20 @@ export default function AccountScreen() {
       customerMap.set(c.id, c);
     });
 
+    const dueCountMap = new Map<string, number>();
+    payments.forEach((p) => {
+      if ((p.paymentType === "DUE" || p.type === "DUE") && p.customerId) {
+        dueCountMap.set(p.customerId, (dueCountMap.get(p.customerId) || 0) + 1);
+      }
+    });
+
     // Find active loans
     const activeLoans = loans.filter((l) => l.status === "ACTIVE");
 
-    // Group loans by customer, compute outstanding balance
+    // Group loans by customer, compute outstanding balance and dues count
     const dues = activeLoans.map((l) => {
       const cust = customerMap.get(l.customerId);
+      const dueCount = dueCountMap.get(l.customerId) || 0;
       return {
         loanId: l.id,
         customerId: l.customerId,
@@ -787,13 +805,19 @@ export default function AccountScreen() {
         numericalId: cust?.numericalId ?? "",
         villageName: cust?.villageName ?? "No village",
         balanceAmount: l.balanceAmount ?? 0,
+        dueCount,
         phone: cust?.phone ?? "",
       };
     });
 
-    // Sort by balanceAmount descending
-    return dues.sort((a, b) => b.balanceAmount - a.balanceAmount);
-  }, [loans, customers]);
+    // Sort by dueCount descending, then balanceAmount descending
+    return dues.sort((a, b) => {
+      if (b.dueCount !== a.dueCount) {
+        return b.dueCount - a.dueCount;
+      }
+      return b.balanceAmount - a.balanceAmount;
+    });
+  }, [loans, customers, payments]);
 
   // ─── Live Calculated Wallet Balance (DISPLAY ONLY) ───────────────────────
   // Derived from real-time onSnapshot data. NEVER writes back to Firestore
@@ -1213,7 +1237,7 @@ export default function AccountScreen() {
                   </View>
                 </View>
                 <Text style={styles.logDesc}>{item.desc}</Text>
-                <Text style={styles.logDate}>{formatDDMMYYYY(item.date)}</Text>
+                <Text style={styles.logDate}>{formatDateTime(item.date)}</Text>
                 {item.mode ? (
                   <Text style={styles.logDate}>Paid via {item.mode}</Text>
                 ) : null}
@@ -1252,6 +1276,9 @@ export default function AccountScreen() {
               {item.phone ? (
                 <Text style={styles.logDate}>{isTe ? "మొబైల్" : "Phone"}: {item.phone}</Text>
               ) : null}
+              <Text style={styles.logDate}>
+                {isTe ? "బకాయిలు" : "Dues"}: {item.dueCount}
+              </Text>
             </View>
             <View style={{ alignItems: "flex-end", gap: 4 }}>
               <Text style={[styles.logAmount, { color: "#d94841" }]}>

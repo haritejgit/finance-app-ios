@@ -438,8 +438,13 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
     })
     .filter((alert): alert is NonNullable<typeof alert> => alert !== null)
     .filter((alert) => alert.balanceAmount > 0)
-    .sort((a, b) => b.lastDueDate - a.lastDueDate)
-    .slice(0, 8);
+    .sort((a, b) => {
+      if (b.dueCount !== a.dueCount) {
+        return b.dueCount - a.dueCount;
+      }
+      return b.lastDueDate - a.lastDueDate;
+    })
+    .slice(0, 80);
 
   const customerStates: Record<string, CustomerState> = Object.fromEntries(
     customers.map((customer) => {

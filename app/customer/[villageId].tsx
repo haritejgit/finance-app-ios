@@ -915,7 +915,7 @@ export default function CustomerListScreen() {
 
     try {
       setPayingCustomerId(customer.id);
-      await addPayment(loan, suggested, toStartOfDay(Date.now()), mode);
+      await addPayment(loan, suggested, Date.now(), mode);
       setPaymentStatuses((current) => ({ ...current, [customer.id]: "paid" }));
       setActiveLoans((current) => ({
         ...current,
@@ -968,7 +968,7 @@ export default function CustomerListScreen() {
         const loan = activeLoans[customer.id];
         const amountPaid = Number(value?.amount);
         if (!value?.selected || !loan || !Number.isFinite(amountPaid) || amountPaid <= 0) return null;
-        return { loan, amountPaid: Math.min(amountPaid, loan.balanceAmount), paymentDate: toStartOfDay(Date.now()), mode: "CASH" as const };
+        return { loan, amountPaid: Math.min(amountPaid, loan.balanceAmount), paymentDate: Date.now(), mode: "CASH" as const };
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
     if (entries.length === 0) return;
@@ -1012,7 +1012,7 @@ export default function CustomerListScreen() {
 
     try {
       setPayingCustomerId(manualPaymentCustomer.id);
-      await addPayment(loan, amount, toStartOfDay(Date.now()), manualPaymentMode);
+      await addPayment(loan, amount, Date.now(), manualPaymentMode);
       setPaymentStatuses((current) => ({ ...current, [manualPaymentCustomer.id]: "paid" }));
       setActiveLoans((current) => ({
         ...current,
@@ -1038,7 +1038,7 @@ export default function CustomerListScreen() {
     }
     try {
       setPayingCustomerId(manualPaymentCustomer.id);
-      await markDue(loan, toStartOfDay(Date.now()));
+      await markDue(loan, Date.now());
       setPaymentStatuses((current) => ({ ...current, [manualPaymentCustomer.id]: "due" }));
       closeManualPayment();
     } catch {
@@ -1056,7 +1056,7 @@ export default function CustomerListScreen() {
     }
     try {
       setPayingCustomerId(customer.id);
-      await markDue(loan, toStartOfDay(Date.now()));
+      await markDue(loan, Date.now());
       setPaymentStatuses((current) => ({ ...current, [customer.id]: "due" }));
       showToast("success", "Due marked", `${customer.name} has been marked due.`);
     } catch {

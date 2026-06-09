@@ -89,6 +89,13 @@ const PaymentHistory = memo(function PaymentHistory({
               <Text style={[styles.paymentYear, { color: colors.textSecondary }]}>
                 {new Date(p.paymentDate).getFullYear()}
               </Text>
+              <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                {new Date(p.paymentDate).toLocaleTimeString('en-IN', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  hour12: true,
+                })}
+              </Text>
             </View>
             <View style={styles.paymentAmountContainer}>
               <Text style={[styles.paymentAmount, { color: colors.text }]}>Rs.{p.amountPaid.toFixed(2)}</Text>
@@ -622,7 +629,8 @@ export default function ProfileScreen() {
       return;
     }
     setPaymentDateError("");
-    await addPayment(loan, parsedAmount, toStartOfDay(parsedDate), mode);
+    const finalDate = (toStartOfDay(parsedDate) === toStartOfDay(Date.now())) ? Date.now() : toStartOfDay(parsedDate);
+    await addPayment(loan, parsedAmount, finalDate, mode);
     setPayOpen(false);
     setAmount("");
     await reload();
@@ -645,7 +653,8 @@ export default function ProfileScreen() {
       return;
     }
     setDueDateError("");
-    await markDue(loan, toStartOfDay(parsedDate));
+    const finalDate = (toStartOfDay(parsedDate) === toStartOfDay(Date.now())) ? Date.now() : toStartOfDay(parsedDate);
+    await markDue(loan, finalDate);
     setDueOpen(false);
     await reload();
   };
@@ -696,7 +705,7 @@ export default function ProfileScreen() {
     await updatePayment(
       editingPayment,
       parsedAmount,
-      toStartOfDay(parsedDate),
+      (toStartOfDay(parsedDate) === toStartOfDay(Date.now())) ? Date.now() : toStartOfDay(parsedDate),
       editPaymentMode
     );
     
