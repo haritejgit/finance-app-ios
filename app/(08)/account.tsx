@@ -106,8 +106,8 @@ export default function AccountScreen() {
 
 
 
-  // Selected Tab state: 'summary' | 'investments' | 'expenses'
-  const [activeTab, setActiveTab] = useState<"summary" | "investments" | "expenses" | "notes">("summary");
+  // Selected Tab state: 'summary' | 'investments' | 'expenses' | 'history' | 'dues' | 'notes'
+  const [activeTab, setActiveTab] = useState<"summary" | "investments" | "expenses" | "history" | "dues" | "notes">("summary");
 
   // Loading States
   const [loading, setLoading] = useState(true);
@@ -671,6 +671,130 @@ export default function AccountScreen() {
     };
   }, [periodBf, investments, expenses, payments, loans, startDateStr, endDateStr]);
 
+  const transactionsHistory = useMemo(() => {
+    const startTs = parseDDMMYYYY(startDateStr) ?? 0;
+    const endTs = getEndOfDay(parseDDMMYYYY(endDateStr) ?? Date.now());
+
+    // Build customer map
+    const customerMap = new Map<string, { name: string; numericalId: string }>();
+    customers.forEach((c) => {
+      customerMap.set(c.id, { name: c.name, numericalId: c.numericalId });
+    });
+
+    const list: Array<{
+      id: string;
+      date: number;
+      type: "INVESTMENT" | "COLLECTION" | "LOAN" | "EXPENSE";
+      amount: number;
+      desc: string;
+      mode?: string;
+    }> = [];
+
+    // Filter Investments
+    investments
+      .filter((i) => i.date >= startTs && i.date <= endTs)
+      .forEach((i) => {
+        list.push({
+          id: i.id,
+          date: i.date,
+          type: "INVESTMENT",
+          amount: i.amount,
+          desc: i.investorName
+            ? `${isTe ? "పెట్టుబడి" : "Investment"} (${i.investorName})`
+            : (isTe ? "పెట్టుబడి" : "Investment"),
+          mode: i.payment_mode === "PHONE" ? "PhonePe" : "Cash",
+        });
+      });
+
+    // Filter Collections (REGULAR payments)
+    payments
+      .filter((p) => {
+        const ts = p.date instanceof Date ? p.date.getTime() : p.date;
+        return p.paymentType === "REGULAR" && ts >= startTs && ts <= endTs;
+      })
+      .forEach((p) => {
+        const ts = p.date instanceof Date ? p.date.getTime() : p.date;
+        const cust = customerMap.get(p.customerId);
+        const desc = cust
+          ? `${cust.name} (${cust.numericalId})`
+          : (isTe ? "వసూళ్లు" : "Collection");
+        list.push({
+          id: p.id,
+          date: ts,
+          type: "COLLECTION",
+          amount: p.amount,
+          desc,
+          mode: p.paymentMode === "PHONE" ? "PhonePe" : "Cash",
+        });
+      });
+
+    // Filter Loans (disbursed loans)
+    loans
+      .filter((l) => {
+        const ts = l.date instanceof Date ? l.date.getTime() : l.date;
+        return ts >= startTs && ts <= endTs;
+      })
+      .forEach((l) => {
+        const ts = l.date instanceof Date ? l.date.getTime() : l.date;
+        const cust = customerMap.get(l.customerId);
+        const desc = cust
+          ? `${cust.name} (${cust.numericalId})`
+          : (isTe ? "పంచిన డబ్బులు" : "Loan");
+        list.push({
+          id: l.id,
+          date: ts,
+          type: "LOAN",
+          amount: l.amount,
+          desc,
+          mode: l.paymentMode === "PHONE" ? "PhonePe" : "Cash",
+        });
+      });
+
+    // Filter Expenses
+    expenses
+      .filter((e) => e.date >= startTs && e.date <= endTs)
+      .forEach((e) => {
+        list.push({
+          id: e.id,
+          date: e.date,
+          type: "EXPENSE",
+          amount: e.amount,
+          desc: e.description || (isTe ? "ఖర్చు" : "Expense"),
+          mode: e.payment_mode === "PHONE" ? "PhonePe" : "Cash",
+        });
+      });
+
+    // Sort chronologically descending
+    return list.sort((a, b) => b.date - a.date);
+  }, [investments, payments, loans, expenses, startDateStr, endDateStr, customers, isTe]);
+
+  const highestDuesList = useMemo(() => {
+    const customerMap = new Map<string, any>();
+    customers.forEach((c) => {
+      customerMap.set(c.id, c);
+    });
+
+    // Find active loans
+    const activeLoans = loans.filter((l) => l.status === "ACTIVE");
+
+    // Group loans by customer, compute outstanding balance
+    const dues = activeLoans.map((l) => {
+      const cust = customerMap.get(l.customerId);
+      return {
+        loanId: l.id,
+        customerId: l.customerId,
+        customerName: cust?.name ?? "Unknown",
+        numericalId: cust?.numericalId ?? "",
+        villageName: cust?.villageName ?? "No village",
+        balanceAmount: l.balanceAmount ?? 0,
+        phone: cust?.phone ?? "",
+      };
+    });
+
+    // Sort by balanceAmount descending
+    return dues.sort((a, b) => b.balanceAmount - a.balanceAmount);
+  }, [loans, customers]);
+
   // ─── Live Calculated Wallet Balance (DISPLAY ONLY) ───────────────────────
   // Derived from real-time onSnapshot data. NEVER writes back to Firestore
   // or to cashOpeningInput / phoneOpeningInput.
@@ -1008,6 +1132,146 @@ export default function AccountScreen() {
     </View>
   );
 
+  const renderHistoryCard = () => (
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>{t("historyLog")}</Text>
+      <Text style={styles.cardDesc}>
+        {isTe ? "తేదీల ఆధారంగా లావాదేవీల చరిత్రను చూడండి" : "View transaction history based on dates"}
+      </Text>
+
+      <View style={styles.datePickerRow}>
+        <View style={[styles.inputContainer, { flex: 1 }]}>
+          <Text style={styles.inputLabel}>{t("startDate")}</Text>
+          <TextInput
+            style={styles.textInput}
+            value={startDateStr}
+            onChangeText={(txt) => handleDateChange(txt, setStartDateStr)}
+            placeholder="DD/MM/YYYY"
+            maxLength={10}
+            keyboardType="numeric"
+            placeholderTextColor="#78909c"
+          />
+        </View>
+        <View style={[styles.inputContainer, { flex: 1 }]}>
+          <Text style={styles.inputLabel}>{t("endDate")}</Text>
+          <TextInput
+            style={styles.textInput}
+            value={endDateStr}
+            onChangeText={(txt) => handleDateChange(txt, setEndDateStr)}
+            placeholder="DD/MM/YYYY"
+            maxLength={10}
+            keyboardType="numeric"
+            placeholderTextColor="#78909c"
+          />
+        </View>
+      </View>
+
+      <View style={styles.walletDivider} />
+
+      {transactionsHistory.length === 0 ? (
+        <Text style={styles.emptyText}>{t("noTransactions")}</Text>
+      ) : (
+        transactionsHistory.map((item) => {
+          let typeLabel = "";
+          let amountColor = "";
+          let amountPrefix = "";
+
+          switch (item.type) {
+            case "INVESTMENT":
+              typeLabel = isTe ? "పెట్టుబడి" : "Investment";
+              amountColor = "#0284c7";
+              amountPrefix = "+";
+              break;
+            case "COLLECTION":
+              typeLabel = isTe ? "వసూలు" : "Collection";
+              amountColor = "#16803a";
+              amountPrefix = "+";
+              break;
+            case "LOAN":
+              typeLabel = isTe ? "రుణం (పంపిణీ)" : "Loan (Disbursed)";
+              amountColor = "#ea580c";
+              amountPrefix = "-";
+              break;
+            case "EXPENSE":
+              typeLabel = isTe ? "ఖర్చు" : "Expense";
+              amountColor = "#d94841";
+              amountPrefix = "-";
+              break;
+          }
+
+          return (
+            <View key={`${item.type}-${item.id}`} style={styles.logRow}>
+              <View style={styles.logDetails}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Text style={[styles.logAmount, { color: amountColor }]}>
+                    {amountPrefix} Rs. {item.amount.toLocaleString("en-IN")}
+                  </Text>
+                  <View style={{ backgroundColor: amountColor + "15", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                    <Text style={{ fontSize: 9, fontWeight: "800", color: amountColor, textTransform: "uppercase" }}>
+                      {typeLabel}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.logDesc}>{item.desc}</Text>
+                <Text style={styles.logDate}>{formatDDMMYYYY(item.date)}</Text>
+                {item.mode ? (
+                  <Text style={styles.logDate}>Paid via {item.mode}</Text>
+                ) : null}
+              </View>
+            </View>
+          );
+        })
+      )}
+    </View>
+  );
+
+  const renderHighestDuesCard = () => (
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>{t("highestDues")}</Text>
+      <Text style={styles.cardDesc}>
+        {isTe ? "అన్ని గ్రామాలలోని అత్యధిక బకాయిలు ఉన్న కస్టమర్ల వివరాలు" : "List of customers with highest outstanding dues across all villages"}
+      </Text>
+
+      <View style={styles.walletDivider} />
+
+      {highestDuesList.length === 0 ? (
+        <Text style={styles.emptyText}>
+          {isTe ? "బకాయిలు ఉన్న కస్టమర్లు ఎవరూ లేరు." : "No customers with outstanding dues found."}
+        </Text>
+      ) : (
+        highestDuesList.map((item, index) => (
+          <View key={item.loanId} style={styles.logRow}>
+            <View style={styles.logDetails}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Text style={{ fontSize: 14, fontWeight: "900", color: "#d94841" }}>
+                  #{index + 1}
+                </Text>
+                <Text style={styles.logDesc}>{item.customerName} ({item.numericalId})</Text>
+              </View>
+              <Text style={styles.logDate}>{isTe ? "గ్రామం" : "Village"}: {item.villageName}</Text>
+              {item.phone ? (
+                <Text style={styles.logDate}>{isTe ? "మొబైల్" : "Phone"}: {item.phone}</Text>
+              ) : null}
+            </View>
+            <View style={{ alignItems: "flex-end", gap: 4 }}>
+              <Text style={[styles.logAmount, { color: "#d94841" }]}>
+                Rs. {Math.round(item.balanceAmount).toLocaleString("en-IN")}
+              </Text>
+              <Pressable
+                style={[styles.smallEditBtn, { backgroundColor: "#fff5f5", borderColor: "#d94841" }]}
+                onPress={() => router.push(`/profile/${item.customerId}` as any)}
+              >
+                <Text style={[styles.smallEditText, { color: "#d94841" }]}>
+                  {isTe ? "చూడు" : "View"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        ))
+      )}
+    </View>
+  );
+
   if (!user) return null;
 
   return (
@@ -1034,9 +1298,23 @@ export default function AccountScreen() {
 
             {/* Tabs Selector */}
             <View style={styles.tabBar}>
-              {(["summary", "investments", "expenses", "notes"] as const).map((tab) => {
+              {(["summary", "investments", "expenses", "history", "dues", "notes"] as const).map((tab) => {
                 const active = activeTab === tab;
-                const label = tab === "summary" ? t("bfSummary") : (tab === "investments" ? t("investments") : (tab === "expenses" ? t("expenses") : "Notes"));
+                const label = tab === "summary"
+                  ? t("bfSummary")
+                  : (tab === "investments"
+                      ? t("investments")
+                      : (tab === "expenses"
+                          ? t("expenses")
+                          : (tab === "history"
+                              ? t("history")
+                              : (tab === "dues"
+                                  ? t("highestDues")
+                                  : "Notes"
+                                )
+                            )
+                        )
+                    );
                 return (
                   <Pressable
                     key={tab}
@@ -1496,6 +1774,18 @@ export default function AccountScreen() {
                         ))
                       )}
                     </View>
+                  </View>
+                )}
+
+                {activeTab === "history" && (
+                  <View style={styles.cardContainer}>
+                    {renderHistoryCard()}
+                  </View>
+                )}
+
+                {activeTab === "dues" && (
+                  <View style={styles.cardContainer}>
+                    {renderHighestDuesCard()}
                   </View>
                 )}
 
