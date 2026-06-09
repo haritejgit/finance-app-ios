@@ -116,8 +116,8 @@ export default function AccountScreen() {
 
 
 
-  // Selected Tab state: 'summary' | 'investments' | 'expenses' | 'history' | 'dues' | 'notes'
-  const [activeTab, setActiveTab] = useState<"summary" | "investments" | "expenses" | "history" | "dues" | "notes">("summary");
+  // Selected Tab state: 'summary' | 'investments' | 'expenses' | 'dues' | 'notes'
+  const [activeTab, setActiveTab] = useState<"summary" | "investments" | "expenses" | "dues" | "notes">("summary");
 
   // Loading States
   const [loading, setLoading] = useState(true);
@@ -1325,7 +1325,7 @@ export default function AccountScreen() {
 
             {/* Tabs Selector */}
             <View style={styles.tabBar}>
-              {(["summary", "investments", "expenses", "history", "dues", "notes"] as const).map((tab) => {
+              {(["summary", "investments", "expenses", "dues", "notes"] as const).map((tab) => {
                 const active = activeTab === tab;
                 const label = tab === "summary"
                   ? t("bfSummary")
@@ -1333,12 +1333,9 @@ export default function AccountScreen() {
                       ? t("investments")
                       : (tab === "expenses"
                           ? t("expenses")
-                          : (tab === "history"
-                              ? t("history")
-                              : (tab === "dues"
-                                  ? t("highestDues")
-                                  : "Notes"
-                                )
+                          : (tab === "dues"
+                              ? t("highestDues")
+                              : "Notes"
                             )
                         )
                     );
@@ -1804,11 +1801,7 @@ export default function AccountScreen() {
                   </View>
                 )}
 
-                {activeTab === "history" && (
-                  <View style={styles.cardContainer}>
-                    {renderHistoryCard()}
-                  </View>
-                )}
+
 
                 {activeTab === "dues" && (
                   <View style={styles.cardContainer}>

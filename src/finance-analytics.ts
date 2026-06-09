@@ -108,6 +108,7 @@ export type DashboardAnalytics = {
   customerStates: Record<string, CustomerState>;
   insights: string[];
   aiInsights: string[];
+  routeProgresses?: Record<string, { target: number; collected: number; customerCount: number; paidCustomerCount: number }>;
 };
 
 const DASHBOARD_CACHE_PREFIX = "dashboardAnalytics:";
@@ -407,37 +408,80 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
     .filter((item): item is NonNullable<typeof item> => item !== null)
     .slice(0, 8);
 
-  const duePaymentsByCustomer = new Map<string, Payment[]>();
-  payments
-    .filter((payment) => payment.paymentType === "DUE" && payment.customerId)
-    .forEach((payment) => {
-      const list = duePaymentsByCustomer.get(payment.customerId!) ?? [];
-      list.push(payment as Payment);
-      duePaymentsByCustomer.set(payment.customerId!, list);
+  const now = Date.now();
+  const oneWeek = 7 * 24 * 60 * 60 * 1000;
+
+  // Pre-calculate dues for all active loans
+  const dueInfoByCustomerId = new Map<string, { dueCount: number; lastDueDate: number }>();
+  activeLoans.forEach((loan) => {
+    const customer = customerById.get(loan.customerId);
+    if (!customer || !namedListCustomerIds.has(customer.id)) return;
+
+    // Payments for this customer and this loan
+    const customerPayments = payments.filter((p) => p.customerId === customer.id && p.loanId === loan.id);
+    const regularPaidWeeks = new Map<number, number>();
+    const dueWeekIndices = new Set<number>();
+    const duePaymentDates: number[] = [];
+
+    customerPayments.forEach((p) => {
+      const diff = startOfDay(p.paymentDate) - startOfDay(loan.startDate);
+      const weekIndex = diff <= 0 ? 0 : Math.max(0, Math.ceil(diff / oneWeek) - 1);
+      if (p.paymentType === "DUE" || p.type === "DUE") {
+        dueWeekIndices.add(weekIndex);
+        duePaymentDates.push(toMillis(p.paymentDate));
+      } else if (isRealCollectionPayment(p)) {
+        regularPaidWeeks.set(weekIndex, (regularPaidWeeks.get(weekIndex) ?? 0) + Number(p.amountPaid || 0));
+      }
     });
 
-  const dueAlerts = Array.from(duePaymentsByCustomer.entries())
-    .map(([customerId, duePayments]) => {
-      const customer = customerById.get(customerId);
-      if (!customer || !namedListCustomerIds.has(customer.id)) return null;
-      const village = customer ? villageById.get(customer.villageId) : undefined;
-      const loan = activeLoanByCustomerId.get(customerId);
-      const weeklyAmount = loan ? Math.min(Math.max(1, Math.round(loan.principalAmount / 10)), loan.balanceAmount) : 0;
-      const dueAmount = loan ? Math.min(loan.balanceAmount, weeklyAmount * duePayments.length) : 0;
+    const completedWeeks = Math.max(0, Math.floor((now - startOfDay(loan.startDate)) / oneWeek));
+    let dueCount = 0;
+    let lastDueDate = duePaymentDates.length > 0 ? Math.max(...duePaymentDates) : 0;
+    const maxWeeksToCheck = Math.max(completedWeeks, ...dueWeekIndices);
+
+    for (let i = 0; i < maxWeeksToCheck; i++) {
+      const isCompleted = i < completedWeeks;
+      const amount = regularPaidWeeks.get(i) ?? 0;
+      const weekDeadline = startOfDay(loan.startDate) + (i + 1) * oneWeek;
+
+      const isAutoOverdue = isCompleted && amount === 0;
+      const hasExplicitDue = dueWeekIndices.has(i);
+
+      if (hasExplicitDue || isAutoOverdue) {
+        dueCount++;
+        if (isAutoOverdue) {
+          const autoDueDate = weekDeadline;
+          if (autoDueDate > lastDueDate) {
+            lastDueDate = autoDueDate;
+          }
+        }
+      }
+    }
+
+    if (dueCount > 0) {
+      dueInfoByCustomerId.set(customer.id, { dueCount, lastDueDate });
+    }
+  });
+
+  const dueAlerts = Array.from(dueInfoByCustomerId.entries())
+    .map(([customerId, { dueCount, lastDueDate }]) => {
+      const customer = customerById.get(customerId)!;
+      const village = villageById.get(customer.villageId);
+      const loan = activeLoanByCustomerId.get(customerId)!;
+      const weeklyAmount = Math.min(Math.max(1, Math.round(loan.principalAmount / 10)), loan.balanceAmount);
+      const dueAmount = Math.min(loan.balanceAmount, weeklyAmount * dueCount);
       return {
         customerId,
-        customerName: customer?.name ?? "Unknown customer",
-        phone: customer?.phone ?? "",
+        customerName: customer.name,
+        phone: customer.phone,
         villageName: village?.name ?? "No village",
-        balanceAmount: loan?.balanceAmount ?? 0,
+        balanceAmount: loan.balanceAmount,
         weeklyAmount,
         dueAmount,
-        dueCount: duePayments.length,
-        lastDueDate: Math.max(...duePayments.map((payment) => toMillis(payment.paymentDate))),
+        dueCount,
+        lastDueDate,
       };
     })
-    .filter((alert): alert is NonNullable<typeof alert> => alert !== null)
-    .filter((alert) => alert.balanceAmount > 0)
     .sort((a, b) => {
       if (b.dueCount !== a.dueCount) {
         return b.dueCount - a.dueCount;
@@ -449,8 +493,10 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
   const customerStates: Record<string, CustomerState> = Object.fromEntries(
     customers.map((customer) => {
       const loan = activeLoanByCustomerId.get(customer.id);
-      const dueList = duePaymentsByCustomer.get(customer.id) ?? [];
-      const hasRecentDue = dueList.some((payment) => toMillis(payment.paymentDate) >= Date.now() - 30 * DAY);
+      const dueInfo = dueInfoByCustomerId.get(customer.id);
+      const dueCount = dueInfo?.dueCount ?? 0;
+      const lastDueDate = dueInfo?.lastDueDate ?? 0;
+      const hasRecentDue = dueCount > 0 && lastDueDate >= now - 30 * DAY;
       const state: CustomerState = !loan || loan.balanceAmount <= 0 ? "closed" : hasRecentDue ? "overdue" : "pending";
       return [customer.id, state];
     })
@@ -509,6 +555,61 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
       : `Warning: net cash position is negative (Rs.${Math.round(Math.abs(netCashPosition)).toLocaleString("en-IN")}). Consider reducing fresh distribution or increasing collections.`,
   ];
 
+  // Group villages by day and shift
+  const villagesByRoute = new Map<string, Village[]>();
+  villages.forEach((v) => {
+    const key = `${v.dayOfWeek}:${v.shift}`;
+    const list = villagesByRoute.get(key) ?? [];
+    list.push(v);
+    villagesByRoute.set(key, list);
+  });
+
+  const routes = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const shiftsList = ["Morning", "Evening"];
+  const routeProgresses: Record<string, { target: number; collected: number; customerCount: number; paidCustomerCount: number }> = {};
+  
+  const todayStartVal = startOfDay(Date.now());
+  const todayEndVal = todayStartVal + DAY - 1;
+  const todayPayments = regularPayments.filter(p => p.paymentDate >= todayStartVal && p.paymentDate <= todayEndVal);
+  const todayPaidCustomerIds = new Set(todayPayments.map(p => p.customerId));
+
+  routes.forEach((day) => {
+    shiftsList.forEach((shift) => {
+      const key = `${day}:${shift}`;
+      const routeVillages = villagesByRoute.get(key) ?? [];
+      const routeVillageIds = new Set(routeVillages.map(v => v.id));
+      
+      let target = 0;
+      let collected = 0;
+      let customerCount = 0;
+      let paidCustomerCount = 0;
+
+      customers.forEach((c) => {
+        if (routeVillageIds.has(c.villageId)) {
+          const loan = activeLoanByCustomerId.get(c.id);
+          if (loan && loan.balanceAmount > 0) {
+            customerCount++;
+            const weeklyAmount = Math.min(Math.max(1, Math.round(loan.principalAmount / 10)), loan.balanceAmount);
+            target += weeklyAmount;
+
+            if (todayPaidCustomerIds.has(c.id)) {
+              paidCustomerCount++;
+              const custTodayPayments = todayPayments.filter(p => p.customerId === c.id);
+              collected += custTodayPayments.reduce((sum, p) => sum + p.amountPaid, 0);
+            }
+          }
+        }
+      });
+
+      routeProgresses[key] = {
+        target,
+        collected,
+        customerCount,
+        paidCustomerCount,
+      };
+    });
+  });
+
   const dashboardAnalytics: DashboardAnalytics = {
     totals: {
       totalCollection,
@@ -551,6 +652,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
     customerStates,
     insights,
     aiInsights,
+    routeProgresses,
   };
   try {
     await AsyncStorage.setItem(cacheKey, JSON.stringify(dashboardAnalytics));

@@ -149,8 +149,8 @@ function EmptyLine({ text }: { text: string }) {
 function BottomNavButton({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) {
   return (
     <Pressable accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.bottomNavButton, pressed && styles.pressed]}>
-      <Icon name={icon} size={18} color={Colors.lightSeaGreen} />
-      <Text style={styles.bottomNavText}>{label}</Text>
+      <Icon name={icon} size={15} color={Colors.lightSeaGreen} />
+      <Text style={styles.bottomNavText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
     </Pressable>
   );
 }
@@ -278,6 +278,7 @@ export default function ShiftSelectionScreen() {
       { label: t("reports"), icon: "document-text-outline", action: () => nav.push("/reports") },
       { label: t("account"), icon: "wallet-outline", action: () => nav.push("/account") },
       { label: t("analytics"), icon: "bar-chart-outline", action: () => nav.push("/graph") },
+      { label: t("history"), icon: "time-outline", action: () => nav.push("/history") },
       { label: t("settings"), icon: "settings-outline", action: () => nav.push("/settings") },
     ],
     [nav, t]
@@ -292,6 +293,12 @@ export default function ShiftSelectionScreen() {
   const balance = (totals?.totalCollection ?? 0) - (totals?.pendingAmount ?? 0);
   const savings = (totals?.monthlyRevenue ?? 0) - (totals?.distributedThisMonth ?? 0);
   const dueAlerts = analytics?.dueAlerts ?? [];
+
+  const activeRouteKey = `${selectedDay}:${selectedShift}`;
+  const routeProgress = analytics?.routeProgresses?.[activeRouteKey] ?? { target: 0, collected: 0, customerCount: 0, paidCustomerCount: 0 };
+  const progressPercent = routeProgress.target > 0 ? Math.min(100, Math.round((routeProgress.collected / routeProgress.target) * 100)) : 0;
+  const remainingTarget = Math.max(0, routeProgress.target - routeProgress.collected);
+  const remainingCustomers = Math.max(0, routeProgress.customerCount - routeProgress.paidCustomerCount);
 
   return (
     <AnimatedScreen style={styles.root}>
@@ -384,6 +391,39 @@ export default function ShiftSelectionScreen() {
                         );
                       })}
                     </View>
+
+                    {routeProgress.customerCount > 0 && (
+                      <View style={styles.progressCard}>
+                        <View style={styles.progressHeader}>
+                          <Text style={styles.progressTitle}>
+                            {selectedDay} {selectedShift === "Morning" ? "☀️" : "🌙"} Route Progress
+                          </Text>
+                          <Text style={styles.progressPercentText}>{progressPercent}%</Text>
+                        </View>
+                        <View style={styles.progressBarBg}>
+                          <LinearGradient
+                            colors={["#0ABFBC", "#2ec4b6"]}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={[styles.progressBarFill, { width: `${progressPercent}%` }]}
+                          />
+                        </View>
+                        <View style={styles.progressDetails}>
+                          <Text style={styles.progressDetailText}>
+                            Collected: <Text style={{fontWeight: "900", color: Colors.lightSeaGreen}}>{formatMoney(routeProgress.collected)}</Text> / {formatMoney(routeProgress.target)}
+                          </Text>
+                          {remainingTarget > 0 ? (
+                            <Text style={styles.progressHintText}>
+                              Rs. {Math.round(remainingTarget).toLocaleString("en-IN")} left • {remainingCustomers} customer{remainingCustomers === 1 ? "" : "s"} remaining
+                            </Text>
+                          ) : (
+                            <Text style={[styles.progressHintText, {color: "#16803a", fontWeight: "900"}]}>
+                              🎉 Route Goal Achieved! 100% Collected
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    )}
 
                     <Pressable accessibilityLabel={t("startCollection")} onPress={startCollection}>
                       <LinearGradient colors={Gradients.ctaButton} style={styles.primaryAction}>
@@ -744,9 +784,18 @@ const styles = StyleSheet.create({
   alertRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13, borderTopWidth: 1, borderTopColor: Colors.borderLight },
   alertIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: Colors.danger, alignItems: "center", justifyContent: "center" },
   emptyText: { color: Colors.textMuted, fontSize: 13, fontWeight: "800", paddingVertical: 12 },
-  bottomNav: { flexDirection: "row", gap: 10 },
-  bottomNavButton: { flex: 1, minHeight: 58, borderRadius: 14, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.borderLight, alignItems: "center", justifyContent: "center", gap: 4 },
-  bottomNavText: { color: Colors.nearBlack, fontSize: 12, fontWeight: "900" },
+  bottomNav: { flexDirection: "row", gap: 5, paddingHorizontal: 2 },
+  bottomNavButton: { flex: 1, minHeight: 52, borderRadius: 12, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.borderLight, alignItems: "center", justifyContent: "center", gap: 2, paddingHorizontal: 2, paddingVertical: 4 },
+  bottomNavText: { color: Colors.nearBlack, fontSize: 10, fontWeight: "900", textAlign: "center" },
+  progressCard: { backgroundColor: "#fafbfc", borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: Colors.borderLight },
+  progressHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
+  progressTitle: { fontSize: 12, fontWeight: "900", color: Colors.nearBlack },
+  progressPercentText: { fontSize: 13, fontWeight: "900", color: Colors.lightSeaGreen },
+  progressBarBg: { height: 8, backgroundColor: "#e2e8f0", borderRadius: 4, overflow: "hidden", marginBottom: 8 },
+  progressBarFill: { height: "100%", borderRadius: 4 },
+  progressDetails: { gap: 2 },
+  progressDetailText: { fontSize: 11, fontWeight: "800", color: Colors.textMuted },
+  progressHintText: { fontSize: 10, fontWeight: "800", color: Colors.amberGlow },
   logoutLink: { alignItems: "center", paddingVertical: 8 },
   logoutText: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
   pressed: { opacity: 0.76, transform: [{ scale: 0.98 }] },
