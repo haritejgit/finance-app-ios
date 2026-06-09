@@ -100,6 +100,8 @@ const dictionary: Record<Language, Record<string, string>> = {
     language: "Language",
     english: "English",
     telugu: "Telugu (తెలుగు)",
+    loanCalculator: "Loan Calculator",
+    loanCalculatorSub: "Simulate loans & repayment plans",
 
     // Account Workspace
     accountWorkspace: "Account Workspace",
@@ -250,6 +252,8 @@ const dictionary: Record<Language, Record<string, string>> = {
     language: "భాష",
     english: "ఇంగ్లీష్ (English)",
     telugu: "తెలుగు (తెలుగు)",
+    loanCalculator: "లోన్ క్యాలిక్యులేటర్",
+    loanCalculatorSub: "లోన్ మరియు తిరిగి చెల్లించే ప్రణాళికలను లెక్కించండి",
 
     // Account Workspace
     accountWorkspace: "ఖాతా వర్క్‌స్పేస్",

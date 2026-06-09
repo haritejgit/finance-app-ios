@@ -194,6 +194,42 @@ export type ExportTotals = {
   netTotal: number;
 };
 
+export const teluguTranslations: Record<string, string> = {
+  "food": "భోజనం",
+  "travel": "దారి ఖర్చులు",
+  "adharsh": "ఆదర్ష్",
+  "hari": "హరి",
+  "petrol": "పెట్రోల్",
+  "investment": "పెట్టుబడి",
+  "collection": "వసూళ్లు",
+  "collections": "వసూళ్లు",
+  "payment": "పంచిన డబ్బులు",
+  "payments": "పంచిన డబ్బులు",
+  "expense": "ఖర్చులు",
+  "expenses": "ఖర్చులు",
+  "loan": "పంచిన డబ్బులు",
+  "loans": "పంచిన డబ్బులు",
+  "office": "ఆఫీస్",
+  "rent": "అద్దె",
+  "salary": "జీతం",
+  "salaries": "జీతాలు",
+  "tea": "టీ",
+  "snacks": "స్నాక్స్",
+};
+
+export function translateTelugu(text: string): string {
+  if (!text) return "";
+  const cleaned = text.trim();
+  const lower = cleaned.toLowerCase();
+  if (teluguTranslations[lower]) {
+    return teluguTranslations[lower];
+  }
+  return cleaned.split(/\b/).map(word => {
+    const wordLower = word.toLowerCase();
+    return teluguTranslations[wordLower] || word;
+  }).join("");
+}
+
 export async function openAccountStatementPrint(
   periodStartStr: string,
   periodEndStr: string,
@@ -246,9 +282,9 @@ let ledgerText = "";
 
   if (isAllVillages) {
     const lblBf = isTe ? "BF (ప్రారంభ నిల్వ)" : "BF";
-    const lblInvs = isTe ? "పెట్టుబడులు" : "Investments";
+    const lblInvs = isTe ? "పెట్టుబడి" : "Investments";
     const lblColls = isTe ? "వసూళ్లు" : "Collections";
-    const lblLoans = isTe ? "చెల్లింపులు (రుణాలు)" : "Payments";
+    const lblLoans = isTe ? "పంచిన డబ్బులు" : "Payments";
     const lblTotal = isTe ? "మొత్తం (Total)" : "Total";
 
     const lineBf = formatLine(lblBf, formatVal(bf));
@@ -287,7 +323,7 @@ let ledgerText = "";
       const groupedExps = Array.from(expenseMap.values()).sort((a, b) => b.amount - a.amount);
 
       groupedExps.forEach((exp) => {
-        const lblExp = `${exp.desc} (${isTe ? "ఖర్చులు" : "Expenses"})`;
+        const lblExp = isTe ? translateTelugu(exp.desc) : exp.desc;
         ledgerText += `${formatLine(lblExp, formatVal(exp.amount))}\n`;
       });
       ledgerText += `${divider}\n`;
@@ -295,8 +331,8 @@ let ledgerText = "";
     ledgerText += `${formatLine(lblTotal, formatVal(totals.netTotal))}\n`;
     ledgerText += `${doubleDivider}`;
   } else {
-    const lblColls = isTe ? "గ్రామ వసూళ్లు" : "Village Collections";
-    const lblLoans = isTe ? "గ్రామ రుణాలు" : "Village Loans";
+    const lblColls = isTe ? "వసూళ్లు" : "Village Collections";
+    const lblLoans = isTe ? "పంచిన డబ్బులు" : "Village Loans";
     const lblNet = isTe ? "నికర నగదు ప్రవాహం" : "Net Cashflow";
 
     ledgerText += `${formatLine(lblColls, formatVal(totals.sumColls))}\n`;
@@ -552,9 +588,9 @@ const formatLine = (label: string, value: string, symbol: string = "="): string 
 
   if (isAllVillages) {
     const lblBf = isTe ? "BF (ప్రారంభ నిల్వ)" : "BF";
-    const lblInvs = isTe ? "పెట్టుబడులు" : "Investments";
+    const lblInvs = isTe ? "పెట్టుబడి" : "Investments";
     const lblColls = isTe ? "వసూళ్లు" : "Collections";
-    const lblLoans = isTe ? "చెల్లింపులు (రుణాలు)" : "Payments";
+    const lblLoans = isTe ? "పంచిన డబ్బులు" : "Payments";
     const lblTotal = isTe ? "మొత్తం (Total)" : "Total";
 
     const lineBf = formatLine(lblBf, formatVal(bf));
@@ -593,7 +629,7 @@ const formatLine = (label: string, value: string, symbol: string = "="): string 
       const groupedExps = Array.from(expenseMap.values()).sort((a, b) => b.amount - a.amount);
 
       groupedExps.forEach((exp) => {
-        const lblExp = `${exp.desc} (${isTe ? "ఖర్చులు" : "Expenses"})`;
+        const lblExp = isTe ? translateTelugu(exp.desc) : exp.desc;
         output += `${formatLine(lblExp, formatVal(exp.amount))}\n`;
       });
       output += `${divider}\n`;
@@ -601,8 +637,8 @@ const formatLine = (label: string, value: string, symbol: string = "="): string 
     output += `${formatLine(lblTotal, formatVal(totals.netTotal))}\n`;
     output += `${doubleDivider}`;
   } else {
-    const lblColls = isTe ? "గ్రామ వసూళ్లు" : "Village Collections";
-    const lblLoans = isTe ? "గ్రామ రుణాలు" : "Village Loans";
+    const lblColls = isTe ? "వసూళ్లు" : "Village Collections";
+    const lblLoans = isTe ? "పంచిన డబ్బులు" : "Village Loans";
     const lblNet = isTe ? "నికర నగదు ప్రవాహం" : "Net Cashflow";
 
     output += `${formatLine(lblColls, formatVal(totals.sumColls))}\n`;

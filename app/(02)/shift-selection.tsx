@@ -538,7 +538,7 @@ export default function ShiftSelectionScreen() {
         <Modal visible={searchOpen} animationType="slide" onRequestClose={() => setSearchOpen(false)}>
           <SafeAreaView style={[styles.searchModalSafe, { backgroundColor: colors.background }]}>
             <View style={styles.searchModalHeader}>
-              <Text style={styles.searchModalTitle}>Smart Customer Search</Text>
+              <Text style={styles.searchModalTitle}>{t("smartCustomerSearch")}</Text>
               <Pressable style={styles.searchCloseBtn} onPress={() => setSearchOpen(false)}>
                 <Icon name="close" size={18} color={colors.textSecondary} />
               </Pressable>
@@ -549,7 +549,7 @@ export default function ShiftSelectionScreen() {
                 <TextInput
                   value={searchQuery}
                   onChangeText={setSearchQuery}
-                  placeholder="Name, mobile, Aadhar, book no, village..."
+                  placeholder={t("searchPlaceholder")}
                   placeholderTextColor={colors.textMuted}
                   style={styles.customerSearchInput}
                   autoFocus
@@ -572,7 +572,9 @@ export default function ShiftSelectionScreen() {
                       }}
                       style={[styles.filterChip, active && styles.filterChipOn]}
                     >
-                      <Text style={[styles.filterChipText, active && styles.filterChipTextOn]}>{filter.label}</Text>
+                      <Text style={[styles.filterChipText, active && styles.filterChipTextOn]}>
+                        {t(filter.key === "paid" ? "paidToday" : filter.key)}
+                      </Text>
                     </Pressable>
                   );
                 })}
@@ -594,7 +596,7 @@ export default function ShiftSelectionScreen() {
                   ListEmptyComponent={
                     <View style={styles.searchEmpty}>
                       <Icon name="people" size={42} color={colors.textMuted} />
-                      <Text style={styles.searchEmptyText}>No customers found</Text>
+                      <Text style={styles.searchEmptyText}>{t("noCustomersFound")}</Text>
                     </View>
                   }
                   renderItem={({ item, index }) => {

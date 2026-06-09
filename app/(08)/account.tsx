@@ -43,7 +43,7 @@ import {
   Expense,
 } from "../../src/repository";
 import { PaymentMode, UserProfile, Village } from "../../src/types";
-import { openAccountStatementPrint, ExportTransaction, ExportTotals } from "../../src/exports";
+import { openAccountStatementPrint, ExportTransaction, ExportTotals, translateTelugu } from "../../src/exports";
 import { calculateWalletBalances } from "../../src/wallet-balances";
 
 import { useLanguage } from "../../src/language-context";
@@ -807,9 +807,10 @@ export default function AccountScreen() {
     const transList: ExportTransaction[] = [];
 
     filteredInvs.forEach((i) => {
-      const invDesc = i.investorName
-        ? `${exportLanguage === "te" ? "à°ªà±†à°Ÿà±à°Ÿà±à°¬à°¡à°¿" : "Investment"} (${i.investorName})`
-        : (exportLanguage === "te" ? "à°ªà±†à°Ÿà±à°Ÿà±à°¬à°¡à°¿" : "Investment");
+      const name = i.investorName ? (exportLanguage === "te" ? translateTelugu(i.investorName) : i.investorName) : "";
+      const invDesc = name
+        ? `${exportLanguage === "te" ? "పెట్టుబడి" : "Investment"} (${name})`
+        : (exportLanguage === "te" ? "పెట్టుబడి" : "Investment");
       transList.push({
         date: i.date,
         type: "INVESTMENT",
@@ -820,7 +821,8 @@ export default function AccountScreen() {
 
     filteredColls.forEach((p) => {
       const cust = customerMap.get(p.customerId);
-      const desc = cust ? `${cust.name} (${cust.numericalId})` : (exportLanguage === "te" ? "à°µà°¸à±‚à°²à±" : "Collection");
+      const name = cust ? (exportLanguage === "te" ? translateTelugu(cust.name) : cust.name) : "";
+      const desc = cust ? `${name} (${cust.numericalId})` : (exportLanguage === "te" ? "వసూళ్లు" : "Collection");
       transList.push({
         date: p.date instanceof Date ? p.date.getTime() : p.date,
         type: "COLLECTION",
@@ -831,7 +833,8 @@ export default function AccountScreen() {
 
     filteredLoans.forEach((l) => {
       const cust = customerMap.get(l.customerId);
-      const desc = cust ? `${cust.name} (${cust.numericalId})` : (exportLanguage === "te" ? "à°°à±à°£à°‚" : "Loan");
+      const name = cust ? (exportLanguage === "te" ? translateTelugu(cust.name) : cust.name) : "";
+      const desc = cust ? `${name} (${cust.numericalId})` : (exportLanguage === "te" ? "పంచిన డబ్బులు" : "Loan");
       transList.push({
         date: l.date instanceof Date ? l.date.getTime() : l.date,
         type: "LOAN",
@@ -841,10 +844,11 @@ export default function AccountScreen() {
     });
 
     filteredExps.forEach((e) => {
+      const desc = exportLanguage === "te" ? translateTelugu(e.description) : e.description;
       transList.push({
         date: e.date,
         type: "EXPENSE",
-        desc: e.description,
+        desc,
         amount: e.amount
       });
     });

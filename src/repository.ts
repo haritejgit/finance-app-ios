@@ -1187,8 +1187,10 @@ export async function getAllBalancingFunds(userId: string): Promise<any[]> {
 export async function getInvestments(userId: string): Promise<Investment[]> {
   const q = query(coll.investments, where("userId", "==", userId), limit(1000));
   const snap = await getDocs(q);
-  return snap.docs.map((docSnap) => docSnap.data() as Investment)
-    .sort((a, b) => b.date - a.date);
+  return snap.docs.map((docSnap) => {
+    const data = docSnap.data() as Investment;
+    return { ...data, id: docSnap.id || data.id };
+  }).sort((a, b) => b.date - a.date);
 }
 
 export async function addInvestment(userId: string, amount: number, date: number, investorName?: string, paymentMode: PaymentMode = "CASH"): Promise<Investment> {
@@ -1233,8 +1235,10 @@ export async function updateInvestment(investmentId: string, amount: number, dat
 export async function getExpenses(userId: string): Promise<Expense[]> {
   const q = query(coll.expenses, where("userId", "==", userId), limit(1000));
   const snap = await getDocs(q);
-  return snap.docs.map((docSnap) => docSnap.data() as Expense)
-    .sort((a, b) => b.date - a.date);
+  return snap.docs.map((docSnap) => {
+    const data = docSnap.data() as Expense;
+    return { ...data, id: docSnap.id || data.id };
+  }).sort((a, b) => b.date - a.date);
 }
 
 export async function addExpense(userId: string, amount: number, description: string, date: number, paymentMode: PaymentMode = "CASH"): Promise<Expense> {
@@ -1374,7 +1378,10 @@ export function subscribeWalletData(
     query(coll.expenses, where("userId", "==", userId), limit(1500)),
     (snap) => {
       state.expenses = snap.docs
-        .map((d) => d.data() as Expense)
+        .map((d) => {
+          const data = d.data() as Expense;
+          return { ...data, id: d.id || data.id };
+        })
         .sort((a, b) => b.date - a.date);
       notify();
     },
@@ -1386,7 +1393,10 @@ export function subscribeWalletData(
     query(coll.investments, where("userId", "==", userId), limit(1500)),
     (snap) => {
       state.investments = snap.docs
-        .map((d) => d.data() as Investment)
+        .map((d) => {
+          const data = d.data() as Investment;
+          return { ...data, id: d.id || data.id };
+        })
         .sort((a, b) => b.date - a.date);
       notify();
     },

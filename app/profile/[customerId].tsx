@@ -53,11 +53,13 @@ const noTextSelection = Platform.OS === "web" ? ({ userSelect: "none", WebkitUse
 const PaymentHistory = memo(function PaymentHistory({ 
   payments, 
   onEdit, 
-  onDelete 
+  onDelete,
+  onShare
 }: { 
   payments: any[];
   onEdit?: (payment: any) => void;
   onDelete?: (payment: any) => void;
+  onShare?: (payment: any) => void;
 }) {
   const { colors } = useTheme();
   if (payments.length === 0) {
@@ -113,6 +115,11 @@ const PaymentHistory = memo(function PaymentHistory({
               <Pressable style={styles.deletePaymentBtn} onPress={() => onDelete(p)}>
                 <Text style={styles.deletePaymentBtnText}>Delete</Text>
               </Pressable>
+              {onShare && (
+                <Pressable style={[styles.editPaymentBtn, { backgroundColor: colors.paidGreen }]} onPress={() => onShare(p)}>
+                  <Text style={styles.editPaymentBtnText}>Share</Text>
+                </Pressable>
+              )}
             </View>
           )}
           {p.paymentType === "DUE" && onDelete && (
@@ -510,9 +517,82 @@ export default function ProfileScreen() {
     }
     const normalized = digits.length === 10 ? `91${digits}` : digits;
     const weeklyAmount = getSuggestedPaymentAmount(loan ?? undefined);
-    const message = `Hi ${customer.name}, this is a payment reminder. Please pay this week's amount Rs.${Math.round(weeklyAmount).toLocaleString("en-IN")} ASAP.`;
+    
+    const totalPaid = payments
+      .filter((p) => p.paymentType === "REGULAR")
+      .reduce((sum, p) => sum + Number(p.amountPaid || 0), 0);
+      
+    const reminderMsg = `Hi ${customer.name}, this is a payment reminder. Please pay this week's amount Rs.${Math.round(weeklyAmount).toLocaleString("en-IN")} ASAP.`;
+    
+    const disbursed = loan ? loan.principalAmount - Math.floor(loan.principalAmount / 1000) * 20 : 0;
+    const statementMsg = `*Karthikeya Finance - Account Statement* 📖\n` +
+      `------------------------------------\n` +
+      `*Customer:* ${customer.name}\n` +
+      `*Book No:* ${customer.numericalId}\n` +
+      `*Aadhar:* ${customer.aadhar || "-"}\n` +
+      `*Principal:* Rs. ${Math.round(loan?.principalAmount ?? 0).toLocaleString("en-IN")}\n` +
+      `*Disbursed Cash:* Rs. ${Math.round(disbursed).toLocaleString("en-IN")}\n` +
+      `*Total Paid:* Rs. ${Math.round(totalPaid).toLocaleString("en-IN")}\n` +
+      `*Outstanding Balance:* Rs. ${Math.round(loan?.balanceAmount ?? 0).toLocaleString("en-IN")}\n` +
+      `*Credit Score:* ${creditSummary.score} (${creditSummary.rating})\n` +
+      `------------------------------------\n` +
+      `Status: ${loan?.status || "NO ACTIVE LOAN"}\n` +
+      `Thank you! 🙏`;
+
+    Alert.alert(
+      "Share Options",
+      "Choose what you want to share with this customer:",
+      [
+        {
+          text: "Send Payment Reminder",
+          onPress: () => {
+            Linking.openURL(`https://wa.me/${normalized}?text=${encodeURIComponent(reminderMsg)}`).catch(() => {
+              Alert.alert("WhatsApp unavailable", "Could not open WhatsApp.");
+            });
+          }
+        },
+        {
+          text: "Send Passbook Statement",
+          onPress: () => {
+            Linking.openURL(`https://wa.me/${normalized}?text=${encodeURIComponent(statementMsg)}`).catch(() => {
+              Alert.alert("WhatsApp unavailable", "Could not open WhatsApp.");
+            });
+          }
+        },
+        {
+          text: "Cancel",
+          style: "cancel"
+        }
+      ]
+    );
+  }, [customer, loan, payments, creditSummary]);
+
+  const sharePaymentReceipt = useCallback((payment: any) => {
+    if (!customer) return;
+    const dateStr = new Date(payment.paymentDate).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+    const message = `*Karthikeya Finance - Payment Receipt* 🧾\n` +
+      `------------------------------------\n` +
+      `*Customer:* ${customer.name}\n` +
+      `*Book No:* ${customer.numericalId}\n` +
+      `*Date:* ${dateStr}\n` +
+      `*Amount Paid:* Rs. ${Math.round(payment.amountPaid).toLocaleString("en-IN")}\n` +
+      `*Mode:* ${payment.paymentMode === "PHONE" ? "PhonePe 📱" : "Cash 💵"}\n` +
+      `*Outstanding Balance:* Rs. ${Math.round(loan?.balanceAmount ?? 0).toLocaleString("en-IN")}\n` +
+      `------------------------------------\n` +
+      `Thank you for your payment! 🙏`;
+      
+    const digits = customer.phone.replace(/\D/g, "");
+    if (!digits) {
+      Alert.alert("Missing phone", "This customer does not have a valid phone number.");
+      return;
+    }
+    const normalized = digits.length === 10 ? `91${digits}` : digits;
     Linking.openURL(`https://wa.me/${normalized}?text=${encodeURIComponent(message)}`).catch(() => {
-      Alert.alert("WhatsApp unavailable", "Could not open WhatsApp reminder.");
+      Alert.alert("WhatsApp unavailable", "Could not open WhatsApp.");
     });
   }, [customer, loan]);
 
@@ -980,7 +1060,7 @@ export default function ProfileScreen() {
                 </View>
                 <View style={[styles.customerAnalyticsMetric, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
                   <Text style={[styles.customerAnalyticsValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{customerInsights.lastPayment}</Text>
-                  <Text style={[styles.customerAnalyticsLabel, { color: colors.textSecondary }]}>Last paid</Text>
+                <Text style={[styles.customerAnalyticsLabel, { color: colors.textSecondary }]}>Last paid</Text>
                 </View>
               </View>
             </View>
@@ -989,6 +1069,7 @@ export default function ProfileScreen() {
               payments={payments} 
               onEdit={openEditPaymentModal}
               onDelete={openDeletePaymentConfirm}
+              onShare={sharePaymentReceipt}
             />
           </View>
         </ScrollView>
