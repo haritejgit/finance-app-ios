@@ -301,10 +301,19 @@ export default function ShiftSelectionScreen() {
   const dueAlerts = analytics?.dueAlerts ?? [];
 
   const activeRouteKey = `${selectedDay}:${selectedShift}`;
-  const routeProgress = analytics?.routeProgresses?.[activeRouteKey] ?? { target: 0, collected: 0, customerCount: 0, paidCustomerCount: 0 };
-  const progressPercent = routeProgress.target > 0 ? Math.min(100, Math.round((routeProgress.collected / routeProgress.target) * 100)) : 0;
-  const remainingTarget = Math.max(0, routeProgress.target - routeProgress.collected);
-  const remainingCustomers = Math.max(0, routeProgress.customerCount - routeProgress.paidCustomerCount);
+  const routeProgress = analytics?.routeProgresses?.[activeRouteKey] ?? {
+    target: 0,
+    collected: 0,
+    dueAmount: 0,
+    customerCount: 0,
+    paidCustomerCount: 0,
+    dueCustomerCount: 0,
+  };
+  const paidPercent = routeProgress.customerCount > 0 ? Math.min(100, Math.round((routeProgress.paidCustomerCount / routeProgress.customerCount) * 100)) : 0;
+  const duePercent = routeProgress.customerCount > 0 ? Math.min(100 - paidPercent, Math.round((routeProgress.dueCustomerCount / routeProgress.customerCount) * 100)) : 0;
+  const progressPercent = Math.min(100, paidPercent + duePercent);
+  const remainingTarget = Math.max(0, routeProgress.target - routeProgress.collected - routeProgress.dueAmount);
+  const remainingCustomers = Math.max(0, routeProgress.customerCount - routeProgress.paidCustomerCount - routeProgress.dueCustomerCount);
 
   return (
     <AnimatedScreen style={styles.root}>
@@ -406,25 +415,47 @@ export default function ShiftSelectionScreen() {
                           </Text>
                           <Text style={[styles.progressPercentText, { color: colors.primary }]}>{progressPercent}%</Text>
                         </View>
-                        <View style={[styles.progressBarBg, { backgroundColor: colors.border }]}>
-                          <LinearGradient
-                            colors={["#0ABFBC", "#2ec4b6"]}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                            style={[styles.progressBarFill, { width: `${progressPercent}%` }]}
-                          />
+                        <View style={[styles.progressBarBg, { backgroundColor: colors.border, flexDirection: "row", overflow: "hidden" }]}>
+                          {paidPercent > 0 && (
+                            <View
+                              style={[
+                                styles.progressBarFill,
+                                {
+                                  width: `${paidPercent}%`,
+                                  backgroundColor: "#ff9f1c", // Orange
+                                  borderRadius: 0,
+                                },
+                              ]}
+                            />
+                          )}
+                          {duePercent > 0 && (
+                            <View
+                              style={[
+                                styles.progressBarFill,
+                                {
+                                  width: `${duePercent}%`,
+                                  backgroundColor: "#d94841", // Red
+                                  borderRadius: 0,
+                                },
+                              ]}
+                            />
+                          )}
                         </View>
                         <View style={styles.progressDetails}>
                           <Text style={[styles.progressDetailText, { color: colors.textSecondary }]}>
-                            Collected: <Text style={{fontWeight: "900", color: colors.primary}}>{formatMoney(routeProgress.collected)}</Text> / {formatMoney(routeProgress.target)}
+                            Paid: <Text style={{fontWeight: "900", color: "#ff9f1c"}}>{formatMoney(routeProgress.collected)}</Text>
+                            {routeProgress.dueAmount > 0 && (
+                              <> • Dues: <Text style={{fontWeight: "900", color: "#d94841"}}>{formatMoney(routeProgress.dueAmount)}</Text></>
+                            )}
+                            {" "}/ {formatMoney(routeProgress.target)}
                           </Text>
-                          {remainingTarget > 0 ? (
+                          {remainingCustomers > 0 ? (
                             <Text style={[styles.progressHintText, { color: colors.amberGlow }]}>
                               Rs. {Math.round(remainingTarget).toLocaleString("en-IN")} left • {remainingCustomers} customer{remainingCustomers === 1 ? "" : "s"} remaining
                             </Text>
                           ) : (
                             <Text style={[styles.progressHintText, {color: "#16803a", fontWeight: "900"}]}>
-                              🎉 Route Goal Achieved! 100% Collected
+                              🎉 Route Visited! {routeProgress.paidCustomerCount} Paid • {routeProgress.dueCustomerCount} Dues
                             </Text>
                           )}
                         </View>

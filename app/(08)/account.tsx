@@ -129,32 +129,61 @@ function DatePickerField({ value, onChange, placeholder, style }: DatePickerFiel
 
   if (Platform.OS === "web") {
     return (
-      <input
-        type="date"
-        value={webDateValue}
-        onChange={(e) => {
-          const yyyymmdd = e.target.value;
-          if (yyyymmdd) {
-            onChange(yyyymmddToDdmm(yyyymmdd));
-          } else {
-            onChange("");
-          }
-        }}
+      <div
         style={{
-          backgroundColor: colors.surfaceTint || "#f6fffe",
-          borderWidth: "1px",
-          borderStyle: "solid",
-          borderColor: colors.border || "#d8f7f4",
-          borderRadius: "12px",
-          padding: "12px 14px",
-          fontSize: "15px",
-          color: colors.text || "#111827",
+          position: "relative",
           width: "100%",
-          boxSizing: "border-box",
-          cursor: "pointer",
-          ...(style || {}),
+          display: "flex",
+          flexDirection: "column",
         }}
-      />
+      >
+        <div
+          style={{
+            backgroundColor: colors.surfaceTint || "#f6fffe",
+            borderWidth: "1px",
+            borderStyle: "solid",
+            borderColor: colors.border || "#d8f7f4",
+            borderRadius: "12px",
+            padding: "12px 14px",
+            fontSize: "15px",
+            color: value ? (colors.text || "#111827") : (colors.textMuted || "#78909c"),
+            width: "100%",
+            minHeight: "45px",
+            display: "flex",
+            alignItems: "center",
+            boxSizing: "border-box",
+            pointerEvents: "none",
+            ...(style || {}),
+          }}
+        >
+          {value || placeholder || "DD/MM/YYYY"}
+        </div>
+        <input
+          type="date"
+          value={webDateValue}
+          onChange={(e) => {
+            const yyyymmdd = e.target.value;
+            if (yyyymmdd) {
+              onChange(yyyymmddToDdmm(yyyymmdd));
+            } else {
+              onChange("");
+            }
+          }}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: "100%",
+            height: "100%",
+            opacity: 0,
+            cursor: "pointer",
+            border: "none",
+            outline: "none",
+          }}
+        />
+      </div>
     );
   }
 

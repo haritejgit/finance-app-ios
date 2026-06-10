@@ -1037,17 +1037,30 @@ export default function ProfileScreen() {
             ) : null}
 
             {loan ? (
-              <View style={[styles.disbursementRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[styles.disbursementLabel, { color: colors.textSecondary }]}>Disbursed via:</Text>
-                <Text
-                  style={[
-                    styles.disbursementBadge,
-                    { backgroundColor: disbursementMode === "PHONE" ? "#5F259F" : "#1565C0" },
-                  ]}
-                >
-                  {disbursementMode === "PHONE" ? "PhonePe" : "Cash"}
-                </Text>
-              </View>
+              <>
+                <View style={[styles.disbursementRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Text style={[styles.disbursementLabel, { color: colors.textSecondary }]}>Disbursed via:</Text>
+                  <Text
+                    style={[
+                      styles.disbursementBadge,
+                      { backgroundColor: disbursementMode === "PHONE" ? "#5F259F" : "#1565C0" },
+                    ]}
+                  >
+                    {disbursementMode === "PHONE" ? "PhonePe" : "Cash"}
+                  </Text>
+                </View>
+
+                <View style={[styles.disbursementRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Text style={[styles.disbursementLabel, { color: colors.textSecondary }]}>Loan Taken Date:</Text>
+                  <Text style={[styles.disbursementLabel, { color: colors.text, fontWeight: "700" }]}>
+                    {new Date(loan.startDate).toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </Text>
+                </View>
+              </>
             ) : null}
 
             {loan ? (

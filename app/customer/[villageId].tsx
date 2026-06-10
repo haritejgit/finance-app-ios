@@ -1379,21 +1379,6 @@ export default function CustomerListScreen() {
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
             <View style={[styles.modalHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>New Customer Registration</Text>
-              <Pressable
-                accessibilityLabel="Scan Aadhaar"
-                onPress={handleAadhaarScan}
-                disabled={scanningAadhaar}
-                style={[styles.scanHeaderBtn, scanningAadhaar && styles.saveDisabled]}
-              >
-                {scanningAadhaar ? (
-                  <ActivityIndicator size="small" color={colors.white} />
-                ) : (
-                  <>
-                    <Icon name="id-card-outline" size={15} color={colors.white} />
-                    <Text style={styles.scanHeaderText}>Scan Aadhaar</Text>
-                  </>
-                )}
-              </Pressable>
               <Pressable onPress={closeAddCustomer} style={styles.closeBtn}>
                 <Text style={[styles.closeBtnText, { color: colors.gray }]}>✕</Text>
               </Pressable>

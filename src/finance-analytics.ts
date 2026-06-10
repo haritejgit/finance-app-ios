@@ -108,7 +108,7 @@ export type DashboardAnalytics = {
   customerStates: Record<string, CustomerState>;
   insights: string[];
   aiInsights: string[];
-  routeProgresses?: Record<string, { target: number; collected: number; customerCount: number; paidCustomerCount: number }>;
+  routeProgresses?: Record<string, { target: number; collected: number; dueAmount: number; customerCount: number; paidCustomerCount: number; dueCustomerCount: number }>;
 };
 
 const DASHBOARD_CACHE_PREFIX = "dashboardAnalytics:";
@@ -566,11 +566,13 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
 
   const routes = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const shiftsList = ["Morning", "Evening"];
-  const routeProgresses: Record<string, { target: number; collected: number; customerCount: number; paidCustomerCount: number }> = {};
+  const routeProgresses: Record<string, { target: number; collected: number; dueAmount: number; customerCount: number; paidCustomerCount: number; dueCustomerCount: number }> = {};
   
   const weekStartVal = weekStart(Date.now());
   const weekPayments = regularPayments.filter(p => p.paymentDate >= weekStartVal);
   const weekPaidCustomerIds = new Set(weekPayments.map(p => p.customerId));
+  const weekDues = payments.filter(p => p.paymentDate >= weekStartVal && (p.paymentType === "DUE" || p.type === "DUE") && Number(p.amountPaid || 0) === 0);
+  const weekDueCustomerIds = new Set(weekDues.map(p => p.customerId));
 
   routes.forEach((day) => {
     shiftsList.forEach((shift) => {
@@ -580,8 +582,10 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
       
       let target = 0;
       let collected = 0;
+      let dueAmount = 0;
       let customerCount = 0;
       let paidCustomerCount = 0;
+      let dueCustomerCount = 0;
 
       customers.forEach((c) => {
         if (routeVillageIds.has(c.villageId)) {
@@ -595,6 +599,9 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
               paidCustomerCount++;
               const custWeekPayments = weekPayments.filter(p => p.customerId === c.id);
               collected += custWeekPayments.reduce((sum, p) => sum + p.amountPaid, 0);
+            } else if (weekDueCustomerIds.has(c.id)) {
+              dueCustomerCount++;
+              dueAmount += weeklyAmount;
             }
           }
         }
@@ -603,8 +610,10 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
       routeProgresses[key] = {
         target,
         collected,
+        dueAmount,
         customerCount,
         paidCustomerCount,
+        dueCustomerCount,
       };
     });
   });
