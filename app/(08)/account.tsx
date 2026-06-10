@@ -207,6 +207,7 @@ export default function AccountScreen() {
   const router = useRouter();
   const { t, language } = useLanguage();
   const isTe = language === "te";
+  const isNarrow = Dimensions.get("window").width < 600;
 
 
 
@@ -1111,8 +1112,8 @@ export default function AccountScreen() {
       <Text style={styles.cardTitle}>{t("calculateTotals")}</Text>
       <Text style={styles.cardDesc}>{t("calculateTotalsDesc")}</Text>
 
-      <View style={styles.datePickerRow}>
-        <View style={[styles.inputContainer, { flex: 1 }]}>
+      <View style={isNarrow ? { flexDirection: "column", gap: 12 } : styles.datePickerRow}>
+        <View style={isNarrow ? styles.inputContainer : [styles.inputContainer, { flex: 1 }]}>
           <Text style={styles.inputLabel}>{t("startDate")}</Text>
           <DatePickerField
             value={startDateStr}
@@ -1120,7 +1121,7 @@ export default function AccountScreen() {
             placeholder="DD/MM/YYYY"
           />
         </View>
-        <View style={[styles.inputContainer, { flex: 1 }]}>
+        <View style={isNarrow ? styles.inputContainer : [styles.inputContainer, { flex: 1 }]}>
           <Text style={styles.inputLabel}>{t("endDate")}</Text>
           <DatePickerField
             value={endDateStr}
@@ -1197,8 +1198,8 @@ export default function AccountScreen() {
         {isTe ? "తేదీల ఆధారంగా లావాదేవీల చరిత్రను చూడండి" : "View transaction history based on dates"}
       </Text>
 
-      <View style={styles.datePickerRow}>
-        <View style={[styles.inputContainer, { flex: 1 }]}>
+      <View style={isNarrow ? { flexDirection: "column", gap: 12 } : styles.datePickerRow}>
+        <View style={isNarrow ? styles.inputContainer : [styles.inputContainer, { flex: 1 }]}>
           <Text style={styles.inputLabel}>{t("startDate")}</Text>
           <DatePickerField
             value={startDateStr}
@@ -1206,7 +1207,7 @@ export default function AccountScreen() {
             placeholder="DD/MM/YYYY"
           />
         </View>
-        <View style={[styles.inputContainer, { flex: 1 }]}>
+        <View style={isNarrow ? styles.inputContainer : [styles.inputContainer, { flex: 1 }]}>
           <Text style={styles.inputLabel}>{t("endDate")}</Text>
           <DatePickerField
             value={endDateStr}
@@ -1356,8 +1357,8 @@ export default function AccountScreen() {
                       <Text style={styles.cardTitle}>{t("balancingFund")}</Text>
                       <Text style={styles.cardDesc}>{t("balancingFundDesc")}</Text>
                       
-                      <View style={styles.datePickerRow}>
-                        <View style={[styles.inputContainer, { flex: 1.2 }]}>
+                      <View style={isNarrow ? { flexDirection: "column", gap: 12 } : styles.datePickerRow}>
+                        <View style={isNarrow ? styles.inputContainer : [styles.inputContainer, { flex: 1.2 }]}>
                           <Text style={styles.inputLabel}>{t("date")}</Text>
                           <DatePickerField
                             value={bfDateStr}
@@ -1365,7 +1366,7 @@ export default function AccountScreen() {
                             placeholder="DD/MM/YYYY"
                           />
                         </View>
-                        <View style={[styles.inputContainer, { flex: 1.8 }]}>
+                        <View style={isNarrow ? styles.inputContainer : [styles.inputContainer, { flex: 1.8 }]}>
                           <Text style={styles.inputLabel}>{t("startingAmount")}</Text>
                           <TextInput
                             style={styles.textInput}
@@ -1444,9 +1445,9 @@ export default function AccountScreen() {
                         </View>
                       ) : (
                         <>
-                          <View style={styles.datePickerRow}>
+                          <View style={isNarrow ? { flexDirection: "column", gap: 12 } : styles.datePickerRow}>
                             {/* Cash field — ONLY updates cashOpeningInput, independent */}
-                            <View style={[styles.inputContainer, { flex: 1 }]}>
+                            <View style={isNarrow ? styles.inputContainer : [styles.inputContainer, { flex: 1 }]}>
                               <Text style={styles.inputLabel}>Cash in Hand (Rs.)</Text>
                               <TextInput
                                 style={styles.textInput}
@@ -1458,7 +1459,7 @@ export default function AccountScreen() {
                               />
                             </View>
                             {/* PhonePe field — ONLY updates phoneOpeningInput, independent */}
-                            <View style={[styles.inputContainer, { flex: 1 }]}>
+                            <View style={isNarrow ? styles.inputContainer : [styles.inputContainer, { flex: 1 }]}>
                               <Text style={styles.inputLabel}>PhonePe Balance (Rs.)</Text>
                               <TextInput
                                 style={styles.textInput}

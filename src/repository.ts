@@ -288,7 +288,7 @@ export async function getNextNumericalId(userId: string, villageId: string) {
   const assignedIds = new Set<number>();
   customersSnap.docs.forEach((d) => {
     const c = d.data() as Customer;
-    if (c.isActive !== false && Number.isInteger(c.numericalId) && c.numericalId > 0) {
+    if ((c.isActive !== false || c.isBlocked === true) && Number.isInteger(c.numericalId) && c.numericalId > 0) {
       assignedIds.add(c.numericalId);
     }
   });
@@ -421,11 +421,36 @@ export async function addCustomerWithLoan(
 }
 
 export async function moveCustomerToVillage(userId: string, customerId: string, targetVillageId: string) {
+  const customer = await getCustomerById(customerId);
+  if (!customer) return;
+
+  const oldVillageId = customer.villageId;
+  const oldNumericalId = customer.numericalId;
+
   const newNumericalId = await getNextNumericalId(userId, targetVillageId);
-  await updateDoc(doc(db, "customers", customerId), {
+
+  const batch = writeBatch(db);
+
+  // Update moving customer's village and ID
+  batch.update(doc(db, "customers", customerId), {
     villageId: targetVillageId,
     numericalId: newNumericalId,
   });
+
+  // Create a blocked/tombstone document in the old village to reserve the ID
+  const blockedDocId = `blocked_${oldVillageId}_${oldNumericalId}`;
+  batch.set(doc(db, "customers", blockedDocId), {
+    id: blockedDocId,
+    userId,
+    villageId: oldVillageId,
+    numericalId: oldNumericalId,
+    isActive: false,
+    isBlocked: true,
+    name: "[Blocked ID]",
+    createdAt: Date.now(),
+  });
+
+  await batch.commit();
   clearCache();
 }
 

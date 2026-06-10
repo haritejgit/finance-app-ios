@@ -41,6 +41,7 @@ export type Customer = {
   villageId: string;
   userId: string;
   isActive: boolean;
+  isBlocked?: boolean;
   createdAt: number;
 };
 
