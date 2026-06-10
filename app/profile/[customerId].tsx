@@ -553,10 +553,9 @@ export default function ProfileScreen() {
     payments
       .filter((payment: Payment) => payment.paymentType === "REGULAR")
       .forEach((payment: Payment) => {
-        const diff = toStartOfDay(payment.paymentDate) - toStartOfDay(loan.startDate);
-        // Week 0 covers day 0 through day 7 (inclusive).
-        // A payment on the 7th day (e.g. next Monday for a Monday loan) belongs to week 0.
-        const weekIndex = diff <= 0 ? 0 : Math.max(0, Math.ceil(diff / oneWeek) - 1);
+        const weekIndex = typeof payment.weekNumber === "number"
+          ? payment.weekNumber - 1
+          : (payment.paymentDate - loan.startDate < 0 ? 0 : Math.floor((toStartOfDay(payment.paymentDate) - toStartOfDay(loan.startDate)) / oneWeek));
         paidByWeek.set(weekIndex, (paidByWeek.get(weekIndex) ?? 0) + Number(payment.amountPaid || 0));
       });
     const now = Date.now();
@@ -586,8 +585,9 @@ export default function ProfileScreen() {
     payments
       .filter((p: any) => p.paymentType === "REGULAR" || p.type === "REGULAR" || p.paymentType === "CASH" || p.paymentType === "PHONE")
       .forEach((p: any) => {
-        const diff = toStartOfDay(p.paymentDate) - toStartOfDay(loan.startDate);
-        const weekIndex = diff <= 0 ? 0 : Math.max(0, Math.ceil(diff / oneWeek) - 1);
+        const weekIndex = typeof p.weekNumber === "number"
+          ? p.weekNumber - 1
+          : (p.paymentDate - loan.startDate < 0 ? 0 : Math.floor((toStartOfDay(p.paymentDate) - toStartOfDay(loan.startDate)) / oneWeek));
         paidByWeek.set(weekIndex, (paidByWeek.get(weekIndex) ?? 0) + Number(p.amountPaid || 0));
       });
       
@@ -595,8 +595,9 @@ export default function ProfileScreen() {
     payments
       .filter((p: any) => p.paymentType === "DUE" || p.type === "DUE")
       .forEach((p: any) => {
-        const diff = toStartOfDay(p.paymentDate) - toStartOfDay(loan.startDate);
-        const weekIndex = diff <= 0 ? 0 : Math.max(0, Math.ceil(diff / oneWeek) - 1);
+        const weekIndex = typeof p.weekNumber === "number"
+          ? p.weekNumber - 1
+          : (p.paymentDate - loan.startDate < 0 ? 0 : Math.floor((toStartOfDay(p.paymentDate) - toStartOfDay(loan.startDate)) / oneWeek));
         explicitDueWeekIndices.add(weekIndex);
       });
 
