@@ -129,7 +129,7 @@ const PaymentHistory = memo(function PaymentHistory({
               )}
             </View>
           )}
-          {p.paymentType === "DUE" && onDelete && (
+          {p.paymentType === "DUE" && !p.isAutoInjected && onDelete && (
             <View style={styles.paymentActions}>
               <Pressable style={styles.deletePaymentBtn} onPress={() => onDelete(p)}>
                 <Icon name="trash-outline" size={14} color={colors.white} />
@@ -513,6 +513,59 @@ export default function ProfileScreen() {
       }
       return { index, date, amount, status };
     });
+  }, [loan, payments]);
+
+  const displayedPayments = useMemo(() => {
+    if (!loan) return payments;
+    const oneWeek = 7 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const paidByWeek = new Map<number, number>();
+    
+    payments
+      .filter((p: any) => p.paymentType === "REGULAR" || p.type === "REGULAR" || p.paymentType === "CASH" || p.paymentType === "PHONE")
+      .forEach((p: any) => {
+        const diff = toStartOfDay(p.paymentDate) - toStartOfDay(loan.startDate);
+        const weekIndex = diff <= 0 ? 0 : Math.max(0, Math.ceil(diff / oneWeek) - 1);
+        paidByWeek.set(weekIndex, (paidByWeek.get(weekIndex) ?? 0) + Number(p.amountPaid || 0));
+      });
+      
+    const explicitDueWeekIndices = new Set<number>();
+    payments
+      .filter((p: any) => p.paymentType === "DUE" || p.type === "DUE")
+      .forEach((p: any) => {
+        const diff = toStartOfDay(p.paymentDate) - toStartOfDay(loan.startDate);
+        const weekIndex = diff <= 0 ? 0 : Math.max(0, Math.ceil(diff / oneWeek) - 1);
+        explicitDueWeekIndices.add(weekIndex);
+      });
+
+    const completedWeeks = Math.max(0, Math.floor((now - toStartOfDay(loan.startDate)) / oneWeek));
+    const injectedDues: any[] = [];
+    
+    for (let i = 0; i < completedWeeks; i++) {
+      const weekStartDate = toStartOfDay(loan.startDate) + i * oneWeek;
+      const amount = paidByWeek.get(i) ?? 0;
+      const isAutoOverdue = amount === 0;
+      const hasExplicitDue = explicitDueWeekIndices.has(i);
+      
+      if (isAutoOverdue && !hasExplicitDue) {
+        injectedDues.push({
+          id: `auto-due-${i}`,
+          loanId: loan.id,
+          customerId: loan.customerId,
+          amountPaid: 0,
+          paymentDate: weekStartDate,
+          weekNumber: i + 1,
+          paymentType: "DUE",
+          paymentMode: "CASH",
+          type: "DUE",
+          userId: loan.userId,
+          isAutoInjected: true,
+        });
+      }
+    }
+    
+    const combined = [...payments, ...injectedDues];
+    return combined.sort((a, b) => b.paymentDate - a.paymentDate);
   }, [loan, payments]);
 
   const sendWhatsAppReminder = useCallback(() => {
@@ -1075,7 +1128,7 @@ export default function ProfileScreen() {
             </View>
             <Text style={[styles.history, { color: colors.white }]}>Transaction History</Text>
             <PaymentHistory 
-              payments={payments} 
+              payments={displayedPayments} 
               onEdit={openEditPaymentModal}
               onDelete={openDeletePaymentConfirm}
               onShare={sharePaymentReceipt}
