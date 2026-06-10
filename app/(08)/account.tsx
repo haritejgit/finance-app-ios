@@ -740,7 +740,7 @@ export default function AccountScreen() {
   // Date Range Filtering and Summary Calculations
   const calculatedSummary = useMemo(() => {
     const startTs = parseDDMMYYYY(startDateStr) ?? 0;
-    const endTs = parseDDMMYYYY(endDateStr) ?? Number.MAX_SAFE_INTEGER;
+    const endTs = getEndOfDay(parseDDMMYYYY(endDateStr) ?? Date.now());
 
     // Filter Investments
     const rangeInvs = investments.filter((i) => i.date >= startTs && i.date <= endTs);

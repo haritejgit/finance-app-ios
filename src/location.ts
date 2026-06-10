@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 import * as Location from "expo-location";
 
 export const LOCATION_PERMISSION_DENIED = "LOCATION_PERMISSION_DENIED";
@@ -66,6 +67,33 @@ async function cacheCoordinates(coordinates: Coordinates) {
 }
 
 export async function requestCurrentCoordinates(onQuickLocation?: (coordinates: Coordinates) => void) {
+  if (Platform.OS === "web") {
+    if (!navigator.geolocation) {
+      throw new Error("Geolocation is not supported by this browser.");
+    }
+    return new Promise<Coordinates>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const coords = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          };
+          onQuickLocation?.(coords);
+          void cacheCoordinates(coords);
+          resolve(coords);
+        },
+        (error) => {
+          reject(error);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0,
+        }
+      );
+    });
+  }
+
   let permission = await withTimeout(Location.getForegroundPermissionsAsync(), 5000);
   if (permission.status !== "granted") {
     permission = await withTimeout(Location.requestForegroundPermissionsAsync(), 10000);
@@ -74,14 +102,12 @@ export async function requestCurrentCoordinates(onQuickLocation?: (coordinates: 
     throw new Error(LOCATION_PERMISSION_DENIED);
   }
 
-  const cached = await getCachedCoordinates();
-  if (cached) {
-    onQuickLocation?.(cached);
-  }
+  // We do not feed cached coordinates to onQuickLocation here automatically to avoid stale coordinates.
+  // The user can use the "Use Last Location" button if they explicitly want to use the cache.
 
   const quickLocation = await withTimeout(
     Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Lowest,
+      accuracy: Location.Accuracy.Balanced,
       timeInterval: 100,
       distanceInterval: 0,
     }),
@@ -94,7 +120,7 @@ export async function requestCurrentCoordinates(onQuickLocation?: (coordinates: 
   try {
     const preciseLocation = await withTimeout(
       Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
+        accuracy: Location.Accuracy.High,
       }),
       PRECISE_LOCATION_TIMEOUT_MS
     );
@@ -108,3 +134,4 @@ export async function requestCurrentCoordinates(onQuickLocation?: (coordinates: 
     return quick;
   }
 }
+

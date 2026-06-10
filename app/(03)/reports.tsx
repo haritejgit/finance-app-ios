@@ -738,12 +738,14 @@ interface Payment {
     }
     
     const from = parseDateInput(totalsFromDate);
-    const to = parseDateInput(totalsToDate);
+    const rawTo = parseDateInput(totalsToDate);
     
-    if (!from || !to) {
+    if (!from || !rawTo) {
       Alert.alert("Error", "Please select valid dates");
       return;
     }
+    
+    const to = new Date(rawTo).setHours(23, 59, 59, 999);
     
     if (from > to) {
       Alert.alert("Error", "From date cannot be after to date");
