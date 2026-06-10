@@ -169,7 +169,8 @@ export async function getCustomers(userId: string, villageId: string, useCache =
     const cached = getCached<Customer[]>(cacheKey);
     if (cached) return cached;
   }
-  await normalizeCustomerNumericalIdsForVillage(userId, villageId);
+  // No longer normalize automatically on every fetch to preserve unique, non-shifting IDs.
+  // await normalizeCustomerNumericalIdsForVillage(userId, villageId);
   const q = query(
     coll.customers,
     where("userId", "==", userId),
@@ -417,6 +418,15 @@ export async function addCustomerWithLoan(
   await setDoc(doc(db, "loans", loan.id), stripUndefined(loan));
   clearCache();
   return customer;
+}
+
+export async function moveCustomerToVillage(userId: string, customerId: string, targetVillageId: string) {
+  const newNumericalId = await getNextNumericalId(userId, targetVillageId);
+  await updateDoc(doc(db, "customers", customerId), {
+    villageId: targetVillageId,
+    numericalId: newNumericalId,
+  });
+  clearCache();
 }
 
 export async function getCustomerById(customerId: string) {

@@ -38,9 +38,12 @@ import {
   renewLoan,
   updateCustomer,
   updateLoan,
-  updatePayment
+  updatePayment,
+  getVillages,
+  moveCustomerToVillage,
+  getNextNumericalId
 } from "../../src/repository";
-import { Customer, Loan, Payment, PaymentMode, PaymentType } from "../../src/types";
+import { Customer, Loan, Payment, PaymentMode, PaymentType, Village } from "../../src/types";
 import { colors } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -275,6 +278,13 @@ export default function ProfileScreen() {
   
   // Combined customer & loan edit state
   const [editOpen, setEditOpen] = useState(false);
+
+  // Move village state
+  const [moveVillageOpen, setMoveVillageOpen] = useState(false);
+  const [villagesList, setVillagesList] = useState<Village[]>([]);
+  const [targetVillageId, setTargetVillageId] = useState<string>("");
+  const [newNumericalIdPreview, setNewNumericalIdPreview] = useState<number | null>(null);
+  const [isMovingVillage, setIsMovingVillage] = useState(false);
   const [editForm, setEditForm] = useState(createEmptyEditForm);
   const [editAadhaarBlocked, setEditAadhaarBlocked] = useState(false);
   const [editAadhaarWarning, setEditAadhaarWarning] = useState("");
@@ -307,6 +317,55 @@ export default function ProfileScreen() {
     setEditAadhaarBlocked(false);
     setEditAadhaarWarning("");
     setEditOpen(true);
+  };
+
+  const openMoveVillageModal = async () => {
+    if (!customer || !user) return;
+    try {
+      const list = await getVillages(user.uid);
+      const filtered = list.filter((v) => v.id !== customer.villageId);
+      setVillagesList(filtered);
+      setTargetVillageId("");
+      setNewNumericalIdPreview(null);
+      setMoveVillageOpen(true);
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Error", "Failed to load villages list.");
+    }
+  };
+
+  const handleSelectTargetVillage = async (villageId: string) => {
+    if (!user) return;
+    setTargetVillageId(villageId);
+    try {
+      const nextId = await getNextNumericalId(user.uid, villageId);
+      setNewNumericalIdPreview(nextId);
+    } catch (err) {
+      console.error(err);
+      setNewNumericalIdPreview(null);
+    }
+  };
+
+  const confirmMoveVillage = async () => {
+    if (!customer || !user || !targetVillageId) return;
+    try {
+      setIsMovingVillage(true);
+      await moveCustomerToVillage(user.uid, customer.id, targetVillageId);
+      const targetVillage = villagesList.find(v => v.id === targetVillageId);
+      const targetName = targetVillage ? targetVillage.name : "new village";
+      
+      Alert.alert(
+        "Moved Successfully", 
+        `Moved ${customer.name} to ${targetName}.\nNew Book No. is ${newNumericalIdPreview}.`
+      );
+      setMoveVillageOpen(false);
+      router.replace("/(02)/shift-selection");
+    } catch (err: any) {
+      console.error(err);
+      Alert.alert("Error", err.message || "Failed to move customer.");
+    } finally {
+      setIsMovingVillage(false);
+    }
   };
 
   const updateEditAadhaar = useCallback(async (text: string) => {
@@ -1096,6 +1155,10 @@ export default function ProfileScreen() {
                 <Icon name="location" size={21} color={hasCustomerCoordinates(customer) ? colors.teal : colors.gray} />
                 <Text selectable={false} style={[styles.iconBtnLabel, { color: colors.primary }]}>Map</Text>
               </Pressable>
+              <Pressable style={[styles.iconBtn, noTextSelection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={openMoveVillageModal}>
+                <Icon name="arrow-forward-circle-outline" size={21} color={colors.amber} />
+                <Text selectable={false} style={[styles.iconBtnLabel, { color: colors.primary }]}>Move</Text>
+              </Pressable>
               <Pressable style={[styles.iconBtn, noTextSelection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={() => setDeleteCustomerConfirmOpen(true)}>
                 <Icon name="trash" size={21} color={colors.missedRed} />
                 <Text selectable={false} style={[styles.iconBtnLabel, styles.iconBtnLabelDanger]}>Delete</Text>
@@ -1750,6 +1813,75 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Move Customer to Another Village Modal */}
+      <Modal visible={moveVillageOpen} transparent animationType="slide">
+        <KeyboardAvoidingView style={styles.modalWrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <View style={[styles.modal, { backgroundColor: colors.card, maxHeight: 400 }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Move Customer to Another Village</Text>
+            
+            <Text style={{ marginBottom: 10, fontSize: 13, color: colors.textSecondary, textAlign: 'center' }}>
+              Select a target village for <Text style={{ fontWeight: '700', color: colors.text }}>{customer?.name}</Text>.
+              {'\n'}
+              Current Book No: <Text style={{ fontWeight: '700', color: colors.text }}>{customer?.numericalId}</Text>
+            </Text>
+
+            <View style={{ flex: 1, maxHeight: 180, borderWidth: 1, borderColor: colors.border, borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
+              <ScrollView style={{ backgroundColor: colors.surfaceTint }} nestedScrollEnabled={true}>
+                {villagesList.length === 0 ? (
+                  <View style={{ padding: 16, alignItems: 'center' }}>
+                    <Text style={{ color: colors.textMuted, fontSize: 13 }}>No other villages available.</Text>
+                  </View>
+                ) : (
+                  villagesList.map((v) => (
+                    <Pressable
+                      key={v.id}
+                      style={[
+                        styles.dropdownItem,
+                        targetVillageId === v.id && styles.dropdownItemActive
+                      ]}
+                      onPress={() => handleSelectTargetVillage(v.id)}
+                    >
+                      <Text style={[
+                        styles.dropdownItemText,
+                        targetVillageId === v.id && styles.dropdownItemTextActive
+                      ]}>
+                        {v.name} ({v.dayOfWeek} - {v.shift})
+                      </Text>
+                    </Pressable>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+
+            {targetVillageId ? (
+              <View style={{ marginBottom: 12, alignItems: 'center' }}>
+                <Text style={{ fontSize: 14, color: colors.success, fontWeight: '700' }}>
+                  New Book No: {newNumericalIdPreview !== null ? String(newNumericalIdPreview).padStart(2, "0") : "Loading..."}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.modalButtons}>
+              <Pressable 
+                style={styles.cancelModalBtn} 
+                onPress={() => setMoveVillageOpen(false)}
+              >
+                <Text style={styles.cancelModalBtnText}>Cancel</Text>
+              </Pressable>
+              <Pressable 
+                style={[styles.primary, (!targetVillageId || isMovingVillage) && { opacity: 0.5 }]} 
+                onPress={confirmMoveVillage}
+                disabled={!targetVillageId || isMovingVillage}
+              >
+                <Text style={styles.primaryText}>
+                  {isMovingVillage ? 'Moving...' : 'Move Customer'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </LinearGradient>
     </AnimatedScreen>
   );
@@ -1890,6 +2022,24 @@ const styles = StyleSheet.create({
   primary: { backgroundColor: colors.blue2, borderRadius: 12, padding: 14, alignItems: "center" },
   primaryText: { color: colors.white, fontWeight: "700" },
   errorText: { color: "#b91c1c", fontSize: 12, marginTop: -4 },
+  dropdownItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9"
+  },
+  dropdownItemActive: {
+    backgroundColor: "#e2fbf7"
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#475569"
+  },
+  dropdownItemTextActive: {
+    color: "#0d9488",
+    fontWeight: "700"
+  },
   successText: { color: "#047857", fontSize: 12, fontWeight: "700", marginTop: -4 },
   dateBtn: { borderWidth: 1, borderColor: "#d2d8e1", borderRadius: 10, padding: 10, alignItems: "center" },
   dateBtnText: { color: colors.blue2, fontWeight: "600" },
