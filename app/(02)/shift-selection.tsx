@@ -28,6 +28,7 @@ import { CustomerSearchResult, getAllActiveCustomersWithVillages } from "../../s
 import { Colors, Gradients } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
 import { useLanguage } from "../../src/language-context";
+import { translateTelugu } from "../../src/exports";
 
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const shortDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -83,12 +84,13 @@ function DashboardPanel({
   children: React.ReactNode;
   action?: React.ReactNode;
 }) {
+  const { colors } = useTheme();
   return (
-    <View style={styles.panel}>
+    <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.sectionHeader}>
         <View style={styles.sectionCopy}>
-          <Text style={styles.sectionTitle}>{title}</Text>
-          {subtitle ? <Text style={styles.sectionSub}>{subtitle}</Text> : null}
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
+          {subtitle ? <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>{subtitle}</Text> : null}
         </View>
         {action}
       </View>
@@ -110,21 +112,23 @@ function DashboardMetric({
   tone: string;
   caption: string;
 }) {
+  const { colors } = useTheme();
   return (
-    <View style={styles.metricCard}>
+    <View style={[styles.metricCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={[styles.metricIcon, { backgroundColor: `${tone}18` }]}>
         <Icon name={icon} size={17} color={tone} />
       </View>
-      <Text style={styles.metricTitle}>{title}</Text>
-      <Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+      <Text style={[styles.metricTitle, { color: colors.textSecondary }]}>{title}</Text>
+      <Text style={[styles.metricValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
         {value}
       </Text>
-      <Text style={styles.metricCaption}>{caption}</Text>
+      <Text style={[styles.metricCaption, { color: colors.textMuted }]}>{caption}</Text>
     </View>
   );
 }
 
 function MoneyMovementChart({ analytics }: { analytics: DashboardAnalytics }) {
+  const { colors } = useTheme();
   const maxValue = Math.max(...analytics.weeklyTrend.map((item) => Math.max(item.collection, item.distribution)), 1);
 
   return (
@@ -135,7 +139,7 @@ function MoneyMovementChart({ analytics }: { analytics: DashboardAnalytics }) {
             <View style={[styles.chartBar, styles.chartBarOut, { height: Math.max(8, (week.distribution / maxValue) * 116) }]} />
             <View style={[styles.chartBar, styles.chartBarIn, { height: Math.max(8, (week.collection / maxValue) * 116) }]} />
           </View>
-          <Text style={styles.chartLabel}>{week.label}</Text>
+          <Text style={[styles.chartLabel, { color: colors.textMuted }]}>{week.label}</Text>
         </View>
       ))}
     </View>
@@ -143,14 +147,16 @@ function MoneyMovementChart({ analytics }: { analytics: DashboardAnalytics }) {
 }
 
 function EmptyLine({ text }: { text: string }) {
-  return <Text style={styles.emptyText}>{text}</Text>;
+  const { colors } = useTheme();
+  return <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{text}</Text>;
 }
 
 function BottomNavButton({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) {
+  const { colors } = useTheme();
   return (
-    <Pressable accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.bottomNavButton, pressed && styles.pressed]}>
-      <Icon name={icon} size={15} color={Colors.lightSeaGreen} />
-      <Text style={styles.bottomNavText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
+    <Pressable accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.bottomNavButton, { backgroundColor: colors.card, borderColor: colors.border }, pressed && styles.pressed]}>
+      <Icon name={icon} size={15} color={colors.primary} />
+      <Text style={[styles.bottomNavText, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
     </Pressable>
   );
 }
@@ -159,7 +165,7 @@ export default function ShiftSelectionScreen() {
   const nav = useRouter();
   const { user, logout } = useAuth();
   const { colors } = useTheme();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [selectedDay, setSelectedDay] = useState("Monday");
   const [selectedShift, setSelectedShift] = useState<Shift>("Morning");
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
@@ -317,16 +323,16 @@ export default function ShiftSelectionScreen() {
                 },
               ]}
             >
-              <View style={styles.headerCard}>
+              <View style={[styles.headerCard, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
                 <View style={styles.headerTop}>
                   <View style={styles.brandRow}>
-                    <View style={styles.brandIcon}>
-                      <Icon name="wallet-outline" size={19} color={Colors.nearBlack} />
+                    <View style={[styles.brandIcon, { backgroundColor: colors.primarySoft }]}>
+                      <Icon name="wallet-outline" size={19} color={colors.primary} />
                     </View>
                     <View style={styles.headerCopy}>
-                      <Text style={styles.eyebrow}>{t("premiumWorkspace")}</Text>
-                      <Text style={styles.header}>{t("financeDashboard")}</Text>
-                      <Text style={styles.welcome}>{getGreeting(t)}, {displayName} | {todayLabel}</Text>
+                      <Text style={[styles.eyebrow, { color: colors.textMuted }]}>{t("premiumWorkspace")}</Text>
+                      <Text style={[styles.header, { color: colors.text }]}>{t("financeDashboard")}</Text>
+                      <Text style={[styles.welcome, { color: colors.textSecondary }]}>{getGreeting(t)}, {displayName} | {todayLabel}</Text>
                     </View>
                   </View>
                   <Pressable accessibilityLabel={t("searchCustomers")} style={styles.searchButton} onPress={openCustomerSearch}>
@@ -334,14 +340,14 @@ export default function ShiftSelectionScreen() {
                   </Pressable>
                 </View>
 
-                <Pressable style={styles.todayCard} onPress={() => nav.push("/graph")}>
-                  <View style={styles.todayIcon}>
-                    <Icon name="cash-outline" size={18} color={Colors.nearBlack} />
+                <Pressable style={[styles.todayCard, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={() => nav.push("/graph")}>
+                  <View style={[styles.todayIcon, { backgroundColor: colors.warningSoft }]}>
+                    <Icon name="cash-outline" size={18} color={colors.amberGlow} />
                   </View>
                   <View style={styles.todayCopy}>
-                    <Text style={styles.todayLabel}>{t("collectedToday")}</Text>
-                    <Text style={styles.todayValue}>{formatMoney(totals?.collectionToday ?? 0)}</Text>
-                    <Text style={styles.todayHint}>{t("distributedTodayHint")} {formatMoney(totals?.distributedToday ?? 0)}</Text>
+                    <Text style={[styles.todayLabel, { color: colors.textSecondary }]}>{t("collectedToday")}</Text>
+                    <Text style={[styles.todayValue, { color: colors.text }]}>{formatMoney(totals?.collectionToday ?? 0)}</Text>
+                    <Text style={[styles.todayHint, { color: colors.textSecondary }]}>{t("distributedTodayHint")} {formatMoney(totals?.distributedToday ?? 0)}</Text>
                   </View>
                 </Pressable>
               </View>
@@ -352,9 +358,9 @@ export default function ShiftSelectionScreen() {
                 <>
                   <DashboardPanel
                     title={t("collectionRoute")}
-                    action={<Text style={styles.routeMeta}>{selectedDay} / {selectedShift}</Text>}
+                    action={<Text style={[styles.routeMeta, { color: colors.textMuted }]}>{selectedDay} / {selectedShift}</Text>}
                   >
-                    <Text style={styles.controlLabel}>{t("day")}</Text>
+                    <Text style={[styles.controlLabel, { color: colors.textSecondary }]}>{t("day")}</Text>
                     <View style={styles.dayGrid}>
                       {days.map((day, index) => (
                         <Pressable
@@ -364,14 +370,14 @@ export default function ShiftSelectionScreen() {
                              lightImpact();
                              setSelectedDay(day);
                            }}
-                           style={[styles.dayChip, selectedDay === day && styles.dayChipOn]}
+                           style={[styles.dayChip, { backgroundColor: colors.surfaceTint, borderColor: colors.border }, selectedDay === day && styles.dayChipOn]}
                         >
-                          <Text style={[styles.dayChipText, selectedDay === day && styles.dayChipTextOn]}>{shortDays[index]}</Text>
+                          <Text style={[styles.dayChipText, { color: colors.text }, selectedDay === day && styles.dayChipTextOn]}>{shortDays[index]}</Text>
                         </Pressable>
                       ))}
                     </View>
 
-                    <Text style={styles.controlLabel}>{t("shift")}</Text>
+                    <Text style={[styles.controlLabel, { color: colors.textSecondary }]}>{t("shift")}</Text>
                     <View style={styles.shiftRow}>
                       {shifts.map((shift) => {
                         const active = selectedShift === shift;
@@ -383,24 +389,24 @@ export default function ShiftSelectionScreen() {
                               lightImpact();
                               setSelectedShift(shift);
                             }}
-                            style={[styles.shift, active && styles.shiftOn]}
+                            style={[styles.shift, { backgroundColor: colors.surfaceTint, borderColor: colors.border }, active && styles.shiftOn]}
                           >
-                            <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={17} color={active ? Colors.nearBlack : Colors.lightSeaGreen} />
-                            <Text style={[styles.shiftText, active && styles.shiftTextOn]}>{shift}</Text>
+                            <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={17} color={active ? Colors.nearBlack : colors.primary} />
+                            <Text style={[styles.shiftText, { color: colors.primary }, active && styles.shiftTextOn]}>{shift}</Text>
                           </Pressable>
                         );
                       })}
                     </View>
 
                     {routeProgress.customerCount > 0 && (
-                      <View style={styles.progressCard}>
+                      <View style={[styles.progressCard, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
                         <View style={styles.progressHeader}>
-                          <Text style={styles.progressTitle}>
+                          <Text style={[styles.progressTitle, { color: colors.text }]}>
                             {selectedDay} {selectedShift === "Morning" ? "☀️" : "🌙"} Route Progress
                           </Text>
-                          <Text style={styles.progressPercentText}>{progressPercent}%</Text>
+                          <Text style={[styles.progressPercentText, { color: colors.primary }]}>{progressPercent}%</Text>
                         </View>
-                        <View style={styles.progressBarBg}>
+                        <View style={[styles.progressBarBg, { backgroundColor: colors.border }]}>
                           <LinearGradient
                             colors={["#0ABFBC", "#2ec4b6"]}
                             start={{ x: 0, y: 0 }}
@@ -409,11 +415,11 @@ export default function ShiftSelectionScreen() {
                           />
                         </View>
                         <View style={styles.progressDetails}>
-                          <Text style={styles.progressDetailText}>
-                            Collected: <Text style={{fontWeight: "900", color: Colors.lightSeaGreen}}>{formatMoney(routeProgress.collected)}</Text> / {formatMoney(routeProgress.target)}
+                          <Text style={[styles.progressDetailText, { color: colors.textSecondary }]}>
+                            Collected: <Text style={{fontWeight: "900", color: colors.primary}}>{formatMoney(routeProgress.collected)}</Text> / {formatMoney(routeProgress.target)}
                           </Text>
                           {remainingTarget > 0 ? (
-                            <Text style={styles.progressHintText}>
+                            <Text style={[styles.progressHintText, { color: colors.amberGlow }]}>
                               Rs. {Math.round(remainingTarget).toLocaleString("en-IN")} left • {remainingCustomers} customer{remainingCustomers === 1 ? "" : "s"} remaining
                             </Text>
                           ) : (
@@ -433,9 +439,9 @@ export default function ShiftSelectionScreen() {
                     </Pressable>
 
                     <View style={styles.walletRouteSummary}>
-                      <Text style={styles.walletRouteText}>Cash: {formatMoney(totals?.cashWalletBalance ?? 0)}</Text>
-                      <View style={styles.walletRouteDot} />
-                      <Text style={styles.walletRouteText}>PhonePe: {formatMoney(totals?.phonePeWalletBalance ?? 0)}</Text>
+                      <Text style={[styles.walletRouteText, { color: colors.textSecondary }]}>Cash: {formatMoney(totals?.cashWalletBalance ?? 0)}</Text>
+                      <View style={[styles.walletRouteDot, { backgroundColor: colors.border }]} />
+                      <Text style={[styles.walletRouteText, { color: colors.textSecondary }]}>PhonePe: {formatMoney(totals?.phonePeWalletBalance ?? 0)}</Text>
                     </View>
                   </DashboardPanel>
 
@@ -577,21 +583,21 @@ export default function ShiftSelectionScreen() {
 
         <Modal visible={searchOpen} animationType="slide" onRequestClose={() => setSearchOpen(false)}>
           <SafeAreaView style={[styles.searchModalSafe, { backgroundColor: colors.background }]}>
-            <View style={styles.searchModalHeader}>
-              <Text style={styles.searchModalTitle}>{t("smartCustomerSearch")}</Text>
-              <Pressable style={styles.searchCloseBtn} onPress={() => setSearchOpen(false)}>
+            <View style={[styles.searchModalHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+              <Text style={[styles.searchModalTitle, { color: colors.text }]}>{t("smartCustomerSearch")}</Text>
+              <Pressable style={[styles.searchCloseBtn, { backgroundColor: colors.surfaceTint }]} onPress={() => setSearchOpen(false)}>
                 <Icon name="close" size={18} color={colors.textSecondary} />
               </Pressable>
             </View>
             <View style={styles.searchModalContent}>
-              <View style={styles.customerSearchShell}>
+              <View style={[styles.customerSearchShell, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
                 <Icon name="search" size={18} color={colors.textSecondary} />
                 <TextInput
                   value={searchQuery}
                   onChangeText={setSearchQuery}
                   placeholder={t("searchPlaceholder")}
                   placeholderTextColor={colors.textMuted}
-                  style={styles.customerSearchInput}
+                  style={[styles.customerSearchInput, { color: colors.text }]}
                   autoFocus
                 />
               </View>
@@ -610,9 +616,9 @@ export default function ShiftSelectionScreen() {
                         lightImpact();
                         setCustomerFilter(filter.key);
                       }}
-                      style={[styles.filterChip, active && styles.filterChipOn]}
+                      style={[styles.filterChip, { backgroundColor: colors.card, borderColor: colors.border }, active && styles.filterChipOn]}
                     >
-                      <Text style={[styles.filterChipText, active && styles.filterChipTextOn]}>
+                      <Text style={[styles.filterChipText, { color: colors.textSecondary }, active && styles.filterChipTextOn]}>
                         {t(filter.key === "paid" ? "paidToday" : filter.key)}
                       </Text>
                     </Pressable>
@@ -644,7 +650,7 @@ export default function ShiftSelectionScreen() {
                     return (
                       <AnimatedListItem index={index}>
                         <Pressable
-                          style={styles.searchCustomerRow}
+                          style={[styles.searchCustomerRow, { backgroundColor: colors.card, borderColor: colors.border }]}
                           onPress={() => {
                             lightImpact();
                             setSearchOpen(false);
@@ -654,13 +660,15 @@ export default function ShiftSelectionScreen() {
                         >
                           <CustomerIdBadge numericalId={item.numericalId} id={item.id} />
                           <View style={styles.searchCustomerInfo}>
-                            <Text style={styles.searchCustomerName}>{item.name}</Text>
-                            <Text style={styles.searchCustomerMeta}>
+                            <Text style={[styles.searchCustomerName, { color: colors.text }]}>
+                              {language === "te" ? translateTelugu(item.name) : item.name}
+                            </Text>
+                            <Text style={[styles.searchCustomerMeta, { color: colors.textSecondary }]}>
                               {item.villageName || "No village"} | {item.villageDayOfWeek || "-"} {item.villageShift || ""}
                             </Text>
-                            <Text style={styles.searchCustomerPhone}>{item.phone}</Text>
+                            <Text style={[styles.searchCustomerPhone, { color: colors.textMuted }]}>{item.phone}</Text>
                           </View>
-                          <Text style={styles.statePill}>{state}</Text>
+                          <Text style={[styles.statePill, { backgroundColor: colors.primarySoft, color: colors.primary }]}>{state}</Text>
                         </Pressable>
                       </AnimatedListItem>
                     );

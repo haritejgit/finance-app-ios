@@ -44,9 +44,11 @@ import {
   getNextNumericalId
 } from "../../src/repository";
 import { Customer, Loan, Payment, PaymentMode, PaymentType, Village } from "../../src/types";
-import { colors } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
+import { colors } from "../../src/theme";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useLanguage } from "../../src/language-context";
+import { translateTelugu } from "../../src/exports";
 import { openCustomerLedgerPrint } from "../../src/exports";
 import { calculateCreditScore } from "../../src/credit-score";
 import { showToast } from "../../src/notify";
@@ -236,6 +238,7 @@ export default function ProfileScreen() {
   const activeCustomerId = Array.isArray(customerId) ? customerId[0] : customerId;
   const { user, loading: authLoading } = useAuth();
   const { colors } = useTheme();
+  const { language } = useLanguage();
   const loadRequestRef = useRef(0);
   const locationRequestRef = useRef(0);
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -653,7 +656,7 @@ export default function ProfileScreen() {
       `*Disbursed Cash:* Rs. ${Math.round(disbursed).toLocaleString("en-IN")}\n` +
       `*Total Paid:* Rs. ${Math.round(totalPaid).toLocaleString("en-IN")}\n` +
       `*Outstanding Balance:* Rs. ${Math.round(loan?.balanceAmount ?? 0).toLocaleString("en-IN")}\n` +
-      `*Credit Score:* ${creditSummary.score} (${creditSummary.rating})\n` +
+      `*Credit Score:* ${creditSummary.score} (${creditSummary.band})\n` +
       `------------------------------------\n` +
       `Status: ${loan?.status || "NO ACTIVE LOAN"}\n` +
       `Thank you! 🙏`;
@@ -949,7 +952,7 @@ export default function ProfileScreen() {
             <View style={[styles.headerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.profileHeaderTop}>
                 <CustomerIdBadge numericalId={customer.numericalId} id={customer.id} />
-                <Text style={[styles.headerName, { color: colors.primary }]}>{customer?.name || "Profile"}</Text>
+                <Text style={[styles.headerName, { color: colors.primary }]}>{customer?.name ? (language === "te" ? translateTelugu(customer.name) : customer.name) : "Profile"}</Text>
               </View>
               {!!customer && (
                 <View style={styles.headerInfo}>
@@ -1777,7 +1780,7 @@ export default function ProfileScreen() {
           <View style={[styles.modal, { maxHeight: 220 }]}>
             <Text style={styles.modalTitle}>Delete Customer</Text>
             <Text style={{ marginBottom: 20, textAlign: "center" }}>
-              Are you sure you want to delete {customer?.name}?
+              Are you sure you want to delete {customer?.name ? (language === "te" ? translateTelugu(customer.name) : customer.name) : ""}?
               {'\n\n'}
               This will permanently delete the customer and all their loan/payment records.
             </Text>
@@ -1821,7 +1824,7 @@ export default function ProfileScreen() {
             <Text style={[styles.modalTitle, { color: colors.text }]}>Move Customer to Another Village</Text>
             
             <Text style={{ marginBottom: 10, fontSize: 13, color: colors.textSecondary, textAlign: 'center' }}>
-              Select a target village for <Text style={{ fontWeight: '700', color: colors.text }}>{customer?.name}</Text>.
+              Select a target village for <Text style={{ fontWeight: '700', color: colors.text }}>{customer?.name ? (language === "te" ? translateTelugu(customer.name) : customer.name) : ""}</Text>.
               {'\n'}
               Current Book No: <Text style={{ fontWeight: '700', color: colors.text }}>{customer?.numericalId}</Text>
             </Text>

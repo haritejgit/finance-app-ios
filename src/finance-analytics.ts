@@ -568,10 +568,9 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
   const shiftsList = ["Morning", "Evening"];
   const routeProgresses: Record<string, { target: number; collected: number; customerCount: number; paidCustomerCount: number }> = {};
   
-  const todayStartVal = startOfDay(Date.now());
-  const todayEndVal = todayStartVal + DAY - 1;
-  const todayPayments = regularPayments.filter(p => p.paymentDate >= todayStartVal && p.paymentDate <= todayEndVal);
-  const todayPaidCustomerIds = new Set(todayPayments.map(p => p.customerId));
+  const weekStartVal = weekStart(Date.now());
+  const weekPayments = regularPayments.filter(p => p.paymentDate >= weekStartVal);
+  const weekPaidCustomerIds = new Set(weekPayments.map(p => p.customerId));
 
   routes.forEach((day) => {
     shiftsList.forEach((shift) => {
@@ -587,15 +586,15 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
       customers.forEach((c) => {
         if (routeVillageIds.has(c.villageId)) {
           const loan = activeLoanByCustomerId.get(c.id);
-          if (loan && loan.balanceAmount > 0) {
+          if (loan && loan.balanceAmount > 0 && loan.startDate < weekStartVal) {
             customerCount++;
             const weeklyAmount = Math.min(Math.max(1, Math.round(loan.principalAmount / 10)), loan.balanceAmount);
             target += weeklyAmount;
 
-            if (todayPaidCustomerIds.has(c.id)) {
+            if (weekPaidCustomerIds.has(c.id)) {
               paidCustomerCount++;
-              const custTodayPayments = todayPayments.filter(p => p.customerId === c.id);
-              collected += custTodayPayments.reduce((sum, p) => sum + p.amountPaid, 0);
+              const custWeekPayments = weekPayments.filter(p => p.customerId === c.id);
+              collected += custWeekPayments.reduce((sum, p) => sum + p.amountPaid, 0);
             }
           }
         }

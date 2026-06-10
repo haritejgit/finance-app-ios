@@ -217,6 +217,204 @@ export const teluguTranslations: Record<string, string> = {
   "snacks": "స్నాక్స్",
 };
 
+export function phonemeTransliterate(word: string): string {
+  let w = word.toLowerCase();
+  const rules = [
+    { pat: "ksha", rep: "క్ష" },
+    { pat: "ksh", rep: "క్ష్" },
+    { pat: "shra", rep: "శ్ర" },
+    { pat: "shr", rep: "శ్ర" },
+    { pat: "thra", rep: "త్ర" },
+    { pat: "thr", rep: "త్ర్" },
+    { pat: "dhra", rep: "ద్ర" },
+    { pat: "dhr", rep: "దర్" },
+    { pat: "chra", rep: "చ్ర" },
+    { pat: "khy", rep: "ఖ్య" },
+    { pat: "kha", rep: "ఖ" },
+    { pat: "khi", rep: "ఖి" },
+    { pat: "khu", rep: "ఖు" },
+    { pat: "kh", rep: "ఖ్" },
+    { pat: "gha", rep: "ఘ" },
+    { pat: "ghi", rep: "ఘి" },
+    { pat: "ghu", rep: "ఘు" },
+    { pat: "gh", rep: "ఘ్" },
+    { pat: "cha", rep: "చ" },
+    { pat: "chi", rep: "చి" },
+    { pat: "chu", rep: "చు" },
+    { pat: "che", rep: "చె" },
+    { pat: "cho", rep: "చొ" },
+    { pat: "ch", rep: "చ్" },
+    { pat: "tha", rep: "త" },
+    { pat: "thi", rep: "తి" },
+    { pat: "thu", rep: "తు" },
+    { pat: "the", rep: "తె" },
+    { pat: "tho", rep: "తొ" },
+    { pat: "th", rep: "త్" },
+    { pat: "dha", rep: "ద" },
+    { pat: "dhi", rep: "ది" },
+    { pat: "dhu", rep: "దు" },
+    { pat: "dhe", rep: "దె" },
+    { pat: "dho", rep: "దొ" },
+    { pat: "dh", rep: "ద్" },
+    { pat: "pha", rep: "ఫ" },
+    { pat: "phi", rep: "ఫి" },
+    { pat: "phu", rep: "ఫు" },
+    { pat: "ph", rep: "ఫ్" },
+    { pat: "bha", rep: "భ" },
+    { pat: "bhi", rep: "భి" },
+    { pat: "bhu", rep: "భు" },
+    { pat: "bh", rep: "బ్" },
+    { pat: "sha", rep: "శ" },
+    { pat: "shi", rep: "శి" },
+    { pat: "shu", rep: "శు" },
+    { pat: "she", rep: "శె" },
+    { pat: "sho", rep: "శొ" },
+    { pat: "sh", rep: "ష్" },
+    { pat: "ddha", rep: "ద్ధ" },
+    { pat: "ddh", rep: "ద్ధ్" },
+    { pat: "dda", rep: "డ్డ" },
+    { pat: "ddi", rep: "డ్డి" },
+    { pat: "ddu", rep: "డ్డు" },
+    { pat: "dd", rep: "డ్డ్" },
+    { pat: "tta", rep: "ట్ట" },
+    { pat: "tti", rep: "ట్టి" },
+    { pat: "ttu", rep: "ట్టు" },
+    { pat: "tt", rep: "ట్ట్" },
+    { pat: "ppa", rep: "ప్ప" },
+    { pat: "pp", rep: "ప్ప్" },
+    { pat: "bba", rep: "బ్బ" },
+    { pat: "bb", rep: "బ్బ్" },
+    { pat: "kka", rep: "క్క" },
+    { pat: "kk", rep: "క్క్" },
+    { pat: "gga", rep: "గ్గ" },
+    { pat: "gg", rep: "గ్గ్" },
+    { pat: "mma", rep: "మ్మ" },
+    { pat: "mmi", rep: "మ్మి" },
+    { pat: "mmu", rep: "మ్ము" },
+    { pat: "mm", rep: "మ్మ్" },
+    { pat: "nna", rep: "న్న" },
+    { pat: "nni", rep: "న్ని" },
+    { pat: "nnu", rep: "న్ను" },
+    { pat: "nn", rep: "న్న్" },
+    { pat: "lla", rep: "ల్ల" },
+    { pat: "lli", rep: "ల్లి" },
+    { pat: "llu", rep: "ల్లు" },
+    { pat: "ll", rep: "ల్ల్" },
+    { pat: "rra", rep: "ర్ర" },
+    { pat: "rri", rep: "ర్రి" },
+    { pat: "rru", rep: "ర్రు" },
+    { pat: "rr", rep: "ర్ర" },
+    { pat: "ka", rep: "క" }, { pat: "kaa", rep: "కా" }, { pat: "ki", rep: "కి" }, { pat: "kee", rep: "కీ" }, { pat: "ku", rep: "కు" }, { pat: "koo", rep: "కూ" }, { pat: "ke", rep: "కె" }, { pat: "kae", rep: "కే" }, { pat: "ko", rep: "కొ" }, { pat: "koa", rep: "కో" }, { pat: "kai", rep: "కై" }, { pat: "kau", rep: "కౌ" }, { pat: "k", rep: "క్" },
+    { pat: "ga", rep: "గ" }, { pat: "gaa", rep: "గా" }, { pat: "gi", rep: "గి" }, { pat: "gee", rep: "గీ" }, { pat: "gu", rep: "గు" }, { pat: "goo", rep: "గూ" }, { pat: "ge", rep: "గె" }, { pat: "gae", rep: "గే" }, { pat: "go", rep: "గొ" }, { pat: "goa", rep: "గో" }, { pat: "gai", rep: "గై" }, { pat: "gau", rep: "గౌ" }, { pat: "g", rep: "గ్" },
+    { pat: "ja", rep: "జ" }, { pat: "jaa", rep: "జా" }, { pat: "ji", rep: "జి" }, { pat: "jee", rep: "జీ" }, { pat: "ju", rep: "జు" }, { pat: "joo", rep: "జూ" }, { pat: "je", rep: "జె" }, { pat: "jae", rep: "జే" }, { pat: "jo", rep: "జొ" }, { pat: "joa", rep: "జో" }, { pat: "jai", rep: "జై" }, { pat: "j", rep: "జ్" },
+    { pat: "ta", rep: "ట" }, { pat: "taa", rep: "టా" }, { pat: "ti", rep: "టి" }, { pat: "tee", rep: "టీ" }, { pat: "tu", rep: "టు" }, { pat: "too", rep: "టూ" }, { pat: "te", rep: "టె" }, { pat: "tae", rep: "టే" }, { pat: "to", rep: "టొ" }, { pat: "toa", rep: "టో" }, { pat: "t", rep: "ట్" },
+    { pat: "da", rep: "డ" }, { pat: "daa", rep: "డా" }, { pat: "di", rep: "డి" }, { pat: "dee", rep: "డీ" }, { pat: "du", rep: "డు" }, { pat: "doo", rep: "డూ" }, { pat: "de", rep: "డె" }, { pat: "dae", rep: "డే" }, { pat: "do", rep: "డొ" }, { pat: "doa", rep: "డో" }, { pat: "d", rep: "డ్" },
+    { pat: "na", rep: "న" }, { pat: "naa", rep: "నా" }, { pat: "ni", rep: "ని" }, { pat: "nee", rep: "నీ" }, { pat: "nu", rep: "ను" }, { pat: "noo", rep: "నూ" }, { pat: "ne", rep: "నె" }, { pat: "nae", rep: "నే" }, { pat: "no", rep: "నొ" }, { pat: "noa", rep: "నో" }, { pat: "nai", rep: "నై" }, { pat: "n", rep: "న్" },
+    { pat: "pa", rep: "ప" }, { pat: "paa", rep: "పా" }, { pat: "pi", rep: "పి" }, { pat: "pee", rep: "పీ" }, { pat: "pu", rep: "పు" }, { pat: "poo", rep: "పూ" }, { pat: "pe", rep: "పె" }, { pat: "pae", rep: "పే" }, { pat: "po", rep: "పొ" }, { pat: "poa", rep: "పో" }, { pat: "pai", rep: "పై" }, { pat: "p", rep: "ప్" },
+    { pat: "ba", rep: "బ" }, { pat: "baa", rep: "బా" }, { pat: "bi", rep: "బి" }, { pat: "bee", rep: "బీ" }, { pat: "bu", rep: "బు" }, { pat: "boo", rep: "బూ" }, { pat: "be", rep: "బె" }, { pat: "bae", rep: "బే" }, { pat: "bo", rep: "బొ" }, { pat: "boa", rep: "బో" }, { pat: "b", rep: "బ్" },
+    { pat: "ma", rep: "మ" }, { pat: "maa", rep: "మా" }, { pat: "mi", rep: "మి" }, { pat: "mee", rep: "మీ" }, { pat: "mu", rep: "ము" }, { pat: "moo", rep: "మూ" }, { pat: "me", rep: "మె" }, { pat: "mae", rep: "మే" }, { pat: "mo", rep: "మొ" }, { pat: "moa", rep: "మో" }, { pat: "mai", rep: "మై" }, { pat: "m", rep: "మ్" },
+    { pat: "ya", rep: "య" }, { pat: "yaa", rep: "యా" }, { pat: "yi", rep: "యి" }, { pat: "yee", rep: "యీ" }, { pat: "yu", rep: "యు" }, { pat: "yoo", rep: "యూ" }, { pat: "ye", rep: "యె" }, { pat: "yae", rep: "యే" }, { pat: "yo", rep: "యొ" }, { pat: "yoa", rep: "యో" }, { pat: "y", rep: "య్" },
+    { pat: "ra", rep: "ర" }, { pat: "raa", rep: "రా" }, { pat: "ri", rep: "రి" }, { pat: "ree", rep: "రీ" }, { pat: "ru", rep: "రు" }, { pat: "roo", rep: "రూ" }, { pat: "re", rep: "రె" }, { pat: "rae", rep: "రే" }, { pat: "ro", rep: "రొ" }, { pat: "roa", rep: "రో" }, { pat: "rai", rep: "రై" }, { pat: "r", rep: "ర్" },
+    { pat: "la", rep: "ల" }, { pat: "laa", rep: "లా" }, { pat: "li", rep: "లి" }, { pat: "lee", rep: "లీ" }, { pat: "lu", rep: "లు" }, { pat: "loo", rep: "లూ" }, { pat: "le", rep: "లె" }, { pat: "lae", rep: "లే" }, { pat: "lo", rep: "లొ" }, { pat: "loa", rep: "లో" }, { pat: "lai", rep: "లై" }, { pat: "l", rep: "ల్" },
+    { pat: "va", rep: "వ" }, { pat: "vaa", rep: "వా" }, { pat: "vi", rep: "వి" }, { pat: "vu", rep: "వు" }, { pat: "voo", rep: "వూ" }, { pat: "ve", rep: "వె" }, { pat: "vae", rep: "వే" }, { pat: "vo", rep: "వొ" }, { pat: "voa", rep: "వో" }, { pat: "vai", rep: "వై" }, { pat: "v", rep: "ヴ" },
+    { pat: "wa", rep: "వ" }, { pat: "waa", rep: "వా" }, { pat: "wi", rep: "వి" }, { pat: "wee", rep: "వీ" }, { pat: "wu", rep: "వు" }, { pat: "woe", rep: "వే" }, { pat: "wo", rep: "వొ" }, { pat: "w", rep: "వ్" },
+    { pat: "sa", rep: "స" }, { pat: "saa", rep: "సా" }, { pat: "si", rep: "సి" }, { pat: "see", rep: "సీ" }, { pat: "su", rep: "సు" }, { pat: "soo", rep: "సూ" }, { pat: "se", rep: "సె" }, { pat: "sae", rep: "సే" }, { pat: "so", rep: "సొ" }, { pat: "soa", rep: "సో" }, { pat: "sai", rep: "సై" }, { pat: "s", rep: "స్" },
+    { pat: "ha", rep: "హ" }, { pat: "haa", rep: "హ" }, { pat: "hi", rep: "హి" }, { pat: "hee", rep: "హీ" }, { pat: "hu", rep: "హు" }, { pat: "hoo", rep: "హూ" }, { pat: "he", rep: "హె" }, { pat: "hae", rep: "హే" }, { pat: "ho", rep: "హొ" }, { pat: "hoa", rep: "హో" }, { pat: "h", rep: "హ్" },
+    { pat: "aa", rep: "ఆ" },
+    { pat: "ee", rep: "ఈ" },
+    { pat: "oo", rep: "ఊ" },
+    { pat: "ae", rep: "ఏ" },
+    { pat: "ai", rep: "ఐ" },
+    { pat: "ou", rep: "ఔ" },
+    { pat: "au", rep: "ఔ" },
+    { pat: "a", rep: "అ" },
+    { pat: "i", rep: "ఇ" },
+    { pat: "u", rep: "ఉ" },
+    { pat: "e", rep: "ఎ" },
+    { pat: "o", rep: "ఒ" }
+  ];
+  let index = 0;
+  let res = "";
+  while (index < w.length) {
+    let matched = false;
+    for (const rule of rules) {
+      if (w.startsWith(rule.pat, index)) {
+        res += rule.rep;
+        index += rule.pat.length;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      const char = w[index];
+      if (/[a-z]/.test(char)) {
+        // Skip
+      } else {
+        res += char;
+      }
+      index++;
+    }
+  }
+  return res;
+}
+
+export function transliterateEnglishToTelugu(text: string): string {
+  if (!text) return "";
+  if (/[\u0c00-\u0c7f]/.test(text)) return text;
+  
+  const overrides: Record<string, string> = {
+    "shraddha": "శ్రద్ధ",
+    "murri": "ముర్రి",
+    "haritej": "హరితేజ్",
+    "karthik": "కార్తీక్",
+    "ramesh": "రమేష్",
+    "suresh": "సురేష్",
+    "chinna": "చిన్న",
+    "murthy": "మూర్తి",
+    "reddy": "రెడ్డి",
+    "rao": "రావు",
+    "naidu": "నాయుడు",
+    "kumar": "కుమార్",
+    "laxmi": "లక్ష్మి",
+    "lakshmi": "లక్ష్మి",
+    "devi": "దేవి",
+    "srinivas": "శ్రీనివాస్",
+    "venkat": "వెంకట్",
+    "satish": "సతీష్",
+    "prasad": "ప్రసాద్",
+    "krishna": "కృష్ణ",
+    "raju": "రాజు",
+    "anil": "అనిల్",
+    "mohan": "మోహన్",
+    "gopal": "గోపాల్",
+    "shankar": "శంకర్",
+    "siva": "శివ",
+    "shiva": "శివ",
+    "seetha": "సీత",
+    "sita": "సీత",
+    "ram": "రామ్",
+    "rama": "రామ",
+    "swamy": "స్వామి",
+    "sekhar": "శేఖర్",
+    "shekhar": "శేఖర్",
+    "babu": "బాబు",
+    "latha": "లత",
+    "rani": "రాణి",
+  };
+
+  const words = text.split(/(\s+)/);
+  const translatedWords = words.map(word => {
+    const trimmed = word.trim();
+    if (!trimmed) return word;
+    const lower = trimmed.toLowerCase();
+    if (overrides[lower]) return overrides[lower];
+    if (teluguTranslations[lower]) return teluguTranslations[lower];
+    return phonemeTransliterate(trimmed);
+  });
+
+  return translatedWords.join("");
+}
+
 export function translateTelugu(text: string): string {
   if (!text) return "";
   const cleaned = text.trim();
@@ -224,10 +422,7 @@ export function translateTelugu(text: string): string {
   if (teluguTranslations[lower]) {
     return teluguTranslations[lower];
   }
-  return cleaned.split(/\b/).map(word => {
-    const wordLower = word.toLowerCase();
-    return teluguTranslations[wordLower] || word;
-  }).join("");
+  return transliterateEnglishToTelugu(cleaned);
 }
 
 export async function openAccountStatementPrint(

@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -203,7 +204,7 @@ export default function BlockAadhaarScreen() {
                 </View>
 
                 {activeTab === "new" ? (
-                  <View style={styles.form}>
+                  <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                     <Text style={[styles.label, { color: colors.text }]}>Aadhaar number</Text>
                     <TextInput
                       accessibilityLabel="Aadhaar number"
@@ -240,7 +241,7 @@ export default function BlockAadhaarScreen() {
                       {saving ? <ActivityIndicator color={colors.white} /> : <Icon name="lock-closed-outline" size={18} color={colors.white} />}
                       <Text style={styles.blockBtnText}>{saving ? "Blocking..." : "Block Aadhaar"}</Text>
                     </Pressable>
-                  </View>
+                  </ScrollView>
                 ) : loading ? (
                   <View style={styles.loading}>
                     <ActivityIndicator color="#6C63FF" />

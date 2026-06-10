@@ -12,6 +12,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -106,6 +107,99 @@ function getEndOfDay(ts: number): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
 }
 
+interface DatePickerFieldProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  style?: any;
+}
+
+function DatePickerField({ value, onChange, placeholder, style }: DatePickerFieldProps) {
+  const { colors } = useTheme();
+  const [showPicker, setShowPicker] = useState(false);
+
+  const dateValue = useMemo(() => {
+    const parsed = parseDDMMYYYY(value);
+    return parsed ? new Date(parsed) : new Date();
+  }, [value]);
+
+  const webDateValue = useMemo(() => {
+    return ddmmToYyyymmdd(value);
+  }, [value]);
+
+  if (Platform.OS === "web") {
+    return (
+      <input
+        type="date"
+        value={webDateValue}
+        onChange={(e) => {
+          const yyyymmdd = e.target.value;
+          if (yyyymmdd) {
+            onChange(yyyymmddToDdmm(yyyymmdd));
+          } else {
+            onChange("");
+          }
+        }}
+        style={{
+          backgroundColor: colors.surfaceTint || "#f6fffe",
+          borderWidth: "1px",
+          borderStyle: "solid",
+          borderColor: colors.border || "#d8f7f4",
+          borderRadius: "12px",
+          padding: "12px 14px",
+          fontSize: "15px",
+          color: colors.text || "#111827",
+          width: "100%",
+          boxSizing: "border-box",
+          cursor: "pointer",
+          ...(style || {}),
+        }}
+      />
+    );
+  }
+
+  return (
+    <View style={{ width: "100%" }}>
+      <Pressable
+        onPress={() => setShowPicker(true)}
+        style={[
+          {
+            backgroundColor: colors.surfaceTint || "#f6fffe",
+            borderWidth: 1,
+            borderColor: colors.border || "#d8f7f4",
+            borderRadius: 12,
+            paddingVertical: 12,
+            paddingHorizontal: 14,
+            minHeight: 45,
+            justifyContent: "center",
+          },
+          style,
+        ]}
+      >
+        <Text style={{ fontSize: 15, color: value ? (colors.text || "#111827") : (colors.textMuted || "#78909c") }}>
+          {value || placeholder || "DD/MM/YYYY"}
+        </Text>
+      </Pressable>
+
+      {showPicker && (
+        <DateTimePicker
+          value={dateValue}
+          mode="date"
+          display="default"
+          onChange={(event, selectedDate) => {
+            setShowPicker(false);
+            if (selectedDate) {
+              const day = String(selectedDate.getDate()).padStart(2, "0");
+              const month = String(selectedDate.getMonth() + 1).padStart(2, "0");
+              const year = selectedDate.getFullYear();
+              onChange(`${day}/${month}/${year}`);
+            }
+          }}
+        />
+      )}
+    </View>
+  );
+}
 
 export default function AccountScreen() {
   const { user } = useAuth();
@@ -116,8 +210,8 @@ export default function AccountScreen() {
 
 
 
-  // Selected Tab state: 'summary' | 'investments' | 'expenses' | 'dues' | 'notes'
-  const [activeTab, setActiveTab] = useState<"summary" | "investments" | "expenses" | "dues" | "notes">("summary");
+  // Selected Tab state: 'summary' | 'investments' | 'expenses' | 'notes'
+  const [activeTab, setActiveTab] = useState<"summary" | "investments" | "expenses" | "notes">("summary");
 
   // Loading States
   const [loading, setLoading] = useState(true);
@@ -299,19 +393,6 @@ export default function AccountScreen() {
     };
   }, [user]);
 
-  // Dynamic input formatting for date (DD/MM/YYYY)
-  const handleDateChange = useCallback((text: string, setter: (val: string) => void) => {
-    let cleaned = text.replace(/[^0-9]/g, "");
-    if (cleaned.length > 8) cleaned = cleaned.slice(0, 8);
-
-    let formatted = cleaned;
-    if (cleaned.length > 4) {
-      formatted = `${cleaned.slice(0, 2)}/${cleaned.slice(2, 4)}/${cleaned.slice(4)}`;
-    } else if (cleaned.length > 2) {
-      formatted = `${cleaned.slice(0, 2)}/${cleaned.slice(2)}`;
-    }
-    setter(formatted);
-  }, []);
 
   // Balancing Fund calculation based on dates
   const getBalancingFundForDateState = useCallback((targetDdmmStr: string) => {
@@ -778,46 +859,7 @@ export default function AccountScreen() {
     return list.sort((a, b) => b.date - a.date);
   }, [investments, payments, loans, expenses, startDateStr, endDateStr, customers, isTe]);
 
-  const highestDuesList = useMemo(() => {
-    const customerMap = new Map<string, any>();
-    customers.forEach((c) => {
-      customerMap.set(c.id, c);
-    });
 
-    const dueCountMap = new Map<string, number>();
-    payments.forEach((p) => {
-      if ((p.paymentType === "DUE" || p.type === "DUE") && p.customerId) {
-        dueCountMap.set(p.customerId, (dueCountMap.get(p.customerId) || 0) + 1);
-      }
-    });
-
-    // Find active loans
-    const activeLoans = loans.filter((l) => l.status === "ACTIVE");
-
-    // Group loans by customer, compute outstanding balance and dues count
-    const dues = activeLoans.map((l) => {
-      const cust = customerMap.get(l.customerId);
-      const dueCount = dueCountMap.get(l.customerId) || 0;
-      return {
-        loanId: l.id,
-        customerId: l.customerId,
-        customerName: cust?.name ?? "Unknown",
-        numericalId: cust?.numericalId ?? "",
-        villageName: cust?.villageName ?? "No village",
-        balanceAmount: l.balanceAmount ?? 0,
-        dueCount,
-        phone: cust?.phone ?? "",
-      };
-    });
-
-    // Sort by dueCount descending, then balanceAmount descending
-    return dues.sort((a, b) => {
-      if (b.dueCount !== a.dueCount) {
-        return b.dueCount - a.dueCount;
-      }
-      return b.balanceAmount - a.balanceAmount;
-    });
-  }, [loans, customers, payments]);
 
   // ─── Live Calculated Wallet Balance (DISPLAY ONLY) ───────────────────────
   // Derived from real-time onSnapshot data. NEVER writes back to Firestore
@@ -1072,26 +1114,18 @@ export default function AccountScreen() {
       <View style={styles.datePickerRow}>
         <View style={[styles.inputContainer, { flex: 1 }]}>
           <Text style={styles.inputLabel}>{t("startDate")}</Text>
-          <TextInput
-            style={styles.textInput}
+          <DatePickerField
             value={startDateStr}
-            onChangeText={(txt) => handleDateChange(txt, setStartDateStr)}
+            onChange={setStartDateStr}
             placeholder="DD/MM/YYYY"
-            maxLength={10}
-            keyboardType="numeric"
-            placeholderTextColor="#78909c"
           />
         </View>
         <View style={[styles.inputContainer, { flex: 1 }]}>
           <Text style={styles.inputLabel}>{t("endDate")}</Text>
-          <TextInput
-            style={styles.textInput}
+          <DatePickerField
             value={endDateStr}
-            onChangeText={(txt) => handleDateChange(txt, setEndDateStr)}
+            onChange={setEndDateStr}
             placeholder="DD/MM/YYYY"
-            maxLength={10}
-            keyboardType="numeric"
-            placeholderTextColor="#78909c"
           />
         </View>
       </View>
@@ -1166,26 +1200,18 @@ export default function AccountScreen() {
       <View style={styles.datePickerRow}>
         <View style={[styles.inputContainer, { flex: 1 }]}>
           <Text style={styles.inputLabel}>{t("startDate")}</Text>
-          <TextInput
-            style={styles.textInput}
+          <DatePickerField
             value={startDateStr}
-            onChangeText={(txt) => handleDateChange(txt, setStartDateStr)}
+            onChange={setStartDateStr}
             placeholder="DD/MM/YYYY"
-            maxLength={10}
-            keyboardType="numeric"
-            placeholderTextColor="#78909c"
           />
         </View>
         <View style={[styles.inputContainer, { flex: 1 }]}>
           <Text style={styles.inputLabel}>{t("endDate")}</Text>
-          <TextInput
-            style={styles.textInput}
+          <DatePickerField
             value={endDateStr}
-            onChangeText={(txt) => handleDateChange(txt, setEndDateStr)}
+            onChange={setEndDateStr}
             placeholder="DD/MM/YYYY"
-            maxLength={10}
-            keyboardType="numeric"
-            placeholderTextColor="#78909c"
           />
         </View>
       </View>
@@ -1249,55 +1275,7 @@ export default function AccountScreen() {
     </View>
   );
 
-  const renderHighestDuesCard = () => (
-    <View style={styles.card}>
-      <Text style={styles.cardTitle}>{t("highestDues")}</Text>
-      <Text style={styles.cardDesc}>
-        {isTe ? "అన్ని గ్రామాలలోని అత్యధిక బకాయిలు ఉన్న కస్టమర్ల వివరాలు" : "List of customers with highest outstanding dues across all villages"}
-      </Text>
 
-      <View style={styles.walletDivider} />
-
-      {highestDuesList.length === 0 ? (
-        <Text style={styles.emptyText}>
-          {isTe ? "బకాయిలు ఉన్న కస్టమర్లు ఎవరూ లేరు." : "No customers with outstanding dues found."}
-        </Text>
-      ) : (
-        highestDuesList.map((item, index) => (
-          <View key={item.loanId} style={styles.logRow}>
-            <View style={styles.logDetails}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <Text style={{ fontSize: 14, fontWeight: "900", color: "#d94841" }}>
-                  #{index + 1}
-                </Text>
-                <Text style={styles.logDesc}>{item.customerName} ({item.numericalId})</Text>
-              </View>
-              <Text style={styles.logDate}>{isTe ? "గ్రామం" : "Village"}: {item.villageName}</Text>
-              {item.phone ? (
-                <Text style={styles.logDate}>{isTe ? "మొబైల్" : "Phone"}: {item.phone}</Text>
-              ) : null}
-              <Text style={styles.logDate}>
-                {isTe ? "బకాయిలు" : "Dues"}: {item.dueCount}
-              </Text>
-            </View>
-            <View style={{ alignItems: "flex-end", gap: 4 }}>
-              <Text style={[styles.logAmount, { color: "#d94841" }]}>
-                Rs. {Math.round(item.balanceAmount).toLocaleString("en-IN")}
-              </Text>
-              <Pressable
-                style={[styles.smallEditBtn, { backgroundColor: "#fff5f5", borderColor: "#d94841" }]}
-                onPress={() => router.push(`/profile/${item.customerId}` as any)}
-              >
-                <Text style={[styles.smallEditText, { color: "#d94841" }]}>
-                  {isTe ? "చూడు" : "View"}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        ))
-      )}
-    </View>
-  );
 
   if (!user) return null;
 
@@ -1330,7 +1308,7 @@ export default function AccountScreen() {
                 showsHorizontalScrollIndicator={false} 
                 contentContainerStyle={styles.tabBar}
               >
-                {(["summary", "investments", "expenses", "dues", "notes"] as const).map((tab) => {
+                {(["summary", "investments", "expenses", "notes"] as const).map((tab) => {
                   const active = activeTab === tab;
                   const label = tab === "summary"
                     ? t("bfSummary")
@@ -1338,10 +1316,7 @@ export default function AccountScreen() {
                         ? t("investments")
                         : (tab === "expenses"
                             ? t("expenses")
-                            : (tab === "dues"
-                                ? t("highestDues")
-                                : "Notes"
-                              )
+                            : "Notes"
                           )
                       );
                   return (
@@ -1384,14 +1359,10 @@ export default function AccountScreen() {
                       <View style={styles.datePickerRow}>
                         <View style={[styles.inputContainer, { flex: 1.2 }]}>
                           <Text style={styles.inputLabel}>{t("date")}</Text>
-                          <TextInput
-                            style={styles.textInput}
+                          <DatePickerField
                             value={bfDateStr}
-                            onChangeText={(txt) => handleDateChange(txt, setBfDateStr)}
+                            onChange={setBfDateStr}
                             placeholder="DD/MM/YYYY"
-                            maxLength={10}
-                            keyboardType="numeric"
-                            placeholderTextColor="#78909c"
                           />
                         </View>
                         <View style={[styles.inputContainer, { flex: 1.8 }]}>
@@ -1500,15 +1471,11 @@ export default function AccountScreen() {
                             </View>
                           </View>
                           <View style={styles.inputContainer}>
-                            <Text style={styles.inputLabel}>Balances as of (DD/MM/YYYY)</Text>
-                            <TextInput
-                              style={styles.textInput}
+                            <Text style={styles.inputLabel}>Balances as of</Text>
+                            <DatePickerField
                               value={walletOpeningDateInput}
-                              onChangeText={(txt) => handleDateChange(txt, setWalletOpeningDateInput)}
+                              onChange={setWalletOpeningDateInput}
                               placeholder="DD/MM/YYYY"
-                              maxLength={10}
-                              keyboardType="numeric"
-                              placeholderTextColor="#78909c"
                             />
                           </View>
                           <Pressable
@@ -1632,14 +1599,10 @@ export default function AccountScreen() {
 
                       <View style={styles.inputContainer}>
                         <Text style={styles.inputLabel}>{t("date")}</Text>
-                        <TextInput
-                          style={styles.textInput}
+                        <DatePickerField
                           value={invDate}
-                          onChangeText={(txt) => handleDateChange(txt, setInvDate)}
+                          onChange={setInvDate}
                           placeholder="DD/MM/YYYY"
-                          maxLength={10}
-                          keyboardType="numeric"
-                          placeholderTextColor="#78909c"
                         />
                       </View>
 
@@ -1748,14 +1711,10 @@ export default function AccountScreen() {
 
                       <View style={styles.inputContainer}>
                         <Text style={styles.inputLabel}>{t("date")}</Text>
-                        <TextInput
-                          style={styles.textInput}
+                        <DatePickerField
                           value={expDate}
-                          onChangeText={(txt) => handleDateChange(txt, setExpDate)}
+                          onChange={setExpDate}
                           placeholder="DD/MM/YYYY"
-                          maxLength={10}
-                          keyboardType="numeric"
-                          placeholderTextColor="#78909c"
                         />
                       </View>
 
@@ -1812,11 +1771,7 @@ export default function AccountScreen() {
 
 
 
-                {activeTab === "dues" && (
-                  <View style={styles.cardContainer}>
-                    {renderHighestDuesCard()}
-                  </View>
-                )}
+
 
                 {activeTab === "notes" && (
                   <View style={styles.cardContainer}>
@@ -1965,14 +1920,11 @@ export default function AccountScreen() {
 
                   <View style={styles.inputContainer}>
                     <Text style={styles.modalLabel}>{t("date")}</Text>
-                    <TextInput
-                      style={[styles.textInput, { borderColor: "#e2e8f0" }]}
+                    <DatePickerField
                       value={editExpDate}
-                      onChangeText={(txt) => handleDateChange(txt, setEditExpDate)}
+                      onChange={setEditExpDate}
                       placeholder="DD/MM/YYYY"
-                      maxLength={10}
-                      keyboardType="numeric"
-                      placeholderTextColor="#78909c"
+                      style={{ borderColor: "#e2e8f0" }}
                     />
                   </View>
 
@@ -2045,14 +1997,11 @@ export default function AccountScreen() {
 
                   <View style={styles.inputContainer}>
                     <Text style={styles.modalLabel}>{t("date")}</Text>
-                    <TextInput
-                      style={[styles.textInput, { borderColor: "#e2e8f0" }]}
+                    <DatePickerField
                       value={editInvDate}
-                      onChangeText={(txt) => handleDateChange(txt, setEditInvDate)}
+                      onChange={setEditInvDate}
                       placeholder="DD/MM/YYYY"
-                      maxLength={10}
-                      keyboardType="numeric"
-                      placeholderTextColor="#78909c"
+                      style={{ borderColor: "#e2e8f0" }}
                     />
                   </View>
 

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from "react";
 import {
   Alert,
+  Linking,
   Platform,
   Pressable,
   ScrollView,

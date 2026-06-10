@@ -25,6 +25,8 @@ import { CustomerIdBadge } from "../../src/components/CustomerIdBadge";
 import Icon from "../../src/Icon";
 import { colors } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
+import { useLanguage } from "../../src/language-context";
+import { translateTelugu } from "../../src/exports";
 import { lightImpact } from "../../src/interactions";
 import { showToast } from "../../src/notify";
 import { getCachedCoordinates, LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
@@ -203,6 +205,7 @@ const CustomerItem = React.memo(function CustomerItem({
   isPaying?: boolean;
   isUpdatingLocation?: boolean;
 }) {
+  const { language } = useLanguage();
   const lastActionPressAtRef = useRef(0);
   const hasLocation = hasCoordinates(customer);
   const canPay = !!loan && loan.balanceAmount > 0 && !isPaying;
@@ -285,7 +288,7 @@ const CustomerItem = React.memo(function CustomerItem({
       {/* Column 2: Center Details */}
       <View style={styles.centerCol}>
         <Text style={[styles.cardName, status === "paid" ? { color: "#16803a" } : status === "due" ? { color: "#dc3545" } : { color: "#111827" }]} numberOfLines={1}>
-          {customer.name}
+          {language === "te" ? translateTelugu(customer.name) : customer.name}
         </Text>
         {getStatusBadge()}
 
@@ -471,6 +474,7 @@ export default function CustomerListScreen() {
   const { villageId } = useLocalSearchParams<{ villageId: string }>();
   const { user, loading: authLoading } = useAuth();
   const { colors } = useTheme();
+  const { language } = useLanguage();
   const insets = useSafeAreaInsets();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const cameraRef = useRef<any>(null);
@@ -1223,7 +1227,7 @@ export default function CustomerListScreen() {
                       {value.selected ? <Icon name="checkmark" size={15} color={colors.white} /> : null}
                     </Pressable>
                     <View style={styles.quickCollectInfo}>
-                      <Text style={styles.quickCollectName}>{item.name}</Text>
+                      <Text style={styles.quickCollectName}>{language === "te" ? translateTelugu(item.name) : item.name}</Text>
                       <Text style={styles.quickCollectMeta}>Balance Rs.{Math.round(loan?.balanceAmount ?? 0)}</Text>
                     </View>
                     <TextInput
@@ -1752,7 +1756,7 @@ export default function CustomerListScreen() {
             <Text style={[styles.manualPayTitle, { color: colors.text }]}>
               {manualPaymentMode === "PHONE" ? "PhonePe" : "Cash"} Payment
             </Text>
-            <Text style={[styles.manualPaySubtitle, { color: colors.textSecondary }]}>{manualPaymentCustomer?.name}</Text>
+            <Text style={[styles.manualPaySubtitle, { color: colors.textSecondary }]}>{manualPaymentCustomer?.name ? (language === "te" ? translateTelugu(manualPaymentCustomer.name) : manualPaymentCustomer.name) : ""}</Text>
             <TextInput
               placeholder="Enter amount"
               placeholderTextColor={colors.textMuted}

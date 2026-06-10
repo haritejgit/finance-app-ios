@@ -1,7 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useState } from "react";
-import { ActivityIndicator, Alert, Dimensions, Platform, Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Dimensions, Platform, Pressable, StyleSheet, Switch, Text, View, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
@@ -365,11 +365,23 @@ export default function SettingsScreen() {
     <AnimatedScreen style={styles.root}>
     <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
       <SafeAreaView style={styles.safe}>
-        <View style={styles.content}>
-          <Pressable style={styles.backBtn} onPress={() => router.back()}>
-            <Icon name="arrow-back" size={20} color={colors.white} />
-          </Pressable>
-
+        <Pressable style={styles.backBtn} onPress={() => router.back()}>
+          <Icon name="arrow-back" size={20} color={colors.white} />
+        </Pressable>
+        <ScrollView
+          style={{ flex: 1, width: "100%" }}
+          contentContainerStyle={{
+            padding: 16,
+            paddingTop: 68,
+            width: "100%",
+            maxWidth: Math.min(screenWidth - 32, 430),
+            alignSelf: "center",
+            gap: 18,
+            flexGrow: 1,
+            justifyContent: "center",
+          }}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.header}>
             <View style={styles.avatar}>
               <Icon name="person" size={28} color={colors.white} />
@@ -593,7 +605,7 @@ export default function SettingsScreen() {
               <Text style={styles.logoutText}>{t("logout")}</Text>
             </Pressable>
           </View>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     </LinearGradient>
     </AnimatedScreen>
