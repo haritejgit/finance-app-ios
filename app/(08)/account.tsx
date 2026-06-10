@@ -1324,33 +1324,42 @@ export default function AccountScreen() {
             </View>
 
             {/* Tabs Selector */}
-            <View style={styles.tabBar}>
-              {(["summary", "investments", "expenses", "dues", "notes"] as const).map((tab) => {
-                const active = activeTab === tab;
-                const label = tab === "summary"
-                  ? t("bfSummary")
-                  : (tab === "investments"
-                      ? t("investments")
-                      : (tab === "expenses"
-                          ? t("expenses")
-                          : (tab === "dues"
-                              ? t("highestDues")
-                              : "Notes"
-                            )
-                        )
-                    );
-                return (
-                  <Pressable
-                    key={tab}
-                    onPress={() => setActiveTab(tab)}
-                    style={[styles.tabButton, active && { borderBottomColor: colors.white }]}
-                  >
-                    <Text style={[styles.tabText, active && { color: colors.white, fontWeight: "800" }]}>
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+            <View style={styles.tabBarContainer}>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false} 
+                contentContainerStyle={styles.tabBar}
+              >
+                {(["summary", "investments", "expenses", "dues", "notes"] as const).map((tab) => {
+                  const active = activeTab === tab;
+                  const label = tab === "summary"
+                    ? t("bfSummary")
+                    : (tab === "investments"
+                        ? t("investments")
+                        : (tab === "expenses"
+                            ? t("expenses")
+                            : (tab === "dues"
+                                ? t("highestDues")
+                                : "Notes"
+                              )
+                          )
+                      );
+                  return (
+                    <Pressable
+                      key={tab}
+                      onPress={() => setActiveTab(tab)}
+                      style={[styles.tabButton, active && { borderBottomColor: colors.white }]}
+                    >
+                      <Text 
+                        numberOfLines={1}
+                        style={[styles.tabText, active && { color: colors.white, fontWeight: "800" }]}
+                      >
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
             </View>
 
             {loading ? (
@@ -2085,8 +2094,16 @@ const styles = StyleSheet.create({
   heroIconBox: { width: 44, height: 44, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.16)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
   heroTitle: { color: "#ffffff", fontSize: 21, fontWeight: "900" },
   heroSubtitle: { color: "rgba(255,255,255,0.8)", fontSize: 11, fontWeight: "600", marginTop: 1 },
-  tabBar: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.15)", paddingHorizontal: 16 },
-  tabButton: { flex: 1, paddingVertical: 12, alignItems: "center", borderBottomWidth: 2, borderBottomColor: "transparent" },
+  tabBarContainer: { borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.15)" },
+  tabBar: { flexDirection: "row", paddingHorizontal: 12 },
+  tabButton: { 
+    paddingHorizontal: 16, 
+    paddingVertical: 12, 
+    alignItems: "center", 
+    borderBottomWidth: 2, 
+    borderBottomColor: "transparent",
+    flexShrink: 0
+  },
   tabText: { color: "rgba(255,255,255,0.65)", fontSize: 13, fontWeight: "700" },
   scroll: { flex: 1 },
   scrollContainer: { padding: 16, paddingBottom: 36 },
