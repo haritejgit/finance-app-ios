@@ -30,7 +30,7 @@ import { translateTelugu } from "../../src/exports";
 import { lightImpact } from "../../src/interactions";
 import { showToast } from "../../src/notify";
 import { getCachedCoordinates, LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
-import { addCustomerWithLoan, addPayment, addPaymentsBatch, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersThisWeek, getVillageById, getCustomerLoanSummary, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, markDue, updateCustomer } from "../../src/repository";
+import { addCustomerWithLoan, addPayment, addPaymentsBatch, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersThisWeek, getVillageById, getCustomerLoanSummary, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, markDue, updateCustomer, isNumericalIdTaken, getNextNumericalId } from "../../src/repository";
 import { Customer, Loan, PaymentMode, Village } from "../../src/types";
 import { calculateDisbursedAmount, weekStart } from "../../src/business-logic";
 import { validateAadhaar, validateIndianPhone, validatePositiveAmount } from "../../src/validation";
@@ -39,6 +39,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 const noTextSelection = Platform.OS === "web" ? ({ userSelect: "none", WebkitUserSelect: "none" } as any) : undefined;
 
 type AddCustomerForm = {
+  numericalId: string;
   name: string;
   phone: string;
   aadhar: string;
@@ -54,6 +55,7 @@ type AddCustomerForm = {
 
 function createEmptyCustomerForm(): AddCustomerForm {
   return {
+    numericalId: "",
     name: "",
     phone: "",
     aadhar: "",
@@ -518,7 +520,7 @@ export default function CustomerListScreen() {
   const [aadhaarInfoDismissed, setAadhaarInfoDismissed] = useState(false);
   const [aadhaarReview, setAadhaarReview] = useState<AadhaarScanResult | null>(null);
   const [scannedData, setScannedData] = useState<AadhaarScanResult | null>(null);
-  const [formErrors, setFormErrors] = useState<{ phone?: string; aadhar?: string; principal?: string }>({});
+  const [formErrors, setFormErrors] = useState<{ phone?: string; aadhar?: string; principal?: string; numericalId?: string }>({});
   const cashToHand = useMemo(() => calculateDisbursedAmount(Number(form.principal || 0)), [form.principal]);
 
   const reload = useCallback(async (preserveScroll = false) => {
@@ -653,10 +655,18 @@ export default function CustomerListScreen() {
     setFormErrors({});
   }, []);
 
-  const openAddCustomer = useCallback(() => {
+  const openAddCustomer = useCallback(async () => {
     resetAddCustomerForm();
     setShowAdd(true);
-  }, [resetAddCustomerForm]);
+    if (user && village) {
+      try {
+        const nextId = await getNextNumericalId(user.uid, village.id);
+        setForm((f) => ({ ...f, numericalId: String(nextId) }));
+      } catch (err) {
+        console.error("Error fetching next ID:", err);
+      }
+    }
+  }, [resetAddCustomerForm, user, village]);
 
   const closeAddCustomer = useCallback(() => {
     setShowAdd(false);
@@ -1476,18 +1486,37 @@ export default function CustomerListScreen() {
                   </View>
 
                   <View style={styles.formRow}>
-                  <View style={styles.formColumn}>
-                    <Text style={[styles.label, { color: colors.text }]}>Co-Applicant ID</Text>
-                    <TextInput
-                      placeholder="Co-applicant ID"
-                      placeholderTextColor={colors.textMuted}
-                      value={form.coId}
-                      onChangeText={(t) => setForm((f) => ({ ...f, coId: t }))}
-                      style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
-                      keyboardType="numeric"
-                    />
+                    <View style={styles.formColumn}>
+                      <Text style={[styles.label, { color: colors.text }]}>Book No / ID *</Text>
+                      <TextInput
+                        placeholder="e.g. 15"
+                        placeholderTextColor={colors.textMuted}
+                        value={form.numericalId}
+                        onChangeText={(t) => {
+                          const sanitized = t.replace(/\D/g, "");
+                          setForm((f) => ({ ...f, numericalId: sanitized }));
+                          setFormErrors((current) => ({
+                            ...current,
+                            numericalId: sanitized ? undefined : "Book No is required",
+                          }));
+                        }}
+                        style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: formErrors.numericalId ? colors.error : colors.border, color: colors.text }]}
+                        keyboardType="numeric"
+                      />
+                      {formErrors.numericalId ? <Text style={styles.aadharWarning}>{formErrors.numericalId}</Text> : null}
+                    </View>
+                    <View style={styles.formColumn}>
+                      <Text style={[styles.label, { color: colors.text }]}>Co-Applicant ID</Text>
+                      <TextInput
+                        placeholder="Co-applicant ID"
+                        placeholderTextColor={colors.textMuted}
+                        value={form.coId}
+                        onChangeText={(t) => setForm((f) => ({ ...f, coId: t }))}
+                        style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
+                        keyboardType="numeric"
+                      />
+                    </View>
                   </View>
-                </View>
 
                 <Text style={[styles.label, { color: colors.text }]}>Location Description</Text>
                 <View style={styles.locationRow}>
@@ -1670,13 +1699,30 @@ export default function CustomerListScreen() {
 
                 <View style={styles.buttonContainer}>
                   <Pressable
-                    style={[styles.save, (!form.name || !form.phone || !form.principal || aadharBlocked) ? styles.saveDisabled : null]}
+                    style={[styles.save, (!form.name || !form.phone || !form.principal || !form.numericalId || aadharBlocked) ? styles.saveDisabled : null]}
                     onPress={async () => {
-                      if (!user || !village || !form.name || !form.phone || !form.principal || aadharBlocked) return;
+                      if (!user || !village || !form.name || !form.phone || !form.principal || !form.numericalId || aadharBlocked) return;
+                      const customId = Number(form.numericalId);
+                      if (isNaN(customId) || customId <= 0) {
+                        setFormErrors((f) => ({ ...f, numericalId: "Valid ID is required" }));
+                        showToast("error", "Invalid Book No", "Please enter a valid positive ID.");
+                        return;
+                      }
+                      const idTaken = await isNumericalIdTaken(user.uid, village.id, customId);
+                      if (idTaken) {
+                        setFormErrors((f) => ({ ...f, numericalId: "ID is already taken" }));
+                        Alert.alert(
+                          "Book No Taken",
+                          `ID ${customId} is already assigned to a customer or blocked in this village. Please enter a different ID.`
+                        );
+                        return;
+                      }
+
                       const nextErrors = {
                         phone: validateIndianPhone(form.phone),
                         aadhar: validateAadhaar(form.aadhar),
                         principal: validatePositiveAmount(form.principal, "Loan amount"),
+                        numericalId: undefined,
                       };
                       setFormErrors(nextErrors);
                       if (nextErrors.phone || nextErrors.aadhar || nextErrors.principal) {
@@ -1715,6 +1761,7 @@ export default function CustomerListScreen() {
                         village.dayOfWeek,
                         village.shift,
                         {
+                          numericalId: customId,
                           name: form.name,
                           phone: form.phone,
                           aadhar: normalizedAadhar,

@@ -293,11 +293,25 @@ export async function getNextNumericalId(userId: string, villageId: string) {
     }
   });
 
-  let nextId = 1;
-  while (assignedIds.has(nextId)) {
-    nextId += 1;
-  }
-  return nextId;
+  let maxId = 0;
+  assignedIds.forEach((id) => {
+    if (id > maxId) maxId = id;
+  });
+  return maxId + 1;
+}
+
+export async function isNumericalIdTaken(userId: string, villageId: string, numericalId: number): Promise<boolean> {
+  const q = query(
+    coll.customers,
+    where("userId", "==", userId),
+    where("villageId", "==", villageId),
+    where("numericalId", "==", numericalId)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.some((doc) => {
+    const data = doc.data() as Customer;
+    return data.isActive !== false || data.isBlocked === true;
+  });
 }
 
 async function normalizeCustomerGroup(customers: { ref: DocumentReference; customer: Customer }[]) {
@@ -380,7 +394,7 @@ export async function addCustomerWithLoan(
   villageId: string,
   dayOfWeek: string,
   shift: string,
-  input: Omit<Customer, "id" | "userId" | "villageId" | "numericalId" | "isActive" | "createdAt">,
+  input: Omit<Customer, "id" | "userId" | "villageId" | "isActive" | "createdAt"> & { numericalId?: number },
   principalAmount: number,
   startDate: number,
   disbursementMode: PaymentMode = "CASH"
@@ -389,7 +403,9 @@ export async function addCustomerWithLoan(
   const sanitizedInput = sanitizeCustomerInput(input);
   if (!sanitizedInput.name) throw new Error("Customer name is required.");
   if (!sanitizedInput.phone) throw new Error("Customer phone is required.");
-  const numericalId = await getNextNumericalId(userId, villageId);
+  const numericalId = sanitizedInput.numericalId && sanitizedInput.numericalId > 0
+    ? sanitizedInput.numericalId
+    : await getNextNumericalId(userId, villageId);
   const customer: Customer = {
     id: id(),
     numericalId,

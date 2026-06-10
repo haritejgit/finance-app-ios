@@ -69,6 +69,9 @@ export function getLoanDistributedAmount(loan: Partial<Loan> & Record<string, an
 
 export function isRealCollectionPayment(payment: Record<string, any>): boolean {
   const kind = payment.paymentType ?? payment.type ?? "REGULAR";
+  if (kind === "DUE") {
+    return Number(payment.amountPaid || 0) > 0;
+  }
   return kind === "REGULAR" || kind === "CASH" || kind === "PHONE";
 }
 
