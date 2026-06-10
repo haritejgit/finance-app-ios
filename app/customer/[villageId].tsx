@@ -1400,24 +1400,7 @@ export default function CustomerListScreen() {
             
             <View style={styles.formContainer}>
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.formScrollContent}>
-                {!aadhaarInfoDismissed ? (
-                  <View style={styles.privacyBanner}>
-                    <Icon name="shield-checkmark-outline" size={18} color={colors.primary} />
-                    <Text style={styles.privacyText}>Scanning only reads Name, Aadhaar number, and address. No data is sent to any server.</Text>
-                    <Pressable onPress={() => setAadhaarInfoDismissed(true)} style={styles.privacyOkBtn}>
-                      <Text style={styles.privacyOkText}>OK</Text>
-                    </Pressable>
-                  </View>
-                ) : null}
-                {aadhaarReview ? (
-                  <View style={styles.reviewCard}>
-                    <Text style={styles.reviewTitle}>Review scanned details before saving</Text>
-                    <Text style={styles.reviewText}>Name: {aadhaarReview.name || "Not detected"}</Text>
-                    <Text style={styles.reviewText}>Aadhaar: {aadhaarReview.aadhaar || "Not detected"}</Text>
-                    <Text style={styles.reviewText}>Phone: {aadhaarReview.phone || "Not detected"}</Text>
-                    <Text style={styles.reviewText}>Address: {aadhaarReview.location_desc || "Not detected"}</Text>
-                  </View>
-                ) : null}
+
                 <View style={styles.formRow}>
                   <View style={styles.formColumn}>
                     <Text style={[styles.label, { color: colors.text }]}>Name *</Text>
