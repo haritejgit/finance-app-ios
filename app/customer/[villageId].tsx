@@ -22,7 +22,6 @@ import {
 import { useAuth } from "../../src/auth-context";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import { CustomerIdBadge } from "../../src/components/CustomerIdBadge";
-import { PhoneLink } from "../../src/components/PhoneLink";
 import Icon from "../../src/Icon";
 import { colors } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
@@ -296,7 +295,23 @@ const CustomerItem = React.memo(function CustomerItem({
         {getStatusBadge()}
 
         <View style={styles.phoneIconRow}>
-          <PhoneLink number={customer.phone} textStyle={styles.cardPhone} />
+          {customer.phone ? (
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel={`Call ${customer.phone}`}
+              onPress={(event) => {
+                event.stopPropagation?.();
+                const phoneUrl = `tel:${customer.phone.replace(/\D/g, "")}`;
+                Linking.openURL(phoneUrl).catch(() => undefined);
+              }}
+              style={styles.callLink}
+            >
+              <Icon name="call" size={14} color="#1565C0" />
+              <Text style={styles.cardPhone}>{customer.phone}</Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.cardPhone}>—</Text>
+          )}
         </View>
 
         {loan ? (
@@ -1928,6 +1943,16 @@ export default function CustomerListScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  callLink: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#E3F2FD",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 5,
+  },
   safe: { flex: 1 },
   content: { flex: 1, width: "100%", maxWidth: 430, alignSelf: "center", paddingTop: 8, paddingHorizontal: 8 },
   headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 10 },

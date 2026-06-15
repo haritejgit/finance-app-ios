@@ -21,7 +21,7 @@ import { useAuth } from "../../src/auth-context";
 import { AnimatedListItem } from "../../src/components/AnimatedListItem";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import { CustomerIdBadge } from "../../src/components/CustomerIdBadge";
-import { PhoneLink } from "../../src/components/PhoneLink";
+
 import { getDashboardAnalytics, subscribeDashboardAnalytics, type CustomerState, type DashboardAnalytics } from "../../src/finance-analytics";
 import Icon from "../../src/Icon";
 import { lightImpact } from "../../src/interactions";
@@ -704,7 +704,7 @@ export default function ShiftSelectionScreen() {
                             <Text style={[styles.searchCustomerMeta, { color: colors.textSecondary }]}>
                               {item.villageName || "No village"} | {item.villageDayOfWeek || "-"} {item.villageShift || ""}
                             </Text>
-                            <PhoneLink number={item.phone} textStyle={[styles.searchCustomerPhone, { color: colors.textMuted }]} />
+                            <Text style={[styles.searchCustomerPhone, { color: colors.textMuted }]}>{item.phone || "—"}</Text>
                           </View>
                           <Text style={[styles.statePill, { backgroundColor: colors.primarySoft, color: colors.primary }]}>{state}</Text>
                         </Pressable>
