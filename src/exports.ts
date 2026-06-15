@@ -4,6 +4,12 @@ import { Customer, Loan } from "./types";
 import {
   buildStatementData,
   formatAlignedStatementBody,
+  formatAmountWithSign,
+  formatIndianNumber,
+  StatementData,
+  StatementLanguage,
+  StatementLineType,
+  translateStatementLabel,
 } from "./statement-format";
 
 function escapeHtml(value: unknown) {
@@ -12,6 +18,109 @@ function escapeHtml(value: unknown) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+type LedgerHtmlRow =
+  | { kind: "line"; label: string; amount: string; type?: StatementLineType }
+  | { kind: "divider" }
+  | { kind: "message"; text: string };
+
+function buildLedgerRows(statementData: StatementData, language: StatementLanguage): LedgerHtmlRow[] {
+  const rows: LedgerHtmlRow[] = [];
+  const hasRows =
+    statementData.investments.length +
+      statementData.collections.length +
+      statementData.payments.length +
+      statementData.expenses.length >
+    0;
+
+  rows.push({ kind: "line", label: "BF", amount: formatIndianNumber(statementData.bf), type: "balance" });
+
+  if (!hasRows) {
+    rows.push({ kind: "message", text: language === "te" ? "ఈ కాలంలో లావాదేవీలు లేవు" : "No transactions in this period" });
+    rows.push({ kind: "divider" });
+    rows.push({ kind: "line", label: translateStatementLabel("Total", language), amount: formatIndianNumber(statementData.total), type: "total" });
+    return rows;
+  }
+
+  statementData.investments.forEach((item) => {
+    rows.push({
+      kind: "line",
+      label: translateStatementLabel(item.name, language),
+      amount: formatAmountWithSign(item.amount, item.type),
+      type: item.type,
+    });
+  });
+  if (statementData.investments.length > 0) {
+    rows.push({ kind: "divider" });
+    rows.push({ kind: "line", label: "", amount: formatIndianNumber(statementData.subtotal1), type: "subtotal" });
+  }
+
+  statementData.collections.forEach((item) => {
+    rows.push({
+      kind: "line",
+      label: translateStatementLabel(item.name, language),
+      amount: formatAmountWithSign(item.amount, item.type),
+      type: item.type,
+    });
+  });
+  statementData.payments.forEach((item) => {
+    rows.push({
+      kind: "line",
+      label: translateStatementLabel(item.name, language),
+      amount: formatAmountWithSign(item.amount, item.type),
+      type: item.type,
+    });
+  });
+  if (statementData.collections.length > 0 || statementData.payments.length > 0) {
+    rows.push({ kind: "divider" });
+    rows.push({ kind: "line", label: "", amount: formatIndianNumber(statementData.subtotal2), type: "subtotal" });
+  }
+
+  statementData.expenses.forEach((item) => {
+    rows.push({
+      kind: "line",
+      label: translateStatementLabel(item.name, language),
+      amount: formatAmountWithSign(item.amount, item.type),
+      type: item.type,
+    });
+  });
+  if (statementData.expenses.length > 0) {
+    rows.push({ kind: "divider" });
+  }
+  rows.push({ kind: "line", label: translateStatementLabel("Total", language), amount: formatIndianNumber(statementData.total), type: "total" });
+
+  return rows;
+}
+
+function renderLedgerHtml(statementData: StatementData, language: StatementLanguage): string {
+  return `
+    <div class="ledger-table" role="table" aria-label="Account statement">
+      ${buildLedgerRows(statementData, language)
+        .map((row) => {
+          if (row.kind === "divider") {
+            return `
+              <div class="ledger-row ledger-divider" role="row">
+                <div class="ledger-label"></div>
+                <div class="ledger-eq"></div>
+                <div class="ledger-amount">---------</div>
+              </div>
+            `;
+          }
+          if (row.kind === "message") {
+            return `<div class="ledger-message">${escapeHtml(row.text)}</div>`;
+          }
+          return `
+            <div class="ledger-row ${row.type === "total" ? "ledger-total" : ""}" role="row">
+              <div class="ledger-label">${escapeHtml(row.label)}</div>
+              <div class="ledger-eq">=</div>
+              <div class="ledger-amount">${escapeHtml(row.amount)}</div>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
 }
 
 export function downloadTextFile(filename: string, contents: string, mimeType = "application/json") {
@@ -457,7 +566,7 @@ export async function openAccountStatementPrint(
     village: villageName,
     email: userEmail,
   });
-  const ledgerText = formatAlignedStatementBody(statementData, language);
+  const ledgerHtml = renderLedgerHtml(statementData, language);
   const win = window.open("", "_blank", "width=600,height=780");
   if (!win) return { success: false, platform: "web" };
   win.document.write(`
@@ -470,12 +579,29 @@ export async function openAccountStatementPrint(
         <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&family=Noto+Sans+Telugu:wght@400;500;700&display=swap" rel="stylesheet">
         <style>
           body { margin: 0; padding: 30px 15px; font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; display: flex; justify-content: center; }
-          #statement-card { background: #fff; width: 100%; max-width: 480px; border: 1px solid #cbd5e1; border-radius: 16px; padding: 32px 28px; box-sizing: border-box; }
+          #statement-card { background: #fff; width: 100%; max-width: 520px; border: 1px solid #cbd5e1; border-radius: 16px; padding: 32px 28px; box-sizing: border-box; }
           .header { text-align: center; margin-bottom: 18px; border-bottom: 2px dashed #cbd5e1; padding-bottom: 14px; }
           .header h2 { margin: 0; font-size: 20px; font-weight: 800; color: #0f172a; }
           .header h3 { margin: 5px 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; }
           .header p { margin: 3px 0; font-size: 12px; color: #64748b; }
-          pre { font-family: 'Roboto Mono', 'Noto Sans Telugu', monospace; font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; color: #1e293b; }
+          .ledger-table { display: flex; flex-direction: column; gap: 7px; font-size: 14px; line-height: 1.35; color: #1e293b; }
+          .ledger-row { display: grid; grid-template-columns: minmax(0, 1fr) 18px minmax(104px, max-content); column-gap: 10px; align-items: baseline; }
+          .ledger-label { min-width: 0; font-family: 'Noto Sans Telugu', system-ui, -apple-system, sans-serif; font-weight: 700; overflow-wrap: anywhere; }
+          .ledger-eq { font-family: 'Roboto Mono', ui-monospace, monospace; font-weight: 700; text-align: center; }
+          .ledger-amount { font-family: 'Roboto Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; font-weight: 700; text-align: right; white-space: nowrap; letter-spacing: 0; }
+          .ledger-divider { margin: 3px 0; }
+          .ledger-divider .ledger-amount { color: #475569; }
+          .ledger-message { grid-column: 1 / -1; color: #64748b; font-weight: 700; padding: 6px 0; }
+          .ledger-total { margin-top: 6px; font-weight: 900; }
+          .ledger-total .ledger-label,
+          .ledger-total .ledger-eq,
+          .ledger-total .ledger-amount { font-weight: 900; }
+          @media (max-width: 420px) {
+            body { padding: 18px 8px; }
+            #statement-card { padding: 26px 18px; }
+            .ledger-table { font-size: 13px; gap: 6px; }
+            .ledger-row { grid-template-columns: minmax(0, 1fr) 16px minmax(92px, max-content); column-gap: 8px; }
+          }
           @media print { body { background: #fff; padding: 0; } #statement-card { border: 0; border-radius: 0; } }
         </style>
       </head>
@@ -488,7 +614,7 @@ export async function openAccountStatementPrint(
             <p>Village: ${escapeHtml(villageName)}</p>
             ${userEmail ? `<p>Email: ${escapeHtml(userEmail)}</p>` : ""}
           </div>
-          <pre>${escapeHtml(ledgerText)}</pre>
+          ${ledgerHtml}
         </div>
         <script>setTimeout(function(){ window.print(); }, 400);</script>
       </body>
