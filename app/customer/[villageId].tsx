@@ -22,6 +22,7 @@ import {
 import { useAuth } from "../../src/auth-context";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import { CustomerIdBadge } from "../../src/components/CustomerIdBadge";
+import { PhoneLink } from "../../src/components/PhoneLink";
 import Icon from "../../src/Icon";
 import { colors } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
@@ -295,10 +296,7 @@ const CustomerItem = React.memo(function CustomerItem({
         {getStatusBadge()}
 
         <View style={styles.phoneIconRow}>
-          <View style={styles.phoneCircleBadge}>
-            <Icon name="call" size={10} color="#FFFFFF" />
-          </View>
-          <Text style={styles.cardPhone}>{customer.phone || "-"}</Text>
+          <PhoneLink number={customer.phone} textStyle={styles.cardPhone} />
         </View>
 
         {loan ? (

@@ -191,8 +191,8 @@ service cloud.firestore {
 
     match /balancingFund/{docId} {
       allow read: if ownsExistingDoc();
-      allow create: if createsOwnDoc();
-      allow update: if ownsExistingDoc() && keepsOwnerImmutable();
+      allow create: if createsOwnDoc() && validNonNegative('amount') && validString('dateStr', 20);
+      allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validNonNegative('amount') && validString('dateStr', 20);
       allow delete: if ownsExistingDoc();
     }
 

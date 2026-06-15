@@ -22,6 +22,7 @@ import { useAuth } from "../../src/auth-context";
 import { AnimatedListItem } from "../../src/components/AnimatedListItem";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import { CustomerIdBadge } from "../../src/components/CustomerIdBadge";
+import { PhoneLink } from "../../src/components/PhoneLink";
 import Icon from "../../src/Icon";
 import { LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
 import {
@@ -961,10 +962,9 @@ export default function ProfileScreen() {
                     <Icon name="person" size={18} color={colors.blue2} style={{marginRight: 8}} />
                     <Text style={[styles.headerText, { color: colors.textSecondary }]}>Book No: {String(customer.numericalId).padStart(2, "0")}</Text>
                   </View>
-                  <Pressable onPress={() => makePhoneCall(customer.phone)} style={styles.headerInfoRow}>
-                    <Icon name="call" size={18} color={colors.blue2} style={{marginRight: 8}} />
-                    <Text style={[styles.headerText, styles.phoneLink, { color: colors.primary }]}>{customer.phone}</Text>
-                  </Pressable>
+                  <View style={styles.headerInfoRow}>
+                    <PhoneLink number={customer.phone} textStyle={[styles.headerText, styles.phoneLink, { color: colors.primary }]} />
+                  </View>
                   <View style={styles.headerInfoRow}>
                     <Icon name="id-card" size={18} color={colors.blue2} style={{marginRight: 8}} />
                     <Text style={[styles.headerText, { color: colors.textSecondary }]}>Aadhar: {customer.aadhar}</Text>

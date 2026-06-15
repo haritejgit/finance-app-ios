@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import Clipboard from "@react-native-clipboard/clipboard";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -44,7 +45,15 @@ import {
   Expense,
 } from "../../src/repository";
 import { PaymentMode, UserProfile, Village } from "../../src/types";
-import { openAccountStatementPrint, ExportTransaction, ExportTotals, translateTelugu } from "../../src/exports";
+import { openAccountStatementPrint, ExportTransaction, ExportTotals } from "../../src/exports";
+import {
+  buildStatementData,
+  formatAmountWithSign,
+  formatIndianNumber,
+  formatStatementForWhatsApp,
+  shareViaWhatsApp,
+  stripExpenseSuffix,
+} from "../../src/statement-format";
 import { calculateWalletBalances } from "../../src/wallet-balances";
 
 import { useLanguage } from "../../src/language-context";
@@ -312,6 +321,8 @@ export default function AccountScreen() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportFormat, setExportFormat] = useState<"pdf" | "jpg">("pdf");
   const [exportLanguage, setExportLanguage] = useState<"en" | "te">(isTe ? "te" : "en");
+  const [showWhatsAppSheet, setShowWhatsAppSheet] = useState(false);
+  const [shareLanguage, setShareLanguage] = useState<"en" | "te">(isTe ? "te" : "en");
   const [selectedVillageId, setSelectedVillageId] = useState<"ALL" | string>("ALL");
 
   // Default dates on mount
@@ -366,6 +377,12 @@ export default function AccountScreen() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    const nextLanguage = isTe ? "te" : "en";
+    setExportLanguage(nextLanguage);
+    setShareLanguage(nextLanguage);
+  }, [isTe]);
 
   // ─── Real-time wallet data subscription ────────────────────────────────────
   // Sets up onSnapshot listeners for expenses, payments, loans, investments, and
@@ -788,6 +805,9 @@ export default function AccountScreen() {
       sumExps,
       netTotal,
       rangeExps,
+      rangeInvs,
+      rangeColls,
+      rangeLoans,
       expenseTotals,
     };
   }, [periodBf, investments, expenses, payments, loans, startDateStr, endDateStr]);
@@ -965,19 +985,19 @@ export default function AccountScreen() {
     let text = "";
     text += `BF               =  ${fmt(periodBf).padStart(9)}\n`;
     if (sumInvs > 0) {
-      text += `Investments      =  ${fmt(sumInvs).padStart(9)}\n`;
+      text += `Investments      =  ${formatAmountWithSign(sumInvs, "investment").padStart(9)}\n`;
       text += `                 ---------\n`;
       text += `                 =  ${fmt(periodBf + sumInvs).padStart(9)}\n`;
     }
-    text += `Collections      =  ${fmt(sumColls).padStart(9)}\n`;
-    text += `Payments         =  ${fmt(sumLoans).padStart(9)}\n`;
+    text += `Collections      =  ${formatAmountWithSign(sumColls, "collection").padStart(9)}\n`;
+    text += `Payments         =  ${formatAmountWithSign(sumLoans, "payment").padStart(9)}\n`;
     text += `                 ---------\n`;
     text += `                 =  ${fmt((sumInvs > 0 ? periodBf + sumInvs : periodBf) + sumColls - sumLoans).padStart(9)}\n`;
 
     if (expenseTotals.length > 0) {
       expenseTotals.forEach((exp) => {
-        const desc = `${exp.description} (Expense)`.slice(0, 16).padEnd(16);
-        text += `${desc} =  ${fmt(exp.amount).padStart(9)}\n`;
+        const desc = stripExpenseSuffix(exp.description).slice(0, 16).padEnd(16);
+        text += `${desc} =  ${formatAmountWithSign(exp.amount, "expense").padStart(9)}\n`;
       });
       text += `                 ---------\n`;
     }
@@ -985,6 +1005,103 @@ export default function AccountScreen() {
     text += `Total            =  ${fmt(netTotal).padStart(9)}`;
     return text;
   }, [periodBf, calculatedSummary]);
+
+  const currentStatementData = useMemo(() => {
+    const { rangeInvs, sumColls, sumLoans, expenseTotals, netTotal } = calculatedSummary;
+    const transactionsForStatement: ExportTransaction[] = [
+      ...rangeInvs.map((item) => ({
+        date: item.date,
+        type: "INVESTMENT" as const,
+        desc: item.investorName ? `Investment(${item.investorName})` : "Investment",
+        amount: item.amount,
+      })),
+      ...expenseTotals.map((item) => ({
+        date: 0,
+        type: "EXPENSE" as const,
+        desc: stripExpenseSuffix(item.description || "Expense"),
+        amount: item.amount,
+      })),
+    ];
+
+    return buildStatementData({
+      startDate: startDateStr,
+      endDate: endDateStr,
+      bf: periodBf,
+      transactions: transactionsForStatement,
+      totals: {
+        sumInvs: calculatedSummary.sumInvs,
+        sumColls,
+        sumLoans,
+        netTotal,
+      },
+      village: "All Villages",
+      email: user?.email ?? undefined,
+    });
+  }, [calculatedSummary, endDateStr, periodBf, startDateStr, user?.email]);
+
+  const whatsAppPreviewText = useMemo(
+    () => formatStatementForWhatsApp(currentStatementData, shareLanguage),
+    [currentStatementData, shareLanguage]
+  );
+
+  const sevenDayCashFlow = useMemo(() => {
+    const todayStart = getStartOfDay(Date.now());
+    return Array.from({ length: 7 }, (_, index) => {
+      const start = todayStart - (6 - index) * 24 * 60 * 60 * 1000;
+      const end = getEndOfDay(start);
+      const collections = payments
+        .filter((p) => {
+          const ts = p.date instanceof Date ? p.date.getTime() : p.date;
+          return p.paymentType === "REGULAR" && ts >= start && ts <= end;
+        })
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      const paid = loans
+        .filter((l) => {
+          const ts = l.date instanceof Date ? l.date.getTime() : l.date;
+          return ts >= start && ts <= end;
+        })
+        .reduce((sum, l) => sum + Number(l.amount || 0), 0);
+      const spent = expenses
+        .filter((e) => e.date >= start && e.date <= end)
+        .reduce((sum, e) => sum + Number(e.amount || 0), 0);
+      return {
+        label: new Date(start).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+        net: collections - paid - spent,
+      };
+    });
+  }, [expenses, loans, payments]);
+
+  const sevenDayNet = useMemo(() => sevenDayCashFlow.reduce((sum, day) => sum + day.net, 0), [sevenDayCashFlow]);
+  const sevenDayPeak = useMemo(
+    () => Math.max(1, ...sevenDayCashFlow.map((day) => Math.abs(day.net))),
+    [sevenDayCashFlow]
+  );
+
+  const copyWhatsAppPreview = useCallback(async () => {
+    try {
+      if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(whatsAppPreviewText);
+      } else {
+        await Clipboard.setString(whatsAppPreviewText);
+      }
+      Alert.alert(t("success"), "Copied to clipboard!");
+    } catch {
+      await Clipboard.setString(whatsAppPreviewText);
+      Alert.alert(t("success"), "Copied!");
+    }
+  }, [t, whatsAppPreviewText]);
+
+  const handleShareWhatsApp = useCallback(() => {
+    if (Platform.OS === "web") {
+      shareViaWhatsApp(whatsAppPreviewText);
+      return;
+    }
+    const encoded = encodeURIComponent(whatsAppPreviewText);
+    const url = `https://wa.me/?text=${encoded}`;
+    import("react-native").then(({ Linking }) => {
+      Linking.openURL(url).catch(() => Alert.alert(t("error"), "Could not open WhatsApp."));
+    });
+  }, [t, whatsAppPreviewText]);
 
   // Trigger export options modal
   const handleExportPDF = useCallback(() => {
@@ -1045,10 +1162,7 @@ export default function AccountScreen() {
     const transList: ExportTransaction[] = [];
 
     filteredInvs.forEach((i) => {
-      const name = i.investorName ? (exportLanguage === "te" ? translateTelugu(i.investorName) : i.investorName) : "";
-      const invDesc = name
-        ? `${exportLanguage === "te" ? "పెట్టుబడి" : "Investment"} (${name})`
-        : (exportLanguage === "te" ? "పెట్టుబడి" : "Investment");
+      const invDesc = i.investorName ? `Investment(${i.investorName})` : "Investment";
       transList.push({
         date: i.date,
         type: "INVESTMENT",
@@ -1059,8 +1173,7 @@ export default function AccountScreen() {
 
     filteredColls.forEach((p) => {
       const cust = customerMap.get(p.customerId);
-      const name = cust ? (exportLanguage === "te" ? translateTelugu(cust.name) : cust.name) : "";
-      const desc = cust ? `${name} (${cust.numericalId})` : (exportLanguage === "te" ? "వసూళ్లు" : "Collection");
+      const desc = cust ? `${cust.name} (${cust.numericalId})` : "Collections";
       transList.push({
         date: p.date instanceof Date ? p.date.getTime() : p.date,
         type: "COLLECTION",
@@ -1071,8 +1184,7 @@ export default function AccountScreen() {
 
     filteredLoans.forEach((l) => {
       const cust = customerMap.get(l.customerId);
-      const name = cust ? (exportLanguage === "te" ? translateTelugu(cust.name) : cust.name) : "";
-      const desc = cust ? `${name} (${cust.numericalId})` : (exportLanguage === "te" ? "పంచిన డబ్బులు" : "Loan");
+      const desc = cust ? `${cust.name} (${cust.numericalId})` : "Payments";
       transList.push({
         date: l.date instanceof Date ? l.date.getTime() : l.date,
         type: "LOAN",
@@ -1082,11 +1194,10 @@ export default function AccountScreen() {
     });
 
     filteredExps.forEach((e) => {
-      const desc = exportLanguage === "te" ? translateTelugu(e.description) : e.description;
       transList.push({
         date: e.date,
         type: "EXPENSE",
-        desc,
+        desc: stripExpenseSuffix(e.description || "Expense"),
         amount: e.amount
       });
     });
@@ -1110,7 +1221,7 @@ export default function AccountScreen() {
     };
 
     const targetVillageName = isAllVillages
-      ? (exportLanguage === "te" ? "à°…à°¨à±à°¨à°¿ à°—à±à°°à°¾à°®à°¾à°²à±" : "All Villages")
+      ? "All Villages"
       : (villages.find((v) => v.id === selectedVillageId)?.name ?? "Village");
 
     const res = await openAccountStatementPrint(
@@ -1162,10 +1273,43 @@ export default function AccountScreen() {
 
       <View style={styles.breakdownHeaderRow}>
         <Text style={styles.breakdownTitle}>{t("liveSummary")}</Text>
-        <Pressable style={styles.pdfButton} onPress={handleExportPDF}>
-          <Icon name="document-text-outline" size={14} color="#111827" />
-          <Text style={styles.pdfButtonText}>{isTe ? "à°Žà°—à±à°®à°¤à°¿" : "Export"}</Text>
-        </Pressable>
+        <View style={styles.summaryActions}>
+          <Pressable style={styles.pdfButton} onPress={handleExportPDF}>
+            <Icon name="document-text-outline" size={14} color="#111827" />
+            <Text style={styles.pdfButtonText}>{isTe ? "ఎగుమతి" : "Export"}</Text>
+          </Pressable>
+          <Pressable style={styles.whatsappShareBtn} onPress={() => setShowWhatsAppSheet(true)} accessibilityLabel="Share via WhatsApp">
+            <Icon name="logo-whatsapp" size={14} color="#ffffff" />
+            <Text style={styles.whatsappShareText}>Share</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.sparklineCard}>
+        <View style={styles.sparklineHeader}>
+          <Text style={styles.sparklineLabel}>Last 7 Days</Text>
+          <Text style={[styles.sparklineTotal, { color: sevenDayNet >= 0 ? "#0F8A5F" : "#C62828" }]}>
+            {sevenDayNet >= 0 ? "+" : "-"}Rs.{formatIndianNumber(Math.abs(sevenDayNet))}
+          </Text>
+        </View>
+        <View style={styles.sparklineBars}>
+          {sevenDayCashFlow.map((day) => {
+            const height = Math.max(8, Math.round((Math.abs(day.net) / sevenDayPeak) * 52));
+            return (
+              <View key={day.label} style={styles.sparklineBarSlot}>
+                <View
+                  style={[
+                    styles.sparklineBar,
+                    {
+                      height,
+                      backgroundColor: day.net >= 0 ? "#25A970" : "#E15241",
+                    },
+                  ]}
+                />
+              </View>
+            );
+          })}
+        </View>
       </View>
 
       <View style={styles.monospacePanel}>
@@ -1899,6 +2043,47 @@ export default function AccountScreen() {
               </View>
             )}
 
+            {showWhatsAppSheet && (
+              <View style={styles.modalOverlay}>
+                <View style={styles.shareSheet}>
+                  <View style={styles.shareSheetHeader}>
+                    <Text style={styles.modalTitle}>WhatsApp Quick Share</Text>
+                    <Pressable onPress={() => setShowWhatsAppSheet(false)} style={styles.shareCloseBtn}>
+                      <Icon name="close" size={18} color="#475569" />
+                    </Pressable>
+                  </View>
+
+                  <View style={styles.modalToggleRow}>
+                    <Pressable
+                      style={[styles.modalToggleBtn, shareLanguage === "en" && styles.modalToggleBtnActive]}
+                      onPress={() => setShareLanguage("en")}
+                    >
+                      <Text style={[styles.modalToggleText, shareLanguage === "en" && styles.modalToggleTextActive]}>English</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.modalToggleBtn, shareLanguage === "te" && styles.modalToggleBtnActive]}
+                      onPress={() => setShareLanguage("te")}
+                    >
+                      <Text style={[styles.modalToggleText, shareLanguage === "te" && styles.modalToggleTextActive]}>Telugu</Text>
+                    </Pressable>
+                  </View>
+
+                  <ScrollView style={styles.sharePreview} nestedScrollEnabled>
+                    <Text style={styles.sharePreviewText}>{whatsAppPreviewText}</Text>
+                  </ScrollView>
+
+                  <View style={styles.modalActionsRow}>
+                    <Pressable style={styles.modalCancelBtn} onPress={copyWhatsAppPreview}>
+                      <Text style={styles.modalCancelText}>Copy to clipboard</Text>
+                    </Pressable>
+                    <Pressable style={styles.whatsappConfirmBtn} onPress={handleShareWhatsApp}>
+                      <Text style={styles.whatsappConfirmText}>Share via WhatsApp</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            )}
+
             {/* Edit Expense Modal */}
             {editingExpense && (
               <View style={styles.modalOverlay}>
@@ -2138,8 +2323,18 @@ const styles = StyleSheet.create({
   datePickerRow: { flexDirection: "row", gap: 10 },
   breakdownHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 },
   breakdownTitle: { color: "#111827", fontSize: 15, fontWeight: "900" },
+  summaryActions: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
   pdfButton: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 20, backgroundColor: "#cbf3f0", paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#2ec4b6" },
   pdfButtonText: { color: "#111827", fontSize: 12, fontWeight: "800" },
+  whatsappShareBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 20, backgroundColor: "#25D366", paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#1EBE5D" },
+  whatsappShareText: { color: "#ffffff", fontSize: 12, fontWeight: "900" },
+  sparklineCard: { borderRadius: 12, backgroundColor: "#F7FCFA", borderWidth: 1, borderColor: "#D9F3EA", padding: 12, gap: 8, maxHeight: 120 },
+  sparklineHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  sparklineLabel: { color: "#426c67", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
+  sparklineTotal: { fontSize: 15, fontWeight: "900" },
+  sparklineBars: { height: 62, flexDirection: "row", alignItems: "flex-end", gap: 6 },
+  sparklineBarSlot: { flex: 1, height: 62, justifyContent: "flex-end", alignItems: "center", borderRadius: 4, backgroundColor: "#ECF7F3" },
+  sparklineBar: { width: "58%", minWidth: 8, borderRadius: 4 },
   monospacePanel: { backgroundColor: "#0f2725", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#174d48" },
   monospaceText: { fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace", color: "#cbf3f0", fontSize: 12, lineHeight: 18, fontWeight: "600" },
   emptyText: { color: "#5f7f7b", fontSize: 13, fontStyle: "italic", textAlign: "center", paddingVertical: 16 },
@@ -2260,5 +2455,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "900",
     color: "#111827"
-  }
+  },
+  shareSheet: {
+    backgroundColor: "#ffffff",
+    borderRadius: 22,
+    padding: 20,
+    width: screenWidth * 0.92,
+    maxWidth: 520,
+    maxHeight: "86%",
+    gap: 12,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10
+  },
+  shareSheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  shareCloseBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#f1f5f9", alignItems: "center", justifyContent: "center" },
+  sharePreview: { maxHeight: 320, backgroundColor: "#0f2725", borderRadius: 12, borderWidth: 1, borderColor: "#174d48", padding: 12 },
+  sharePreviewText: { fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace", color: "#cbf3f0", fontSize: 12, lineHeight: 18, fontWeight: "600" },
+  whatsappConfirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: "#25D366", alignItems: "center" },
+  whatsappConfirmText: { fontSize: 13, fontWeight: "900", color: "#ffffff" }
 });

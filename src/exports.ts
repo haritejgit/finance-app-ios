@@ -1,6 +1,10 @@
 import { Platform } from "react-native";
 import Clipboard from "@react-native-clipboard/clipboard";
 import { Customer, Loan } from "./types";
+import {
+  buildStatementData,
+  formatStatementForWhatsApp,
+} from "./statement-format";
 
 function escapeHtml(value: unknown) {
   return String(value ?? "")
@@ -443,6 +447,62 @@ export async function openAccountStatementPrint(
     return { success: true, platform: "mobile", copied: true };
   }
 
+  {
+  const statementData = buildStatementData({
+    startDate: periodStartStr,
+    endDate: periodEndStr,
+    bf,
+    transactions,
+    totals,
+    village: villageName,
+    email: userEmail,
+  });
+  const ledgerText = formatStatementForWhatsApp(statementData, language)
+    .replace(/\*/g, "")
+    .split("\n")
+    .filter((line) => !line.startsWith("Karthikeya Finance") && !line.startsWith("ACCOUNT STATEMENT") && !line.startsWith("Period:") && !line.startsWith("Village:") && !line.startsWith("Email:"))
+    .join("\n")
+    .trim();
+  const win = window.open("", "_blank", "width=600,height=780");
+  if (!win) return { success: false, platform: "web" };
+  win.document.write(`
+    <!doctype html>
+    <html>
+      <head>
+        <title>ACCOUNT STATEMENT</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&family=Noto+Sans+Telugu:wght@400;500;700&display=swap" rel="stylesheet">
+        <style>
+          body { margin: 0; padding: 30px 15px; font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; display: flex; justify-content: center; }
+          #statement-card { background: #fff; width: 100%; max-width: 480px; border: 1px solid #cbd5e1; border-radius: 16px; padding: 32px 28px; box-sizing: border-box; }
+          .header { text-align: center; margin-bottom: 18px; border-bottom: 2px dashed #cbd5e1; padding-bottom: 14px; }
+          .header h2 { margin: 0; font-size: 20px; font-weight: 800; color: #0f172a; }
+          .header h3 { margin: 5px 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; }
+          .header p { margin: 3px 0; font-size: 12px; color: #64748b; }
+          pre { font-family: 'Roboto Mono', 'Noto Sans Telugu', monospace; font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; color: #1e293b; }
+          @media print { body { background: #fff; padding: 0; } #statement-card { border: 0; border-radius: 0; } }
+        </style>
+      </head>
+      <body>
+        <div id="statement-card">
+          <div class="header">
+            <h2>Karthikeya Finance</h2>
+            <h3>ACCOUNT STATEMENT</h3>
+            <p>Period: ${escapeHtml(periodStartStr)} - ${escapeHtml(periodEndStr)}</p>
+            <p>Village: ${escapeHtml(villageName)}</p>
+            ${userEmail ? `<p>Email: ${escapeHtml(userEmail)}</p>` : ""}
+          </div>
+          <pre>${escapeHtml(ledgerText)}</pre>
+        </div>
+        <script>setTimeout(function(){ window.print(); }, 400);</script>
+      </body>
+    </html>
+  `);
+  win.document.close();
+  return { success: true, platform: "web" };
+  }
+
   const isTe = language === "te";
   const title = isTe ? "కార్తికేయ ఫైనాన్స్" : "Karthikeya Finance";
   const subTitle = isTe ? "ఆర్థిక ఖాతా నివేదిక" : "Account Statement";
@@ -741,6 +801,18 @@ export function generatePlainTextStatement(
   language: "en" | "te",
   villageName: string
 ): string {
+  return formatStatementForWhatsApp(
+    buildStatementData({
+      startDate: periodStartStr,
+      endDate: periodEndStr,
+      bf,
+      transactions,
+      totals,
+      village: villageName,
+    }),
+    language
+  ).replace(/\*/g, "");
+
   const formatVal = (v: number) => Math.round(v).toLocaleString("en-IN");
   const isTe = language === "te";
   
