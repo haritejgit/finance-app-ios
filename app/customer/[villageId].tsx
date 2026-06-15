@@ -31,7 +31,7 @@ import { translateTelugu } from "../../src/exports";
 import { lightImpact } from "../../src/interactions";
 import { showToast } from "../../src/notify";
 import { getCachedCoordinates, LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
-import { addCustomerWithLoan, addPayment, addPaymentsBatch, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersThisWeek, getVillageById, getCustomerLoanSummary, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, markDue, updateCustomer, isNumericalIdTaken, getNextNumericalId } from "../../src/repository";
+import { addCustomerWithLoan, addPayment, addPaymentsBatch, checkAndAutoMarkDues, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersThisWeek, getVillageById, getCustomerLoanSummary, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, markDue, updateCustomer, isNumericalIdTaken, getNextNumericalId } from "../../src/repository";
 import { Customer, Loan, PaymentMode, Village } from "../../src/types";
 import { calculateDisbursedAmount, weekStart } from "../../src/business-logic";
 import { validateAadhaar, validateIndianPhone, validatePositiveAmount } from "../../src/validation";
@@ -541,13 +541,21 @@ export default function CustomerListScreen() {
       setVillage(villageDetails);
 
       const customerIds = sortedList.map((customer) => customer.id);
-      const [statuses, loansByCustomer, latestPayments] = await Promise.all([
+      const loansByCustomer = await getActiveLoansByCustomerIds(user.uid, customerIds);
+      setActiveLoans(loansByCustomer);
+
+      // Auto-mark dues for completed, unpaid weeks across all active loans
+      try {
+        await checkAndAutoMarkDues(user.uid, Object.values(loansByCustomer));
+      } catch {
+        // Non-critical: ignore auto-due failures silently
+      }
+
+      const [statuses, latestPayments] = await Promise.all([
         getPaymentStatusesForCustomersThisWeek(user.uid, customerIds),
-        getActiveLoansByCustomerIds(user.uid, customerIds),
         getLastRegularPaymentDatesForCustomers(user.uid, customerIds),
       ]);
       setPaymentStatuses(statuses);
-      setActiveLoans(loansByCustomer);
       setLastPaymentDates(latestPayments);
 
       // Restore scroll position after data loads

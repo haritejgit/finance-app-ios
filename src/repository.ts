@@ -580,6 +580,15 @@ export async function getPaymentStatusesForCustomersThisWeek(userId: string, cus
       .filter((loan) => wantedCustomerIds.has(loan.customerId))
       .map((loan) => [loan.id, loan.customerId])
   );
+  
+  const activeLoanIdByCustomerId = new Map<string, string>();
+  loansSnap.docs
+    .map((d) => d.data() as Loan)
+    .filter((loan) => loan.status === "ACTIVE" && wantedCustomerIds.has(loan.customerId))
+    .forEach((loan) => {
+      activeLoanIdByCustomerId.set(loan.customerId, loan.id);
+    });
+
   const statuses = Object.fromEntries(
     customerIds.map((customerId) => [customerId, "none" as "paid" | "due" | "none"])
   );
@@ -593,11 +602,14 @@ export async function getPaymentStatusesForCustomersThisWeek(userId: string, cus
       const customerId = payment.customerId ?? customerIdByLoanId.get(payment.loanId);
       if (!customerId || !wantedCustomerIds.has(customerId)) return;
 
+      const activeLoanId = activeLoanIdByCustomerId.get(customerId);
+      if (!activeLoanId || payment.loanId !== activeLoanId) return;
+
       if (payment.paymentType === "DUE") {
         if (statuses[customerId] !== "paid") {
           statuses[customerId] = "due";
         }
-      } else {
+      } else if (payment.paymentType === "REGULAR" || (payment as any).paymentType === "CASH" || (payment as any).paymentType === "PHONE" || (payment as any).type === "CASH" || (payment as any).type === "PHONE") {
         statuses[customerId] = "paid";
       }
     });
@@ -621,6 +633,14 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
       .map((loan) => [loan.id, loan.customerId])
   );
 
+  const activeLoanIdByCustomerId = new Map<string, string>();
+  loansSnap.docs
+    .map((d) => d.data() as Loan)
+    .filter((loan) => loan.status === "ACTIVE" && wantedCustomerIds.has(loan.customerId))
+    .forEach((loan) => {
+      activeLoanIdByCustomerId.set(loan.customerId, loan.id);
+    });
+
   const currentMonday = weekStart(Date.now());
   const prevWeekStart = currentMonday - 7 * 24 * 60 * 60 * 1000;
   const prevWeekEnd = currentMonday - 1;
@@ -636,6 +656,10 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
     .forEach((payment) => {
       const customerId = payment.customerId ?? customerIdByLoanId.get(payment.loanId);
       if (!customerId || !wantedCustomerIds.has(customerId)) return;
+
+      const activeLoanId = activeLoanIdByCustomerId.get(customerId);
+      if (!activeLoanId || payment.loanId !== activeLoanId) return;
+
       const paymentDate = toMillis(payment.paymentDate);
       if (paymentDate > latest[customerId].lastPaymentDate) {
         latest[customerId].lastPaymentDate = paymentDate;
@@ -651,23 +675,46 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
 export async function addPayment(loan: Loan, amountPaid: number, paymentDate: number, mode: PaymentMode) {
   assertPositiveAmount(amountPaid, "Payment amount");
   const paymentMode = normalizeMode(mode);
+  const targetWeekNumber = loanWeekNumber(loan.startDate, paymentDate);
   const payment: Payment = {
     id: id(),
     loanId: loan.id,
     customerId: loan.customerId,
     amountPaid,
     paymentDate,
-    weekNumber: loanWeekNumber(loan.startDate, paymentDate),
+    weekNumber: targetWeekNumber,
     paymentType: "REGULAR",
     paymentMode,
     type: paymentMode,
     userId: loan.userId,
   };
+
+  // Find and delete any existing DUE payments for this loan in the same week
+  const q = query(
+    coll.payments,
+    where("loanId", "==", loan.id),
+    where("paymentType", "==", "DUE")
+  );
+  const duesSnap = await getDocs(q);
+  const targetWeekStart = weekStart(paymentDate);
+  const duesToDelete = duesSnap.docs.filter((dDoc) => {
+    const dData = dDoc.data();
+    const dTime = toMillis(dData.paymentDate);
+    const dWeekNum = dData.weekNumber;
+    return dWeekNum === targetWeekNumber || weekStart(dTime) === targetWeekStart;
+  });
+
   await runTransaction(db, async (transaction) => {
     const loanRef = doc(db, "loans", loan.id);
     const loanSnap = await transaction.get(loanRef);
     const liveLoan = loanSnap.exists() ? (loanSnap.data() as Loan) : loan;
     const newBalance = Math.max(0, money(liveLoan.balanceAmount) - amountPaid);
+    
+    // Delete existing dues
+    duesToDelete.forEach((dueDoc) => {
+      transaction.delete(dueDoc.ref);
+    });
+
     transaction.set(doc(db, "payments", payment.id), stripUndefined(payment));
     transaction.update(loanRef, {
       balanceAmount: newBalance,
@@ -682,28 +729,51 @@ export async function addPaymentsBatch(
 ) {
   if (entries.length === 0) return 0;
   const batch = writeBatch(db);
-  entries.forEach(({ loan, amountPaid, paymentDate, mode }) => {
+  
+  for (const { loan, amountPaid, paymentDate, mode } of entries) {
     assertPositiveAmount(amountPaid, "Payment amount");
     const paymentMode = normalizeMode(mode);
+    const targetWeekNumber = loanWeekNumber(loan.startDate, paymentDate);
     const payment: Payment = {
       id: id(),
       loanId: loan.id,
       customerId: loan.customerId,
       amountPaid,
       paymentDate,
-      weekNumber: loanWeekNumber(loan.startDate, paymentDate),
+      weekNumber: targetWeekNumber,
       paymentType: "REGULAR",
       paymentMode,
       type: paymentMode,
       userId: loan.userId,
     };
+
+    // Find and delete any existing DUE payments for this loan in the same week
+    const q = query(
+      coll.payments,
+      where("loanId", "==", loan.id),
+      where("paymentType", "==", "DUE")
+    );
+    const duesSnap = await getDocs(q);
+    const targetWeekStart = weekStart(paymentDate);
+    const duesToDelete = duesSnap.docs.filter((dDoc) => {
+      const dData = dDoc.data();
+      const dTime = toMillis(dData.paymentDate);
+      const dWeekNum = dData.weekNumber;
+      return dWeekNum === targetWeekNumber || weekStart(dTime) === targetWeekStart;
+    });
+
+    duesToDelete.forEach((dueDoc) => {
+      batch.delete(dueDoc.ref);
+    });
+
     const newBalance = Math.max(0, loan.balanceAmount - amountPaid);
     batch.set(doc(db, "payments", payment.id), stripUndefined(payment));
     batch.update(doc(db, "loans", loan.id), {
       balanceAmount: newBalance,
       status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
     });
-  });
+  }
+  
   await batch.commit();
   clearCache();
   return entries.length;
@@ -814,6 +884,75 @@ export async function renewLoan(loan: Loan, newPrincipal: number, date: number) 
   };
   await setDoc(doc(db, "loans", newLoan.id), stripUndefined(newLoan));
   clearCache();
+}
+
+export async function checkAndAutoMarkDues(userId: string, activeLoans: Loan[]) {
+  const validLoans = activeLoans.filter((l) => l && l.id && l.startDate);
+  if (validLoans.length === 0) return;
+
+  const minStartDate = Math.min(...validLoans.map((l) => toMillis(l.startDate)));
+  const q = query(
+    coll.payments,
+    where("userId", "==", userId),
+    where("paymentDate", ">=", minStartDate)
+  );
+  const paymentsSnap = await getDocs(q);
+  const payments = paymentsSnap.docs.map((d) => d.data() as Payment);
+
+  const oneWeek = 7 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const batch = writeBatch(db);
+  let hasChanges = false;
+
+  const toStartOfDay = (ts: number) => {
+    const d = new Date(ts);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  };
+
+  for (const loan of validLoans) {
+    const loanPayments = payments.filter((p) => p.loanId === loan.id);
+    const completedWeeks = Math.max(0, Math.floor((now - toStartOfDay(loan.startDate)) / oneWeek));
+
+    const paidWeeks = new Set<number>();
+    const dueWeeks = new Set<number>();
+
+    loanPayments.forEach((p) => {
+      const wNum = p.weekNumber;
+      if (typeof wNum === "number") {
+        if (p.paymentType === "DUE" || (p as any).type === "DUE") {
+          dueWeeks.add(wNum);
+        } else if (p.paymentType === "REGULAR" || (p as any).type === "REGULAR" || (p as any).paymentType === "CASH" || (p as any).paymentType === "PHONE" || p.type === "CASH" || p.type === "PHONE") {
+          paidWeeks.add(wNum);
+        }
+      }
+    });
+
+    for (let w = 1; w <= completedWeeks; w++) {
+      if (!paidWeeks.has(w) && !dueWeeks.has(w)) {
+        // Automatically mark as due
+        const duePayment: Payment = {
+          id: id(),
+          loanId: loan.id,
+          customerId: loan.customerId,
+          amountPaid: 0,
+          paymentDate: toStartOfDay(loan.startDate) + (w - 1) * oneWeek,
+          weekNumber: w,
+          paymentType: "DUE",
+          paymentMode: "CASH",
+          type: "DUE",
+          userId: loan.userId,
+        };
+        batch.set(doc(db, "payments", duePayment.id), stripUndefined(duePayment));
+        hasChanges = true;
+      }
+    }
+  }
+
+  if (hasChanges) {
+    await batch.commit();
+    clearCache();
+  }
 }
 
 export async function getCollectionToday(userId: string) {

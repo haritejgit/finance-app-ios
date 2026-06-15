@@ -27,6 +27,7 @@ import Icon from "../../src/Icon";
 import { LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
 import {
   addPayment,
+  checkAndAutoMarkDues,
   deleteCustomer,
   deleteDuePayment,
   deletePayment,
@@ -479,9 +480,20 @@ export default function ProfileScreen() {
       if (c && c.userId !== user.uid) {
         throw new Error("Customer does not belong to the active user.");
       }
+      // Auto-mark dues for any completed unpaid weeks
+      if (l) {
+        try {
+          await checkAndAutoMarkDues(user.uid, [l]);
+        } catch {
+          // Non-critical: ignore silently
+        }
+      }
+      // Reload payments after auto-due so timeline is up to date
+      const freshPayments = l ? await getPaymentsForCustomer(user.uid, activeCustomerId) : p;
+      if (loadRequestRef.current !== requestId) return;
       setCustomer(c);
       setLoan(l || null);
-      setPayments(p);
+      setPayments(freshPayments);
     } catch (error) {
       if (loadRequestRef.current !== requestId) return;
       console.error('Error loading customer details:', error);
@@ -567,26 +579,44 @@ export default function ProfileScreen() {
 
   const paymentTimeline = useMemo(() => {
     if (!loan) return [] as { index: number; date: number; status: "paid" | "overdue" | "upcoming"; amount: number }[];
-    const paidByWeek = new Map<number, number>();
     const oneWeek = 7 * 24 * 60 * 60 * 1000;
+
+    const toStartOfDay = (ts: number) => {
+      const d = new Date(ts);
+      d.setHours(0, 0, 0, 0);
+      return d.getTime();
+    };
+
+    const paidByWeek = new Map<number, number>();
+    const explicitDueWeeks = new Set<number>();
+
     payments
-      .filter((p: any) => p.loanId === loan.id && (p.paymentType === "REGULAR" || p.type === "REGULAR" || p.paymentType === "CASH" || p.paymentType === "PHONE"))
+      .filter((p: any) => p.loanId === loan.id)
       .forEach((p: any) => {
         const weekIndex = typeof p.weekNumber === "number"
           ? p.weekNumber - 1
           : (p.paymentDate - loan.startDate < 0 ? 0 : Math.floor((toStartOfDay(p.paymentDate) - toStartOfDay(loan.startDate)) / oneWeek));
-        paidByWeek.set(weekIndex, (paidByWeek.get(weekIndex) ?? 0) + Number(p.amountPaid || 0));
+
+        if (p.paymentType === "DUE" || p.type === "DUE") {
+          explicitDueWeeks.add(weekIndex);
+        } else if (p.paymentType === "REGULAR" || p.type === "REGULAR" || p.paymentType === "CASH" || p.paymentType === "PHONE" || p.type === "CASH" || p.type === "PHONE") {
+          paidByWeek.set(weekIndex, (paidByWeek.get(weekIndex) ?? 0) + Number(p.amountPaid || 0));
+        }
       });
+
     const now = Date.now();
-    return Array.from({ length: 12 }, (_, index) => {
+    const completedWeeks = Math.max(0, Math.floor((now - toStartOfDay(loan.startDate)) / oneWeek));
+    const maxPaidWeekIndex = paidByWeek.size > 0 ? Math.max(...paidByWeek.keys()) : 0;
+    const totalWeeks = Math.max(12, completedWeeks + 1, maxPaidWeekIndex + 1);
+
+    return Array.from({ length: totalWeeks }, (_, index) => {
       const date = toStartOfDay(loan.startDate) + index * oneWeek;
       const amount = paidByWeek.get(index) ?? 0;
-      // A week is overdue only AFTER its 7-day window has fully passed with no payment
       const weekDeadline = date + oneWeek;
       let status: "paid" | "overdue" | "upcoming";
       if (amount > 0) {
         status = "paid";
-      } else if (weekDeadline < now) {
+      } else if (explicitDueWeeks.has(index) || weekDeadline < now) {
         status = "overdue";
       } else {
         status = "upcoming";
