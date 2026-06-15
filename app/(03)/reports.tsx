@@ -18,7 +18,7 @@ import {
 import { useAuth } from "../../src/auth-context";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import Icon from "../../src/Icon";
-import { getPaymentsByDate } from "../../src/repository";
+import { getPaymentsByDate, getISOWeekString } from "../../src/repository";
 import { colors } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -1060,8 +1060,7 @@ interface Payment {
         alignment: baseAlignment,
       };
       const movedStyle = {
-        font: { bold: true, color: { rgb: 'FF5722' } }, // Distinct orange/red
-        fill: { patternType: 'solid', fgColor: { rgb: 'F5F5F5' } },
+        font: { bold: true, color: { rgb: 'FF8C00' } }, // Orange: #FF8C00
         alignment: baseAlignment,
       };
       const orangeStyle = {
@@ -1084,10 +1083,14 @@ interface Payment {
       for (const dayName of orderedDays) {
         for (const shiftName of orderedShifts) {
           const shiftVillages = villagesData.filter((v) => v.dayOfWeek === dayName && v.shift === shiftName);
-          const shiftCustomers = customersData.filter((customer) =>
-            shiftVillages.some((village) => village.id === customer.villageId) ||
-            (customer.movedFromVillage && shiftVillages.some((village) => village.id === customer.movedFromVillage))
-          );
+          const shiftCustomers = customersData.filter((customer) => {
+            const history = (customer as any).villageHistory || [];
+            if (history.length > 0) {
+              return history.some((h: any) => h.villageId && shiftVillages.some((v) => v.id === h.villageId));
+            }
+            return shiftVillages.some((village) => village.id === customer.villageId) ||
+                   (customer.movedFromVillage && shiftVillages.some((village) => village.id === customer.movedFromVillage));
+          });
           if (shiftCustomers.length === 0) continue;
 
           const weekDates: number[] = [];
@@ -1122,11 +1125,23 @@ interface Payment {
           
           sortedVillages.forEach((village) => {
             const villageCustomers = shiftCustomers
-              .filter((c) => c.villageId === village.id || c.movedFromVillage === village.id)
+              .filter((c) => {
+                const history = (c as any).villageHistory || [];
+                if (history.length > 0) {
+                  return history.some((h: any) => h.villageId === village.id);
+                }
+                return c.villageId === village.id || c.movedFromVillage === village.id;
+              })
               .sort((a, b) => {
-                const aId = a.villageId === village.id ? (a.numericalId ?? Number.MAX_SAFE_INTEGER) : (a.movedFromNumericalId ?? Number.MAX_SAFE_INTEGER);
-                const bId = b.villageId === village.id ? (b.numericalId ?? Number.MAX_SAFE_INTEGER) : (b.movedFromNumericalId ?? Number.MAX_SAFE_INTEGER);
-                return aId - bId;
+                const getSortId = (cust: any) => {
+                  const history = cust.villageHistory || [];
+                  if (history.length > 0) {
+                    const seg = history.find((h: any) => h.villageId === village.id);
+                    return seg ? (seg.numericalId ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+                  }
+                  return cust.villageId === village.id ? (cust.numericalId ?? Number.MAX_SAFE_INTEGER) : (cust.movedFromNumericalId ?? Number.MAX_SAFE_INTEGER);
+                };
+                return getSortId(a) - getSortId(b);
               });
             
             if (villageCustomers.length === 0) return;
@@ -1149,8 +1164,11 @@ interface Payment {
 
             villageCustomers.forEach((customer) => {
             const rowIndex = sheetData.length;
-            const isCurrent = customer.villageId === village.id;
-            const displayId = isCurrent ? (customer.numericalId ?? '') : (customer.movedFromNumericalId ?? '');
+            const history = (customer as any).villageHistory || [];
+            const matchingSegment = history.find((h: any) => h.villageId === village.id);
+            const displayId = matchingSegment 
+              ? (matchingSegment.numericalId ?? '') 
+              : (customer.villageId === village.id ? (customer.numericalId ?? '') : (customer.movedFromNumericalId ?? ''));
             const villageName = village.name;
             const customerLoans = loansData.filter((loan) => loan.customerId === customer.id);
             const customerPayments = paymentsData.filter((payment) =>
@@ -1168,35 +1186,71 @@ interface Payment {
               const startOfWeek = weekDate;
               const endOfWeek = weekDate + 7 * 24 * 60 * 60 * 1000 - 1000;
               const colIndex = 4 + weekIdx;
+              const colWeekStr = getISOWeekString(weekDate);
 
-              // Check if moved
-              const moveWeekStart = customer.movedOnWeek
-                ? getCollectionWeekStart(getStartOfDay(new Date(customer.movedOnWeek).getTime()), dayName)
-                : null;
-
-              if (moveWeekStart !== null) {
-                if (!isCurrent) {
-                  // In the old/source village group:
-                  if (startOfWeek >= moveWeekStart) {
-                    row.push("Moved");
-                    setStyle(rowIndex, colIndex, movedStyle);
-                    return; // skip to next week column
+              const history = (customer as any).villageHistory || [];
+              if (history.length > 0) {
+                const segments = history.filter((seg: any) => seg.villageId === village.id);
+                if (segments.length > 0) {
+                  const activeSeg = segments.find((seg: any) => colWeekStr >= seg.fromWeek && (seg.toWeek === null || colWeekStr <= seg.toWeek));
+                  if (activeSeg) {
+                    const segIndex = history.indexOf(activeSeg);
+                    const isFirstWeekOfSegment = colWeekStr === activeSeg.fromWeek;
+                    const hasPreviousSegment = segIndex > 0;
+                    
+                    if (isFirstWeekOfSegment && hasPreviousSegment) {
+                      const totalPaidBefore = customerPayments
+                        .filter((payment) => isRealCollectionPayment(payment) && payment.paymentDate < startOfWeek)
+                        .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
+                      row.push(`Carried forward: ₹${totalPaidBefore}`);
+                      setStyle(rowIndex, colIndex, standardStyle);
+                      return; // skip to next week column
+                    }
+                  } else {
+                    const allFromWeeks = segments.map((seg: any) => seg.fromWeek);
+                    const earliestFromWeek = allFromWeeks.reduce((min, w) => w < min ? w : min, allFromWeeks[0]);
+                    
+                    if (colWeekStr < earliestFromWeek) {
+                      row.push("");
+                      setStyle(rowIndex, colIndex, standardStyle);
+                      return; // skip to next week column
+                    } else {
+                      row.push("MOVED");
+                      setStyle(rowIndex, colIndex, movedStyle);
+                      return; // skip to next week column
+                    }
                   }
                 } else {
-                  // In the new/destination village group:
-                  if (startOfWeek < moveWeekStart) {
-                    row.push("");
-                    setStyle(rowIndex, colIndex, standardStyle);
-                    return; // skip to next week column
-                  }
-                  if (startOfWeek === moveWeekStart) {
-                    // Cumulative payments from all time
-                    const cumulativeAmount = customerPayments
-                      .filter((payment) => isRealCollectionPayment(payment) && payment.paymentDate <= endOfWeek)
-                      .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
-                    row.push(cumulativeAmount || "");
-                    setStyle(rowIndex, colIndex, standardStyle);
-                    return; // skip to next week column
+                  row.push("");
+                  setStyle(rowIndex, colIndex, standardStyle);
+                  return; // skip to next week column
+                }
+              } else {
+                const moveWeekStart = customer.movedOnWeek
+                  ? getCollectionWeekStart(getStartOfDay(new Date(customer.movedOnWeek).getTime()), dayName)
+                  : null;
+
+                if (moveWeekStart !== null) {
+                  if (customer.villageId !== village.id) {
+                    if (startOfWeek >= moveWeekStart) {
+                      row.push("MOVED");
+                      setStyle(rowIndex, colIndex, movedStyle);
+                      return; // skip to next week column
+                    }
+                  } else {
+                    if (startOfWeek < moveWeekStart) {
+                      row.push("");
+                      setStyle(rowIndex, colIndex, standardStyle);
+                      return; // skip to next week column
+                    }
+                    if (startOfWeek === moveWeekStart) {
+                      const totalPaidBefore = customerPayments
+                        .filter((payment) => isRealCollectionPayment(payment) && payment.paymentDate < startOfWeek)
+                        .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
+                      row.push(`Carried forward: ₹${totalPaidBefore}`);
+                      setStyle(rowIndex, colIndex, standardStyle);
+                      return; // skip to next week column
+                    }
                   }
                 }
               }

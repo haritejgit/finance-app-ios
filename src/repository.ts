@@ -23,7 +23,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { BlockedAadhaar, Customer, Expense, Investment, Loan, Payment, PaymentMode, UserProfile, Village } from "./types";
+import { BlockedAadhaar, Customer, Expense, Investment, Loan, Payment, PaymentMode, UserProfile, Village, VillageHistorySegment } from "./types";
 import { getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, loanWeekNumber, money, toMillis, weekStart } from "./business-logic";
 import { filterCustomersWithVillage } from "./utils";
 
@@ -406,6 +406,10 @@ export async function addCustomerWithLoan(
   const numericalId = sanitizedInput.numericalId && sanitizedInput.numericalId > 0
     ? sanitizedInput.numericalId
     : await getNextNumericalId(userId, villageId);
+  const cycleStartDay = new Date(toMillis(startDate || Date.now())).getDay();
+  const startWeekStr = getISOWeekString(startDate || Date.now());
+  const villageDoc = await getVillageById(villageId);
+  const villageName = villageDoc ? villageDoc.name : "";
   const customer: Customer = {
     id: id(),
     numericalId,
@@ -413,6 +417,16 @@ export async function addCustomerWithLoan(
     userId,
     isActive: true,
     createdAt: Date.now(),
+    cycleStartDay,
+    villageHistory: [
+      {
+        villageId,
+        villageName,
+        fromWeek: startWeekStr,
+        toWeek: null,
+        numericalId,
+      }
+    ],
     ...sanitizedInput,
   };
   await setDoc(doc(db, "customers", customer.id), stripUndefined(customer));
@@ -449,6 +463,22 @@ function getISOWeekStartString(timestamp: number, cycleStartDay: number): string
   const dd = String(d.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
 }
+export function getISOWeekString(dateMs: number): string {
+  const date = new Date(toMillis(dateMs));
+  const target = new Date(date.valueOf());
+  const dayNr = (date.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3);
+  const firstThursday = target.valueOf();
+  target.setMonth(0, 1);
+  if (target.getDay() !== 4) {
+    target.setMonth(0, 1 + ((4 - target.getDay() + 7) % 7));
+  }
+  const weekNum = 1 + Math.ceil((firstThursday - target.valueOf()) / (7 * 24 * 60 * 60 * 1000));
+  
+  const yyyy = date.getFullYear();
+  const ww = String(weekNum).padStart(2, '0');
+  return `${yyyy}-${ww}`;
+}
 
 export async function moveCustomerToVillage(userId: string, customerId: string, targetVillageId: string) {
   const customer = await getCustomerById(customerId);
@@ -464,6 +494,42 @@ export async function moveCustomerToVillage(userId: string, customerId: string, 
     : new Date(customer.createdAt || Date.now()).getDay();
 
   const movedOnWeek = getISOWeekStartString(Date.now(), cycleStartDay);
+  const moveISOWeek = getISOWeekString(Date.now());
+
+  const oldVillage = await getVillageById(oldVillageId);
+  const targetVillage = await getVillageById(targetVillageId);
+  const oldVillageName = oldVillage ? oldVillage.name : "";
+  const targetVillageName = targetVillage ? targetVillage.name : "";
+
+  let history: VillageHistorySegment[] = customer.villageHistory || [];
+  if (history.length === 0) {
+    const joinDate = customer.createdAt || Date.now();
+    const joinWeekStr = getISOWeekString(joinDate);
+    history = [
+      {
+        villageId: oldVillageId,
+        villageName: oldVillageName,
+        fromWeek: joinWeekStr,
+        toWeek: null,
+        numericalId: oldNumericalId,
+      }
+    ];
+  }
+
+  const updatedHistory = history.map((h) => {
+    if (h.villageId === oldVillageId && h.toWeek === null) {
+      return { ...h, toWeek: moveISOWeek };
+    }
+    return h;
+  });
+
+  updatedHistory.push({
+    villageId: targetVillageId,
+    villageName: targetVillageName,
+    fromWeek: moveISOWeek,
+    toWeek: null,
+    numericalId: newNumericalId,
+  });
 
   const batch = writeBatch(db);
 
@@ -478,6 +544,7 @@ export async function moveCustomerToVillage(userId: string, customerId: string, 
     movedToVillage: targetVillageId,
     movedOnWeek: movedOnWeek,
     movedFromNumericalId: oldNumericalId,
+    villageHistory: updatedHistory,
   });
 
   // Create a blocked/tombstone document in the old village to reserve the ID
@@ -498,6 +565,7 @@ export async function moveCustomerToVillage(userId: string, customerId: string, 
     movedToVillage: targetVillageId,
     movedOnWeek: movedOnWeek,
     movedFromNumericalId: oldNumericalId,
+    villageHistory: updatedHistory,
   });
 
   await batch.commit();
@@ -709,7 +777,9 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
 export async function addPayment(loan: Loan, amountPaid: number, paymentDate: number, mode: PaymentMode) {
   assertPositiveAmount(amountPaid, "Payment amount");
   const paymentMode = normalizeMode(mode);
-  const targetWeekNumber = loanWeekNumber(loan.startDate, paymentDate);
+  const customer = await getCustomerById(loan.customerId);
+  const cycleStartDay = getOrDeriveCycleStartDay(customer!, loan.startDate);
+  const targetWeekNumber = getPersonalCycleWeekIndex(paymentDate, loan.startDate, cycleStartDay) + 1;
   const payment: Payment = {
     id: id(),
     loanId: loan.id,
@@ -723,19 +793,18 @@ export async function addPayment(loan: Loan, amountPaid: number, paymentDate: nu
     userId: loan.userId,
   };
 
-  // Find and delete any existing DUE payments for this loan in the same week
+  // Find and delete any existing DUE payments for this loan in the same personal cycle window
   const q = query(
     coll.payments,
     where("loanId", "==", loan.id),
     where("paymentType", "==", "DUE")
   );
   const duesSnap = await getDocs(q);
-  const targetWeekStart = weekStart(paymentDate);
+  const targetCycleStart = getPersonalCycleStartTs(paymentDate, cycleStartDay);
   const duesToDelete = duesSnap.docs.filter((dDoc) => {
     const dData = dDoc.data();
     const dTime = toMillis(dData.paymentDate);
-    const dWeekNum = dData.weekNumber;
-    return dWeekNum === targetWeekNumber || weekStart(dTime) === targetWeekStart;
+    return getPersonalCycleStartTs(dTime, cycleStartDay) === targetCycleStart;
   });
 
   await runTransaction(db, async (transaction) => {
@@ -767,7 +836,9 @@ export async function addPaymentsBatch(
   for (const { loan, amountPaid, paymentDate, mode } of entries) {
     assertPositiveAmount(amountPaid, "Payment amount");
     const paymentMode = normalizeMode(mode);
-    const targetWeekNumber = loanWeekNumber(loan.startDate, paymentDate);
+    const customer = await getCustomerById(loan.customerId);
+    const cycleStartDay = getOrDeriveCycleStartDay(customer!, loan.startDate);
+    const targetWeekNumber = getPersonalCycleWeekIndex(paymentDate, loan.startDate, cycleStartDay) + 1;
     const payment: Payment = {
       id: id(),
       loanId: loan.id,
@@ -781,19 +852,18 @@ export async function addPaymentsBatch(
       userId: loan.userId,
     };
 
-    // Find and delete any existing DUE payments for this loan in the same week
+    // Find and delete any existing DUE payments for this loan in the same personal cycle window
     const q = query(
       coll.payments,
       where("loanId", "==", loan.id),
       where("paymentType", "==", "DUE")
     );
     const duesSnap = await getDocs(q);
-    const targetWeekStart = weekStart(paymentDate);
+    const targetCycleStart = getPersonalCycleStartTs(paymentDate, cycleStartDay);
     const duesToDelete = duesSnap.docs.filter((dDoc) => {
       const dData = dDoc.data();
       const dTime = toMillis(dData.paymentDate);
-      const dWeekNum = dData.weekNumber;
-      return dWeekNum === targetWeekNumber || weekStart(dTime) === targetWeekStart;
+      return getPersonalCycleStartTs(dTime, cycleStartDay) === targetCycleStart;
     });
 
     duesToDelete.forEach((dueDoc) => {
@@ -920,116 +990,102 @@ export async function renewLoan(loan: Loan, newPrincipal: number, date: number) 
   clearCache();
 }
 
+export function getPersonalCycleStartTs(dateMs: number, cycleStartDay: number): number {
+  const d = new Date(toMillis(dateMs));
+  d.setHours(0, 0, 0, 0);
+  const currentDay = d.getDay(); // 0 (Sun) - 6 (Sat)
+  let diff = currentDay - cycleStartDay;
+  if (diff < 0) diff += 7;
+  d.setDate(d.getDate() - diff);
+  return d.getTime();
+}
+
+export function getOrDeriveCycleStartDay(customer: Customer, loanStartDate?: number): number {
+  if (customer && typeof (customer as any).cycleStartDay === "number" && (customer as any).cycleStartDay >= 0 && (customer as any).cycleStartDay <= 6) {
+    return (customer as any).cycleStartDay;
+  }
+  const baseDate = loanStartDate || customer?.createdAt || Date.now();
+  return new Date(toMillis(baseDate)).getDay();
+}
+
+export function getPersonalCycleWeekIndex(paymentDateMs: number, loanStartDateMs: number, cycleStartDay: number): number {
+  const pStart = getPersonalCycleStartTs(paymentDateMs, cycleStartDay);
+  const lStart = getPersonalCycleStartTs(loanStartDateMs, cycleStartDay);
+  const diffMs = pStart - lStart;
+  if (diffMs <= 0) return 0;
+  return Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
+}
+
+export function formatPersonalCycleRange(startTs: number): string {
+  const start = new Date(toMillis(startTs));
+  const end = new Date(toMillis(startTs) + 6 * 24 * 60 * 60 * 1000);
+  
+  const daysShort = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const monthsShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  
+  const startStr = `${daysShort[start.getDay()]} ${start.getDate()} ${monthsShort[start.getMonth()]}`;
+  const endStr = `${daysShort[end.getDay()]} ${end.getDate()} ${monthsShort[end.getMonth()]}`;
+  
+  return `${startStr} – ${endStr}`;
+}
+
 export async function checkAndAutoMarkDues(userId: string, activeLoans: Loan[]) {
-  const validLoans = activeLoans.filter((l) => l && l.id && l.startDate);
-  if (validLoans.length === 0) return;
+  // Client-side auto-due marking is disabled. Auto-dues are now handled daily by Firebase Cloud Functions.
+  return;
+}
 
-  const minStartDate = Math.min(...validLoans.map((l) => toMillis(l.startDate)));
-  const q = query(
-    coll.payments,
-    where("userId", "==", userId),
-    where("paymentDate", ">=", minStartDate)
-  );
-  const paymentsSnap = await getDocs(q);
-
-  // Keep both data and doc reference so we can delete bad DUEs
-  const paymentItems = paymentsSnap.docs.map((d) => ({
-    data: d.data() as Payment,
-    ref: d.ref,
-  }));
-
-  const oneWeek = 7 * 24 * 60 * 60 * 1000;
-  const now = Date.now();
-  const batch = writeBatch(db);
-  let hasChanges = false;
-
-  const toSOD = (ts: number) => {
-    const d = new Date(toMillis(ts));
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
-  };
-
-  // Resolve the week number for any payment, falling back to date math when
-  // the weekNumber field is missing or zero (common in older Firestore records).
-  const resolveWeekNum = (p: Payment, loanStartDate: number): number | null => {
-    let wNum = p.weekNumber;
-    if (typeof wNum !== "number" || wNum <= 0) {
-      const pDate = toSOD(toMillis(p.paymentDate));
-      const loanStart = toSOD(loanStartDate);
-      if (pDate >= loanStart) {
-        wNum = Math.floor((pDate - loanStart) / oneWeek) + 1;
-      } else {
-        return null;
-      }
-    }
-    return wNum > 0 ? wNum : null;
-  };
-
-  for (const loan of validLoans) {
-    const loanItems = paymentItems.filter((item) => item.data.loanId === loan.id);
-    const completedWeeks = Math.max(0, Math.floor((now - toSOD(loan.startDate)) / oneWeek));
-
-    // Build paid-weeks set and collect DUE doc refs grouped by week
-    const paidWeeks = new Set<number>();
-    const dueItemsByWeek = new Map<number, { ref: ReturnType<typeof doc> }[]>();
-
-    loanItems.forEach(({ data: p, ref }) => {
-      const wNum = resolveWeekNum(p, loan.startDate);
-      if (wNum === null) return;
-
-      if (p.paymentType === "DUE" || (p as any).type === "DUE") {
-        if (!dueItemsByWeek.has(wNum)) dueItemsByWeek.set(wNum, []);
-        dueItemsByWeek.get(wNum)!.push({ ref });
-      } else if (
-        p.paymentType === "REGULAR" ||
-        (p as any).type === "REGULAR" ||
-        (p as any).paymentType === "CASH" ||
-        (p as any).paymentType === "PHONE" ||
-        p.type === "CASH" ||
-        p.type === "PHONE"
-      ) {
-        paidWeeks.add(wNum);
-      }
-    });
-
-    // Step 1: Delete any DUE entries whose week already has a real payment.
-    // This cleans up corrupted data created before this fix.
-    paidWeeks.forEach((w) => {
-      const dues = dueItemsByWeek.get(w) ?? [];
-      dues.forEach(({ ref: dueRef }) => {
-        batch.delete(dueRef);
-        hasChanges = true;
-      });
-      // Remove from map so these weeks aren't treated as "already due"
-      dueItemsByWeek.delete(w);
-    });
-
-    // Step 2: Create auto-due for each completed week that has neither a
-    // payment nor an existing DUE entry in Firestore.
-    const dueWeeks = new Set(dueItemsByWeek.keys());
-    for (let w = 1; w <= completedWeeks; w++) {
-      if (!paidWeeks.has(w) && !dueWeeks.has(w)) {
-        const duePayment: Payment = {
-          id: id(),
-          loanId: loan.id,
-          customerId: loan.customerId,
-          amountPaid: 0,
-          paymentDate: toSOD(loan.startDate) + (w - 1) * oneWeek,
-          weekNumber: w,
-          paymentType: "DUE",
-          paymentMode: "CASH",
-          type: "DUE",
-          userId: loan.userId,
-        };
-        batch.set(doc(db, "payments", duePayment.id), stripUndefined(duePayment));
-        hasChanges = true;
-      }
-    }
+export async function runRetroactiveCleanup(userId: string) {
+  if (typeof window !== "undefined" && window.localStorage && window.localStorage.getItem("migration_done_v2")) {
+    return;
   }
 
-  if (hasChanges) {
-    await batch.commit();
-    clearCache();
+  try {
+    const customersSnap = await getDocs(query(coll.customers, where("userId", "==", userId)));
+    const activeCustomers = customersSnap.docs.map(d => d.data() as Customer).filter(c => c.isActive !== false);
+
+    const batch = writeBatch(db);
+    let updateCount = 0;
+
+    for (const customer of activeCustomers) {
+      let cycleStartDay = (customer as any).cycleStartDay;
+      if (typeof cycleStartDay !== "number" || cycleStartDay < 0 || cycleStartDay > 6) {
+        cycleStartDay = new Date(customer.createdAt || Date.now()).getDay();
+        batch.update(doc(db, "customers", customer.id), { cycleStartDay });
+        updateCount++;
+      }
+
+      const pSnap = await getDocs(query(coll.payments, where("customerId", "==", customer.id)));
+      const payments = pSnap.docs.map(d => ({ data: d.data() as Payment, ref: d.ref }));
+
+      const dues = payments.filter(p => p.data.paymentType === "DUE" || (p.data as any).type === "DUE");
+      const regularPayments = payments.filter(p => p.data.paymentType === "REGULAR" || (p.data as any).type === "REGULAR" || p.data.paymentType === "CASH" || p.data.paymentType === "PHONE" || (p.data as any).type === "CASH" || (p.data as any).type === "PHONE");
+
+      for (const reg of regularPayments) {
+        const regTs = toMillis(reg.data.paymentDate);
+        const targetCycleStart = getPersonalCycleStartTs(regTs, cycleStartDay);
+
+        const coexistingDues = dues.filter(due => {
+          const dueTs = toMillis(due.data.paymentDate);
+          return getPersonalCycleStartTs(dueTs, cycleStartDay) === targetCycleStart;
+        });
+
+        for (const due of coexistingDues) {
+          batch.delete(due.ref);
+          updateCount++;
+        }
+      }
+    }
+
+    if (updateCount > 0) {
+      await batch.commit();
+      console.log(`Retroactive cleanup migrated ${updateCount} records.`);
+    }
+
+    if (typeof window !== "undefined" && window.localStorage) {
+      window.localStorage.setItem("migration_done_v2", "true");
+    }
+  } catch (err) {
+    console.error("Migration failed", err);
   }
 }
 

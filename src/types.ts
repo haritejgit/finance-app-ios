@@ -50,6 +50,15 @@ export type Customer = {
   movedToVillage?: string;
   movedOnWeek?: string;
   movedFromNumericalId?: number;
+  villageHistory?: VillageHistorySegment[];
+};
+
+export type VillageHistorySegment = {
+  villageId: string;
+  villageName: string;
+  fromWeek: string;
+  toWeek: string | null;
+  numericalId: number;
 };
 
 export type Loan = {

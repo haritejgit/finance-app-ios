@@ -25,7 +25,7 @@ import { PhoneLink } from "../../src/components/PhoneLink";
 import { getDashboardAnalytics, subscribeDashboardAnalytics, type CustomerState, type DashboardAnalytics } from "../../src/finance-analytics";
 import Icon from "../../src/Icon";
 import { lightImpact } from "../../src/interactions";
-import { CustomerSearchResult, getAllActiveCustomersWithVillages } from "../../src/repository";
+import { CustomerSearchResult, getAllActiveCustomersWithVillages, runRetroactiveCleanup } from "../../src/repository";
 import { Colors, Gradients } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
 import { useLanguage } from "../../src/language-context";
@@ -188,6 +188,12 @@ export default function ShiftSelectionScreen() {
       useNativeDriver: true,
     }).start();
   }, [intro]);
+
+  useEffect(() => {
+    if (user?.uid) {
+      runRetroactiveCleanup(user.uid);
+    }
+  }, [user?.uid]);
 
   useEffect(() => {
     const timeout = setTimeout(() => setDebouncedQuery(searchQuery.trim().toLowerCase()), 220);

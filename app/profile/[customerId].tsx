@@ -43,7 +43,11 @@ import {
   updatePayment,
   getVillages,
   moveCustomerToVillage,
-  getNextNumericalId
+  getNextNumericalId,
+  getOrDeriveCycleStartDay,
+  getPersonalCycleStartTs,
+  getPersonalCycleWeekIndex,
+  formatPersonalCycleRange
 } from "../../src/repository";
 import { Customer, Loan, Payment, PaymentMode, PaymentType, Village } from "../../src/types";
 import { useTheme } from "../../src/theme-context";
@@ -60,11 +64,13 @@ const noTextSelection = Platform.OS === "web" ? ({ userSelect: "none", WebkitUse
 
 const PaymentHistory = memo(function PaymentHistory({ 
   payments, 
+  customer,
   onEdit, 
   onDelete,
   onShare
 }: { 
   payments: any[];
+  customer: any;
   onEdit?: (payment: any) => void;
   onDelete?: (payment: any) => void;
   onShare?: (payment: any) => void;
@@ -80,6 +86,8 @@ const PaymentHistory = memo(function PaymentHistory({
     );
   }
 
+  const cycleStartDay = getOrDeriveCycleStartDay(customer);
+
   return (
     <>
       {payments.map((p, index) => (
@@ -87,31 +95,43 @@ const PaymentHistory = memo(function PaymentHistory({
         <View style={[styles.paymentCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.paymentHeader}>
             <View style={styles.paymentDateContainer}>
-              <Text style={[styles.paymentDate, { color: colors.text }]}>
-                {new Date(p.paymentDate).toLocaleDateString('en-US', {
-                  weekday: 'short',
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </Text>
-              <Text style={[styles.paymentYear, { color: colors.textSecondary }]}>
-                {new Date(p.paymentDate).getFullYear()}
-              </Text>
-              <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
-                {new Date(p.paymentDate).toLocaleTimeString('en-IN', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  hour12: true,
-                })}
-              </Text>
+              {p.paymentType === "DUE" || p.type === "DUE" ? (
+                <Text style={[styles.paymentDate, { color: colors.text, fontSize: 13, fontWeight: "600" }]}>
+                  {formatPersonalCycleRange(getPersonalCycleStartTs(p.paymentDate, cycleStartDay))}
+                </Text>
+              ) : (
+                <>
+                  <Text style={[styles.paymentDate, { color: colors.text }]}>
+                    {new Date(p.paymentDate).toLocaleDateString('en-US', {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </Text>
+                  <Text style={[styles.paymentYear, { color: colors.textSecondary }]}>
+                    {new Date(p.paymentDate).getFullYear()}
+                  </Text>
+                  <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                    {new Date(p.paymentDate).toLocaleTimeString('en-IN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true,
+                    })}
+                  </Text>
+                </>
+              )}
             </View>
             <View style={styles.paymentAmountContainer}>
               <Text style={[styles.paymentAmount, { color: colors.text }]}>Rs.{p.amountPaid.toFixed(2)}</Text>
               <View style={[styles.paymentTypeBadge, {
-                backgroundColor: (p.paymentType as PaymentType) === "DUE" ? colors.missedRed : colors.paidGreen,
+                backgroundColor: p.paymentType === "DUE" 
+                  ? (p.isAutoDue ? '#FF5722' : colors.missedRed) 
+                  : colors.paidGreen,
               }]}>
                 <Text style={styles.paymentTypeText}>
-                  {(p.paymentType as PaymentType) === "DUE" ? "DUE" : p.paymentType}
+                  {p.paymentType === "DUE" 
+                    ? (p.isAutoDue ? "Auto Due" : "Due") 
+                    : p.paymentType}
                 </Text>
               </View>
             </View>
@@ -135,13 +155,6 @@ const PaymentHistory = memo(function PaymentHistory({
                   <Text style={styles.editPaymentBtnText}>Share</Text>
                 </Pressable>
               )}
-            </View>
-          )}
-          {p.paymentType === "DUE" && !p.isAutoInjected && onDelete && (
-            <View style={styles.paymentActions}>
-              <Pressable style={styles.deletePaymentBtn} onPress={() => onDelete(p)}>
-                <Icon name="trash-outline" size={14} color={colors.white} />
-              </Pressable>
             </View>
           )}
         </View>
@@ -578,24 +591,23 @@ export default function ProfileScreen() {
   const disbursementMode = (loan?.disbursement_mode ?? loan?.disbursementMode ?? "CASH") as PaymentMode;
 
   const paymentTimeline = useMemo(() => {
-    if (!loan) return [] as { index: number; date: number; status: "paid" | "overdue" | "upcoming"; amount: number }[];
+    if (!loan || !customer) return [] as { index: number; date: number; status: "paid" | "overdue" | "upcoming"; amount: number }[];
     const oneWeek = 7 * 24 * 60 * 60 * 1000;
 
     const toStartOfDay = (ts: number) => {
-      const d = new Date(ts);
+      const d = new Date(toMillis(ts));
       d.setHours(0, 0, 0, 0);
       return d.getTime();
     };
 
+    const customerCycleStartDay = getOrDeriveCycleStartDay(customer, loan.startDate);
     const paidByWeek = new Map<number, number>();
     const explicitDueWeeks = new Set<number>();
 
     payments
       .filter((p: any) => p.loanId === loan.id)
       .forEach((p: any) => {
-        const weekIndex = typeof p.weekNumber === "number"
-          ? p.weekNumber - 1
-          : (p.paymentDate - loan.startDate < 0 ? 0 : Math.floor((toStartOfDay(p.paymentDate) - toStartOfDay(loan.startDate)) / oneWeek));
+        const weekIndex = getPersonalCycleWeekIndex(p.paymentDate, loan.startDate, customerCycleStartDay);
 
         if (p.paymentType === "DUE" || p.type === "DUE") {
           explicitDueWeeks.add(weekIndex);
@@ -605,12 +617,13 @@ export default function ProfileScreen() {
       });
 
     const now = Date.now();
-    const completedWeeks = Math.max(0, Math.floor((now - toStartOfDay(loan.startDate)) / oneWeek));
+    const loanStartCycleStart = getPersonalCycleStartTs(loan.startDate, customerCycleStartDay);
+    const completedWeeks = Math.max(0, Math.floor((now - loanStartCycleStart) / oneWeek));
     const maxPaidWeekIndex = paidByWeek.size > 0 ? Math.max(...paidByWeek.keys()) : 0;
     const totalWeeks = Math.max(12, completedWeeks + 1, maxPaidWeekIndex + 1);
 
     return Array.from({ length: totalWeeks }, (_, index) => {
-      const date = toStartOfDay(loan.startDate) + index * oneWeek;
+      const date = loanStartCycleStart + index * oneWeek;
       const amount = paidByWeek.get(index) ?? 0;
       const weekDeadline = date + oneWeek;
       let status: "paid" | "overdue" | "upcoming";
@@ -623,20 +636,20 @@ export default function ProfileScreen() {
       }
       return { index, date, amount, status };
     });
-  }, [loan, payments]);
+  }, [loan, payments, customer]);
 
   const displayedPayments = useMemo(() => {
-    if (!loan) return payments;
+    if (!loan || !customer) return payments;
     const oneWeek = 7 * 24 * 60 * 60 * 1000;
     const now = Date.now();
+
+    const customerCycleStartDay = getOrDeriveCycleStartDay(customer, loan.startDate);
     const paidByWeek = new Map<number, number>();
     
     payments
       .filter((p: any) => p.loanId === loan.id && (p.paymentType === "REGULAR" || p.type === "REGULAR" || p.paymentType === "CASH" || p.paymentType === "PHONE"))
       .forEach((p: any) => {
-        const weekIndex = typeof p.weekNumber === "number"
-          ? p.weekNumber - 1
-          : (p.paymentDate - loan.startDate < 0 ? 0 : Math.floor((toStartOfDay(p.paymentDate) - toStartOfDay(loan.startDate)) / oneWeek));
+        const weekIndex = getPersonalCycleWeekIndex(p.paymentDate, loan.startDate, customerCycleStartDay);
         paidByWeek.set(weekIndex, (paidByWeek.get(weekIndex) ?? 0) + Number(p.amountPaid || 0));
       });
       
@@ -644,17 +657,16 @@ export default function ProfileScreen() {
     payments
       .filter((p: any) => p.loanId === loan.id && (p.paymentType === "DUE" || p.type === "DUE"))
       .forEach((p: any) => {
-        const weekIndex = typeof p.weekNumber === "number"
-          ? p.weekNumber - 1
-          : (p.paymentDate - loan.startDate < 0 ? 0 : Math.floor((toStartOfDay(p.paymentDate) - toStartOfDay(loan.startDate)) / oneWeek));
+        const weekIndex = getPersonalCycleWeekIndex(p.paymentDate, loan.startDate, customerCycleStartDay);
         explicitDueWeekIndices.add(weekIndex);
       });
 
-    const completedWeeks = Math.max(0, Math.floor((now - toStartOfDay(loan.startDate)) / oneWeek));
+    const loanStartCycleStart = getPersonalCycleStartTs(loan.startDate, customerCycleStartDay);
+    const completedWeeks = Math.max(0, Math.floor((now - loanStartCycleStart) / oneWeek));
     const injectedDues: any[] = [];
     
     for (let i = 0; i < completedWeeks; i++) {
-      const weekStartDate = toStartOfDay(loan.startDate) + i * oneWeek;
+      const weekStartDate = loanStartCycleStart + i * oneWeek;
       const amount = paidByWeek.get(i) ?? 0;
       const isAutoOverdue = amount === 0;
       const hasExplicitDue = explicitDueWeekIndices.has(i);
@@ -672,30 +684,21 @@ export default function ProfileScreen() {
           type: "DUE",
           userId: loan.userId,
           isAutoInjected: true,
+          isAutoDue: true,
         });
       }
     }
     
-    // Defensive filter: suppress any Firestore DUE entries for weeks that
-    // already have a real payment.  This handles stale data created before
-    // the auto-cleanup fix, preventing "DUE + REGULAR on same day" in the UI.
     const filteredPayments = payments.filter((p: any) => {
-      // Keep everything that is NOT a DUE entry
       if (p.paymentType !== "DUE" && p.type !== "DUE") return true;
-      // Keep DUE entries from old loans (show full history)
       if (p.loanId !== loan.id) return true;
-      // Suppress DUE entries for weeks that have a real payment
-      const wIdx = typeof p.weekNumber === "number"
-        ? p.weekNumber - 1
-        : (p.paymentDate - loan.startDate < 0
-            ? 0
-            : Math.floor((toStartOfDay(p.paymentDate) - toStartOfDay(loan.startDate)) / oneWeek));
+      const wIdx = getPersonalCycleWeekIndex(p.paymentDate, loan.startDate, customerCycleStartDay);
       return (paidByWeek.get(wIdx) ?? 0) === 0;
     });
 
     const combined = [...filteredPayments, ...injectedDues];
     return combined.sort((a, b) => b.paymentDate - a.paymentDate);
-  }, [loan, payments]);
+  }, [loan, payments, customer]);
 
   const sendWhatsAppReminder = useCallback(() => {
     if (!customer) return;
@@ -1173,7 +1176,7 @@ export default function ProfileScreen() {
                               Rs.{Math.round(week.amount).toLocaleString("en-IN")}
                             </Text>
                             <Text style={[styles.timelineTooltipDate, { color: colors.textSecondary }]}>
-                              {new Date(week.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                              {formatPersonalCycleRange(week.date)}
                             </Text>
                           </View>
                         ) : null}
@@ -1291,6 +1294,7 @@ export default function ProfileScreen() {
             <Text style={[styles.history, { color: colors.white }]}>Transaction History</Text>
             <PaymentHistory 
               payments={displayedPayments} 
+              customer={customer}
               onEdit={openEditPaymentModal}
               onDelete={openDeletePaymentConfirm}
               onShare={sharePaymentReceipt}
