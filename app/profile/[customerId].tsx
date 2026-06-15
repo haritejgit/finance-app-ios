@@ -570,12 +570,12 @@ export default function ProfileScreen() {
     const paidByWeek = new Map<number, number>();
     const oneWeek = 7 * 24 * 60 * 60 * 1000;
     payments
-      .filter((payment: Payment) => payment.paymentType === "REGULAR")
-      .forEach((payment: Payment) => {
-        const weekIndex = typeof payment.weekNumber === "number"
-          ? payment.weekNumber - 1
-          : (payment.paymentDate - loan.startDate < 0 ? 0 : Math.floor((toStartOfDay(payment.paymentDate) - toStartOfDay(loan.startDate)) / oneWeek));
-        paidByWeek.set(weekIndex, (paidByWeek.get(weekIndex) ?? 0) + Number(payment.amountPaid || 0));
+      .filter((p: any) => p.loanId === loan.id && (p.paymentType === "REGULAR" || p.type === "REGULAR" || p.paymentType === "CASH" || p.paymentType === "PHONE"))
+      .forEach((p: any) => {
+        const weekIndex = typeof p.weekNumber === "number"
+          ? p.weekNumber - 1
+          : (p.paymentDate - loan.startDate < 0 ? 0 : Math.floor((toStartOfDay(p.paymentDate) - toStartOfDay(loan.startDate)) / oneWeek));
+        paidByWeek.set(weekIndex, (paidByWeek.get(weekIndex) ?? 0) + Number(p.amountPaid || 0));
       });
     const now = Date.now();
     return Array.from({ length: 12 }, (_, index) => {
@@ -602,7 +602,7 @@ export default function ProfileScreen() {
     const paidByWeek = new Map<number, number>();
     
     payments
-      .filter((p: any) => p.paymentType === "REGULAR" || p.type === "REGULAR" || p.paymentType === "CASH" || p.paymentType === "PHONE")
+      .filter((p: any) => p.loanId === loan.id && (p.paymentType === "REGULAR" || p.type === "REGULAR" || p.paymentType === "CASH" || p.paymentType === "PHONE"))
       .forEach((p: any) => {
         const weekIndex = typeof p.weekNumber === "number"
           ? p.weekNumber - 1
@@ -612,7 +612,7 @@ export default function ProfileScreen() {
       
     const explicitDueWeekIndices = new Set<number>();
     payments
-      .filter((p: any) => p.paymentType === "DUE" || p.type === "DUE")
+      .filter((p: any) => p.loanId === loan.id && (p.paymentType === "DUE" || p.type === "DUE"))
       .forEach((p: any) => {
         const weekIndex = typeof p.weekNumber === "number"
           ? p.weekNumber - 1
@@ -1094,20 +1094,6 @@ export default function ProfileScreen() {
                       month: "short",
                       year: "numeric",
                     })}
-                  </Text>
-                </View>
-
-                <View style={[styles.disbursementRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <Text style={[styles.disbursementLabel, { color: colors.textSecondary }]}>Principal Amount:</Text>
-                  <Text style={[styles.disbursementLabel, { color: colors.text, fontWeight: "700" }]}>
-                    Rs.{Math.round(loan.principalAmount).toLocaleString("en-IN")}/-
-                  </Text>
-                </View>
-
-                <View style={[styles.disbursementRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <Text style={[styles.disbursementLabel, { color: colors.textSecondary }]}>Actual Disbursed:</Text>
-                  <Text style={[styles.disbursementLabel, { color: colors.text, fontWeight: "700" }]}>
-                    Rs.{Math.round(calculateDisbursedAmount(loan.principalAmount)).toLocaleString("en-IN")}/-
                   </Text>
                 </View>
               </>
