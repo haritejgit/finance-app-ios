@@ -288,6 +288,7 @@ export default function ShiftSelectionScreen() {
   const todayLabel = useMemo(() => new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" }), []);
   const bottomActions = useMemo(
     () => [
+      { label: "Reminders", icon: "sparkles-outline", action: () => nav.push("/reminders") },
       { label: t("reports"), icon: "document-text-outline", action: () => nav.push("/reports") },
       { label: t("account"), icon: "wallet-outline", action: () => nav.push("/account") },
       { label: t("analytics"), icon: "bar-chart-outline", action: () => nav.push("/graph") },
