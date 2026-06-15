@@ -520,8 +520,6 @@ export default function CustomerListScreen() {
   const [quickCollectSaving, setQuickCollectSaving] = useState(false);
   const [quickCollectValues, setQuickCollectValues] = useState<Record<string, { selected: boolean; amount: string }>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [showCelebrate, setShowCelebrate] = useState(false);
-  const [hasCelebrated, setHasCelebrated] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const scrollOffsetRef = useRef(0);
   const [aadharWarning, setAadharWarning] = useState("");
@@ -915,31 +913,6 @@ export default function CustomerListScreen() {
     [statusFilter]
   );
 
-  const villageProgress = useMemo(() => {
-    const activeLoansList = customers.filter(c => activeLoans[c.id] && activeLoans[c.id].balanceAmount > 0);
-    const totalActive = activeLoansList.length;
-    const collectedActive = activeLoansList.filter(c => paymentStatuses[c.id] === "paid").length;
-    const percent = totalActive > 0 ? Math.round((collectedActive / totalActive) * 100) : 0;
-    return {
-      totalActive,
-      collectedActive,
-      percent
-    };
-  }, [customers, activeLoans, paymentStatuses]);
-
-  useEffect(() => {
-    if (villageProgress.percent === 100 && villageProgress.totalActive > 0 && !hasCelebrated) {
-      setShowCelebrate(true);
-      setHasCelebrated(true);
-      const timer = setTimeout(() => setShowCelebrate(false), 5000);
-      return () => clearTimeout(timer);
-    }
-    if (villageProgress.percent < 100) {
-      setHasCelebrated(false);
-    }
-    return undefined;
-  }, [villageProgress.percent, villageProgress.totalActive, hasCelebrated]);
-
   const openCustomer = useCallback((customerId: string) => {
     router.push(`/profile/${customerId}`);
   }, []);
@@ -1207,28 +1180,7 @@ export default function CustomerListScreen() {
             />
           </View>
 
-          {villageProgress.totalActive > 0 ? (
-            <View style={{
-              backgroundColor: "rgba(255, 255, 255, 0.12)",
-              borderColor: "rgba(255, 255, 255, 0.2)",
-              borderWidth: 1,
-              borderRadius: 14,
-              padding: 12,
-              marginBottom: 10,
-              marginTop: 2,
-            }}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "700" }}>Weekly Village Progress</Text>
-                <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "800" }}>{villageProgress.percent}%</Text>
-              </View>
-              <View style={{ height: 8, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 4, overflow: "hidden", marginBottom: 4 }}>
-                <View style={{ height: "100%", width: `${villageProgress.percent}%`, backgroundColor: "#00D4AA", borderRadius: 4 }} />
-              </View>
-              <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 11, fontWeight: "600" }}>
-                {villageProgress.collectedActive} of {villageProgress.totalActive} active collections completed
-              </Text>
-            </View>
-          ) : null}
+
 
           <View style={styles.compactFilterRow}>
             <Pressable style={styles.compactFilterBtn} onPress={() => setFilterMenuOpen(true)}>
@@ -1905,37 +1857,7 @@ export default function CustomerListScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {showCelebrate && (
-        <View style={{
-          position: "absolute",
-          top: 50,
-          left: 20,
-          right: 20,
-          backgroundColor: "#1B4332",
-          borderRadius: 12,
-          padding: 16,
-          zIndex: 9999,
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "center",
-          borderWidth: 2,
-          borderColor: "#52B788",
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 5,
-          elevation: 8,
-        }}>
-          <Icon name="trophy" size={24} color="#FFD700" style={{ marginRight: 10 }} />
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: "#FFFFFF", fontWeight: "800", fontSize: 15 }}>100% Completed! 🎉</Text>
-            <Text style={{ color: "#D8F3DC", fontWeight: "600", fontSize: 12 }}>All collections in {village?.name} have been cleared!</Text>
-          </View>
-          <Pressable onPress={() => setShowCelebrate(false)} style={{ padding: 4 }}>
-            <Icon name="close" size={18} color="#FFFFFF" />
-          </Pressable>
-        </View>
-      )}
+
     </LinearGradient>
     </AnimatedScreen>
   );
