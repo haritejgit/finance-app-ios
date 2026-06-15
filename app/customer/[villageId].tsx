@@ -505,6 +505,8 @@ export default function CustomerListScreen() {
   const [quickCollectSaving, setQuickCollectSaving] = useState(false);
   const [quickCollectValues, setQuickCollectValues] = useState<Record<string, { selected: boolean; amount: string }>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [showCelebrate, setShowCelebrate] = useState(false);
+  const [hasCelebrated, setHasCelebrated] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const scrollOffsetRef = useRef(0);
   const [aadharWarning, setAadharWarning] = useState("");
@@ -890,6 +892,31 @@ export default function CustomerListScreen() {
     [statusFilter]
   );
 
+  const villageProgress = useMemo(() => {
+    const activeLoansList = customers.filter(c => activeLoans[c.id] && activeLoans[c.id].balanceAmount > 0);
+    const totalActive = activeLoansList.length;
+    const collectedActive = activeLoansList.filter(c => paymentStatuses[c.id] === "paid").length;
+    const percent = totalActive > 0 ? Math.round((collectedActive / totalActive) * 100) : 0;
+    return {
+      totalActive,
+      collectedActive,
+      percent
+    };
+  }, [customers, activeLoans, paymentStatuses]);
+
+  useEffect(() => {
+    if (villageProgress.percent === 100 && villageProgress.totalActive > 0 && !hasCelebrated) {
+      setShowCelebrate(true);
+      setHasCelebrated(true);
+      const timer = setTimeout(() => setShowCelebrate(false), 5000);
+      return () => clearTimeout(timer);
+    }
+    if (villageProgress.percent < 100) {
+      setHasCelebrated(false);
+    }
+    return undefined;
+  }, [villageProgress.percent, villageProgress.totalActive, hasCelebrated]);
+
   const openCustomer = useCallback((customerId: string) => {
     router.push(`/profile/${customerId}`);
   }, []);
@@ -925,25 +952,40 @@ export default function CustomerListScreen() {
     const suggested = getSuggestedPaymentAmount(loan);
     if (!user) return;
 
-    try {
-      setPayingCustomerId(customer.id);
-      await addPayment(loan, suggested, Date.now(), mode);
-      setPaymentStatuses((current) => ({ ...current, [customer.id]: "paid" }));
-      setActiveLoans((current) => ({
-        ...current,
-        [customer.id]: { ...loan, balanceAmount: Math.max(0, loan.balanceAmount - suggested) },
-      }));
-      showToast(
-        "success",
-        "✅ Payment Registered!",
-        `Paid Rs.${suggested.toLocaleString("en-IN")} via ${mode === "PHONE" ? "PhonePe" : "Cash"} for ${customer.name}`
+    const proceed = async () => {
+      try {
+        setPayingCustomerId(customer.id);
+        await addPayment(loan, suggested, Date.now(), mode);
+        setPaymentStatuses((current) => ({ ...current, [customer.id]: "paid" }));
+        setActiveLoans((current) => ({
+          ...current,
+          [customer.id]: { ...loan, balanceAmount: Math.max(0, loan.balanceAmount - suggested) },
+        }));
+        showToast(
+          "success",
+          "✅ Payment Registered!",
+          `Paid Rs.${suggested.toLocaleString("en-IN")} via ${mode === "PHONE" ? "PhonePe" : "Cash"} for ${customer.name}`
+        );
+      } catch {
+        Alert.alert("Payment failed", "Could not save this payment. Please try again.");
+      } finally {
+        setPayingCustomerId(null);
+      }
+    };
+
+    if (paymentStatuses[customer.id] === "paid") {
+      Alert.alert(
+        "Already Paid",
+        `${customer.name} has already paid this week. Do you want to register an additional payment of Rs.${suggested.toLocaleString("en-IN")}?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Confirm", onPress: proceed }
+        ]
       );
-    } catch {
-      Alert.alert("Payment failed", "Could not save this payment. Please try again.");
-    } finally {
-      setPayingCustomerId(null);
+    } else {
+      await proceed();
     }
-  }, [activeLoans, user]);
+  }, [activeLoans, user, paymentStatuses]);
 
   const openQuickCollect = useCallback(() => {
     const nextValues: Record<string, { selected: boolean; amount: string }> = {};
@@ -1022,24 +1064,39 @@ export default function CustomerListScreen() {
       return;
     }
 
-    try {
-      setPayingCustomerId(manualPaymentCustomer.id);
-      await addPayment(loan, amount, Date.now(), manualPaymentMode);
-      setPaymentStatuses((current) => ({ ...current, [manualPaymentCustomer.id]: "paid" }));
-      setActiveLoans((current) => ({
-        ...current,
-        [manualPaymentCustomer.id]: {
-          ...loan,
-          balanceAmount: Math.max(0, loan.balanceAmount - amount),
-        },
-      }));
-      closeManualPayment();
-    } catch {
-      Alert.alert("Payment failed", "Could not save this payment. Please try again.");
-    } finally {
-      setPayingCustomerId(null);
+    const proceed = async () => {
+      try {
+        setPayingCustomerId(manualPaymentCustomer.id);
+        await addPayment(loan, amount, Date.now(), manualPaymentMode);
+        setPaymentStatuses((current) => ({ ...current, [manualPaymentCustomer.id]: "paid" }));
+        setActiveLoans((current) => ({
+          ...current,
+          [manualPaymentCustomer.id]: {
+            ...loan,
+            balanceAmount: Math.max(0, loan.balanceAmount - amount),
+          },
+        }));
+        closeManualPayment();
+      } catch {
+        Alert.alert("Payment failed", "Could not save this payment. Please try again.");
+      } finally {
+        setPayingCustomerId(null);
+      }
+    };
+
+    if (paymentStatuses[manualPaymentCustomer.id] === "paid") {
+      Alert.alert(
+        "Already Paid",
+        `${manualPaymentCustomer.name} has already paid this week. Do you want to register an additional payment of Rs.${amount.toLocaleString("en-IN")}?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Confirm", onPress: proceed }
+        ]
+      );
+    } else {
+      await proceed();
     }
-  }, [activeLoans, closeManualPayment, manualPaymentAmount, manualPaymentCustomer, manualPaymentMode, user]);
+  }, [activeLoans, closeManualPayment, manualPaymentAmount, manualPaymentCustomer, manualPaymentMode, user, paymentStatuses]);
 
   const confirmManualDue = useCallback(async () => {
     if (!manualPaymentCustomer) return;
@@ -1126,6 +1183,30 @@ export default function CustomerListScreen() {
               placeholderTextColor="rgba(255,255,255,0.62)"
             />
           </View>
+
+          {villageProgress.totalActive > 0 ? (
+            <View style={{
+              backgroundColor: "rgba(255, 255, 255, 0.12)",
+              borderColor: "rgba(255, 255, 255, 0.2)",
+              borderWidth: 1,
+              borderRadius: 14,
+              padding: 12,
+              marginBottom: 10,
+              marginTop: 2,
+            }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "700" }}>Weekly Village Progress</Text>
+                <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "800" }}>{villageProgress.percent}%</Text>
+              </View>
+              <View style={{ height: 8, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 4, overflow: "hidden", marginBottom: 4 }}>
+                <View style={{ height: "100%", width: `${villageProgress.percent}%`, backgroundColor: "#00D4AA", borderRadius: 4 }} />
+              </View>
+              <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 11, fontWeight: "600" }}>
+                {villageProgress.collectedActive} of {villageProgress.totalActive} active collections completed
+              </Text>
+            </View>
+          ) : null}
+
           <View style={styles.compactFilterRow}>
             <Pressable style={styles.compactFilterBtn} onPress={() => setFilterMenuOpen(true)}>
               <Icon name="filter-outline" size={16} color={colors.blue2} />
@@ -1797,9 +1878,41 @@ export default function CustomerListScreen() {
                 <Text style={styles.saveTxt}>Save Payment</Text>
               </Pressable>
             </View>
-          </View>
+            </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {showCelebrate && (
+        <View style={{
+          position: "absolute",
+          top: 50,
+          left: 20,
+          right: 20,
+          backgroundColor: "#1B4332",
+          borderRadius: 12,
+          padding: 16,
+          zIndex: 9999,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          borderWidth: 2,
+          borderColor: "#52B788",
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 5,
+          elevation: 8,
+        }}>
+          <Icon name="trophy" size={24} color="#FFD700" style={{ marginRight: 10 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: "#FFFFFF", fontWeight: "800", fontSize: 15 }}>100% Completed! 🎉</Text>
+            <Text style={{ color: "#D8F3DC", fontWeight: "600", fontSize: 12 }}>All collections in {village?.name} have been cleared!</Text>
+          </View>
+          <Pressable onPress={() => setShowCelebrate(false)} style={{ padding: 4 }}>
+            <Icon name="close" size={18} color="#FFFFFF" />
+          </Pressable>
+        </View>
+      )}
     </LinearGradient>
     </AnimatedScreen>
   );

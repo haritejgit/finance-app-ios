@@ -506,7 +506,7 @@ export async function getActiveLoansByCustomerIds(userId: string, customerIds: s
     }, {} as Record<string, Loan>);
 }
 
-export async function updateLoan(loan: Loan, newPrincipalAmount: number, newStartDate: number) {
+export async function updateLoan(loan: Loan, newPrincipalAmount: number, newStartDate: number, newDisbursementMode?: PaymentMode) {
   assertPositiveAmount(newPrincipalAmount, "Loan amount");
   // Recalculate interest and totals based on new principal
   const interestAmount = newPrincipalAmount * 0.2;
@@ -516,6 +516,8 @@ export async function updateLoan(loan: Loan, newPrincipalAmount: number, newStar
   const paidSoFar = loan.totalPayable - loan.balanceAmount;
   const newBalanceAmount = totalPayable - paidSoFar;
   
+  const finalMode = newDisbursementMode ? normalizeMode(newDisbursementMode) : normalizeMode(loan.disbursement_mode ?? loan.disbursementMode ?? "CASH");
+  
   const updatedLoan: Loan = {
     ...loan,
     principalAmount: newPrincipalAmount,
@@ -523,8 +525,8 @@ export async function updateLoan(loan: Loan, newPrincipalAmount: number, newStar
     totalPayable: totalPayable,
     balanceAmount: newBalanceAmount,
     startDate: newStartDate,
-    disbursement_mode: normalizeMode(loan.disbursement_mode ?? loan.disbursementMode),
-    disbursementMode: normalizeMode(loan.disbursement_mode ?? loan.disbursementMode),
+    disbursement_mode: finalMode,
+    disbursementMode: finalMode,
   };
   
   await setDoc(doc(db, "loans", loan.id), stripUndefined(updatedLoan));

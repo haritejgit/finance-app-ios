@@ -48,6 +48,7 @@ import { Customer, Loan, Payment, PaymentMode, PaymentType, Village } from "../.
 import { useTheme } from "../../src/theme-context";
 import { colors } from "../../src/theme";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { calculateDisbursedAmount } from "../../src/business-logic";
 import { useLanguage } from "../../src/language-context";
 import { translateTelugu } from "../../src/exports";
 import { openCustomerLedgerPrint } from "../../src/exports";
@@ -231,6 +232,7 @@ function createEmptyEditForm() {
     passportPhotoSubmitted: false,
     loanAmount: "",
     loanStartDate: formatDateInput(Date.now()),
+    loanDisbursementMode: "CASH" as PaymentMode,
   };
 }
 
@@ -315,6 +317,7 @@ export default function ProfileScreen() {
       passportPhotoSubmitted: customer.passportPhotoSubmitted === true,
       loanAmount: loan ? loan.principalAmount.toString() : "",
       loanStartDate: loan ? formatDateInput(loan.startDate) : formatDateInput(Date.now()),
+      loanDisbursementMode: loan ? (loan.disbursement_mode ?? loan.disbursementMode ?? "CASH") : "CASH",
     });
     setEditCoordinateError("");
     setEditLocationStatus("");
@@ -514,6 +517,21 @@ export default function ProfileScreen() {
   }, [authLoading, reload]));
 
   const creditSummary = useMemo(() => calculateCreditScore(payments, loan), [loan, payments]);
+
+  const paidTodayAmount = useMemo(() => {
+    const today = new Date();
+    return payments
+      .filter((p) => {
+        const pDate = p.paymentDate;
+        if (!pDate) return false;
+        const d = new Date(pDate);
+        return (p.paymentType === "REGULAR" || p.type === "REGULAR" || p.paymentType === "CASH" || p.paymentType === "PHONE" || p.type === "CASH" || p.type === "PHONE") &&
+          d.getDate() === today.getDate() &&
+          d.getMonth() === today.getMonth() &&
+          d.getFullYear() === today.getFullYear();
+      })
+      .reduce((sum, p) => sum + Number(p.amountPaid || p.amount || 0), 0);
+  }, [payments]);
 
   const customerInsights = useMemo(() => {
     const regular = payments.filter((payment) => payment.paymentType === "REGULAR");
@@ -747,10 +765,26 @@ export default function ProfileScreen() {
     }
     setPaymentDateError("");
     const finalDate = (toStartOfDay(parsedDate) === toStartOfDay(Date.now())) ? Date.now() : toStartOfDay(parsedDate);
-    await addPayment(loan, parsedAmount, finalDate, mode);
-    setPayOpen(false);
-    setAmount("");
-    await reload();
+    
+    const proceed = async () => {
+      await addPayment(loan, parsedAmount, finalDate, mode);
+      setPayOpen(false);
+      setAmount("");
+      await reload();
+    };
+
+    if (paidTodayAmount > 0) {
+      Alert.alert(
+        "Already Paid Today",
+        `${customer?.name || "Customer"} has already paid Rs.${paidTodayAmount} today. Do you want to enter this additional amount of Rs.${parsedAmount}?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Confirm", onPress: proceed }
+        ]
+      );
+    } else {
+      await proceed();
+    }
   };
 
   const closePaymentModal = () => {
@@ -906,7 +940,8 @@ export default function ProfileScreen() {
         await updateLoan(
           loan,
           Number(editForm.loanAmount || 0),
-          parsedDate
+          parsedDate,
+          editForm.loanDisbursementMode as PaymentMode
         );
       }
     }
@@ -1059,6 +1094,20 @@ export default function ProfileScreen() {
                       month: "short",
                       year: "numeric",
                     })}
+                  </Text>
+                </View>
+
+                <View style={[styles.disbursementRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Text style={[styles.disbursementLabel, { color: colors.textSecondary }]}>Principal Amount:</Text>
+                  <Text style={[styles.disbursementLabel, { color: colors.text, fontWeight: "700" }]}>
+                    Rs.{Math.round(loan.principalAmount).toLocaleString("en-IN")}/-
+                  </Text>
+                </View>
+
+                <View style={[styles.disbursementRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <Text style={[styles.disbursementLabel, { color: colors.textSecondary }]}>Actual Disbursed:</Text>
+                  <Text style={[styles.disbursementLabel, { color: colors.text, fontWeight: "700" }]}>
+                    Rs.{Math.round(calculateDisbursedAmount(loan.principalAmount)).toLocaleString("en-IN")}/-
                   </Text>
                 </View>
               </>
@@ -1316,6 +1365,13 @@ export default function ProfileScreen() {
               </View>
             )}
             {!!paymentDateError && <Text style={styles.errorText}>{paymentDateError}</Text>}
+            {paidTodayAmount > 0 ? (
+              <View style={{ backgroundColor: "#FFF3CD", borderColor: "#FFEBAA", borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 12 }}>
+                <Text style={{ color: "#856404", fontSize: 13, fontWeight: "600", textAlign: "center" }}>
+                  ⚠️ {customer?.name || "Customer"} has already paid Rs.{paidTodayAmount} today. Any new entry will be recorded as an additional payment.
+                </Text>
+              </View>
+            ) : null}
             <Text style={[styles.paymentMode, { color: colors.textSecondary }]}>
               Confirm Rs.{Number(amount || 0).toLocaleString("en-IN")} payment via {mode === "PHONE" ? "PhonePe" : "Cash"}?
             </Text>
@@ -1437,17 +1493,83 @@ export default function ProfileScreen() {
           <View style={[styles.modal, { backgroundColor: colors.card }]}>
             <Text style={[styles.modalTitle, { color: colors.text }]}>Renew Loan</Text>
             <TextInput placeholder="New Principal Amount" placeholderTextColor={colors.textMuted} value={renewAmount} onChangeText={setRenewAmount} style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]} keyboardType="numeric" />
+            
+            {(() => {
+              if (!loan || !renewAmount) return null;
+              const newPrincipal = Number(renewAmount);
+              if (isNaN(newPrincipal) || newPrincipal <= 0) return null;
+              const deduction = Math.floor(newPrincipal / 1000) * 20;
+              const disbursed = newPrincipal - deduction;
+              const oldBalance = loan.balanceAmount;
+              const netToGive = disbursed - oldBalance;
+              
+              return (
+                <View style={{ marginVertical: 12, padding: 12, backgroundColor: colors.surfaceTint, borderRadius: 10, borderWidth: 1, borderColor: colors.border, width: "100%" }}>
+                  <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 4 }}>
+                    New Disbursed Amount: <Text style={{ fontWeight: "700", color: colors.text }}>Rs.{disbursed.toLocaleString("en-IN")}</Text> (after Rs.{deduction} deduction)
+                  </Text>
+                  <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 4 }}>
+                    Old Loan Balance: <Text style={{ fontWeight: "700", color: colors.text }}>Rs.{Math.round(oldBalance).toLocaleString("en-IN")}</Text>
+                  </Text>
+                  <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 6 }} />
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: netToGive >= 0 ? "#059669" : "#dc3545" }}>
+                    {netToGive >= 0 ? "Net Cash to Give Customer: " : "Net Cash to Collect: "}
+                    Rs.{Math.abs(netToGive).toLocaleString("en-IN")}/-
+                  </Text>
+                </View>
+              );
+            })()}
+
             <Pressable
               style={styles.primary}
               onPress={async () => {
                 if (!loan) return;
-                await renewLoan(loan, Number(renewAmount || 0), Date.now());
-                setRenewOpen(false);
-                setRenewAmount("");
-                await reload();
+                const newPrincipal = Number(renewAmount);
+                if (isNaN(newPrincipal) || newPrincipal <= 0) {
+                  Alert.alert("Error", "Please enter a valid principal amount.");
+                  return;
+                }
+                const deduction = Math.floor(newPrincipal / 1000) * 20;
+                const disbursed = newPrincipal - deduction;
+                const oldBalance = loan.balanceAmount;
+                const netToGive = disbursed - oldBalance;
+                
+                const msg = `Please confirm the renewal details:\n\n` +
+                  `New Loan: Rs.${newPrincipal.toLocaleString("en-IN")}\n` +
+                  `Actual Disbursed: Rs.${disbursed.toLocaleString("en-IN")} (after Rs.${deduction} deduction)\n` +
+                  `Less Old Balance: -Rs.${Math.round(oldBalance).toLocaleString("en-IN")}\n\n` +
+                  `Net Amount to ${netToGive >= 0 ? "GIVE" : "COLLECT"}: Rs.${Math.abs(netToGive).toLocaleString("en-IN")}/-\n\n` +
+                  `Do you want to confirm renewal?`;
+
+                Alert.alert(
+                  "Confirm Loan Renewal",
+                  msg,
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Confirm",
+                      onPress: async () => {
+                        await renewLoan(loan, newPrincipal, Date.now());
+                        setRenewOpen(false);
+                        setRenewAmount("");
+                        await reload();
+                      }
+                    }
+                  ]
+                );
               }}
             >
               <Text style={styles.primaryText}>Renew Now</Text>
+            </Pressable>
+            
+            <Pressable
+              style={styles.cancelModalBtn}
+              onPress={() => {
+                setRenewOpen(false);
+                setRenewAmount("");
+              }}
+            >
+              <Text style={styles.cancelModalBtnText}>Cancel</Text>
             </Pressable>
           </View>
         </KeyboardAvoidingView>
@@ -1582,6 +1704,25 @@ export default function ProfileScreen() {
                     style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
                     keyboardType="numeric"
                   />
+                  
+                  <Text style={[styles.inputLabel, { color: colors.text, marginTop: 8, marginBottom: 6 }]}>Disbursement Mode</Text>
+                  <View style={[styles.modeRow, { marginBottom: 12 }]}>
+                    {(["CASH", "PHONE"] as const).map((m) => (
+                      <Pressable
+                        key={m}
+                        onPress={() => setEditForm(prev => ({ ...prev, loanDisbursementMode: m }))}
+                        style={[
+                          styles.chip,
+                          editForm.loanDisbursementMode === m && styles.chipOn,
+                          editForm.loanDisbursementMode === m && m === "PHONE" && styles.chipPhoneOn,
+                        ]}
+                      >
+                        <Text style={editForm.loanDisbursementMode === m ? styles.chipOnText : styles.chipText}>
+                          {m === "PHONE" ? "PhonePe" : "Cash"}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
                   
                   {/* Date Picker Section */}
                   <Text style={[styles.inputLabel, { color: colors.text }]}>Loan Start Date</Text>
