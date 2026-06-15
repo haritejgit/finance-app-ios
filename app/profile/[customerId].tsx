@@ -676,7 +676,24 @@ export default function ProfileScreen() {
       }
     }
     
-    const combined = [...payments, ...injectedDues];
+    // Defensive filter: suppress any Firestore DUE entries for weeks that
+    // already have a real payment.  This handles stale data created before
+    // the auto-cleanup fix, preventing "DUE + REGULAR on same day" in the UI.
+    const filteredPayments = payments.filter((p: any) => {
+      // Keep everything that is NOT a DUE entry
+      if (p.paymentType !== "DUE" && p.type !== "DUE") return true;
+      // Keep DUE entries from old loans (show full history)
+      if (p.loanId !== loan.id) return true;
+      // Suppress DUE entries for weeks that have a real payment
+      const wIdx = typeof p.weekNumber === "number"
+        ? p.weekNumber - 1
+        : (p.paymentDate - loan.startDate < 0
+            ? 0
+            : Math.floor((toStartOfDay(p.paymentDate) - toStartOfDay(loan.startDate)) / oneWeek));
+      return (paidByWeek.get(wIdx) ?? 0) === 0;
+    });
+
+    const combined = [...filteredPayments, ...injectedDues];
     return combined.sort((a, b) => b.paymentDate - a.paymentDate);
   }, [loan, payments]);
 

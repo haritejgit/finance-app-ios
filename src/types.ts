@@ -43,6 +43,8 @@ export type Customer = {
   isActive: boolean;
   isBlocked?: boolean;
   createdAt: number;
+  movedAt?: number;
+  previousVillageId?: string;
 };
 
 export type Loan = {

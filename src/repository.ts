@@ -897,46 +897,90 @@ export async function checkAndAutoMarkDues(userId: string, activeLoans: Loan[]) 
     where("paymentDate", ">=", minStartDate)
   );
   const paymentsSnap = await getDocs(q);
-  const payments = paymentsSnap.docs.map((d) => d.data() as Payment);
+
+  // Keep both data and doc reference so we can delete bad DUEs
+  const paymentItems = paymentsSnap.docs.map((d) => ({
+    data: d.data() as Payment,
+    ref: d.ref,
+  }));
 
   const oneWeek = 7 * 24 * 60 * 60 * 1000;
   const now = Date.now();
   const batch = writeBatch(db);
   let hasChanges = false;
 
-  const toStartOfDay = (ts: number) => {
-    const d = new Date(ts);
+  const toSOD = (ts: number) => {
+    const d = new Date(toMillis(ts));
     d.setHours(0, 0, 0, 0);
     return d.getTime();
   };
 
+  // Resolve the week number for any payment, falling back to date math when
+  // the weekNumber field is missing or zero (common in older Firestore records).
+  const resolveWeekNum = (p: Payment, loanStartDate: number): number | null => {
+    let wNum = p.weekNumber;
+    if (typeof wNum !== "number" || wNum <= 0) {
+      const pDate = toSOD(toMillis(p.paymentDate));
+      const loanStart = toSOD(loanStartDate);
+      if (pDate >= loanStart) {
+        wNum = Math.floor((pDate - loanStart) / oneWeek) + 1;
+      } else {
+        return null;
+      }
+    }
+    return wNum > 0 ? wNum : null;
+  };
+
   for (const loan of validLoans) {
-    const loanPayments = payments.filter((p) => p.loanId === loan.id);
-    const completedWeeks = Math.max(0, Math.floor((now - toStartOfDay(loan.startDate)) / oneWeek));
+    const loanItems = paymentItems.filter((item) => item.data.loanId === loan.id);
+    const completedWeeks = Math.max(0, Math.floor((now - toSOD(loan.startDate)) / oneWeek));
 
+    // Build paid-weeks set and collect DUE doc refs grouped by week
     const paidWeeks = new Set<number>();
-    const dueWeeks = new Set<number>();
+    const dueItemsByWeek = new Map<number, { ref: ReturnType<typeof doc> }[]>();
 
-    loanPayments.forEach((p) => {
-      const wNum = p.weekNumber;
-      if (typeof wNum === "number") {
-        if (p.paymentType === "DUE" || (p as any).type === "DUE") {
-          dueWeeks.add(wNum);
-        } else if (p.paymentType === "REGULAR" || (p as any).type === "REGULAR" || (p as any).paymentType === "CASH" || (p as any).paymentType === "PHONE" || p.type === "CASH" || p.type === "PHONE") {
-          paidWeeks.add(wNum);
-        }
+    loanItems.forEach(({ data: p, ref }) => {
+      const wNum = resolveWeekNum(p, loan.startDate);
+      if (wNum === null) return;
+
+      if (p.paymentType === "DUE" || (p as any).type === "DUE") {
+        if (!dueItemsByWeek.has(wNum)) dueItemsByWeek.set(wNum, []);
+        dueItemsByWeek.get(wNum)!.push({ ref });
+      } else if (
+        p.paymentType === "REGULAR" ||
+        (p as any).type === "REGULAR" ||
+        (p as any).paymentType === "CASH" ||
+        (p as any).paymentType === "PHONE" ||
+        p.type === "CASH" ||
+        p.type === "PHONE"
+      ) {
+        paidWeeks.add(wNum);
       }
     });
 
+    // Step 1: Delete any DUE entries whose week already has a real payment.
+    // This cleans up corrupted data created before this fix.
+    paidWeeks.forEach((w) => {
+      const dues = dueItemsByWeek.get(w) ?? [];
+      dues.forEach(({ ref: dueRef }) => {
+        batch.delete(dueRef);
+        hasChanges = true;
+      });
+      // Remove from map so these weeks aren't treated as "already due"
+      dueItemsByWeek.delete(w);
+    });
+
+    // Step 2: Create auto-due for each completed week that has neither a
+    // payment nor an existing DUE entry in Firestore.
+    const dueWeeks = new Set(dueItemsByWeek.keys());
     for (let w = 1; w <= completedWeeks; w++) {
       if (!paidWeeks.has(w) && !dueWeeks.has(w)) {
-        // Automatically mark as due
         const duePayment: Payment = {
           id: id(),
           loanId: loan.id,
           customerId: loan.customerId,
           amountPaid: 0,
-          paymentDate: toStartOfDay(loan.startDate) + (w - 1) * oneWeek,
+          paymentDate: toSOD(loan.startDate) + (w - 1) * oneWeek,
           weekNumber: w,
           paymentType: "DUE",
           paymentMode: "CASH",
