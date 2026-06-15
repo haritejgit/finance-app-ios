@@ -1030,9 +1030,132 @@ export function formatPersonalCycleRange(startTs: number): string {
 }
 
 export async function checkAndAutoMarkDues(userId: string, activeLoans: Loan[]) {
-  // Client-side auto-due marking is disabled. Auto-dues are now handled daily by Firebase Cloud Functions.
-  return;
+  if (!activeLoans || activeLoans.length === 0) return;
+
+  const now = Date.now();
+  const batch = writeBatch(db);
+  let hasChanges = false;
+  const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
+
+  // Group active loans by customer ID so we can fetch customers in batch
+  const customerIds = Array.from(new Set(activeLoans.map(l => l.customerId)));
+  if (customerIds.length === 0) return;
+
+  // Fetch customers in chunks of 30 (Firestore limit for "in" query)
+  const customersMap = new Map<string, Customer>();
+  const chunks: string[][] = [];
+  for (let i = 0; i < customerIds.length; i += 30) {
+    chunks.push(customerIds.slice(i, i + 30));
+  }
+
+  for (const chunk of chunks) {
+    const snap = await getDocs(query(coll.customers, where("__name__", "in", chunk)));
+    snap.docs.forEach(d => {
+      customersMap.set(d.id, d.data() as Customer);
+    });
+  }
+
+  // Fetch all payments for all active loans
+  const loanIds = activeLoans.map(l => l.id);
+  const paymentsMap = new Map<string, Payment[]>();
+  
+  const loanChunks: string[][] = [];
+  for (let i = 0; i < loanIds.length; i += 30) {
+    loanChunks.push(loanIds.slice(i, i + 30));
+  }
+
+  for (const chunk of loanChunks) {
+    const snap = await getDocs(query(coll.payments, where("loanId", "in", chunk)));
+    snap.docs.forEach(d => {
+      const p = d.data() as Payment;
+      if (!paymentsMap.has(p.loanId)) {
+        paymentsMap.set(p.loanId, []);
+      }
+      paymentsMap.get(p.loanId)!.push(p);
+    });
+  }
+
+  for (const loan of activeLoans) {
+    const customer = customersMap.get(loan.customerId);
+    if (!customer) continue;
+
+    const loanStartDateMs = toMillis(loan.startDate);
+    const cycleStartDay = getOrDeriveCycleStartDay(customer, loanStartDateMs);
+
+    // Find all completed personal cycle weeks since loan start (first week is grace period)
+    const currentCycleStartTs = getPersonalCycleStartTs(now, cycleStartDay);
+    const loanCycleStartTs = getPersonalCycleStartTs(loanStartDateMs + oneWeekMs, cycleStartDay);
+
+    const diffMs = currentCycleStartTs - loanCycleStartTs;
+    const totalWeeksElapsed = Math.floor(diffMs / oneWeekMs);
+
+    if (totalWeeksElapsed <= 0) {
+      continue;
+    }
+
+    const loanPayments = paymentsMap.get(loan.id) || [];
+
+    // Group payments by their personal cycle week start timestamp
+    const paidCycleStarts = new Set<number>();
+    const existingDueCycleStarts = new Set<number>();
+
+    for (const p of loanPayments) {
+      const pTs = toMillis(p.paymentDate);
+      const pCycleStart = getPersonalCycleStartTs(pTs, cycleStartDay);
+      const pType = p.paymentType || (p as any).type;
+      
+      if (pType === "DUE") {
+        existingDueCycleStarts.add(pCycleStart);
+      } else if (
+        pType === "REGULAR" ||
+        pType === "CASH" ||
+        pType === "PHONE" ||
+        p.paymentMode === "CASH" ||
+        p.paymentMode === "PHONE"
+      ) {
+        paidCycleStarts.add(pCycleStart);
+      }
+    }
+
+    // For each elapsed week, see if a regular payment exists. If not, make sure a DUE exists.
+    for (let w = 0; w < totalWeeksElapsed; w++) {
+      const weekStartTs = loanCycleStartTs + w * oneWeekMs;
+
+      // If paid, skip
+      if (paidCycleStarts.has(weekStartTs)) {
+        continue;
+      }
+
+      // If not paid and no DUE entry exists, create one
+      if (!existingDueCycleStarts.has(weekStartTs)) {
+        const dueId = `due_${loan.id}_w${w + 1}`;
+        const duePayment = {
+          id: dueId,
+          loanId: loan.id,
+          customerId: loan.customerId,
+          amountPaid: 0,
+          paymentDate: weekStartTs, // Start of that cycle week
+          weekNumber: w + 1,
+          paymentType: "DUE",
+          paymentMode: "CASH",
+          type: "DUE",
+          userId: loan.userId,
+          isAutoDue: true, // Mark it as an auto-due
+          createdAt: Date.now(),
+        };
+
+        batch.set(doc(db, "payments", dueId), stripUndefined(duePayment));
+        hasChanges = true;
+      }
+    }
+  }
+
+  if (hasChanges) {
+    await batch.commit();
+    clearCache();
+  }
 }
+
 
 export async function runRetroactiveCleanup(userId: string) {
   if (typeof window !== "undefined" && window.localStorage && window.localStorage.getItem("migration_done_v2")) {
