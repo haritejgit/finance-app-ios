@@ -436,6 +436,20 @@ export async function addCustomerWithLoan(
   return customer;
 }
 
+function getISOWeekStartString(timestamp: number, cycleStartDay: number): string {
+  const d = new Date(timestamp);
+  d.setHours(0, 0, 0, 0);
+  const currentDay = d.getDay(); // 0 (Sun) - 6 (Sat)
+  let diff = currentDay - cycleStartDay;
+  if (diff < 0) diff += 7;
+  d.setDate(d.getDate() - diff);
+  
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export async function moveCustomerToVillage(userId: string, customerId: string, targetVillageId: string) {
   const customer = await getCustomerById(customerId);
   if (!customer) return;
@@ -444,6 +458,12 @@ export async function moveCustomerToVillage(userId: string, customerId: string, 
   const oldNumericalId = customer.numericalId;
 
   const newNumericalId = await getNextNumericalId(userId, targetVillageId);
+
+  const cycleStartDay = typeof (customer as any).cycleStartDay === "number"
+    ? (customer as any).cycleStartDay
+    : new Date(customer.createdAt || Date.now()).getDay();
+
+  const movedOnWeek = getISOWeekStartString(Date.now(), cycleStartDay);
 
   const batch = writeBatch(db);
 
@@ -454,6 +474,10 @@ export async function moveCustomerToVillage(userId: string, customerId: string, 
     movedAt: Date.now(),
     previousVillageId: oldVillageId,
     previousNumericalId: oldNumericalId,
+    movedFromVillage: oldVillageId,
+    movedToVillage: targetVillageId,
+    movedOnWeek: movedOnWeek,
+    movedFromNumericalId: oldNumericalId,
   });
 
   // Create a blocked/tombstone document in the old village to reserve the ID
@@ -470,6 +494,10 @@ export async function moveCustomerToVillage(userId: string, customerId: string, 
     movedAt: Date.now(),
     previousVillageId: oldVillageId,
     previousNumericalId: oldNumericalId,
+    movedFromVillage: oldVillageId,
+    movedToVillage: targetVillageId,
+    movedOnWeek: movedOnWeek,
+    movedFromNumericalId: oldNumericalId,
   });
 
   await batch.commit();

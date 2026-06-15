@@ -1060,8 +1060,8 @@ interface Payment {
         alignment: baseAlignment,
       };
       const movedStyle = {
-        font: { italic: true, color: { rgb: '808080' } },
-        fill: { patternType: 'solid', fgColor: { rgb: 'E0E0E0' } },
+        font: { bold: true, color: { rgb: 'FF5722' } }, // Distinct orange/red
+        fill: { patternType: 'solid', fgColor: { rgb: 'F5F5F5' } },
         alignment: baseAlignment,
       };
       const orangeStyle = {
@@ -1086,7 +1086,7 @@ interface Payment {
           const shiftVillages = villagesData.filter((v) => v.dayOfWeek === dayName && v.shift === shiftName);
           const shiftCustomers = customersData.filter((customer) =>
             shiftVillages.some((village) => village.id === customer.villageId) ||
-            (customer.previousVillageId && shiftVillages.some((village) => village.id === customer.previousVillageId))
+            (customer.movedFromVillage && shiftVillages.some((village) => village.id === customer.movedFromVillage))
           );
           if (shiftCustomers.length === 0) continue;
 
@@ -1122,10 +1122,10 @@ interface Payment {
           
           sortedVillages.forEach((village) => {
             const villageCustomers = shiftCustomers
-              .filter((c) => c.villageId === village.id || c.previousVillageId === village.id)
+              .filter((c) => c.villageId === village.id || c.movedFromVillage === village.id)
               .sort((a, b) => {
-                const aId = a.villageId === village.id ? (a.numericalId ?? Number.MAX_SAFE_INTEGER) : (a.previousNumericalId ?? Number.MAX_SAFE_INTEGER);
-                const bId = b.villageId === village.id ? (b.numericalId ?? Number.MAX_SAFE_INTEGER) : (b.previousNumericalId ?? Number.MAX_SAFE_INTEGER);
+                const aId = a.villageId === village.id ? (a.numericalId ?? Number.MAX_SAFE_INTEGER) : (a.movedFromNumericalId ?? Number.MAX_SAFE_INTEGER);
+                const bId = b.villageId === village.id ? (b.numericalId ?? Number.MAX_SAFE_INTEGER) : (b.movedFromNumericalId ?? Number.MAX_SAFE_INTEGER);
                 return aId - bId;
               });
             
@@ -1150,7 +1150,7 @@ interface Payment {
             villageCustomers.forEach((customer) => {
             const rowIndex = sheetData.length;
             const isCurrent = customer.villageId === village.id;
-            const displayId = isCurrent ? (customer.numericalId ?? '') : (customer.previousNumericalId ?? '');
+            const displayId = isCurrent ? (customer.numericalId ?? '') : (customer.movedFromNumericalId ?? '');
             const villageName = village.name;
             const customerLoans = loansData.filter((loan) => loan.customerId === customer.id);
             const customerPayments = paymentsData.filter((payment) =>
@@ -1170,25 +1170,34 @@ interface Payment {
               const colIndex = 4 + weekIdx;
 
               // Check if moved
-              const moveWeekStart = customer.movedAt
-                ? getCollectionWeekStart(getStartOfDay(customer.movedAt), dayName)
+              const moveWeekStart = customer.movedOnWeek
+                ? getCollectionWeekStart(getStartOfDay(new Date(customer.movedOnWeek).getTime()), dayName)
                 : null;
 
-              if (!isCurrent) {
-                // In the old/source village group:
-                if (moveWeekStart !== null && startOfWeek > moveWeekStart) {
-                  // After move week
-                  row.push("Moved →");
-                  setStyle(rowIndex, colIndex, movedStyle);
-                  return; // skip to next week column
-                }
-              } else {
-                // In the new/destination village group:
-                if (moveWeekStart !== null && startOfWeek < moveWeekStart) {
-                  // Before move week, show empty (no Due)
-                  row.push("");
-                  setStyle(rowIndex, colIndex, standardStyle);
-                  return; // skip to next week column
+              if (moveWeekStart !== null) {
+                if (!isCurrent) {
+                  // In the old/source village group:
+                  if (startOfWeek >= moveWeekStart) {
+                    row.push("Moved");
+                    setStyle(rowIndex, colIndex, movedStyle);
+                    return; // skip to next week column
+                  }
+                } else {
+                  // In the new/destination village group:
+                  if (startOfWeek < moveWeekStart) {
+                    row.push("");
+                    setStyle(rowIndex, colIndex, standardStyle);
+                    return; // skip to next week column
+                  }
+                  if (startOfWeek === moveWeekStart) {
+                    // Cumulative payments from all time
+                    const cumulativeAmount = customerPayments
+                      .filter((payment) => isRealCollectionPayment(payment) && payment.paymentDate <= endOfWeek)
+                      .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
+                    row.push(cumulativeAmount || "");
+                    setStyle(rowIndex, colIndex, standardStyle);
+                    return; // skip to next week column
+                  }
                 }
               }
 

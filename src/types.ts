@@ -46,6 +46,10 @@ export type Customer = {
   movedAt?: number;
   previousVillageId?: string;
   previousNumericalId?: number;
+  movedFromVillage?: string;
+  movedToVillage?: string;
+  movedOnWeek?: string;
+  movedFromNumericalId?: number;
 };
 
 export type Loan = {
