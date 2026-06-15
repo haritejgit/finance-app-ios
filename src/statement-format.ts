@@ -49,6 +49,8 @@ export const nameTransliterations: Record<string, string> = {
   Satish: "సతీష్",
   Sathish: "సతీష్",
   Sateesh: "సతీష్",
+  Ganapathi: "గణపతి",
+  Anna: "అన్న",
 };
 
 export function stripExpenseSuffix(label: string): string {

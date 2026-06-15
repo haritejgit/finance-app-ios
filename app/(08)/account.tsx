@@ -59,6 +59,37 @@ import { calculateWalletBalances } from "../../src/wallet-balances";
 
 import { useLanguage } from "../../src/language-context";
 
+type InvestmentPerson = "Hari" | "Satish" | "Ganapathi";
+
+const INVESTMENT_PEOPLE: InvestmentPerson[] = ["Hari", "Satish", "Ganapathi"];
+
+function normalizeInvestmentPerson(name?: string): InvestmentPerson {
+  return INVESTMENT_PEOPLE.includes(name as InvestmentPerson) ? (name as InvestmentPerson) : "Hari";
+}
+
+function renderInvestmentPersonSelector(
+  selectedPerson: InvestmentPerson,
+  onSelectPerson: React.Dispatch<React.SetStateAction<InvestmentPerson>>
+): React.ReactNode {
+  return (
+    <View style={styles.paymentModeRow}>
+      {INVESTMENT_PEOPLE.map((person) => (
+        <Pressable
+          key={person}
+          style={[
+            styles.paymentModeBtn,
+            selectedPerson === person && styles.investorSelectedBtn,
+          ]}
+          onPress={() => onSelectPerson(person)}
+        >
+          <Text style={[styles.paymentModeText, selectedPerson === person && styles.paymentModeTextOn]}>
+            {person}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
 
 // Helper functions for date formatting & parsing in DD/MM/YYYY
 function formatDDMMYYYY(ts: number): string {
@@ -290,7 +321,7 @@ export default function AccountScreen() {
   // Forms inputs
   const [invAmount, setInvAmount] = useState<string>("");
   const [invDate, setInvDate] = useState<string>("");
-  const [invName, setInvName] = useState<string>("");
+  const [invName, setInvName] = useState<InvestmentPerson>("Hari");
   const [expAmount, setExpAmount] = useState<string>("");
   const [expDesc, setExpDesc] = useState<string>("");
   const [expDate, setExpDate] = useState<string>("");
@@ -315,7 +346,7 @@ export default function AccountScreen() {
   const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null);
   const [editInvAmount, setEditInvAmount] = useState<string>("");
   const [editInvDate, setEditInvDate] = useState<string>("");
-  const [editInvName, setEditInvName] = useState<string>("");
+  const [editInvName, setEditInvName] = useState<InvestmentPerson>("Hari");
   const [editInvPaymentMode, setEditInvPaymentMode] = useState<PaymentMode>("CASH");
 
   // Export Modal Options State
@@ -565,9 +596,9 @@ export default function AccountScreen() {
     }
     try {
       setSubmitting(true);
-      await addInvestment(user.uid, amount, timestamp, invName.trim() || undefined, invPaymentMode);
+      await addInvestment(user.uid, amount, timestamp, invName, invPaymentMode);
       setInvAmount("");
-      setInvName("");
+      setInvName("Hari");
       setInvPaymentMode("CASH");
       // Refresh list
       const invs = await getInvestments(user.uid);
@@ -720,7 +751,7 @@ export default function AccountScreen() {
     setEditingInvestment(investment);
     setEditInvAmount(investment.amount.toString());
     setEditInvDate(formatDDMMYYYY(investment.date));
-    setEditInvName(investment.investorName || "");
+    setEditInvName(normalizeInvestmentPerson(investment.investorName));
     setEditInvPaymentMode(investment.payment_mode === "PHONE" ? "PHONE" : "CASH");
   }, []);
 
@@ -738,7 +769,7 @@ export default function AccountScreen() {
     }
     try {
       setSubmitting(true);
-      await updateInvestment(editingInvestment.id, amount, timestamp, editInvName.trim(), editInvPaymentMode);
+      await updateInvestment(editingInvestment.id, amount, timestamp, editInvName, editInvPaymentMode);
       setEditingInvestment(null);
       const invs = await getInvestments(user.uid);
       setInvestments(invs);
@@ -1765,13 +1796,7 @@ export default function AccountScreen() {
 
                       <View style={styles.inputContainer}>
                         <Text style={styles.inputLabel}>{t("investorName")}</Text>
-                        <TextInput
-                          style={styles.textInput}
-                          value={invName}
-                          onChangeText={setInvName}
-                          placeholder={t("investorNamePlaceholder")}
-                          placeholderTextColor="#78909c"
-                        />
+                        {renderInvestmentPersonSelector(invName, setInvName)}
                       </View>
 
                       <View style={styles.inputContainer}>
@@ -2204,13 +2229,7 @@ export default function AccountScreen() {
 
                   <View style={styles.inputContainer}>
                     <Text style={styles.modalLabel}>{t("investorName")}</Text>
-                    <TextInput
-                      style={[styles.textInput, { borderColor: "#e2e8f0" }]}
-                      value={editInvName}
-                      onChangeText={setEditInvName}
-                      placeholder={t("investorNamePlaceholder")}
-                      placeholderTextColor="#78909c"
-                    />
+                    {renderInvestmentPersonSelector(editInvName, setEditInvName)}
                   </View>
 
                   <View style={styles.inputContainer}>
@@ -2318,6 +2337,7 @@ const styles = StyleSheet.create({
   blockAadhaarIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#fee2e2" },
   paymentModeRow: { flexDirection: "row", gap: 8 },
   paymentModeBtn: { flex: 1, borderRadius: 999, backgroundColor: "#F5F9FF", borderWidth: 1, borderColor: "#d2d8e1", paddingVertical: 10, alignItems: "center" },
+  investorSelectedBtn: { backgroundColor: "#1565C0", borderColor: "#1565C0" },
   paymentModeText: { color: "#64748b", fontSize: 13, fontWeight: "900" },
   paymentModeTextOn: { color: "#ffffff" },
   primaryButton: { backgroundColor: "#ff9f1c", borderRadius: 12, paddingVertical: 14, alignItems: "center", justifyContent: "center" },
