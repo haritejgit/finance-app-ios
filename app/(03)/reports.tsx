@@ -1059,6 +1059,11 @@ interface Payment {
         fill: { patternType: 'solid', fgColor: { rgb: RED } },
         alignment: baseAlignment,
       };
+      const movedStyle = {
+        font: { italic: true, color: { rgb: '808080' } },
+        fill: { patternType: 'solid', fgColor: { rgb: 'E0E0E0' } },
+        alignment: baseAlignment,
+      };
       const orangeStyle = {
         font: { bold: true, color: { rgb: ORANGE } },
         alignment: baseAlignment,
@@ -1080,7 +1085,8 @@ interface Payment {
         for (const shiftName of orderedShifts) {
           const shiftVillages = villagesData.filter((v) => v.dayOfWeek === dayName && v.shift === shiftName);
           const shiftCustomers = customersData.filter((customer) =>
-            shiftVillages.some((village) => village.id === customer.villageId)
+            shiftVillages.some((village) => village.id === customer.villageId) ||
+            (customer.previousVillageId && shiftVillages.some((village) => village.id === customer.previousVillageId))
           );
           if (shiftCustomers.length === 0) continue;
 
@@ -1116,8 +1122,12 @@ interface Payment {
           
           sortedVillages.forEach((village) => {
             const villageCustomers = shiftCustomers
-              .filter((c) => c.villageId === village.id)
-              .sort((a, b) => (a.numericalId ?? Number.MAX_SAFE_INTEGER) - (b.numericalId ?? Number.MAX_SAFE_INTEGER));
+              .filter((c) => c.villageId === village.id || c.previousVillageId === village.id)
+              .sort((a, b) => {
+                const aId = a.villageId === village.id ? (a.numericalId ?? Number.MAX_SAFE_INTEGER) : (a.previousNumericalId ?? Number.MAX_SAFE_INTEGER);
+                const bId = b.villageId === village.id ? (b.numericalId ?? Number.MAX_SAFE_INTEGER) : (b.previousNumericalId ?? Number.MAX_SAFE_INTEGER);
+                return aId - bId;
+              });
             
             if (villageCustomers.length === 0) return;
             
@@ -1139,13 +1149,15 @@ interface Payment {
 
             villageCustomers.forEach((customer) => {
             const rowIndex = sheetData.length;
-            const villageName = shiftVillages.find((v) => v.id === customer.villageId)?.name ?? '';
+            const isCurrent = customer.villageId === village.id;
+            const displayId = isCurrent ? (customer.numericalId ?? '') : (customer.previousNumericalId ?? '');
+            const villageName = village.name;
             const customerLoans = loansData.filter((loan) => loan.customerId === customer.id);
             const customerPayments = paymentsData.filter((payment) =>
               customerLoans.some((loan) => loan.id === payment.loanId)
             );
             const row: any[] = [
-              customer.numericalId ?? '',
+              displayId,
               customer.coId?.toString() ?? customer.coName ?? '',
               customer.name ?? '',
               `${villageName}\n${customer.phone ?? ''}\n${customer.aadhar ?? ''}`,
@@ -1155,6 +1167,31 @@ interface Payment {
             weekDates.forEach((weekDate, weekIdx) => {
               const startOfWeek = weekDate;
               const endOfWeek = weekDate + 7 * 24 * 60 * 60 * 1000 - 1000;
+              const colIndex = 4 + weekIdx;
+
+              // Check if moved
+              const moveWeekStart = customer.movedAt
+                ? getCollectionWeekStart(getStartOfDay(customer.movedAt), dayName)
+                : null;
+
+              if (!isCurrent) {
+                // In the old/source village group:
+                if (moveWeekStart !== null && startOfWeek > moveWeekStart) {
+                  // After move week
+                  row.push("Moved →");
+                  setStyle(rowIndex, colIndex, movedStyle);
+                  return; // skip to next week column
+                }
+              } else {
+                // In the new/destination village group:
+                if (moveWeekStart !== null && startOfWeek < moveWeekStart) {
+                  // Before move week, show empty (no Due)
+                  row.push("");
+                  setStyle(rowIndex, colIndex, standardStyle);
+                  return; // skip to next week column
+                }
+              }
+
               const weekPayments = customerPayments.filter(
                 (payment) => payment.paymentDate >= startOfWeek && payment.paymentDate <= endOfWeek
               );
@@ -1162,7 +1199,6 @@ interface Payment {
                 const loanStartDay = getStartOfDay(loan.startDate);
                 return loanStartDay >= startOfWeek && loanStartDay <= endOfWeek;
               });
-              const colIndex = 4 + weekIdx;
 
               if (loanStartingThisWeek) {
                 const renewalPayment = weekPayments.find((payment) => payment.paymentType === 'RENEWAL_CLOSURE');

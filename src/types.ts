@@ -45,6 +45,7 @@ export type Customer = {
   createdAt: number;
   movedAt?: number;
   previousVillageId?: string;
+  previousNumericalId?: number;
 };
 
 export type Loan = {

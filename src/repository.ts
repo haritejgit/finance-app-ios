@@ -451,6 +451,9 @@ export async function moveCustomerToVillage(userId: string, customerId: string, 
   batch.update(doc(db, "customers", customerId), {
     villageId: targetVillageId,
     numericalId: newNumericalId,
+    movedAt: Date.now(),
+    previousVillageId: oldVillageId,
+    previousNumericalId: oldNumericalId,
   });
 
   // Create a blocked/tombstone document in the old village to reserve the ID
@@ -464,6 +467,9 @@ export async function moveCustomerToVillage(userId: string, customerId: string, 
     isBlocked: true,
     name: "[Blocked ID]",
     createdAt: Date.now(),
+    movedAt: Date.now(),
+    previousVillageId: oldVillageId,
+    previousNumericalId: oldNumericalId,
   });
 
   await batch.commit();
