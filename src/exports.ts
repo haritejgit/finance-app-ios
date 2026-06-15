@@ -3,7 +3,7 @@ import Clipboard from "@react-native-clipboard/clipboard";
 import { Customer, Loan } from "./types";
 import {
   buildStatementData,
-  formatStatementForWhatsApp,
+  formatAlignedStatementBody,
 } from "./statement-format";
 
 function escapeHtml(value: unknown) {
@@ -457,12 +457,7 @@ export async function openAccountStatementPrint(
     village: villageName,
     email: userEmail,
   });
-  const ledgerText = formatStatementForWhatsApp(statementData, language)
-    .replace(/\*/g, "")
-    .split("\n")
-    .filter((line) => !line.startsWith("Karthikeya Finance") && !line.startsWith("ACCOUNT STATEMENT") && !line.startsWith("Period:") && !line.startsWith("Village:") && !line.startsWith("Email:"))
-    .join("\n")
-    .trim();
+  const ledgerText = formatAlignedStatementBody(statementData, language);
   const win = window.open("", "_blank", "width=600,height=780");
   if (!win) return { success: false, platform: "web" };
   win.document.write(`
@@ -801,17 +796,23 @@ export function generatePlainTextStatement(
   language: "en" | "te",
   villageName: string
 ): string {
-  return formatStatementForWhatsApp(
-    buildStatementData({
-      startDate: periodStartStr,
-      endDate: periodEndStr,
-      bf,
-      transactions,
-      totals,
-      village: villageName,
-    }),
-    language
-  ).replace(/\*/g, "");
+  const statementData = buildStatementData({
+    startDate: periodStartStr,
+    endDate: periodEndStr,
+    bf,
+    transactions,
+    totals,
+    village: villageName,
+  });
+  return [
+    "Karthikeya Finance",
+    "ACCOUNT STATEMENT",
+    "",
+    `Period: ${periodStartStr} - ${periodEndStr}`,
+    `Village: ${villageName || "All Villages"}`,
+    "",
+    formatAlignedStatementBody(statementData, language),
+  ].join("\n");
 
   const formatVal = (v: number) => Math.round(v).toLocaleString("en-IN");
   const isTe = language === "te";

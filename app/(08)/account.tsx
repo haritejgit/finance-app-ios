@@ -48,11 +48,12 @@ import { PaymentMode, UserProfile, Village } from "../../src/types";
 import { openAccountStatementPrint, ExportTransaction, ExportTotals } from "../../src/exports";
 import {
   buildStatementData,
-  formatAmountWithSign,
+  formatAlignedStatementBody,
   formatIndianNumber,
   formatStatementForWhatsApp,
   shareViaWhatsApp,
   stripExpenseSuffix,
+  translateStatementLabel,
 } from "../../src/statement-format";
 import { calculateWalletBalances } from "../../src/wallet-balances";
 
@@ -980,31 +981,33 @@ export default function AccountScreen() {
   // Monospace String Output
   const liveMonospaceBreakdown = useMemo(() => {
     const { sumInvs, sumColls, sumLoans, expenseTotals, netTotal } = calculatedSummary;
-    const fmt = (val: number) => Math.round(val).toLocaleString("en-IN");
+    const transactionsForSummary: ExportTransaction[] = [
+      ...(sumInvs > 0 ? [{ date: 0, type: "INVESTMENT" as const, desc: "Investments", amount: sumInvs }] : []),
+      ...expenseTotals.map((item) => ({
+        date: 0,
+        type: "EXPENSE" as const,
+        desc: stripExpenseSuffix(item.description || "Expense"),
+        amount: item.amount,
+      })),
+    ];
 
-    let text = "";
-    text += `BF               =  ${fmt(periodBf).padStart(9)}\n`;
-    if (sumInvs > 0) {
-      text += `Investments      =  ${formatAmountWithSign(sumInvs, "investment").padStart(9)}\n`;
-      text += `                 ---------\n`;
-      text += `                 =  ${fmt(periodBf + sumInvs).padStart(9)}\n`;
-    }
-    text += `Collections      =  ${formatAmountWithSign(sumColls, "collection").padStart(9)}\n`;
-    text += `Payments         =  ${formatAmountWithSign(sumLoans, "payment").padStart(9)}\n`;
-    text += `                 ---------\n`;
-    text += `                 =  ${fmt((sumInvs > 0 ? periodBf + sumInvs : periodBf) + sumColls - sumLoans).padStart(9)}\n`;
-
-    if (expenseTotals.length > 0) {
-      expenseTotals.forEach((exp) => {
-        const desc = stripExpenseSuffix(exp.description).slice(0, 16).padEnd(16);
-        text += `${desc} =  ${formatAmountWithSign(exp.amount, "expense").padStart(9)}\n`;
-      });
-      text += `                 ---------\n`;
-    }
-
-    text += `Total            =  ${fmt(netTotal).padStart(9)}`;
-    return text;
-  }, [periodBf, calculatedSummary]);
+    return formatAlignedStatementBody(
+      buildStatementData({
+        startDate: startDateStr,
+        endDate: endDateStr,
+        bf: periodBf,
+        transactions: transactionsForSummary,
+        totals: {
+          sumInvs,
+          sumColls,
+          sumLoans,
+          netTotal,
+        },
+        village: "All Villages",
+      }),
+      language
+    );
+  }, [calculatedSummary, endDateStr, language, periodBf, startDateStr]);
 
   const currentStatementData = useMemo(() => {
     const { rangeInvs, sumColls, sumLoans, expenseTotals, netTotal } = calculatedSummary;
@@ -1436,7 +1439,7 @@ export default function AccountScreen() {
                     </Text>
                   </View>
                 </View>
-                <Text style={styles.logDesc}>{item.desc}</Text>
+                <Text style={styles.logDesc}>{item.type === "EXPENSE" ? translateStatementLabel(item.desc, language) : item.desc}</Text>
                 <Text style={styles.logDate}>{formatDateTime(item.date)}</Text>
                 {item.mode ? (
                   <Text style={styles.logDate}>Paid via {item.mode}</Text>
@@ -1916,7 +1919,7 @@ export default function AccountScreen() {
                               <Text style={[styles.logAmount, { color: "#d94841" }]}>
                                 - Rs. {item.amount.toLocaleString("en-IN")}
                               </Text>
-                              <Text style={styles.logDesc}>{item.description}</Text>
+                              <Text style={styles.logDesc}>{translateStatementLabel(item.description, language)}</Text>
                               <Text style={styles.logDate}>{formatDDMMYYYY(item.date)}</Text>
                               <Text style={styles.logDate}>Paid via {item.payment_mode === "PHONE" ? "PhonePe" : "Cash"}</Text>
                             </View>

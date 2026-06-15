@@ -36,6 +36,7 @@ export const teluguTranslations: Record<string, string> = {
   Food: "భోజనం ఖర్చు",
   Petrol: "పెట్రోలు",
   "Adharsh Travel": "ఆదర్శ్ దారి ఖర్చులు",
+  "Satish Travel": "సతీష్ దారి ఖర్చులు",
   Salary: "జీతం",
   Expense: "ఖర్చు",
   Expenses: "ఖర్చులు",
@@ -45,6 +46,9 @@ export const teluguTranslations: Record<string, string> = {
 export const nameTransliterations: Record<string, string> = {
   Hari: "హరి",
   Adharsh: "ఆదర్శ్",
+  Satish: "సతీష్",
+  Sathish: "సతీష్",
+  Sateesh: "సతీష్",
 };
 
 export function stripExpenseSuffix(label: string): string {
@@ -62,6 +66,23 @@ export function formatAmountWithSign(amount: number, transactionType: StatementL
   return formatted;
 }
 
+function lookupTelugu(map: Record<string, string>, value: string): string | undefined {
+  if (map[value]) return map[value];
+  const lowerValue = value.toLocaleLowerCase("en-IN");
+  const key = Object.keys(map).find((item) => item.toLocaleLowerCase("en-IN") === lowerValue);
+  return key ? map[key] : undefined;
+}
+
+function translateTeluguToken(token: string): string {
+  return lookupTelugu(teluguTranslations, token) ?? lookupTelugu(nameTransliterations, token) ?? token;
+}
+
+function translateCompositeTeluguLabel(label: string): string {
+  const direct = lookupTelugu(teluguTranslations, label) ?? lookupTelugu(nameTransliterations, label);
+  if (direct) return direct;
+  return label.split(/\s+/).map(translateTeluguToken).join(" ");
+}
+
 export function translateStatementLabel(label: string, language: StatementLanguage): string {
   const cleaned = stripExpenseSuffix(label);
   if (language !== "te" || !cleaned) return cleaned;
@@ -70,16 +91,81 @@ export function translateStatementLabel(label: string, language: StatementLangua
   if (parenMatch) {
     const base = stripExpenseSuffix(parenMatch[1]).trim();
     const person = parenMatch[2].trim();
-    const translatedBase = teluguTranslations[base] ?? base;
-    const translatedPerson = nameTransliterations[person] ?? person;
+    const translatedBase = translateCompositeTeluguLabel(base);
+    const translatedPerson = lookupTelugu(nameTransliterations, person) ?? person;
     return `${translatedBase}(${translatedPerson})`;
   }
 
-  return teluguTranslations[cleaned] ?? cleaned;
+  return translateCompositeTeluguLabel(cleaned);
 }
 
 export function formatStatementLine(label: string, amount: number, type: StatementLineType, language: StatementLanguage): string {
   return `${translateStatementLabel(label, language)} = ${formatAmountWithSign(amount, type)}`;
+}
+
+function truncateText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return value.slice(0, maxLength);
+}
+
+export function formatAlignedStatementLine(
+  label: string,
+  amountText: string,
+  options: { labelWidth?: number; amountWidth?: number } = {}
+): string {
+  const labelWidth = options.labelWidth ?? 22;
+  const amountWidth = options.amountWidth ?? 12;
+  const safeLabel = truncateText(label, labelWidth).padEnd(labelWidth);
+  return `${safeLabel} = ${amountText.padStart(amountWidth)}`;
+}
+
+export function formatAlignedStatementBody(periodData: StatementData, language: StatementLanguage = "en"): string {
+  const labelWidth = language === "te" ? 26 : 22;
+  const amountWidth = 12;
+  const divider = `${" ".repeat(labelWidth + 3)}${"-".repeat(9)}`;
+  const lines: string[] = [];
+  const line = (label: string, amountText: string) =>
+    formatAlignedStatementLine(label, amountText, { labelWidth, amountWidth });
+  const hasRows =
+    periodData.investments.length + periodData.collections.length + periodData.payments.length + periodData.expenses.length > 0;
+
+  lines.push(line("BF", formatIndianNumber(periodData.bf)));
+
+  if (!hasRows) {
+    lines.push(language === "te" ? "ఈ కాలంలో లావాదేవీలు లేవు" : "No transactions in this period");
+    lines.push(divider);
+    lines.push(line(translateStatementLabel("Total", language), formatIndianNumber(periodData.total)));
+    return lines.join("\n");
+  }
+
+  periodData.investments.forEach((item) => {
+    lines.push(line(translateStatementLabel(item.name, language), formatAmountWithSign(item.amount, item.type)));
+  });
+  if (periodData.investments.length > 0) {
+    lines.push(divider);
+    lines.push(line("", formatIndianNumber(periodData.subtotal1)));
+  }
+
+  periodData.collections.forEach((item) => {
+    lines.push(line(translateStatementLabel(item.name, language), formatAmountWithSign(item.amount, item.type)));
+  });
+  periodData.payments.forEach((item) => {
+    lines.push(line(translateStatementLabel(item.name, language), formatAmountWithSign(item.amount, item.type)));
+  });
+  if (periodData.collections.length > 0 || periodData.payments.length > 0) {
+    lines.push(divider);
+    lines.push(line("", formatIndianNumber(periodData.subtotal2)));
+  }
+
+  periodData.expenses.forEach((item) => {
+    lines.push(line(translateStatementLabel(item.name, language), formatAmountWithSign(item.amount, item.type)));
+  });
+  if (periodData.expenses.length > 0) {
+    lines.push(divider);
+  }
+  lines.push(line(translateStatementLabel("Total", language), formatIndianNumber(periodData.total)));
+
+  return lines.join("\n");
 }
 
 export function buildStatementData(params: {
@@ -91,9 +177,19 @@ export function buildStatementData(params: {
   transactions: Array<{ type: "INVESTMENT" | "COLLECTION" | "LOAN" | "EXPENSE"; desc: string; amount: number }>;
   totals: { sumInvs: number; sumColls: number; sumLoans: number; netTotal: number };
 }): StatementData {
-  const investments = params.transactions
+  const investmentMap = new Map<string, StatementItem>();
+  params.transactions
     .filter((item) => item.type === "INVESTMENT")
-    .map((item) => ({ name: item.desc || "Investment", amount: Number(item.amount) || 0, type: "investment" as const }));
+    .forEach((item) => {
+      const name = stripExpenseSuffix(item.desc || "Investment") || "Investment";
+      const key = name.toLocaleLowerCase("en-IN");
+      const existing = investmentMap.get(key);
+      investmentMap.set(key, {
+        name: existing?.name ?? name,
+        amount: (existing?.amount ?? 0) + (Number(item.amount) || 0),
+        type: "investment",
+      });
+    });
   const expenseMap = new Map<string, StatementItem>();
   params.transactions
     .filter((item) => item.type === "EXPENSE")
@@ -114,7 +210,7 @@ export function buildStatementData(params: {
     village: params.village || "All Villages",
     email: params.email,
     bf: params.bf,
-    investments,
+    investments: Array.from(investmentMap.values()).sort((a, b) => b.amount - a.amount),
     collections: params.totals.sumColls > 0 ? [{ name: "Collections", amount: params.totals.sumColls, type: "collection" }] : [],
     payments: params.totals.sumLoans > 0 ? [{ name: "Payments", amount: params.totals.sumLoans, type: "payment" }] : [],
     expenses: Array.from(expenseMap.values()).sort((a, b) => b.amount - a.amount),
