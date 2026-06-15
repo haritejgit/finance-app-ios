@@ -65,7 +65,7 @@ exports.dailyAutoMarkDues = functions.pubsub
             const cycleStartDay = getOrDeriveCycleStartDay(customer, loanStartDateMs);
             // Find all completed personal cycle weeks since loan start
             const currentCycleStartTs = getPersonalCycleStartTs(now, cycleStartDay);
-            const loanCycleStartTs = getPersonalCycleStartTs(loanStartDateMs, cycleStartDay);
+            const loanCycleStartTs = getPersonalCycleStartTs(loanStartDateMs + 7 * 24 * 60 * 60 * 1000, cycleStartDay);
             const diffMs = currentCycleStartTs - loanCycleStartTs;
             const totalWeeksElapsed = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
             if (totalWeeksElapsed <= 0) {

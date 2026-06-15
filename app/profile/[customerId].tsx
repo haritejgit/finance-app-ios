@@ -53,7 +53,7 @@ import { Customer, Loan, Payment, PaymentMode, PaymentType, Village } from "../.
 import { useTheme } from "../../src/theme-context";
 import { colors } from "../../src/theme";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { calculateDisbursedAmount } from "../../src/business-logic";
+import { calculateDisbursedAmount, toMillis } from "../../src/business-logic";
 import { useLanguage } from "../../src/language-context";
 import { translateTelugu } from "../../src/exports";
 import { openCustomerLedgerPrint } from "../../src/exports";
@@ -617,7 +617,7 @@ export default function ProfileScreen() {
       });
 
     const now = Date.now();
-    const loanStartCycleStart = getPersonalCycleStartTs(loan.startDate, customerCycleStartDay);
+    const loanStartCycleStart = getPersonalCycleStartTs(loan.startDate + 7 * 24 * 60 * 60 * 1000, customerCycleStartDay);
     const completedWeeks = Math.max(0, Math.floor((now - loanStartCycleStart) / oneWeek));
     const maxPaidWeekIndex = paidByWeek.size > 0 ? Math.max(...paidByWeek.keys()) : 0;
     const totalWeeks = Math.max(12, completedWeeks + 1, maxPaidWeekIndex + 1);
@@ -661,7 +661,7 @@ export default function ProfileScreen() {
         explicitDueWeekIndices.add(weekIndex);
       });
 
-    const loanStartCycleStart = getPersonalCycleStartTs(loan.startDate, customerCycleStartDay);
+    const loanStartCycleStart = getPersonalCycleStartTs(loan.startDate + 7 * 24 * 60 * 60 * 1000, customerCycleStartDay);
     const completedWeeks = Math.max(0, Math.floor((now - loanStartCycleStart) / oneWeek));
     const injectedDues: any[] = [];
     

@@ -51,6 +51,7 @@ export type Customer = {
   movedOnWeek?: string;
   movedFromNumericalId?: number;
   villageHistory?: VillageHistorySegment[];
+  cycleStartDay?: number;
 };
 
 export type VillageHistorySegment = {

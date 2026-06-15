@@ -1010,7 +1010,7 @@ export function getOrDeriveCycleStartDay(customer: Customer, loanStartDate?: num
 
 export function getPersonalCycleWeekIndex(paymentDateMs: number, loanStartDateMs: number, cycleStartDay: number): number {
   const pStart = getPersonalCycleStartTs(paymentDateMs, cycleStartDay);
-  const lStart = getPersonalCycleStartTs(loanStartDateMs, cycleStartDay);
+  const lStart = getPersonalCycleStartTs(loanStartDateMs + 7 * 24 * 60 * 60 * 1000, cycleStartDay);
   const diffMs = pStart - lStart;
   if (diffMs <= 0) return 0;
   return Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
@@ -1058,7 +1058,7 @@ export async function runRetroactiveCleanup(userId: string) {
       const payments = pSnap.docs.map(d => ({ data: d.data() as Payment, ref: d.ref }));
 
       const dues = payments.filter(p => p.data.paymentType === "DUE" || (p.data as any).type === "DUE");
-      const regularPayments = payments.filter(p => p.data.paymentType === "REGULAR" || (p.data as any).type === "REGULAR" || p.data.paymentType === "CASH" || p.data.paymentType === "PHONE" || (p.data as any).type === "CASH" || (p.data as any).type === "PHONE");
+      const regularPayments = payments.filter(p => p.data.paymentType === "REGULAR" || (p.data as any).type === "REGULAR" || p.data.paymentMode === "CASH" || p.data.paymentMode === "PHONE" || (p.data as any).type === "CASH" || (p.data as any).type === "PHONE");
 
       for (const reg of regularPayments) {
         const regTs = toMillis(reg.data.paymentDate);
