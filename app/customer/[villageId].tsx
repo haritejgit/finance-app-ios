@@ -221,18 +221,45 @@ const CustomerItem = React.memo(function CustomerItem({
   const didntPayLastWeek = !!loan && loan.status === "ACTIVE" && loan.startDate < weekStart(Date.now()) && !paidLastWeek;
   
   const getStatusBadge = useCallback(() => {
+    const badges = [];
     if (isNew) {
-      return <View style={styles.statusBadgeContainer}><Icon name="star" size={10} color="#4F46E5" /><Text style={styles.statusBadgeNew}> NEW</Text></View>;
+      badges.push(
+        <View key="new" style={styles.statusBadgeContainer}>
+          <Icon name="star" size={10} color="#4F46E5" />
+          <Text style={styles.statusBadgeNew}> NEW</Text>
+        </View>
+      );
     }
-    switch (status) {
-      case 'paid':
-        return <View style={styles.statusBadgeContainer}><Icon name="checkmark" size={12} color="#059669" /><Text style={styles.statusBadgePaidGrey}> PAID</Text></View>;
-      case 'due':
-        return <View style={styles.statusBadgeContainer}><Icon name="close" size={12} color="#dc3545" /><Text style={styles.statusBadgeDue}> DUE</Text></View>;
-      default:
-        return null;
+    if (status === 'paid') {
+      badges.push(
+        <View key="paid" style={styles.statusBadgeContainer}>
+          <Icon name="checkmark" size={12} color="#059669" />
+          <Text style={styles.statusBadgePaidGrey}> PAID</Text>
+        </View>
+      );
+    } else if (status === 'due') {
+      badges.push(
+        <View key="due" style={styles.statusBadgeContainer}>
+          <Icon name="close" size={12} color="#dc3545" />
+          <Text style={styles.statusBadgeDue}> DUE</Text>
+        </View>
+      );
     }
-  }, [status, isNew]);
+    if (didntPayLastWeek) {
+      badges.push(
+        <View key="missed" style={styles.statusBadgeContainer}>
+          <Icon name="warning" size={10} color="#dc3545" />
+          <Text style={styles.statusBadgeMissed}> MISSED LAST WEEK</Text>
+        </View>
+      );
+    }
+    if (badges.length === 0) return null;
+    return (
+      <View style={styles.badgesRow}>
+        {badges}
+      </View>
+    );
+  }, [status, isNew, didntPayLastWeek]);
 
   const getBackgroundColor = useCallback(() => {
     if (status === 'due') {
@@ -319,13 +346,8 @@ const CustomerItem = React.memo(function CustomerItem({
               Rs.{Math.round(loan.balanceAmount).toLocaleString("en-IN")}
             </Text>
             {/* Doc badges inline - only when a doc is missing */}
-            {(didntPayLastWeek || !customer.aadharSubmitted || !customer.passportPhotoSubmitted) && (
+            {(!customer.aadharSubmitted || !customer.passportPhotoSubmitted) && (
               <View style={styles.docStatusGroup}>
-                {didntPayLastWeek && (
-                  <View style={styles.docMiniSquare}>
-                    <Icon name="warning" size={11} color="#dc3545" />
-                  </View>
-                )}
                 {!customer.aadharSubmitted && (
                   <View style={styles.docMiniSquare}>
                     <Icon name="id-card" size={11} color="#dc3545" />
@@ -2040,6 +2062,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
   addressBox: {
     flexDirection: "row",
@@ -2126,6 +2150,8 @@ const styles = StyleSheet.create({
   statusBadgePaidGrey: { fontSize: 8, color: "#666666", fontWeight: "700", backgroundColor: "#f5f5f5", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start" },
   statusBadgeDue: { fontSize: 8, color: "#dc3545", fontWeight: "700", backgroundColor: "#f8d7da", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start" },
   statusBadgeNew: { fontSize: 8, color: "#4F46E5", fontWeight: "700", backgroundColor: "#EEF2FF", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start" },
+  statusBadgeMissed: { fontSize: 8, color: "#dc3545", fontWeight: "700", backgroundColor: "#f8d7da", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, alignSelf: "flex-start", borderWidth: 1, borderColor: "#f5c6cb" },
+  badgesRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 5, marginTop: 2 },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
   emptyText: { color: colors.white, fontSize: 18, fontWeight: "700", marginBottom: 6 },
