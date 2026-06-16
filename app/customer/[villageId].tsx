@@ -113,10 +113,17 @@ function hasCoordinates(customer: Customer) {
   return typeof customer.latitude === "number" && typeof customer.longitude === "number";
 }
 
-function getSuggestedPaymentAmount(loan?: Loan) {
+function getSuggestedPaymentAmount(loan?: Loan | null) {
   if (!loan) return 0;
-  const standardAmount = Math.max(1, Math.round(loan.principalAmount / 10));
-  return Math.min(standardAmount, loan.balanceAmount);
+  const principalVal = loan.principalAmount ?? loan.principal_amount ?? loan.loanAmount ?? loan.amount;
+  const principal = Number(principalVal);
+  const balance = Number(loan.balanceAmount ?? 0);
+  
+  const safePrincipal = Number.isFinite(principal) && principal > 0 ? principal : 0;
+  const safeBalance = Number.isFinite(balance) && balance > 0 ? balance : 0;
+
+  const standardAmount = Math.max(1, Math.round(safePrincipal / 10));
+  return Math.min(standardAmount, safeBalance);
 }
 
 function toStartOfDay(ts: number) {
@@ -257,23 +264,18 @@ const CustomerItem = React.memo(function CustomerItem({
   }, [customer.id, onPress]);
 
   return (
-    <View
+    <Pressable
       style={[
         styles.item,
         noTextSelection,
         {
           backgroundColor: getBackgroundColor(),
         },
-      ] as any}
+      ]}
+      onPress={openCustomer}
     >
-      {/* Absolute Pressable covering left/center to navigate to details */}
-      <Pressable
-        style={styles.detailsPressable}
-        onPress={openCustomer}
-      />
-
       {/* Column 1: Left Badge Info */}
-      <View style={styles.leftCol} pointerEvents={"none" as const}>
+      <View style={styles.leftCol}>
         <CustomerIdBadge 
           numericalId={customer.numericalId} 
           id={customer.id} 
@@ -293,7 +295,7 @@ const CustomerItem = React.memo(function CustomerItem({
       </View>
 
       {/* Column 2: Center Details */}
-      <View style={styles.centerCol} pointerEvents={"box-none" as const}>
+      <View style={styles.centerCol}>
         <Text style={[styles.cardName, status === "paid" ? { color: "#16803a" } : status === "due" ? { color: "#dc3545" } : { color: "#111827" }]} numberOfLines={1}>
           {language === "te" ? translateTelugu(customer.name) : customer.name}
         </Text>
@@ -301,10 +303,19 @@ const CustomerItem = React.memo(function CustomerItem({
 
         <View style={styles.phoneIconRow}>
           {customer.phone ? (
-            <View style={styles.callLink}>
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel={`Call ${customer.phone}`}
+              onPress={(event) => {
+                event.stopPropagation?.();
+                const phoneUrl = `tel:${customer.phone.replace(/\D/g, "")}`;
+                Linking.openURL(phoneUrl).catch(() => undefined);
+              }}
+              style={styles.callLink}
+            >
               <Icon name="call" size={14} color="#1565C0" />
               <Text style={styles.cardPhone}>{customer.phone}</Text>
-            </View>
+            </Pressable>
           ) : (
             <Text style={styles.cardPhone}>—</Text>
           )}
@@ -346,7 +357,8 @@ const CustomerItem = React.memo(function CustomerItem({
             style={[styles.locationIconSquare, {
               backgroundColor: hasLocation ? "#1A3C34" : "#9CA3AF",
             }]}
-            onPress={() => {
+            onPress={(e) => {
+              markActionPress(e);
               lightImpact();
               if (hasLocation) {
                 onOpenDirections(customer);
@@ -354,7 +366,8 @@ const CustomerItem = React.memo(function CustomerItem({
                 onSaveCurrentLocation(customer);
               }
             }}
-            onLongPress={() => {
+            onLongPress={(e) => {
+              markActionPress(e);
               if (!hasLocation) {
                 onSaveCurrentLocation(customer);
               }
@@ -382,11 +395,10 @@ const CustomerItem = React.memo(function CustomerItem({
           accessibilityLabel={`Cash payment for ${customer.name}`}
           style={[styles.actionRow, !canPay && styles.actionRowDisabled]}
           disabled={!canPay}
-          onPress={() => {
-            lightImpact();
-            onQuickPay(customer, "CASH");
-          }}
-          onLongPress={() => {
+          onPressIn={markActionPress}
+          onPressOut={markActionPress}
+          onPress={(e) => {
+            markActionPress(e);
             lightImpact();
             onManualPay(customer, "CASH");
           }}
@@ -401,11 +413,10 @@ const CustomerItem = React.memo(function CustomerItem({
           accessibilityLabel={`PhonePe payment for ${customer.name}`}
           style={[styles.actionRow, !canPay && styles.actionRowDisabled]}
           disabled={!canPay}
-          onPress={() => {
-            lightImpact();
-            onQuickPay(customer, "PHONE");
-          }}
-          onLongPress={() => {
+          onPressIn={markActionPress}
+          onPressOut={markActionPress}
+          onPress={(e) => {
+            markActionPress(e);
             lightImpact();
             onManualPay(customer, "PHONE");
           }}
@@ -420,7 +431,10 @@ const CustomerItem = React.memo(function CustomerItem({
           accessibilityLabel={`Mark ${customer.name} due`}
           style={[styles.actionRow, !canPay && styles.actionRowDisabled]}
           disabled={!canPay}
-          onPress={() => {
+          onPressIn={markActionPress}
+          onPressOut={markActionPress}
+          onPress={(e) => {
+            markActionPress(e);
             lightImpact();
             onMarkDue(customer);
           }}
@@ -430,7 +444,7 @@ const CustomerItem = React.memo(function CustomerItem({
           </View>
         </Pressable>
       </View>
-    </View>
+    </Pressable>
   );
 });
 
@@ -917,7 +931,7 @@ export default function CustomerListScreen() {
       return;
     }
     setManualPaymentCustomer(customer);
-    setManualPaymentAmount("");
+    setManualPaymentAmount(getSuggestedPaymentAmount(loan).toString());
     setManualPaymentMode(selectedMode);
     setManualPaymentError("");
   }, [activeLoans]);
@@ -945,8 +959,13 @@ export default function CustomerListScreen() {
           "✅ Payment Registered!",
           `Paid Rs.${suggested.toLocaleString("en-IN")} via ${mode === "PHONE" ? "PhonePe" : "Cash"} for ${customer.name}`
         );
-      } catch {
-        Alert.alert("Payment failed", "Could not save this payment. Please try again.");
+      } catch (err: any) {
+        console.error("Quick pay failed:", err);
+        showToast(
+          "error",
+          "Payment failed",
+          err instanceof Error ? err.message : "Could not save this payment. Please try again."
+        );
       } finally {
         setPayingCustomerId(null);
       }
@@ -1056,8 +1075,13 @@ export default function CustomerListScreen() {
           },
         }));
         closeManualPayment();
-      } catch {
-        Alert.alert("Payment failed", "Could not save this payment. Please try again.");
+      } catch (err: any) {
+        console.error("Manual pay failed:", err);
+        showToast(
+          "error",
+          "Payment failed",
+          err instanceof Error ? err.message : "Could not save this payment. Please try again."
+        );
       } finally {
         setPayingCustomerId(null);
       }
@@ -1914,7 +1938,6 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   listContent: { flexGrow: 1, paddingBottom: 116 },
   item: { 
-    position: "relative",
     backgroundColor: colors.white, 
     borderRadius: 14, 
     paddingVertical: 6,
@@ -1928,14 +1951,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08, 
     shadowRadius: 8, 
     elevation: 3,
-  },
-  detailsPressable: {
-    position: "absolute",
-    left: 0,
-    right: 80,
-    top: 0,
-    bottom: 0,
-    borderRadius: 14,
   },
   leftCol: {
     alignItems: "center",

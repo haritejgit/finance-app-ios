@@ -228,8 +228,15 @@ function hasCustomerCoordinates(customer?: Customer | null) {
 
 function getSuggestedPaymentAmount(loan?: Loan | null) {
   if (!loan) return 0;
-  const standardAmount = Math.max(1, Math.round(loan.principalAmount / 10));
-  return Math.min(standardAmount, loan.balanceAmount);
+  const principalVal = loan.principalAmount ?? loan.principal_amount ?? loan.loanAmount ?? loan.amount;
+  const principal = Number(principalVal);
+  const balance = Number(loan.balanceAmount ?? 0);
+  
+  const safePrincipal = Number.isFinite(principal) && principal > 0 ? principal : 0;
+  const safeBalance = Number.isFinite(balance) && balance > 0 ? balance : 0;
+
+  const standardAmount = Math.max(1, Math.round(safePrincipal / 10));
+  return Math.min(standardAmount, safeBalance);
 }
 
 function createEmptyEditForm() {
