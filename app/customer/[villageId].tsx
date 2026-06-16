@@ -398,6 +398,11 @@ const CustomerItem = React.memo(function CustomerItem({
           onPress={(e) => {
             markActionPress(e);
             lightImpact();
+            onQuickPay(customer, "CASH");
+          }}
+          onLongPress={(e) => {
+            markActionPress(e);
+            lightImpact();
             onManualPay(customer, "CASH");
           }}
         >
@@ -412,6 +417,11 @@ const CustomerItem = React.memo(function CustomerItem({
           style={[styles.actionRow, !canPay && styles.actionRowDisabled]}
           disabled={!canPay}
           onPress={(e) => {
+            markActionPress(e);
+            lightImpact();
+            onQuickPay(customer, "PHONE");
+          }}
+          onLongPress={(e) => {
             markActionPress(e);
             lightImpact();
             onManualPay(customer, "PHONE");
