@@ -1914,6 +1914,7 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   listContent: { flexGrow: 1, paddingBottom: 116 },
   item: { 
+    position: "relative",
     backgroundColor: colors.white, 
     borderRadius: 14, 
     paddingVertical: 6,
