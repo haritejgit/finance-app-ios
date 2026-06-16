@@ -698,15 +698,20 @@ export async function getPaymentStatusesForCustomersThisWeek(userId: string, cus
       );
       const loansSnap = await getDocs(loansQ);
       const activeLoanIdByCustomerId = new Map<string, string>();
+      const customerIdByActiveLoanId = new Map<string, string>();
       loansSnap.docs.forEach((d) => {
         const loan = d.data() as Loan;
         activeLoanIdByCustomerId.set(loan.customerId, loan.id);
+        customerIdByActiveLoanId.set(loan.id, loan.customerId);
       });
+
+      const activeLoanIds = Array.from(activeLoanIdByCustomerId.values());
+      if (activeLoanIds.length === 0) return;
 
       const paymentsQ = query(
         coll.payments,
         where("userId", "==", userId),
-        where("customerId", "in", chunk),
+        where("loanId", "in", activeLoanIds),
         where("paymentDate", ">=", startMs),
         where("paymentDate", "<=", endMs)
       );
@@ -714,7 +719,7 @@ export async function getPaymentStatusesForCustomersThisWeek(userId: string, cus
 
       paymentsSnap.docs.forEach((d) => {
         const payment = d.data() as Payment;
-        const customerId = payment.customerId;
+        const customerId = payment.customerId ?? customerIdByActiveLoanId.get(payment.loanId);
         if (!customerId) return;
 
         const activeLoanId = activeLoanIdByCustomerId.get(customerId);
@@ -767,15 +772,20 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
       );
       const loansSnap = await getDocs(loansQ);
       const activeLoanIdByCustomerId = new Map<string, string>();
+      const customerIdByActiveLoanId = new Map<string, string>();
       loansSnap.docs.forEach((d) => {
         const loan = d.data() as Loan;
         activeLoanIdByCustomerId.set(loan.customerId, loan.id);
+        customerIdByActiveLoanId.set(loan.id, loan.customerId);
       });
+
+      const activeLoanIds = Array.from(activeLoanIdByCustomerId.values());
+      if (activeLoanIds.length === 0) return;
 
       const paymentsQ = query(
         coll.payments,
         where("userId", "==", userId),
-        where("customerId", "in", chunk)
+        where("loanId", "in", activeLoanIds)
       );
       const paymentsSnap = await getDocs(paymentsQ);
 
@@ -783,7 +793,7 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
         .map((d) => d.data() as Payment)
         .filter(isRealCollectionPayment)
         .forEach((payment) => {
-          const customerId = payment.customerId;
+          const customerId = payment.customerId ?? customerIdByActiveLoanId.get(payment.loanId);
           if (!customerId) return;
 
           const activeLoanId = activeLoanIdByCustomerId.get(customerId);
