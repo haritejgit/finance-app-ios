@@ -742,6 +742,28 @@ export async function getPaymentStatusesForCustomersThisWeek(userId: string, cus
           statuses[customerId] = "paid";
         }
       });
+
+      const customerPaymentsQ = query(
+        coll.payments,
+        where("userId", "==", userId),
+        where("customerId", "in", chunk)
+      );
+      const customerPaymentsSnap = await getDocs(customerPaymentsQ);
+      const now = Date.now();
+      const renewalGreenWindowMs = 6 * 24 * 60 * 60 * 1000;
+
+      customerPaymentsSnap.docs.forEach((d) => {
+        const payment = d.data() as Payment;
+        if (payment.paymentType !== "RENEWAL_CLOSURE") return;
+
+        const customerId = payment.customerId;
+        if (!customerId || !statuses[customerId]) return;
+
+        const paymentDate = toMillis(payment.paymentDate);
+        if (paymentDate <= now && now <= paymentDate + renewalGreenWindowMs) {
+          statuses[customerId] = "paid";
+        }
+      });
     })
   );
 

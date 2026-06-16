@@ -1862,11 +1862,6 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    backgroundColor: "#E3F2FD",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 5,
   },
   safe: { flex: 1 },
   content: { flex: 1, width: "100%", maxWidth: 430, alignSelf: "center", paddingTop: 8, paddingHorizontal: 8 },
@@ -2004,7 +1999,7 @@ const styles = StyleSheet.create({
   },
   cardPhone: {
     fontSize: 10,
-    color: "#4B5563",
+    color: "#000000",
     fontWeight: "700",
   },
   amountStatusRow: {

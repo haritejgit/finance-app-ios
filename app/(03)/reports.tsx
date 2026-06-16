@@ -1163,22 +1163,31 @@ interface Payment {
             }
 
             villageCustomers.forEach((customer) => {
-            const rowIndex = sheetData.length;
-            const history = (customer as any).villageHistory || [];
-            const matchingSegment = history.find((h: any) => h.villageId === village.id);
-            const displayId = matchingSegment 
-              ? (matchingSegment.numericalId ?? '') 
-              : (customer.villageId === village.id ? (customer.numericalId ?? '') : (customer.movedFromNumericalId ?? ''));
-            const villageName = village.name;
+            const history = ((customer as any).villageHistory || []) as any[];
+            const legacyMovedWeek = typeof customer.movedOnWeek === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(customer.movedOnWeek)
+              ? getISOWeekString(new Date(customer.movedOnWeek).getTime())
+              : customer.movedOnWeek || null;
+            const villageSegments = history.length > 0
+              ? history.filter((seg: any) => seg.villageId === village.id)
+              : [{
+                  villageId: village.id,
+                  villageName: village.name,
+                  fromWeek: getISOWeekString(customer.createdAt || reportStart),
+                  toWeek: customer.villageId === village.id ? null : legacyMovedWeek,
+                  numericalId: customer.villageId === village.id ? customer.numericalId : customer.movedFromNumericalId,
+                }];
             const customerLoans = loansData.filter((loan) => loan.customerId === customer.id);
             const customerPayments = paymentsData.filter((payment) =>
-              customerLoans.some((loan) => loan.id === payment.loanId)
+              customerLoans.some((loan) => loan.id === payment.loanId) || payment.customerId === customer.id
             );
+
+            villageSegments.forEach((segment) => {
+            const rowIndex = sheetData.length;
             const row: any[] = [
-              displayId,
+              segment.numericalId ?? '',
               customer.coId?.toString() ?? customer.coName ?? '',
               customer.name ?? '',
-              `${villageName}\n${customer.phone ?? ''}\n${customer.aadhar ?? ''}`,
+              `${village.name}\n${customer.phone ?? ''}\n${customer.aadhar ?? ''}`,
             ];
             for (let col = 0; col < 4; col += 1) setStyle(rowIndex, col, standardStyle);
 
@@ -1187,9 +1196,23 @@ interface Payment {
               const endOfWeek = weekDate + 7 * 24 * 60 * 60 * 1000 - 1000;
               const colIndex = 4 + weekIdx;
               const colWeekStr = getISOWeekString(weekDate);
+              const startsAfterThisWeek = colWeekStr < segment.fromWeek;
+              const movedOutThisWeekOrEarlier = segment.toWeek !== null && colWeekStr >= segment.toWeek;
+
+              if (startsAfterThisWeek) {
+                row.push('');
+                setStyle(rowIndex, colIndex, standardStyle);
+                return;
+              }
+
+              if (movedOutThisWeekOrEarlier) {
+                row.push('MOVED');
+                setStyle(rowIndex, colIndex, movedStyle);
+                return;
+              }
 
               const history = (customer as any).villageHistory || [];
-              if (history.length > 0) {
+              if (false && history.length > 0) {
                 const segments = history.filter((seg: any) => seg.villageId === village.id);
                 if (segments.length > 0) {
                   const activeSeg = segments.find((seg: any) => colWeekStr >= seg.fromWeek && (seg.toWeek === null || colWeekStr <= seg.toWeek));
@@ -1226,9 +1249,7 @@ interface Payment {
                   return; // skip to next week column
                 }
               } else {
-                const moveWeekStart = customer.movedOnWeek
-                  ? getCollectionWeekStart(getStartOfDay(new Date(customer.movedOnWeek).getTime()), dayName)
-                  : null;
+                const moveWeekStart = null;
 
                 if (moveWeekStart !== null) {
                   if (customer.villageId !== village.id) {
@@ -1262,6 +1283,17 @@ interface Payment {
                 const loanStartDay = getStartOfDay(loan.startDate);
                 return loanStartDay >= startOfWeek && loanStartDay <= endOfWeek;
               });
+              const segmentIndex = history.indexOf(segment);
+              const isFirstWeekOfSegment = history.length > 0 && colWeekStr === segment.fromWeek;
+              const carryForwardNote = isFirstWeekOfSegment && segmentIndex > 0
+                ? `Carried forward: \u20B9${Math.trunc(customerPayments
+                    .filter((payment) => isRealCollectionPayment(payment) && payment.paymentDate < startOfWeek)
+                    .reduce((sum, payment) => sum + money(payment.amountPaid), 0))}`
+                : '';
+              const withCarryForward = (value: any) => {
+                if (!carryForwardNote) return value;
+                return value === '' ? carryForwardNote : `${carryForwardNote}\n${value}`;
+              };
 
               if (loanStartingThisWeek) {
                 const renewalPayment = weekPayments.find((payment) => payment.paymentType === 'RENEWAL_CLOSURE');
@@ -1271,10 +1303,10 @@ interface Payment {
 
                 if (renewalPayment) {
                   const previousBalance = money(renewalPayment.amountPaid);
-                  row.push(`${Math.trunc(previousBalance)}\n${Math.trunc(displayedAmount)}`);
+                  row.push(withCarryForward(`${Math.trunc(previousBalance)}\n${Math.trunc(displayedAmount)}`));
                   setStyle(rowIndex, colIndex, orangeStyle);
                 } else {
-                  row.push(Math.trunc(displayedAmount));
+                  row.push(withCarryForward(Math.trunc(displayedAmount)));
                   setStyle(rowIndex, colIndex, orangeStyle);
                 }
               } else if (weekPayments.length > 0) {
@@ -1284,13 +1316,13 @@ interface Payment {
 
                 if (regularPayment > 0) {
                   weeklyCollected[weekIdx] += regularPayment;
-                  row.push(regularPayment);
+                  row.push(withCarryForward(regularPayment));
                   setStyle(rowIndex, colIndex, standardStyle);
                 } else if (weekPayments.some((payment) => payment.paymentType === 'DUE')) {
-                  row.push('Due');
+                  row.push(withCarryForward('Due'));
                   setStyle(rowIndex, colIndex, dueStyle);
                 } else {
-                  row.push('');
+                  row.push(withCarryForward(''));
                   setStyle(rowIndex, colIndex, standardStyle);
                 }
               } else {
@@ -1307,10 +1339,10 @@ interface Payment {
                 });
 
                 if (wasAnyLoanOpen) {
-                  row.push('Due');
+                  row.push(withCarryForward('Due'));
                   setStyle(rowIndex, colIndex, dueStyle);
                 } else {
-                  row.push('');
+                  row.push(withCarryForward(''));
                   setStyle(rowIndex, colIndex, standardStyle);
                 }
               }
@@ -1318,6 +1350,7 @@ interface Payment {
 
             sheetData.push(row);
             });
+          });
           });
 
           sheetData.push([]);
