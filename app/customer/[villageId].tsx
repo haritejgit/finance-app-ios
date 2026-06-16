@@ -346,8 +346,7 @@ const CustomerItem = React.memo(function CustomerItem({
             style={[styles.locationIconSquare, {
               backgroundColor: hasLocation ? "#1A3C34" : "#9CA3AF",
             }]}
-            onPress={(e) => {
-              markActionPress(e);
+            onPress={() => {
               lightImpact();
               if (hasLocation) {
                 onOpenDirections(customer);
@@ -355,8 +354,7 @@ const CustomerItem = React.memo(function CustomerItem({
                 onSaveCurrentLocation(customer);
               }
             }}
-            onLongPress={(e) => {
-              markActionPress(e);
+            onLongPress={() => {
               if (!hasLocation) {
                 onSaveCurrentLocation(customer);
               }
@@ -384,15 +382,11 @@ const CustomerItem = React.memo(function CustomerItem({
           accessibilityLabel={`Cash payment for ${customer.name}`}
           style={[styles.actionRow, !canPay && styles.actionRowDisabled]}
           disabled={!canPay}
-          onPressIn={markActionPress}
-          onPressOut={markActionPress}
-          onPress={(e) => {
-            markActionPress(e);
+          onPress={() => {
             lightImpact();
             onQuickPay(customer, "CASH");
           }}
-          onLongPress={(e) => {
-            markActionPress(e);
+          onLongPress={() => {
             lightImpact();
             onManualPay(customer, "CASH");
           }}
@@ -407,15 +401,11 @@ const CustomerItem = React.memo(function CustomerItem({
           accessibilityLabel={`PhonePe payment for ${customer.name}`}
           style={[styles.actionRow, !canPay && styles.actionRowDisabled]}
           disabled={!canPay}
-          onPressIn={markActionPress}
-          onPressOut={markActionPress}
-          onPress={(e) => {
-            markActionPress(e);
+          onPress={() => {
             lightImpact();
             onQuickPay(customer, "PHONE");
           }}
-          onLongPress={(e) => {
-            markActionPress(e);
+          onLongPress={() => {
             lightImpact();
             onManualPay(customer, "PHONE");
           }}
@@ -430,10 +420,7 @@ const CustomerItem = React.memo(function CustomerItem({
           accessibilityLabel={`Mark ${customer.name} due`}
           style={[styles.actionRow, !canPay && styles.actionRowDisabled]}
           disabled={!canPay}
-          onPressIn={markActionPress}
-          onPressOut={markActionPress}
-          onPress={(e) => {
-            markActionPress(e);
+          onPress={() => {
             lightImpact();
             onMarkDue(customer);
           }}
