@@ -826,13 +826,14 @@ export async function addPayment(loan: Loan, amountPaid: number, paymentDate: nu
     // Find and delete any existing DUE payments for this loan in the same personal cycle window
     const q = query(
       coll.payments,
-      where("loanId", "==", loan.id),
-      where("paymentType", "==", "DUE")
+      where("loanId", "==", loan.id)
     );
-    const duesSnap = await getDocs(q);
+    const paymentsSnap = await getDocs(q);
     const targetCycleStart = getPersonalCycleStartTs(paymentDate, cycleStartDay);
-    const duesToDelete = duesSnap.docs.filter((dDoc) => {
+    const duesToDelete = paymentsSnap.docs.filter((dDoc) => {
       const dData = dDoc.data();
+      const dType = dData.paymentType || (dData as any).type;
+      if (dType !== "DUE") return false;
       const dTime = toMillis(dData.paymentDate);
       return getPersonalCycleStartTs(dTime, cycleStartDay) === targetCycleStart;
     });
@@ -890,13 +891,14 @@ export async function addPaymentsBatch(
     // Find and delete any existing DUE payments for this loan in the same personal cycle window
     const q = query(
       coll.payments,
-      where("loanId", "==", loan.id),
-      where("paymentType", "==", "DUE")
+      where("loanId", "==", loan.id)
     );
-    const duesSnap = await getDocs(q);
+    const paymentsSnap = await getDocs(q);
     const targetCycleStart = getPersonalCycleStartTs(paymentDate, cycleStartDay);
-    const duesToDelete = duesSnap.docs.filter((dDoc) => {
+    const duesToDelete = paymentsSnap.docs.filter((dDoc) => {
       const dData = dDoc.data();
+      const dType = dData.paymentType || (dData as any).type;
+      if (dType !== "DUE") return false;
       const dTime = toMillis(dData.paymentDate);
       return getPersonalCycleStartTs(dTime, cycleStartDay) === targetCycleStart;
     });
