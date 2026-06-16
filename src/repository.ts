@@ -22,7 +22,7 @@ import {
   type QueryDocumentSnapshot,
   type Unsubscribe,
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { auth, db } from "./firebase";
 import { BlockedAadhaar, Customer, Expense, Investment, Loan, Payment, PaymentMode, UserProfile, Village, VillageHistorySegment } from "./types";
 import { getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, loanWeekNumber, money, toMillis, weekStart } from "./business-logic";
 import { filterCustomersWithVillage } from "./utils";
@@ -589,23 +589,32 @@ export async function getActiveLoan(userId: string, customerId: string) {
 }
 
 export async function getActiveLoansByCustomerIds(userId: string, customerIds: string[]) {
-  const wantedCustomerIds = new Set(customerIds);
-  if (wantedCustomerIds.size === 0) return {} as Record<string, Loan>;
+  if (customerIds.length === 0) return {} as Record<string, Loan>;
 
-  const q = query(
-    coll.loans,
-    where("userId", "==", userId),
-    where("status", "==", "ACTIVE"),
-    limit(1500)
+  const chunks: string[][] = [];
+  for (let i = 0; i < customerIds.length; i += 30) {
+    chunks.push(customerIds.slice(i, i + 30));
+  }
+
+  const loansByCustomer: Record<string, Loan> = {};
+
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      const q = query(
+        coll.loans,
+        where("userId", "==", userId),
+        where("status", "==", "ACTIVE"),
+        where("customerId", "in", chunk)
+      );
+      const snap = await getDocs(q);
+      snap.docs.forEach((d) => {
+        const loan = d.data() as Loan;
+        loansByCustomer[loan.customerId] = loan;
+      });
+    })
   );
-  const snap = await getDocs(q);
-  return snap.docs
-    .map((d) => d.data() as Loan)
-    .filter((loan) => wantedCustomerIds.has(loan.customerId))
-    .reduce((loansByCustomer, loan) => {
-      loansByCustomer[loan.customerId] = loan;
-      return loansByCustomer;
-    }, {} as Record<string, Loan>);
+
+  return loansByCustomer;
 }
 
 export async function updateLoan(loan: Loan, newPrincipalAmount: number, newStartDate: number, newDisbursementMode?: PaymentMode) {
@@ -665,83 +674,74 @@ export async function getPaymentsForCustomer(userId: string, customerId: string)
 }
 
 export async function getPaymentStatusesForCustomersThisWeek(userId: string, customerIds: string[]) {
-  const wantedCustomerIds = new Set(customerIds);
-  if (wantedCustomerIds.size === 0) return {} as Record<string, "paid" | "due" | "none">;
+  if (customerIds.length === 0) return {} as Record<string, "paid" | "due" | "none">;
 
   const startMs = weekStart(Date.now());
   const endMs = startMs + 7 * 24 * 60 * 60 * 1000 - 1;
-
-  const [paymentsSnap, loansSnap] = await Promise.all([
-    getDocs(query(coll.payments, where("userId", "==", userId))),
-    getDocs(query(coll.loans, where("userId", "==", userId))),
-  ]);
-
-  const customerIdByLoanId = new Map(
-    loansSnap.docs
-      .map((d) => d.data() as Loan)
-      .filter((loan) => wantedCustomerIds.has(loan.customerId))
-      .map((loan) => [loan.id, loan.customerId])
-  );
-  
-  const activeLoanIdByCustomerId = new Map<string, string>();
-  loansSnap.docs
-    .map((d) => d.data() as Loan)
-    .filter((loan) => loan.status === "ACTIVE" && wantedCustomerIds.has(loan.customerId))
-    .forEach((loan) => {
-      activeLoanIdByCustomerId.set(loan.customerId, loan.id);
-    });
 
   const statuses = Object.fromEntries(
     customerIds.map((customerId) => [customerId, "none" as "paid" | "due" | "none"])
   );
 
-  paymentsSnap.docs
-    .map((d) => d.data() as Payment)
-    .forEach((payment) => {
-      const paymentDate = toMillis(payment.paymentDate);
-      if (paymentDate < startMs || paymentDate > endMs) return;
+  const chunks: string[][] = [];
+  for (let i = 0; i < customerIds.length; i += 30) {
+    chunks.push(customerIds.slice(i, i + 30));
+  }
 
-      const customerId = payment.customerId ?? customerIdByLoanId.get(payment.loanId);
-      if (!customerId || !wantedCustomerIds.has(customerId)) return;
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      const loansQ = query(
+        coll.loans,
+        where("userId", "==", userId),
+        where("status", "==", "ACTIVE"),
+        where("customerId", "in", chunk)
+      );
+      const loansSnap = await getDocs(loansQ);
+      const activeLoanIdByCustomerId = new Map<string, string>();
+      loansSnap.docs.forEach((d) => {
+        const loan = d.data() as Loan;
+        activeLoanIdByCustomerId.set(loan.customerId, loan.id);
+      });
 
-      const activeLoanId = activeLoanIdByCustomerId.get(customerId);
-      if (!activeLoanId || payment.loanId !== activeLoanId) return;
+      const paymentsQ = query(
+        coll.payments,
+        where("userId", "==", userId),
+        where("customerId", "in", chunk),
+        where("paymentDate", ">=", startMs),
+        where("paymentDate", "<=", endMs)
+      );
+      const paymentsSnap = await getDocs(paymentsQ);
 
-      if (payment.paymentType === "DUE") {
-        if (statuses[customerId] !== "paid") {
-          statuses[customerId] = "due";
+      paymentsSnap.docs.forEach((d) => {
+        const payment = d.data() as Payment;
+        const customerId = payment.customerId;
+        if (!customerId) return;
+
+        const activeLoanId = activeLoanIdByCustomerId.get(customerId);
+        if (!activeLoanId || payment.loanId !== activeLoanId) return;
+
+        if (payment.paymentType === "DUE") {
+          if (statuses[customerId] !== "paid") {
+            statuses[customerId] = "due";
+          }
+        } else if (
+          payment.paymentType === "REGULAR" ||
+          (payment as any).paymentType === "CASH" ||
+          (payment as any).paymentType === "PHONE" ||
+          (payment as any).type === "CASH" ||
+          (payment as any).type === "PHONE"
+        ) {
+          statuses[customerId] = "paid";
         }
-      } else if (payment.paymentType === "REGULAR" || (payment as any).paymentType === "CASH" || (payment as any).paymentType === "PHONE" || (payment as any).type === "CASH" || (payment as any).type === "PHONE") {
-        statuses[customerId] = "paid";
-      }
-    });
+      });
+    })
+  );
 
   return statuses;
 }
 
 export async function getLastRegularPaymentDatesForCustomers(userId: string, customerIds: string[]) {
-  const wantedCustomerIds = new Set(customerIds);
-  if (wantedCustomerIds.size === 0) return {} as Record<string, { lastPaymentDate: number; paidLastWeek: boolean }>;
-
-  const [paymentsSnap, loansSnap] = await Promise.all([
-    getDocs(query(coll.payments, where("userId", "==", userId), limit(1500))),
-    getDocs(query(coll.loans, where("userId", "==", userId), limit(1500))),
-  ]);
-
-  const customerIdByLoanId = new Map(
-    loansSnap.docs
-      .map((d) => d.data() as Loan)
-      .filter((loan) => wantedCustomerIds.has(loan.customerId))
-      .map((loan) => [loan.id, loan.customerId])
-  );
-
-  const activeLoanIdByCustomerId = new Map<string, string>();
-  loansSnap.docs
-    .map((d) => d.data() as Loan)
-    .filter((loan) => loan.status === "ACTIVE" && wantedCustomerIds.has(loan.customerId))
-    .forEach((loan) => {
-      activeLoanIdByCustomerId.set(loan.customerId, loan.id);
-    });
+  if (customerIds.length === 0) return {} as Record<string, { lastPaymentDate: number; paidLastWeek: boolean }>;
 
   const currentMonday = weekStart(Date.now());
   const prevWeekStart = currentMonday - 7 * 24 * 60 * 60 * 1000;
@@ -752,24 +752,53 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
     latest[id] = { lastPaymentDate: 0, paidLastWeek: false };
   });
 
-  paymentsSnap.docs
-    .map((d) => d.data() as Payment)
-    .filter(isRealCollectionPayment)
-    .forEach((payment) => {
-      const customerId = payment.customerId ?? customerIdByLoanId.get(payment.loanId);
-      if (!customerId || !wantedCustomerIds.has(customerId)) return;
+  const chunks: string[][] = [];
+  for (let i = 0; i < customerIds.length; i += 30) {
+    chunks.push(customerIds.slice(i, i + 30));
+  }
 
-      const activeLoanId = activeLoanIdByCustomerId.get(customerId);
-      if (!activeLoanId || payment.loanId !== activeLoanId) return;
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      const loansQ = query(
+        coll.loans,
+        where("userId", "==", userId),
+        where("status", "==", "ACTIVE"),
+        where("customerId", "in", chunk)
+      );
+      const loansSnap = await getDocs(loansQ);
+      const activeLoanIdByCustomerId = new Map<string, string>();
+      loansSnap.docs.forEach((d) => {
+        const loan = d.data() as Loan;
+        activeLoanIdByCustomerId.set(loan.customerId, loan.id);
+      });
 
-      const paymentDate = toMillis(payment.paymentDate);
-      if (paymentDate > latest[customerId].lastPaymentDate) {
-        latest[customerId].lastPaymentDate = paymentDate;
-      }
-      if (paymentDate >= prevWeekStart && paymentDate <= prevWeekEnd) {
-        latest[customerId].paidLastWeek = true;
-      }
-    });
+      const paymentsQ = query(
+        coll.payments,
+        where("userId", "==", userId),
+        where("customerId", "in", chunk)
+      );
+      const paymentsSnap = await getDocs(paymentsQ);
+
+      paymentsSnap.docs
+        .map((d) => d.data() as Payment)
+        .filter(isRealCollectionPayment)
+        .forEach((payment) => {
+          const customerId = payment.customerId;
+          if (!customerId) return;
+
+          const activeLoanId = activeLoanIdByCustomerId.get(customerId);
+          if (!activeLoanId || payment.loanId !== activeLoanId) return;
+
+          const paymentDate = toMillis(payment.paymentDate);
+          if (paymentDate > latest[customerId].lastPaymentDate) {
+            latest[customerId].lastPaymentDate = paymentDate;
+          }
+          if (paymentDate >= prevWeekStart && paymentDate <= prevWeekEnd) {
+            latest[customerId].paidLastWeek = true;
+          }
+        });
+    })
+  );
 
   return latest;
 }
@@ -790,7 +819,7 @@ export async function addPayment(loan: Loan, amountPaid: number, paymentDate: nu
     paymentType: "REGULAR",
     paymentMode,
     type: paymentMode,
-    userId: loan.userId,
+    userId: auth.currentUser?.uid || loan.userId,
   };
 
   // Find and delete any existing DUE payments for this loan in the same personal cycle window
@@ -849,7 +878,7 @@ export async function addPaymentsBatch(
       paymentType: "REGULAR",
       paymentMode,
       type: paymentMode,
-      userId: loan.userId,
+      userId: auth.currentUser?.uid || loan.userId,
     };
 
     // Find and delete any existing DUE payments for this loan in the same personal cycle window
@@ -946,7 +975,7 @@ export async function markDue(loan: Loan, paymentDate: number) {
     paymentType: "DUE",
     paymentMode: "CASH",
     type: "DUE",
-    userId: loan.userId,
+    userId: auth.currentUser?.uid || loan.userId,
   };
   await setDoc(doc(db, "payments", payment.id), stripUndefined(payment));
   clearCache();
@@ -966,7 +995,7 @@ export async function renewLoan(loan: Loan, newPrincipal: number, date: number) 
       paymentMode: "CASH",
       type: "CASH",
       notes: "Loan renewed - old balance cleared",
-      userId: loan.userId,
+      userId: auth.currentUser?.uid || loan.userId,
     };
     await setDoc(doc(db, "payments", closure.id), stripUndefined(closure));
   }
@@ -980,7 +1009,7 @@ export async function renewLoan(loan: Loan, newPrincipal: number, date: number) 
     interestAmount: interest,
     totalPayable,
     balanceAmount: totalPayable,
-    userId: loan.userId,
+    userId: auth.currentUser?.uid || loan.userId,
     startDate: date,
     status: "ACTIVE",
     disbursement_mode: normalizeMode(loan.disbursement_mode ?? loan.disbursementMode),

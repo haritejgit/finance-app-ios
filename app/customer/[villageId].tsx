@@ -257,18 +257,23 @@ const CustomerItem = React.memo(function CustomerItem({
   }, [customer.id, onPress]);
 
   return (
-    <Pressable
+    <View
       style={[
         styles.item,
         noTextSelection,
         {
           backgroundColor: getBackgroundColor(),
         },
-      ]}
-      onPress={openCustomer}
+      ] as any}
     >
+      {/* Absolute Pressable covering left/center to navigate to details */}
+      <Pressable
+        style={styles.detailsPressable}
+        onPress={openCustomer}
+      />
+
       {/* Column 1: Left Badge Info */}
-      <View style={styles.leftCol}>
+      <View style={styles.leftCol} pointerEvents={"none" as const}>
         <CustomerIdBadge 
           numericalId={customer.numericalId} 
           id={customer.id} 
@@ -288,7 +293,7 @@ const CustomerItem = React.memo(function CustomerItem({
       </View>
 
       {/* Column 2: Center Details */}
-      <View style={styles.centerCol}>
+      <View style={styles.centerCol} pointerEvents={"box-none" as const}>
         <Text style={[styles.cardName, status === "paid" ? { color: "#16803a" } : status === "due" ? { color: "#dc3545" } : { color: "#111827" }]} numberOfLines={1}>
           {language === "te" ? translateTelugu(customer.name) : customer.name}
         </Text>
@@ -296,19 +301,10 @@ const CustomerItem = React.memo(function CustomerItem({
 
         <View style={styles.phoneIconRow}>
           {customer.phone ? (
-            <Pressable
-              accessibilityRole="link"
-              accessibilityLabel={`Call ${customer.phone}`}
-              onPress={(event) => {
-                event.stopPropagation?.();
-                const phoneUrl = `tel:${customer.phone.replace(/\D/g, "")}`;
-                Linking.openURL(phoneUrl).catch(() => undefined);
-              }}
-              style={styles.callLink}
-            >
+            <View style={styles.callLink}>
               <Icon name="call" size={14} color="#1565C0" />
               <Text style={styles.cardPhone}>{customer.phone}</Text>
-            </Pressable>
+            </View>
           ) : (
             <Text style={styles.cardPhone}>—</Text>
           )}
@@ -447,7 +443,7 @@ const CustomerItem = React.memo(function CustomerItem({
           </View>
         </Pressable>
       </View>
-    </Pressable>
+    </View>
   );
 });
 
@@ -1944,6 +1940,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08, 
     shadowRadius: 8, 
     elevation: 3,
+  },
+  detailsPressable: {
+    position: "absolute",
+    left: 0,
+    right: 65,
+    top: 0,
+    bottom: 0,
+    borderRadius: 14,
   },
   leftCol: {
     alignItems: "center",

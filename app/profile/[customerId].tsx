@@ -264,6 +264,7 @@ export default function ProfileScreen() {
   const [payOpen, setPayOpen] = useState(false);
   const [dueOpen, setDueOpen] = useState(false);
   const [renewOpen, setRenewOpen] = useState(false);
+  const [isPaymentSaving, setIsPaymentSaving] = useState(false);
   const [amount, setAmount] = useState("");
   const [mode, setMode] = useState<PaymentMode>("CASH");
   const [renewAmount, setRenewAmount] = useState("");
@@ -798,6 +799,7 @@ export default function ProfileScreen() {
 
   const confirmPayment = async () => {
     Keyboard.dismiss();
+    if (isPaymentSaving) return;
     if (!loan) return;
     const parsedDate = parseDateInput(paymentDateInput);
     if (!parsedDate) {
@@ -817,10 +819,17 @@ export default function ProfileScreen() {
     const finalDate = (toStartOfDay(parsedDate) === toStartOfDay(Date.now())) ? Date.now() : toStartOfDay(parsedDate);
     
     const proceed = async () => {
-      await addPayment(loan, parsedAmount, finalDate, mode);
-      setPayOpen(false);
-      setAmount("");
-      await reload();
+      try {
+        setIsPaymentSaving(true);
+        await addPayment(loan, parsedAmount, finalDate, mode);
+        setPayOpen(false);
+        setAmount("");
+        await reload();
+      } catch {
+        setPaymentDateError("Payment failed. Please try again.");
+      } finally {
+        setIsPaymentSaving(false);
+      }
     };
 
     if (paidTodayAmount > 0) {
@@ -838,6 +847,7 @@ export default function ProfileScreen() {
   };
 
   const closePaymentModal = () => {
+    if (isPaymentSaving) return;
     Keyboard.dismiss();
     setPayOpen(false);
     setAmount("");
@@ -1386,7 +1396,9 @@ export default function ProfileScreen() {
                         setShowPaymentPicker(false);
                       }
                     } else {
-                      setPaymentDateInput(formatDateInput(selected.getTime()));
+                      if (selected) {
+                        setPaymentDateInput(formatDateInput(selected.getTime()));
+                      }
                       setShowPaymentPicker(false);
                     }
                   }}
@@ -1413,14 +1425,17 @@ export default function ProfileScreen() {
               Confirm Rs.{Number(amount || 0).toLocaleString("en-IN")} payment via {mode === "PHONE" ? "PhonePe" : "Cash"}?
             </Text>
             <Pressable
-              style={styles.primary}
+              style={[styles.primary, isPaymentSaving && styles.primaryDisabled]}
               onPress={confirmPayment}
+              disabled={isPaymentSaving}
             >
-              <Text style={styles.primaryText}>Confirm</Text>
+              {isPaymentSaving ? <ActivityIndicator size="small" color={colors.white} /> : null}
+              <Text style={styles.primaryText}>{isPaymentSaving ? "Saving..." : "Confirm"}</Text>
             </Pressable>
             <Pressable
-              style={styles.cancelModalBtn}
+              style={[styles.cancelModalBtn, isPaymentSaving && styles.cancelModalBtnDisabled]}
               onPress={closePaymentModal}
+              disabled={isPaymentSaving}
             >
               <Text style={styles.cancelModalBtnText}>Cancel</Text>
             </Pressable>
@@ -1493,7 +1508,9 @@ export default function ProfileScreen() {
                         setShowDuePicker(false);
                       }
                     } else {
-                      setDueDateInput(formatDateInput(selected.getTime()));
+                      if (selected) {
+                        setDueDateInput(formatDateInput(selected.getTime()));
+                      }
                       setShowDuePicker(false);
                     }
                   }}
@@ -2214,7 +2231,9 @@ const styles = StyleSheet.create({
   chipPhoneOn: { backgroundColor: "#5F259F", borderColor: "#5F259F" },
   chipText: { color: "#555" },
   chipOnText: { color: colors.white, fontWeight: "700" },
-  primary: { backgroundColor: colors.blue2, borderRadius: 12, padding: 14, alignItems: "center" },
+  primary: { backgroundColor: colors.blue2, borderRadius: 12, padding: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
+  primaryDisabled: { opacity: 0.65 },
+  cancelModalBtnDisabled: { opacity: 0.6 },
   primaryText: { color: colors.white, fontWeight: "700" },
   errorText: { color: "#b91c1c", fontSize: 12, marginTop: -4 },
   dropdownItem: {
