@@ -395,9 +395,12 @@ const CustomerItem = React.memo(function CustomerItem({
           accessibilityLabel={`Cash payment for ${customer.name}`}
           style={[styles.actionRow, !canPay && styles.actionRowDisabled]}
           disabled={!canPay}
-          onPressIn={markActionPress}
-          onPressOut={markActionPress}
           onPress={(e) => {
+            markActionPress(e);
+            lightImpact();
+            onQuickPay(customer, "CASH");
+          }}
+          onLongPress={(e) => {
             markActionPress(e);
             lightImpact();
             onManualPay(customer, "CASH");
@@ -413,9 +416,12 @@ const CustomerItem = React.memo(function CustomerItem({
           accessibilityLabel={`PhonePe payment for ${customer.name}`}
           style={[styles.actionRow, !canPay && styles.actionRowDisabled]}
           disabled={!canPay}
-          onPressIn={markActionPress}
-          onPressOut={markActionPress}
           onPress={(e) => {
+            markActionPress(e);
+            lightImpact();
+            onQuickPay(customer, "PHONE");
+          }}
+          onLongPress={(e) => {
             markActionPress(e);
             lightImpact();
             onManualPay(customer, "PHONE");
@@ -431,8 +437,6 @@ const CustomerItem = React.memo(function CustomerItem({
           accessibilityLabel={`Mark ${customer.name} due`}
           style={[styles.actionRow, !canPay && styles.actionRowDisabled]}
           disabled={!canPay}
-          onPressIn={markActionPress}
-          onPressOut={markActionPress}
           onPress={(e) => {
             markActionPress(e);
             lightImpact();
@@ -931,7 +935,7 @@ export default function CustomerListScreen() {
       return;
     }
     setManualPaymentCustomer(customer);
-    setManualPaymentAmount(getSuggestedPaymentAmount(loan).toString());
+    setManualPaymentAmount("");
     setManualPaymentMode(selectedMode);
     setManualPaymentError("");
   }, [activeLoans]);
@@ -959,13 +963,8 @@ export default function CustomerListScreen() {
           "✅ Payment Registered!",
           `Paid Rs.${suggested.toLocaleString("en-IN")} via ${mode === "PHONE" ? "PhonePe" : "Cash"} for ${customer.name}`
         );
-      } catch (err: any) {
-        console.error("Quick pay failed:", err);
-        showToast(
-          "error",
-          "Payment failed",
-          err instanceof Error ? err.message : "Could not save this payment. Please try again."
-        );
+      } catch {
+        Alert.alert("Payment failed", "Could not save this payment. Please try again.");
       } finally {
         setPayingCustomerId(null);
       }
@@ -1075,13 +1074,8 @@ export default function CustomerListScreen() {
           },
         }));
         closeManualPayment();
-      } catch (err: any) {
-        console.error("Manual pay failed:", err);
-        showToast(
-          "error",
-          "Payment failed",
-          err instanceof Error ? err.message : "Could not save this payment. Please try again."
-        );
+      } catch {
+        Alert.alert("Payment failed", "Could not save this payment. Please try again.");
       } finally {
         setPayingCustomerId(null);
       }
@@ -1171,7 +1165,7 @@ export default function CustomerListScreen() {
               <Icon name="arrow-back" size={20} color={colors.white} />
             </Pressable>
             <View style={styles.headerTextWrap}>
-              <Text style={styles.headerTitle}>{village?.name || 'Customers'}</Text>
+              <Text style={styles.headerTitle}>{village?.name || 'Customers'} <Text style={{ fontSize: 10, opacity: 0.6 }}>v2</Text></Text>
               <Text style={styles.headerSub}>{filtered.length} customer{filtered.length !== 1 ? 's' : ''}</Text>
             </View>
           </View>

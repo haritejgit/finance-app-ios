@@ -822,38 +822,44 @@ export async function addPayment(loan: Loan, amountPaid: number, paymentDate: nu
     userId: auth.currentUser?.uid || loan.userId,
   };
 
-  // Find and delete any existing DUE payments for this loan in the same personal cycle window
-  const q = query(
-    coll.payments,
-    where("loanId", "==", loan.id),
-    where("paymentType", "==", "DUE")
-  );
-  const duesSnap = await getDocs(q);
-  const targetCycleStart = getPersonalCycleStartTs(paymentDate, cycleStartDay);
-  const duesToDelete = duesSnap.docs.filter((dDoc) => {
-    const dData = dDoc.data();
-    const dTime = toMillis(dData.paymentDate);
-    return getPersonalCycleStartTs(dTime, cycleStartDay) === targetCycleStart;
-  });
-
-  await runTransaction(db, async (transaction) => {
-    const loanRef = doc(db, "loans", loan.id);
-    const loanSnap = await transaction.get(loanRef);
-    const liveLoan = loanSnap.exists() ? (loanSnap.data() as Loan) : loan;
-    const newBalance = Math.max(0, money(liveLoan.balanceAmount) - amountPaid);
-    
-    // Delete existing dues
-    duesToDelete.forEach((dueDoc) => {
-      transaction.delete(dueDoc.ref);
+  try {
+    // Find and delete any existing DUE payments for this loan in the same personal cycle window
+    const q = query(
+      coll.payments,
+      where("loanId", "==", loan.id),
+      where("paymentType", "==", "DUE")
+    );
+    const duesSnap = await getDocs(q);
+    const targetCycleStart = getPersonalCycleStartTs(paymentDate, cycleStartDay);
+    const duesToDelete = duesSnap.docs.filter((dDoc) => {
+      const dData = dDoc.data();
+      const dTime = toMillis(dData.paymentDate);
+      return getPersonalCycleStartTs(dTime, cycleStartDay) === targetCycleStart;
     });
 
-    transaction.set(doc(db, "payments", payment.id), stripUndefined(payment));
-    transaction.update(loanRef, {
-      balanceAmount: newBalance,
-      status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+    await runTransaction(db, async (transaction) => {
+      const loanRef = doc(db, "loans", loan.id);
+      const loanSnap = await transaction.get(loanRef);
+      const liveLoan = loanSnap.exists() ? (loanSnap.data() as Loan) : loan;
+      const newBalance = Math.max(0, money(liveLoan.balanceAmount) - amountPaid);
+      
+      // Delete existing dues
+      duesToDelete.forEach((dueDoc) => {
+        transaction.delete(dueDoc.ref);
+      });
+
+      transaction.set(doc(db, "payments", payment.id), stripUndefined(payment));
+      transaction.update(loanRef, {
+        balanceAmount: newBalance,
+        status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+      });
     });
-  });
-  clearCache();
+    clearCache();
+  } catch (err: any) {
+    console.error("addPayment failed detail:", err);
+    const errText = err?.message || String(err);
+    throw new Error(`${errText} [Data: amt=${amountPaid}, mode=${mode}, pId=${payment.id}, uid=${payment.userId}, loan=${loan.id}]`);
+  }
 }
 
 export async function addPaymentsBatch(
