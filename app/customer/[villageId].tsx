@@ -1944,7 +1944,7 @@ const styles = StyleSheet.create({
   detailsPressable: {
     position: "absolute",
     left: 0,
-    right: 65,
+    right: 80,
     top: 0,
     bottom: 0,
     borderRadius: 14,
