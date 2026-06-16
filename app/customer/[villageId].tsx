@@ -303,19 +303,10 @@ const CustomerItem = React.memo(function CustomerItem({
 
         <View style={styles.phoneIconRow}>
           {customer.phone ? (
-            <Pressable
-              accessibilityRole="link"
-              accessibilityLabel={`Call ${customer.phone}`}
-              onPress={(event) => {
-                event.stopPropagation?.();
-                const phoneUrl = `tel:${customer.phone.replace(/\D/g, "")}`;
-                Linking.openURL(phoneUrl).catch(() => undefined);
-              }}
-              style={styles.callLink}
-            >
+            <View style={styles.callLink}>
               <Icon name="call" size={14} color="#1565C0" />
               <Text style={styles.cardPhone}>{customer.phone}</Text>
-            </Pressable>
+            </View>
           ) : (
             <Text style={styles.cardPhone}>—</Text>
           )}
@@ -963,8 +954,10 @@ export default function CustomerListScreen() {
           "✅ Payment Registered!",
           `Paid Rs.${suggested.toLocaleString("en-IN")} via ${mode === "PHONE" ? "PhonePe" : "Cash"} for ${customer.name}`
         );
-      } catch {
-        Alert.alert("Payment failed", "Could not save this payment. Please try again.");
+      } catch (err: any) {
+        console.error("Quick pay failed:", err);
+        const errMsg = err?.message || String(err);
+        showToast("error", "Payment failed", errMsg);
       } finally {
         setPayingCustomerId(null);
       }

@@ -806,61 +806,30 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
 export async function addPayment(loan: Loan, amountPaid: number, paymentDate: number, mode: PaymentMode) {
   assertPositiveAmount(amountPaid, "Payment amount");
   const paymentMode = normalizeMode(mode);
-  const customer = await getCustomerById(loan.customerId);
-  const cycleStartDay = getOrDeriveCycleStartDay(customer!, loan.startDate);
-  const targetWeekNumber = getPersonalCycleWeekIndex(paymentDate, loan.startDate, cycleStartDay) + 1;
   const payment: Payment = {
     id: id(),
     loanId: loan.id,
     customerId: loan.customerId,
     amountPaid,
     paymentDate,
-    weekNumber: targetWeekNumber,
+    weekNumber: loanWeekNumber(loan.startDate, paymentDate),
     paymentType: "REGULAR",
     paymentMode,
     type: paymentMode,
     userId: auth.currentUser?.uid || loan.userId,
   };
-
-  try {
-    // Find and delete any existing DUE payments for this loan in the same personal cycle window
-    const q = query(
-      coll.payments,
-      where("loanId", "==", loan.id)
-    );
-    const paymentsSnap = await getDocs(q);
-    const targetCycleStart = getPersonalCycleStartTs(paymentDate, cycleStartDay);
-    const duesToDelete = paymentsSnap.docs.filter((dDoc) => {
-      const dData = dDoc.data();
-      const dType = dData.paymentType || (dData as any).type;
-      if (dType !== "DUE") return false;
-      const dTime = toMillis(dData.paymentDate);
-      return getPersonalCycleStartTs(dTime, cycleStartDay) === targetCycleStart;
+  await runTransaction(db, async (transaction) => {
+    const loanRef = doc(db, "loans", loan.id);
+    const loanSnap = await transaction.get(loanRef);
+    const liveLoan = loanSnap.exists() ? (loanSnap.data() as Loan) : loan;
+    const newBalance = Math.max(0, money(liveLoan.balanceAmount) - amountPaid);
+    transaction.set(doc(db, "payments", payment.id), stripUndefined(payment));
+    transaction.update(loanRef, {
+      balanceAmount: newBalance,
+      status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
     });
-
-    await runTransaction(db, async (transaction) => {
-      const loanRef = doc(db, "loans", loan.id);
-      const loanSnap = await transaction.get(loanRef);
-      const liveLoan = loanSnap.exists() ? (loanSnap.data() as Loan) : loan;
-      const newBalance = Math.max(0, money(liveLoan.balanceAmount) - amountPaid);
-      
-      // Delete existing dues
-      duesToDelete.forEach((dueDoc) => {
-        transaction.delete(dueDoc.ref);
-      });
-
-      transaction.set(doc(db, "payments", payment.id), stripUndefined(payment));
-      transaction.update(loanRef, {
-        balanceAmount: newBalance,
-        status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
-      });
-    });
-    clearCache();
-  } catch (err: any) {
-    console.error("addPayment failed detail:", err);
-    const errText = err?.message || String(err);
-    throw new Error(`${errText} [Data: amt=${amountPaid}, mode=${mode}, pId=${payment.id}, uid=${payment.userId}, loan=${loan.id}]`);
-  }
+  });
+  clearCache();
 }
 
 export async function addPaymentsBatch(
@@ -872,40 +841,18 @@ export async function addPaymentsBatch(
   for (const { loan, amountPaid, paymentDate, mode } of entries) {
     assertPositiveAmount(amountPaid, "Payment amount");
     const paymentMode = normalizeMode(mode);
-    const customer = await getCustomerById(loan.customerId);
-    const cycleStartDay = getOrDeriveCycleStartDay(customer!, loan.startDate);
-    const targetWeekNumber = getPersonalCycleWeekIndex(paymentDate, loan.startDate, cycleStartDay) + 1;
     const payment: Payment = {
       id: id(),
       loanId: loan.id,
       customerId: loan.customerId,
       amountPaid,
       paymentDate,
-      weekNumber: targetWeekNumber,
+      weekNumber: loanWeekNumber(loan.startDate, paymentDate),
       paymentType: "REGULAR",
       paymentMode,
       type: paymentMode,
       userId: auth.currentUser?.uid || loan.userId,
     };
-
-    // Find and delete any existing DUE payments for this loan in the same personal cycle window
-    const q = query(
-      coll.payments,
-      where("loanId", "==", loan.id)
-    );
-    const paymentsSnap = await getDocs(q);
-    const targetCycleStart = getPersonalCycleStartTs(paymentDate, cycleStartDay);
-    const duesToDelete = paymentsSnap.docs.filter((dDoc) => {
-      const dData = dDoc.data();
-      const dType = dData.paymentType || (dData as any).type;
-      if (dType !== "DUE") return false;
-      const dTime = toMillis(dData.paymentDate);
-      return getPersonalCycleStartTs(dTime, cycleStartDay) === targetCycleStart;
-    });
-
-    duesToDelete.forEach((dueDoc) => {
-      batch.delete(dueDoc.ref);
-    });
 
     const newBalance = Math.max(0, loan.balanceAmount - amountPaid);
     batch.set(doc(db, "payments", payment.id), stripUndefined(payment));
@@ -1066,10 +1013,17 @@ export function formatPersonalCycleRange(startTs: number): string {
   return `${startStr} – ${endStr}`;
 }
 
+let _lastAutoDueRun = 0;
+const AUTO_DUE_THROTTLE_MS = 60 * 60 * 1000; // 1 hour
+
 export async function checkAndAutoMarkDues(userId: string, activeLoans: Loan[]) {
   if (!activeLoans || activeLoans.length === 0) return;
 
+  // Throttle: only run once per hour to conserve Firestore quota
   const now = Date.now();
+  if (now - _lastAutoDueRun < AUTO_DUE_THROTTLE_MS) return;
+  _lastAutoDueRun = now;
+
   const batch = writeBatch(db);
   let hasChanges = false;
   const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
@@ -1086,7 +1040,7 @@ export async function checkAndAutoMarkDues(userId: string, activeLoans: Loan[]) 
   }
 
   for (const chunk of chunks) {
-    const snap = await getDocs(query(coll.customers, where("__name__", "in", chunk)));
+    const snap = await getDocs(query(coll.customers, where("userId", "==", userId), where("__name__", "in", chunk)));
     snap.docs.forEach(d => {
       customersMap.set(d.id, d.data() as Customer);
     });
@@ -1102,7 +1056,7 @@ export async function checkAndAutoMarkDues(userId: string, activeLoans: Loan[]) 
   }
 
   for (const chunk of loanChunks) {
-    const snap = await getDocs(query(coll.payments, where("loanId", "in", chunk)));
+    const snap = await getDocs(query(coll.payments, where("userId", "==", userId), where("loanId", "in", chunk)));
     snap.docs.forEach(d => {
       const p = d.data() as Payment;
       if (!paymentsMap.has(p.loanId)) {
