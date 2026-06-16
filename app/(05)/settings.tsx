@@ -545,20 +545,7 @@ export default function SettingsScreen() {
                 </View>
                 <Icon name="arrow-forward" size={18} color={colors.textMuted} />
               </Pressable>
-              <Pressable
-                accessibilityLabel="Open Loan Calculator"
-                style={[styles.settingsLink, { borderTopColor: colors.border }]}
-                onPress={() => router.push("/loan-calculator" as any)}
-              >
-                <View style={[styles.infoIcon, { backgroundColor: colors.warningSoft }]}>
-                  <Icon name="calculator-outline" size={18} color={colors.coral} />
-                </View>
-                <View style={styles.infoCopy}>
-                  <Text style={[styles.label, { color: colors.textSecondary }]}>{t("loanCalculator")}</Text>
-                  <Text style={[styles.value, { color: colors.text }]}>{t("loanCalculatorSub")}</Text>
-                </View>
-                <Icon name="arrow-forward" size={18} color={colors.textMuted} />
-              </Pressable>
+
             </View>
 
             <View style={[styles.securityPanel, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>

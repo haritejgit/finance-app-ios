@@ -708,17 +708,20 @@ export async function getPaymentStatusesForCustomersThisWeek(userId: string, cus
       const activeLoanIds = Array.from(activeLoanIdByCustomerId.values());
       if (activeLoanIds.length === 0) return;
 
+      // Fetch ALL payments for active loans, then filter dates in-memory
+      // using toMillis() to handle both Firestore Timestamps and raw numbers
       const paymentsQ = query(
         coll.payments,
         where("userId", "==", userId),
-        where("loanId", "in", activeLoanIds),
-        where("paymentDate", ">=", startMs),
-        where("paymentDate", "<=", endMs)
+        where("loanId", "in", activeLoanIds)
       );
       const paymentsSnap = await getDocs(paymentsQ);
 
       paymentsSnap.docs.forEach((d) => {
         const payment = d.data() as Payment;
+        const paymentDate = toMillis(payment.paymentDate);
+        if (paymentDate < startMs || paymentDate > endMs) return;
+
         const customerId = payment.customerId ?? customerIdByActiveLoanId.get(payment.loanId);
         if (!customerId) return;
 

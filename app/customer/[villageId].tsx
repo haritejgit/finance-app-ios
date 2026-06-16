@@ -230,50 +230,25 @@ const CustomerItem = React.memo(function CustomerItem({
         </View>
       );
     }
-    if (status === 'paid') {
-      badges.push(
-        <View key="paid" style={styles.statusBadgeContainer}>
-          <Icon name="checkmark" size={12} color="#059669" />
-          <Text style={styles.statusBadgePaidGrey}> PAID</Text>
-        </View>
-      );
-    } else if (status === 'due') {
-      badges.push(
-        <View key="due" style={styles.statusBadgeContainer}>
-          <Icon name="close" size={12} color="#dc3545" />
-          <Text style={styles.statusBadgeDue}> DUE</Text>
-        </View>
-      );
-    }
-    if (didntPayLastWeek) {
-      badges.push(
-        <View key="missed" style={styles.statusBadgeContainer}>
-          <Icon name="warning" size={10} color="#dc3545" />
-          <Text style={styles.statusBadgeMissed}> MISSED LAST WEEK</Text>
-        </View>
-      );
-    }
     if (badges.length === 0) return null;
     return (
       <View style={styles.badgesRow}>
         {badges}
       </View>
     );
-  }, [status, isNew, didntPayLastWeek]);
+  }, [isNew]);
 
   const getBackgroundColor = useCallback(() => {
+    if (status === 'paid') {
+      return '#d4edda'; // Soft green for paid
+    }
     if (status === 'due') {
-      return '#f8d7da'; // Soft light red
+      return '#f8d7da'; // Soft red for due
     }
     if (isNew) {
       return '#E0E7FF'; // Soft indigo/grey tint for new
     }
-    switch (status) {
-      case 'paid':
-        return '#f5f5f5'; // Light grey for paid status
-      default:
-        return '#F5F9FF'; // Premium light blue tint (Card BG)
-    }
+    return '#F5F9FF'; // Premium light blue tint (Card BG)
   }, [status, isNew]);
 
   const markActionPress = useCallback((event?: { stopPropagation?: () => void }) => {
@@ -331,7 +306,6 @@ const CustomerItem = React.memo(function CustomerItem({
         <View style={styles.phoneIconRow}>
           {customer.phone ? (
             <View style={styles.callLink}>
-              <Icon name="call" size={14} color="#1565C0" />
               <Text style={styles.cardPhone}>{customer.phone}</Text>
             </View>
           ) : (
@@ -345,6 +319,9 @@ const CustomerItem = React.memo(function CustomerItem({
             <Text style={[styles.cardAmount, loan.balanceAmount <= 0 && styles.balanceCleared]}>
               Rs.{Math.round(loan.balanceAmount).toLocaleString("en-IN")}
             </Text>
+            {didntPayLastWeek && (
+              <Icon name="warning" size={13} color="#dc3545" style={{ marginLeft: 2 }} />
+            )}
             {/* Doc badges inline - only when a doc is missing */}
             {(!customer.aadharSubmitted || !customer.passportPhotoSubmitted) && (
               <View style={styles.docStatusGroup}>

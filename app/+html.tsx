@@ -38,8 +38,8 @@ export default function Root({ children }: PropsWithChildren) {
         <style
           dangerouslySetInnerHTML={{
             __html: `
-              html, body { min-height: 100%; min-height: 100dvh; background: var(--app-bg, #2D3A28); color: var(--app-text, #FFFFFF); font-family: 'Onest', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-              #root { min-height: 100%; min-height: 100dvh; max-width: 430px; margin: 0 auto; background: var(--app-bg, #2D3A28); color: var(--app-text, #FFFFFF); box-shadow: 0 0 0 1px rgba(255,255,255,0.06); }
+              html, body { height: 100%; height: 100dvh; background: var(--app-bg, #2D3A28); color: var(--app-text, #FFFFFF); font-family: 'Onest', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; }
+              #root { height: 100%; height: 100dvh; max-width: 430px; margin: 0 auto; background: var(--app-bg, #2D3A28); color: var(--app-text, #FFFFFF); box-shadow: 0 0 0 1px rgba(255,255,255,0.06); display: flex; flex-direction: column; overflow: hidden; }
               html[data-theme="dark"], html[data-theme="dark"] body { background: #2D3A28; }
               * { box-sizing: border-box; }
               body { margin: 0; overscroll-behavior-y: none; }
