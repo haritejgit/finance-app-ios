@@ -1599,44 +1599,6 @@ export default function AccountScreen() {
                   <View style={styles.cardContainer}>
                     {renderCalculateCard()}
                     {renderBlockAadhaarCard()}
-                    
-                    {/* A. Balancing Fund Configuration */}
-                    <View style={styles.card}>
-                      <Text style={styles.cardTitle}>{t("balancingFund")}</Text>
-                      <Text style={styles.cardDesc}>{t("balancingFundDesc")}</Text>
-                      
-                      <View style={isNarrow ? { flexDirection: "column", gap: 12 } : styles.datePickerRow}>
-                        <View style={isNarrow ? styles.inputContainer : [styles.inputContainer, { flex: 1.2 }]}>
-                          <Text style={styles.inputLabel}>{t("date")}</Text>
-                          <DatePickerField
-                            value={bfDateStr}
-                            onChange={setBfDateStr}
-                            placeholder="DD/MM/YYYY"
-                          />
-                        </View>
-                        <View style={isNarrow ? styles.inputContainer : [styles.inputContainer, { flex: 1.8 }]}>
-                          <Text style={styles.inputLabel}>{t("startingAmount")}</Text>
-                          <TextInput
-                            style={styles.textInput}
-                            value={bfInput}
-                            onChangeText={setBfInput}
-                            keyboardType="numeric"
-                            placeholder="e.g. 100000"
-                            placeholderTextColor="#78909c"
-                          />
-                        </View>
-                      </View>
-
-                      <Pressable 
-                        style={[styles.primaryButton, submitting && styles.btnDisabled]} 
-                        onPress={handleSaveBf}
-                        disabled={submitting}
-                      >
-                        <Text style={styles.primaryButtonText}>
-                          {submitting ? t("loading") : t("updateBalancingFund")}
-                        </Text>
-                      </Pressable>
-                    </View>
 
                     {/* ═══════════════════════════════════════════════════════════
                         MY WALLET BALANCES CARD
