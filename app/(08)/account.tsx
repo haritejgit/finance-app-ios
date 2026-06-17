@@ -35,6 +35,8 @@ import {
   addExpense,
   deleteExpense,
   updateExpense,
+  getAllPaymentsEver,
+  getAllLoansEver,
   getUserProfile,
   saveAccountNotes,
   saveWalletOpeningBalances,
@@ -45,7 +47,7 @@ import {
   AllPaymentEver,
   AllLoanEver,
 } from "../../src/repository";
-import { isAccountCollectionPayment, money, toMillis } from "../../src/business-logic";
+import { isRealCollectionPayment, money, toMillis } from "../../src/business-logic";
 import { PaymentMode, UserProfile, Village } from "../../src/types";
 import { openAccountStatementPrint, ExportTransaction, ExportTotals } from "../../src/exports";
 import {
@@ -163,7 +165,7 @@ function loanMillis(l: AllLoanEver): number {
 }
 
 function isCollectionInRange(p: AllPaymentEver, startTs: number, endTs: number): boolean {
-  if (!isAccountCollectionPayment(p)) return false;
+  if (!isRealCollectionPayment(p)) return false;
   const ts = paymentMillis(p);
   return ts >= startTs && ts <= endTs;
 }
@@ -401,20 +403,28 @@ export default function AccountScreen() {
     setExpDate(formatDDMMYYYY(today.getTime()));
   }, []);
 
-  // Fetch balancing fund, villages, and customers (one-shot).
-  // Wallet data (expenses, payments, loans, investments) comes from subscribeWalletData().
+  // Fetch balancing fund, villages, customers, and transaction lists (one-shot).
+  // Live wallet balance uses subscribeWalletData(); live summary uses getAccountSummaryForRange().
   const loadData = useCallback(async () => {
     if (!user) return;
     try {
       setLoading(true);
-      const [bfVal, dateBfs, vills, custs] = await Promise.all([
+      const [bfVal, dateBfs, invs, exps, pmts, lns, vills, custs] = await Promise.all([
         getBalancingFund(user.uid),
         getAllBalancingFunds(user.uid),
+        getInvestments(user.uid),
+        getExpenses(user.uid),
+        getAllPaymentsEver(user.uid),
+        getAllLoansEver(user.uid),
         getVillages(user.uid),
         getAllActiveCustomersWithVillages(user.uid),
       ]);
       setBf(bfVal);
       setDateSpecificBfs(dateBfs);
+      setInvestments(invs);
+      setExpenses(exps);
+      setPayments(pmts);
+      setLoans(lns);
       setVillages(vills);
       setCustomers(custs);
 
@@ -454,16 +464,12 @@ export default function AccountScreen() {
     const unsubscribe = subscribeWalletData(
       user.uid,
       (data) => {
-        // Real-time wallet + summary data (single source of truth)
+        // Live wallet display state only — does not replace one-shot lists used elsewhere
         setLiveExpenses(data.expenses);
         setLivePayments(data.payments);
         setLiveLoans(data.loans);
         setLiveInvestments(data.investments);
         setLiveUserProfile(data.userProfile);
-        setExpenses(data.expenses);
-        setPayments(data.payments);
-        setLoans(data.loans);
-        setInvestments(data.investments);
 
         if (isFirstCallback) {
           isFirstCallback = false;

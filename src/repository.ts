@@ -24,7 +24,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { BlockedAadhaar, Customer, Expense, Investment, Loan, Payment, PaymentMode, UserProfile, Village, VillageHistorySegment } from "./types";
-import { getLoanDistributedAmount, getLoanPrincipalAmount, isAccountCollectionPayment, isRealCollectionPayment, loanWeekNumber, money, toMillis, weekStart } from "./business-logic";
+import { getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, loanWeekNumber, money, toMillis, weekStart } from "./business-logic";
 import { filterCustomersWithVillage } from "./utils";
 
 const coll = {
@@ -1377,11 +1377,12 @@ export async function getAccountSummaryForRange(
   expenses: Expense[];
   investments: Investment[];
 }> {
-  const [paymentsSnap, loansSnap, expensesSnap, investmentsSnap] = await Promise.all([
+  const [paymentsSnap, loansSnap, expensesSnap, investmentsSnap, eligibleCustomerIds] = await Promise.all([
     getDocs(query(coll.payments, where("userId", "==", userId))),
     getDocs(query(coll.loans, where("userId", "==", userId))),
     getDocs(query(coll.expenses, where("userId", "==", userId))),
     getDocs(query(coll.investments, where("userId", "==", userId))),
+    getEligibleCustomerIds(userId),
   ]);
 
   const customerIdByLoanId = new Map(
@@ -1395,14 +1396,25 @@ export async function getAccountSummaryForRange(
     .map((docSnap) => mapPaymentDoc(docSnap, customerIdByLoanId))
     .filter((payment) => {
       const ts = toMillis(payment.paymentDate ?? payment.date);
-      return ts >= startMs && ts <= endMs && isAccountCollectionPayment(payment);
+      return (
+        ts >= startMs &&
+        ts <= endMs &&
+        isRealCollectionPayment(payment) &&
+        !!payment.customerId &&
+        eligibleCustomerIds.has(payment.customerId)
+      );
     });
 
   const loans = loansSnap.docs
     .map(mapLoanDoc)
     .filter((loan) => {
       const ts = toMillis(loan.startDate ?? loan.date);
-      return ts >= startMs && ts <= endMs;
+      return (
+        ts >= startMs &&
+        ts <= endMs &&
+        !!loan.customerId &&
+        eligibleCustomerIds.has(loan.customerId)
+      );
     });
 
   const expenses = expensesSnap.docs

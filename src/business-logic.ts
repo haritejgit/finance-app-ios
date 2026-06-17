@@ -70,22 +70,9 @@ export function getLoanDistributedAmount(loan: Partial<Loan> & Record<string, an
 export function isRealCollectionPayment(payment: Record<string, any>): boolean {
   const kind = payment.paymentType ?? payment.type ?? "REGULAR";
   if (kind === "DUE") {
-    return money(payment.amountPaid ?? payment.amount_paid ?? payment.amount) > 0;
+    return Number(payment.amountPaid || 0) > 0;
   }
   if (kind === "RENEWAL_CLOSURE") return true;
-  return (
-    kind === "REGULAR" ||
-    kind === "CASH" ||
-    kind === "PHONE" ||
-    payment.paymentMode === "CASH" ||
-    payment.paymentMode === "PHONE"
-  );
-}
-
-/** Account statement collections: regular customer payments only (excludes renewal closures and dues). */
-export function isAccountCollectionPayment(payment: Record<string, any>): boolean {
-  const kind = payment.paymentType ?? payment.type ?? "REGULAR";
-  if (kind === "DUE" || kind === "RENEWAL_CLOSURE") return false;
   return kind === "REGULAR" || kind === "CASH" || kind === "PHONE";
 }
 
