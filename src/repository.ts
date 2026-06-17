@@ -1327,6 +1327,111 @@ export type WeeklyChartPoint = {
   distributed: number;
 };
 
+function mapPaymentDoc(
+  docSnap: { id: string; data: () => any },
+  customerIdByLoanId?: Map<string, string>
+): AllPaymentEver {
+  const d = docSnap.data() as any;
+  const rawDate = d.date ?? d.payment_date ?? d.paymentDate;
+  const millis = toMillis(rawDate);
+  const loanId = d.loanId ?? d.loan_id;
+  return {
+    id: docSnap.id,
+    amount: money(d.amountPaid ?? d.amount_paid ?? d.amount),
+    amountPaid: money(d.amountPaid ?? d.amount_paid ?? d.amount),
+    date: new Date(millis || Date.now()),
+    paymentDate: millis || Date.now(),
+    customerId: d.customerId ?? d.customer_id ?? customerIdByLoanId?.get(loanId),
+    loanId,
+    paymentType: d.paymentType ?? d.type,
+    paymentMode: d.paymentMode ?? (d.type === "PHONE" ? "PHONE" : "CASH"),
+    type: d.type,
+  };
+}
+
+function mapLoanDoc(docSnap: { id: string; data: () => any }): AllLoanEver {
+  const d = docSnap.data() as any;
+  const rawDate = d.start_date ?? d.startDate ?? d.createdAt;
+  const millis = toMillis(rawDate);
+  return {
+    id: docSnap.id,
+    amount: getLoanDistributedAmount(d),
+    principalAmount: getLoanPrincipalAmount(d),
+    date: new Date(millis || Date.now()),
+    startDate: millis || Date.now(),
+    status: d.status || "ACTIVE",
+    customerId: d.customerId ?? d.customer_id,
+    disbursement_mode: d.disbursement_mode ?? d.disbursementMode ?? "CASH",
+    disbursementMode: d.disbursementMode ?? d.disbursement_mode ?? "CASH",
+  };
+}
+
+/** Full user payment/loan/expense/investment fetch filtered to a date range (no 1500-doc cap). */
+export async function getAccountSummaryForRange(
+  userId: string,
+  startMs: number,
+  endMs: number
+): Promise<{
+  payments: AllPaymentEver[];
+  loans: AllLoanEver[];
+  expenses: Expense[];
+  investments: Investment[];
+}> {
+  const [paymentsSnap, loansSnap, expensesSnap, investmentsSnap] = await Promise.all([
+    getDocs(query(coll.payments, where("userId", "==", userId))),
+    getDocs(query(coll.loans, where("userId", "==", userId))),
+    getDocs(query(coll.expenses, where("userId", "==", userId))),
+    getDocs(query(coll.investments, where("userId", "==", userId))),
+  ]);
+
+  const customerIdByLoanId = new Map(
+    loansSnap.docs.map((d) => {
+      const loan = d.data() as Loan;
+      return [loan.id, loan.customerId];
+    })
+  );
+
+  const payments = paymentsSnap.docs
+    .map((docSnap) => mapPaymentDoc(docSnap, customerIdByLoanId))
+    .filter((payment) => {
+      const ts = toMillis(payment.paymentDate ?? payment.date);
+      return ts >= startMs && ts <= endMs && isRealCollectionPayment(payment);
+    });
+
+  const loans = loansSnap.docs
+    .map(mapLoanDoc)
+    .filter((loan) => {
+      const ts = toMillis(loan.startDate ?? loan.date);
+      return ts >= startMs && ts <= endMs;
+    });
+
+  const expenses = expensesSnap.docs
+    .map((d) => {
+      const data = d.data() as Expense;
+      return { ...data, id: d.id || data.id };
+    })
+    .filter((expense) => expense.date >= startMs && expense.date <= endMs);
+
+  const investments = investmentsSnap.docs
+    .map((d) => {
+      const data = d.data() as Investment;
+      return { ...data, id: d.id || data.id };
+    })
+    .filter((investment) => investment.date >= startMs && investment.date <= endMs);
+
+  return { payments, loans, expenses, investments };
+}
+
+/** All payments between two timestamps (inclusive), without the 1500-doc snapshot cap. */
+export async function getPaymentsForAccountRange(
+  userId: string,
+  startMs: number,
+  endMs: number
+): Promise<AllPaymentEver[]> {
+  const { payments } = await getAccountSummaryForRange(userId, startMs, endMs);
+  return payments;
+}
+
 export const getAllPaymentsEver = async (userId?: string): Promise<AllPaymentEver[]> => {
   const [snap, loansSnap, eligibleCustomerIds] = await Promise.all([
     getDocs(userId ? query(coll.payments, where("userId", "==", userId), limit(1500)) : query(coll.payments, limit(1500))),
@@ -1339,23 +1444,9 @@ export const getAllPaymentsEver = async (userId?: string): Promise<AllPaymentEve
       return [loan.id, loan.customerId];
     }) ?? []
   );
-  return snap.docs.map((docSnap) => {
-    const d = docSnap.data() as any;
-    const rawDate = d.date ?? d.payment_date ?? d.paymentDate;
-    const millis = toMillis(rawDate);
-    return {
-      id: docSnap.id,
-      amount: money(d.amountPaid ?? d.amount_paid ?? d.amount),
-      amountPaid: money(d.amountPaid ?? d.amount_paid ?? d.amount),
-      date: new Date(millis || Date.now()),
-      paymentDate: millis || Date.now(),
-      customerId: d.customerId ?? d.customer_id ?? customerIdByLoanId.get(d.loanId ?? d.loan_id),
-      loanId: d.loanId ?? d.loan_id,
-      paymentType: d.paymentType ?? d.type,
-      paymentMode: d.paymentMode ?? (d.type === "PHONE" ? "PHONE" : "CASH"),
-      type: d.type,
-    };
-  }).filter((payment) => !eligibleCustomerIds || (!!payment.customerId && eligibleCustomerIds.has(payment.customerId)));
+  return snap.docs.map((docSnap) => mapPaymentDoc(docSnap, customerIdByLoanId)).filter(
+    (payment) => !eligibleCustomerIds || (!!payment.customerId && eligibleCustomerIds.has(payment.customerId))
+  );
 };
 
 export const getAllLoansEver = async (userId?: string): Promise<AllLoanEver[]> => {
@@ -1363,22 +1454,9 @@ export const getAllLoansEver = async (userId?: string): Promise<AllLoanEver[]> =
     getDocs(userId ? query(coll.loans, where("userId", "==", userId), limit(1500)) : query(coll.loans, limit(1500))),
     userId ? getEligibleCustomerIds(userId) : Promise.resolve(null),
   ]);
-  const loans = snap.docs.map((docSnap) => {
-    const d = docSnap.data() as any;
-    const rawDate = d.start_date ?? d.startDate ?? d.createdAt;
-    const millis = toMillis(rawDate);
-    return {
-      id: docSnap.id,
-      amount: getLoanDistributedAmount(d),
-      principalAmount: getLoanPrincipalAmount(d),
-      date: new Date(millis || Date.now()),
-      startDate: millis || Date.now(),
-      status: d.status || "ACTIVE",
-      customerId: d.customerId ?? d.customer_id,
-      disbursement_mode: d.disbursement_mode ?? d.disbursementMode ?? "CASH",
-      disbursementMode: d.disbursementMode ?? d.disbursement_mode ?? "CASH",
-    };
-  }).filter((loan) => !eligibleCustomerIds || (!!loan.customerId && eligibleCustomerIds.has(loan.customerId)));
+  const loans = snap.docs.map(mapLoanDoc).filter(
+    (loan) => !eligibleCustomerIds || (!!loan.customerId && eligibleCustomerIds.has(loan.customerId))
+  );
   const seen = new Set<string>();
   return loans.filter((loan) => {
     const key = `${loan.customerId ?? ""}:${loan.date.getTime()}:${loan.amount}:${loan.status}`;
@@ -1977,23 +2055,7 @@ export function subscribeWalletData(
   const unsubPayments = onSnapshot(
     query(coll.payments, where("userId", "==", userId), limit(1500)),
     (snap) => {
-      state.payments = snap.docs.map((docSnap) => {
-        const d = docSnap.data() as any;
-        const rawDate = d.date ?? d.payment_date ?? d.paymentDate;
-        const millis = toMillis(rawDate);
-        return {
-          id: docSnap.id,
-          amount: money(d.amountPaid ?? d.amount_paid ?? d.amount),
-          amountPaid: money(d.amountPaid ?? d.amount_paid ?? d.amount),
-          date: new Date(millis || Date.now()),
-          paymentDate: millis || Date.now(),
-          customerId: d.customerId ?? d.customer_id,
-          loanId: d.loanId ?? d.loan_id,
-          paymentType: d.paymentType ?? d.type,
-          paymentMode: d.paymentMode ?? (d.type === "PHONE" ? "PHONE" : "CASH"),
-          type: d.type,
-        } as AllPaymentEver;
-      });
+      state.payments = snap.docs.map((docSnap) => mapPaymentDoc(docSnap));
       notify();
     },
     handleError
@@ -2003,22 +2065,7 @@ export function subscribeWalletData(
   const unsubLoans = onSnapshot(
     query(coll.loans, where("userId", "==", userId), limit(1500)),
     (snap) => {
-      state.loans = snap.docs.map((docSnap) => {
-        const d = docSnap.data() as any;
-        const rawDate = d.start_date ?? d.startDate ?? d.createdAt;
-        const millis = toMillis(rawDate);
-        return {
-          id: docSnap.id,
-          amount: getLoanDistributedAmount(d),
-          principalAmount: getLoanPrincipalAmount(d),
-          date: new Date(millis || Date.now()),
-          startDate: millis || Date.now(),
-          status: d.status || "ACTIVE",
-          customerId: d.customerId ?? d.customer_id,
-          disbursement_mode: d.disbursement_mode ?? d.disbursementMode ?? "CASH",
-          disbursementMode: d.disbursementMode ?? d.disbursement_mode ?? "CASH",
-        } as AllLoanEver;
-      });
+      state.loans = snap.docs.map((docSnap) => mapLoanDoc(docSnap));
       notify();
     },
     handleError

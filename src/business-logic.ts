@@ -70,9 +70,16 @@ export function getLoanDistributedAmount(loan: Partial<Loan> & Record<string, an
 export function isRealCollectionPayment(payment: Record<string, any>): boolean {
   const kind = payment.paymentType ?? payment.type ?? "REGULAR";
   if (kind === "DUE") {
-    return Number(payment.amountPaid || 0) > 0;
+    return money(payment.amountPaid ?? payment.amount_paid ?? payment.amount) > 0;
   }
-  return kind === "REGULAR" || kind === "CASH" || kind === "PHONE";
+  if (kind === "RENEWAL_CLOSURE") return true;
+  return (
+    kind === "REGULAR" ||
+    kind === "CASH" ||
+    kind === "PHONE" ||
+    payment.paymentMode === "CASH" ||
+    payment.paymentMode === "PHONE"
+  );
 }
 
 export function loanWeekIndex(loanStartDate: number, targetDate: number): number {

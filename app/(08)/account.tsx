@@ -39,6 +39,7 @@ import {
   saveAccountNotes,
   saveWalletOpeningBalances,
   subscribeWalletData,
+  getAccountSummaryForRange,
   Investment,
   Expense,
   AllPaymentEver,
@@ -336,6 +337,18 @@ export default function AccountScreen() {
   // Date Range inputs (DD/MM/YYYY)
   const [startDateStr, setStartDateStr] = useState<string>("");
   const [endDateStr, setEndDateStr] = useState<string>("");
+  const [rangeSummary, setRangeSummary] = useState<{
+    payments: AllPaymentEver[];
+    loans: AllLoanEver[];
+    expenses: Expense[];
+    investments: Investment[];
+  } | null>(null);
+  const [rangeSummaryLoading, setRangeSummaryLoading] = useState(false);
+  const [sparklineSummary, setSparklineSummary] = useState<{
+    payments: AllPaymentEver[];
+    loans: AllLoanEver[];
+    expenses: Expense[];
+  } | null>(null);
 
   // Forms inputs
   const [invAmount, setInvAmount] = useState<string>("");
@@ -485,6 +498,46 @@ export default function AccountScreen() {
       unsubscribe();
     };
   }, [user]);
+
+  const refreshRangeSummary = useCallback(async () => {
+    if (!user) return;
+    const startTs = parseDDMMYYYY(startDateStr);
+    const endTs = getEndOfDay(parseDDMMYYYY(endDateStr) ?? Date.now());
+    if (!startTs || !endTs) return;
+    setRangeSummaryLoading(true);
+    try {
+      const data = await getAccountSummaryForRange(user.uid, startTs, endTs);
+      setRangeSummary(data);
+    } catch (err) {
+      console.error("Range summary load error:", err);
+    } finally {
+      setRangeSummaryLoading(false);
+    }
+  }, [user, startDateStr, endDateStr]);
+
+  useEffect(() => {
+    refreshRangeSummary();
+  }, [refreshRangeSummary]);
+
+  useEffect(() => {
+    if (!user || walletDataLoading) return;
+    refreshRangeSummary();
+  }, [user, walletDataLoading, livePayments.length, liveLoans.length, liveExpenses.length, liveInvestments.length, refreshRangeSummary]);
+
+  useEffect(() => {
+    if (!user) return;
+    const todayStart = getStartOfDay(Date.now());
+    const start = todayStart - 6 * 24 * 60 * 60 * 1000;
+    getAccountSummaryForRange(user.uid, start, getEndOfDay(todayStart))
+      .then((data) => {
+        setSparklineSummary({
+          payments: data.payments,
+          loans: data.loans,
+          expenses: data.expenses,
+        });
+      })
+      .catch((err) => console.error("Sparkline summary load error:", err));
+  }, [user, livePayments.length, liveLoans.length, liveExpenses.length]);
 
 
   // Balancing Fund calculation based on dates
@@ -799,26 +852,14 @@ export default function AccountScreen() {
 
   // Date Range Filtering and Summary Calculations
   const calculatedSummary = useMemo(() => {
-    const startTs = parseDDMMYYYY(startDateStr) ?? 0;
-    const endTs = getEndOfDay(parseDDMMYYYY(endDateStr) ?? Date.now());
+    const rangeInvs = rangeSummary?.investments ?? [];
+    const rangeColls = rangeSummary?.payments ?? [];
+    const rangeLoans = rangeSummary?.loans ?? [];
+    const rangeExps = rangeSummary?.expenses ?? [];
 
-    // Filter Investments
-    const rangeInvs = investments.filter((i) => i.date >= startTs && i.date <= endTs);
     const sumInvs = rangeInvs.reduce((sum, i) => sum + i.amount, 0);
-
-    // Filter Collections (cash/phone payments and partial dues)
-    const rangeColls = payments.filter((p) => isCollectionInRange(p, startTs, endTs));
     const sumColls = rangeColls.reduce((sum, p) => sum + paymentAmount(p), 0);
-
-    // Filter Payments (distributed loans)
-    const rangeLoans = loans.filter((l) => {
-      const ts = loanMillis(l);
-      return ts >= startTs && ts <= endTs;
-    });
     const sumLoans = rangeLoans.reduce((sum, l) => sum + l.amount, 0);
-
-    // Filter Expenses
-    const rangeExps = expenses.filter((e) => e.date >= startTs && e.date <= endTs);
     const sumExps = rangeExps.reduce((sum, e) => sum + e.amount, 0);
     const expenseTotals = Array.from(
       rangeExps.reduce((map, expense) => {
@@ -850,11 +891,13 @@ export default function AccountScreen() {
       rangeLoans,
       expenseTotals,
     };
-  }, [periodBf, investments, expenses, payments, loans, startDateStr, endDateStr]);
+  }, [periodBf, rangeSummary, startDateStr, endDateStr]);
 
   const transactionsHistory = useMemo(() => {
-    const startTs = parseDDMMYYYY(startDateStr) ?? 0;
-    const endTs = getEndOfDay(parseDDMMYYYY(endDateStr) ?? Date.now());
+    const rangeInvs = rangeSummary?.investments ?? [];
+    const rangeColls = rangeSummary?.payments ?? [];
+    const rangeLoans = rangeSummary?.loans ?? [];
+    const rangeExps = rangeSummary?.expenses ?? [];
 
     // Build customer map
     const customerMap = new Map<string, { name: string; numericalId: string }>();
@@ -872,9 +915,7 @@ export default function AccountScreen() {
     }> = [];
 
     // Filter Investments
-    investments
-      .filter((i) => i.date >= startTs && i.date <= endTs)
-      .forEach((i) => {
+    rangeInvs.forEach((i) => {
         list.push({
           id: i.id,
           date: i.date,
@@ -885,12 +926,9 @@ export default function AccountScreen() {
             : (isTe ? "పెట్టుబడి" : "Investment"),
           mode: i.payment_mode === "PHONE" ? "PhonePe" : "Cash",
         });
-      });
+    });
 
-    // Filter Collections
-    payments
-      .filter((p) => isCollectionInRange(p, startTs, endTs))
-      .forEach((p) => {
+    rangeColls.forEach((p) => {
         const ts = paymentMillis(p);
         const cust = customerMap.get(p.customerId ?? "");
         const desc = cust
@@ -907,14 +945,9 @@ export default function AccountScreen() {
       });
 
     // Filter Loans (disbursed loans)
-    loans
-      .filter((l) => {
-        const ts = loanMillis(l);
-        return ts >= startTs && ts <= endTs;
-      })
-      .forEach((l) => {
-        const ts = loanMillis(l);
-        const cust = customerMap.get(l.customerId);
+    rangeLoans.forEach((l) => {
+      const ts = loanMillis(l);
+      const cust = customerMap.get(l.customerId ?? "");
         const desc = cust
           ? `${cust.name} (${cust.numericalId})`
           : (isTe ? "పంచిన డబ్బులు" : "Loan");
@@ -924,14 +957,12 @@ export default function AccountScreen() {
           type: "LOAN",
           amount: l.amount,
           desc,
-          mode: l.paymentMode === "PHONE" ? "PhonePe" : "Cash",
+          mode: (l.disbursement_mode ?? l.disbursementMode) === "PHONE" ? "PhonePe" : "Cash",
         });
       });
 
     // Filter Expenses
-    expenses
-      .filter((e) => e.date >= startTs && e.date <= endTs)
-      .forEach((e) => {
+    rangeExps.forEach((e) => {
         list.push({
           id: e.id,
           date: e.date,
@@ -944,7 +975,7 @@ export default function AccountScreen() {
 
     // Sort chronologically descending
     return list.sort((a, b) => b.date - a.date);
-  }, [investments, payments, loans, expenses, startDateStr, endDateStr, customers, isTe]);
+  }, [rangeSummary, customers, isTe]);
 
 
 
@@ -1085,19 +1116,25 @@ export default function AccountScreen() {
 
   const sevenDayCashFlow = useMemo(() => {
     const todayStart = getStartOfDay(Date.now());
+    const sparkPayments = sparklineSummary?.payments ?? [];
+    const sparkLoans = sparklineSummary?.loans ?? [];
+    const sparkExpenses = sparklineSummary?.expenses ?? [];
     return Array.from({ length: 7 }, (_, index) => {
       const start = todayStart - (6 - index) * 24 * 60 * 60 * 1000;
       const end = getEndOfDay(start);
-      const collections = payments
-        .filter((p) => isCollectionInRange(p, start, end))
+      const collections = sparkPayments
+        .filter((p) => {
+          const ts = paymentMillis(p);
+          return ts >= start && ts <= end;
+        })
         .reduce((sum, p) => sum + paymentAmount(p), 0);
-      const paid = loans
+      const paid = sparkLoans
         .filter((l) => {
           const ts = loanMillis(l);
           return ts >= start && ts <= end;
         })
         .reduce((sum, l) => sum + Number(l.amount || 0), 0);
-      const spent = expenses
+      const spent = sparkExpenses
         .filter((e) => e.date >= start && e.date <= end)
         .reduce((sum, e) => sum + Number(e.amount || 0), 0);
       return {
@@ -1105,7 +1142,7 @@ export default function AccountScreen() {
         net: collections - paid - spent,
       };
     });
-  }, [expenses, loans, payments]);
+  }, [sparklineSummary]);
 
   const sevenDayNet = useMemo(() => sevenDayCashFlow.reduce((sum, day) => sum + day.net, 0), [sevenDayCashFlow]);
   const sevenDayPeak = useMemo(
@@ -1156,7 +1193,9 @@ export default function AccountScreen() {
 
     const startTs = parseDDMMYYYY(startDateStr);
     const endTs = getEndOfDay(parseDDMMYYYY(endDateStr) ?? Date.now());
-    if (!startTs || !endTs) return;
+    if (!startTs || !endTs || !user) return;
+
+    const summary = await getAccountSummaryForRange(user.uid, startTs, endTs);
 
     // Build customer map
     const customerMap = new Map<string, { name: string; villageId: string; numericalId: string }>();
@@ -1166,13 +1205,9 @@ export default function AccountScreen() {
 
     const isAllVillages = selectedVillageId === "ALL";
 
-    // Filter transactions
-    const filteredInvs = isAllVillages
-      ? investments.filter((i) => i.date >= startTs && i.date <= endTs)
-      : [];
+    const filteredInvs = isAllVillages ? summary.investments : [];
 
-    const filteredColls = payments.filter((p) => {
-      if (!isCollectionInRange(p, startTs, endTs)) return false;
+    const filteredColls = summary.payments.filter((p) => {
       if (!isAllVillages) {
         const cust = customerMap.get(p.customerId ?? "");
         if (!cust || cust.villageId !== selectedVillageId) return false;
@@ -1180,19 +1215,15 @@ export default function AccountScreen() {
       return true;
     });
 
-    const filteredLoans = loans.filter((l) => {
-      const ts = loanMillis(l);
-      if (ts < startTs || ts > endTs) return false;
+    const filteredLoans = summary.loans.filter((l) => {
       if (!isAllVillages) {
-        const cust = customerMap.get(l.customerId);
+        const cust = customerMap.get(l.customerId ?? "");
         if (!cust || cust.villageId !== selectedVillageId) return false;
       }
       return true;
     });
 
-    const filteredExps = isAllVillages
-      ? expenses.filter((e) => e.date >= startTs && e.date <= endTs)
-      : [];
+    const filteredExps = isAllVillages ? summary.expenses : [];
 
     const transList: ExportTransaction[] = [];
 
@@ -1308,6 +1339,9 @@ export default function AccountScreen() {
 
       <View style={styles.breakdownHeaderRow}>
         <Text style={styles.breakdownTitle}>{t("liveSummary")}</Text>
+        {rangeSummaryLoading ? (
+          <ActivityIndicator size="small" color="#64748b" />
+        ) : null}
         <View style={styles.summaryActions}>
           <Pressable style={styles.pdfButton} onPress={handleExportPDF}>
             <Icon name="document-text-outline" size={14} color="#111827" />
