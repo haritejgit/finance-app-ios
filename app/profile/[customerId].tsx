@@ -62,6 +62,25 @@ import { showToast } from "../../src/notify";
 
 const noTextSelection = Platform.OS === "web" ? ({ userSelect: "none", WebkitUserSelect: "none" } as any) : undefined;
 
+function confirmRenewal(message: string): Promise<boolean> {
+  if (Platform.OS === "web") {
+    return Promise.resolve(window.confirm(message));
+  }
+  return new Promise((resolve) => {
+    Alert.alert("Confirm Loan Renewal", message, [
+      { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+      { text: "Confirm", onPress: () => resolve(true) },
+    ]);
+  });
+}
+
+function buildRenewalSummary(newPrincipal: number, oldBalance: number) {
+  const deduction = Math.floor(newPrincipal / 1000) * 20;
+  const disbursed = calculateDisbursedAmount(newPrincipal);
+  const netToGive = disbursed - oldBalance;
+  return { deduction, disbursed, netToGive };
+}
+
 const PaymentHistory = memo(function PaymentHistory({ 
   payments, 
   customer,
@@ -271,6 +290,7 @@ export default function ProfileScreen() {
   const [payOpen, setPayOpen] = useState(false);
   const [dueOpen, setDueOpen] = useState(false);
   const [renewOpen, setRenewOpen] = useState(false);
+  const [isRenewing, setIsRenewing] = useState(false);
   const [isPaymentSaving, setIsPaymentSaving] = useState(false);
   const [amount, setAmount] = useState("");
   const [mode, setMode] = useState<PaymentMode>("CASH");
@@ -1247,7 +1267,17 @@ export default function ProfileScreen() {
                 <Icon name="warning" size={20} color={colors.white} style={{marginBottom: 4}} />
                 <Text selectable={false} style={styles.actionLabel}>Due</Text>
               </Pressable>
-              <Pressable style={[styles.actionBtn, noTextSelection, { backgroundColor: colors.amber }]} onPress={() => setRenewOpen(true)}>
+              <Pressable
+                style={[styles.actionBtn, noTextSelection, { backgroundColor: colors.amber }, !loan && styles.actionBtnDisabled]}
+                onPress={() => {
+                  if (!loan) {
+                    showToast("info", "No active loan", "This customer does not have an active loan to renew.");
+                    return;
+                  }
+                  setRenewOpen(true);
+                }}
+                disabled={!loan}
+              >
                 <Icon name="refresh" size={20} color={colors.white} style={{marginBottom: 4}} />
                 <Text selectable={false} style={styles.actionLabel}>Renew</Text>
               </Pressable>
@@ -1559,10 +1589,7 @@ export default function ProfileScreen() {
               if (!loan || !renewAmount) return null;
               const newPrincipal = Number(renewAmount);
               if (isNaN(newPrincipal) || newPrincipal <= 0) return null;
-              const deduction = Math.floor(newPrincipal / 1000) * 20;
-              const disbursed = newPrincipal - deduction;
-              const oldBalance = loan.balanceAmount;
-              const netToGive = disbursed - oldBalance;
+              const { deduction, disbursed, netToGive } = buildRenewalSummary(newPrincipal, loan.balanceAmount);
               
               return (
                 <View style={{ marginVertical: 12, padding: 12, backgroundColor: colors.surfaceTint, borderRadius: 10, borderWidth: 1, borderColor: colors.border, width: "100%" }}>
@@ -1570,7 +1597,7 @@ export default function ProfileScreen() {
                     New Disbursed Amount: <Text style={{ fontWeight: "700", color: colors.text }}>Rs.{disbursed.toLocaleString("en-IN")}</Text> (after Rs.{deduction} deduction)
                   </Text>
                   <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 4 }}>
-                    Old Loan Balance: <Text style={{ fontWeight: "700", color: colors.text }}>Rs.{Math.round(oldBalance).toLocaleString("en-IN")}</Text>
+                    Old Loan Balance: <Text style={{ fontWeight: "700", color: colors.text }}>Rs.{Math.round(loan.balanceAmount).toLocaleString("en-IN")}</Text>
                   </Text>
                   <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 6 }} />
                   <Text style={{ fontSize: 14, fontWeight: "700", color: netToGive >= 0 ? "#059669" : "#dc3545" }}>
@@ -1582,45 +1609,43 @@ export default function ProfileScreen() {
             })()}
 
             <Pressable
-              style={styles.primary}
+              style={[styles.primary, isRenewing && styles.primaryDisabled]}
+              disabled={isRenewing}
               onPress={async () => {
-                if (!loan) return;
+                if (!loan || isRenewing) return;
                 const newPrincipal = Number(renewAmount);
                 if (isNaN(newPrincipal) || newPrincipal <= 0) {
-                  Alert.alert("Error", "Please enter a valid principal amount.");
+                  showToast("error", "Invalid amount", "Please enter a valid principal amount.");
                   return;
                 }
-                const deduction = Math.floor(newPrincipal / 1000) * 20;
-                const disbursed = newPrincipal - deduction;
-                const oldBalance = loan.balanceAmount;
-                const netToGive = disbursed - oldBalance;
-                
-                const msg = `Please confirm the renewal details:\n\n` +
+                const { deduction, disbursed, netToGive } = buildRenewalSummary(newPrincipal, loan.balanceAmount);
+                const msg =
+                  `Please confirm the renewal details:\n\n` +
                   `New Loan: Rs.${newPrincipal.toLocaleString("en-IN")}\n` +
                   `Actual Disbursed: Rs.${disbursed.toLocaleString("en-IN")} (after Rs.${deduction} deduction)\n` +
-                  `Less Old Balance: -Rs.${Math.round(oldBalance).toLocaleString("en-IN")}\n\n` +
+                  `Less Old Balance: -Rs.${Math.round(loan.balanceAmount).toLocaleString("en-IN")}\n\n` +
                   `Net Amount to ${netToGive >= 0 ? "GIVE" : "COLLECT"}: Rs.${Math.abs(netToGive).toLocaleString("en-IN")}/-\n\n` +
                   `Do you want to confirm renewal?`;
 
-                Alert.alert(
-                  "Confirm Loan Renewal",
-                  msg,
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    {
-                      text: "Confirm",
-                      onPress: async () => {
-                        await renewLoan(loan, newPrincipal, Date.now());
-                        setRenewOpen(false);
-                        setRenewAmount("");
-                        await reload();
-                      }
-                    }
-                  ]
-                );
+                const confirmed = await confirmRenewal(msg);
+                if (!confirmed) return;
+
+                try {
+                  setIsRenewing(true);
+                  await renewLoan(loan, newPrincipal, Date.now());
+                  setRenewOpen(false);
+                  setRenewAmount("");
+                  await reload();
+                  showToast("success", "Loan renewed", "The loan was renewed successfully.");
+                } catch (error: any) {
+                  console.error("Renewal failed:", error);
+                  showToast("error", "Renewal failed", error?.message || "Could not renew the loan. Please try again.");
+                } finally {
+                  setIsRenewing(false);
+                }
               }}
             >
-              <Text style={styles.primaryText}>Renew Now</Text>
+              <Text style={styles.primaryText}>{isRenewing ? "Renewing..." : "Renew Now"}</Text>
             </Pressable>
             
             <Pressable
@@ -2165,6 +2190,7 @@ const styles = StyleSheet.create({
   // Action Grid Styles (2x2)
   actionGrid: { flexDirection: 'row', gap: 10 },
   actionBtn: { flex: 1, minHeight: 74, paddingVertical: 14, paddingHorizontal: 10, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 8, elevation: 3 },
+  actionBtnDisabled: { opacity: 0.45 },
   actionIcon: { fontSize: 24 },
   actionLabel: { color: colors.white, fontSize: 13, fontWeight: '600' },
   

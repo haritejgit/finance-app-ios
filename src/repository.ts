@@ -757,7 +757,7 @@ export async function getPaymentStatusesForCustomersThisWeek(userId: string, cus
         if (payment.paymentType !== "RENEWAL_CLOSURE") return;
 
         const customerId = payment.customerId;
-        if (!customerId || !statuses[customerId]) return;
+        if (!customerId || !(customerId in statuses)) return;
 
         const paymentDate = toMillis(payment.paymentDate);
         if (paymentDate <= now && now <= paymentDate + renewalGreenWindowMs) {
@@ -973,6 +973,10 @@ export async function markDue(loan: Loan, paymentDate: number) {
 
 export async function renewLoan(loan: Loan, newPrincipal: number, date: number) {
   assertPositiveAmount(newPrincipal, "Renewal amount");
+  const userId = auth.currentUser?.uid || loan.userId;
+  const disbursementMode = normalizeMode(loan.disbursement_mode ?? loan.disbursementMode);
+  const batch = writeBatch(db);
+
   if (loan.balanceAmount > 0) {
     const closure: Payment = {
       id: id(),
@@ -985,11 +989,13 @@ export async function renewLoan(loan: Loan, newPrincipal: number, date: number) 
       paymentMode: "CASH",
       type: "CASH",
       notes: "Loan renewed - old balance cleared",
-      userId: auth.currentUser?.uid || loan.userId,
+      userId,
     };
-    await setDoc(doc(db, "payments", closure.id), stripUndefined(closure));
+    batch.set(doc(db, "payments", closure.id), stripUndefined(closure));
   }
-  await updateDoc(doc(db, "loans", loan.id), { balanceAmount: 0, status: "RENEWED" });
+
+  batch.update(doc(db, "loans", loan.id), { balanceAmount: 0, status: "RENEWED" });
+
   const interest = newPrincipal * 0.2;
   const totalPayable = newPrincipal + interest;
   const newLoan: Loan = {
@@ -999,13 +1005,14 @@ export async function renewLoan(loan: Loan, newPrincipal: number, date: number) 
     interestAmount: interest,
     totalPayable,
     balanceAmount: totalPayable,
-    userId: auth.currentUser?.uid || loan.userId,
+    userId,
     startDate: date,
     status: "ACTIVE",
-    disbursement_mode: normalizeMode(loan.disbursement_mode ?? loan.disbursementMode),
-    disbursementMode: normalizeMode(loan.disbursement_mode ?? loan.disbursementMode),
+    disbursement_mode: disbursementMode,
+    disbursementMode,
   };
-  await setDoc(doc(db, "loans", newLoan.id), stripUndefined(newLoan));
+  batch.set(doc(db, "loans", newLoan.id), stripUndefined(newLoan));
+  await batch.commit();
   clearCache();
 }
 
