@@ -30,11 +30,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
+    let active = true;
+    const unsub = onAuthStateChanged(auth, (nextUser) => {
+      if (!active) return;
+      setUser(nextUser);
       setLoading(false);
     });
-    return unsub;
+
+    void auth.authStateReady().then(() => {
+      if (!active) return;
+      setUser(auth.currentUser);
+      setLoading(false);
+    });
+
+    return () => {
+      active = false;
+      unsub();
+    };
   }, []);
 
   const value = useMemo<AuthContextValue>(

@@ -15,7 +15,7 @@ import FinanceMotion from "../../src/FinanceMotion";
 WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
-  const { signInEmail, signUpEmail, resetPassword, signInGoogleWithIdToken } = useAuth();
+  const { user, loading: authLoading, signInEmail, signUpEmail, resetPassword, signInGoogleWithIdToken } = useAuth();
   const { colors } = useTheme();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -49,6 +49,12 @@ export default function LoginScreen() {
     };
     run();
   }, [response, signInGoogleWithIdToken]);
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.replace("/shift-selection");
+    }
+  }, [authLoading, user]);
 
   useEffect(() => {
     Animated.timing(intro, {
@@ -88,6 +94,18 @@ export default function LoginScreen() {
   };
 
   const title = forgot ? "Reset password" : isSignUp ? "Create account" : "Welcome back";
+
+  if (authLoading) {
+    return (
+      <AnimatedScreen style={styles.root}>
+        <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
+          <SafeAreaView style={[styles.safe, styles.centered]}>
+            <ActivityIndicator color={colors.white} size="large" />
+          </SafeAreaView>
+        </LinearGradient>
+      </AnimatedScreen>
+    );
+  }
 
   return (
     <AnimatedScreen style={styles.root}>
@@ -201,6 +219,7 @@ const screenWidth = Dimensions.get("window").width;
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
+  centered: { alignItems: "center", justifyContent: "center" },
   container: { paddingHorizontal: 20, paddingVertical: 18, flexGrow: 1, justifyContent: "center" },
   content: { width: "100%", maxWidth: Math.min(screenWidth - 40, 390), alignSelf: "center", gap: 18 },
   brand: { alignItems: "center", gap: 8 },
