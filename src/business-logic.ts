@@ -82,6 +82,13 @@ export function isRealCollectionPayment(payment: Record<string, any>): boolean {
   );
 }
 
+/** Account statement collections: regular customer payments only (excludes renewal closures and dues). */
+export function isAccountCollectionPayment(payment: Record<string, any>): boolean {
+  const kind = payment.paymentType ?? payment.type ?? "REGULAR";
+  if (kind === "DUE" || kind === "RENEWAL_CLOSURE") return false;
+  return kind === "REGULAR" || kind === "CASH" || kind === "PHONE";
+}
+
 export function loanWeekIndex(loanStartDate: number, targetDate: number): number {
   const start = startOfDay(loanStartDate);
   const target = startOfDay(targetDate);

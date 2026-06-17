@@ -45,7 +45,7 @@ import {
   AllPaymentEver,
   AllLoanEver,
 } from "../../src/repository";
-import { isRealCollectionPayment, money, toMillis } from "../../src/business-logic";
+import { isAccountCollectionPayment, money, toMillis } from "../../src/business-logic";
 import { PaymentMode, UserProfile, Village } from "../../src/types";
 import { openAccountStatementPrint, ExportTransaction, ExportTotals } from "../../src/exports";
 import {
@@ -163,7 +163,7 @@ function loanMillis(l: AllLoanEver): number {
 }
 
 function isCollectionInRange(p: AllPaymentEver, startTs: number, endTs: number): boolean {
-  if (!isRealCollectionPayment(p)) return false;
+  if (!isAccountCollectionPayment(p)) return false;
   const ts = paymentMillis(p);
   return ts >= startTs && ts <= endTs;
 }

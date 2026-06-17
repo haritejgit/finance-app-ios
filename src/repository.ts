@@ -24,7 +24,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { BlockedAadhaar, Customer, Expense, Investment, Loan, Payment, PaymentMode, UserProfile, Village, VillageHistorySegment } from "./types";
-import { getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, loanWeekNumber, money, toMillis, weekStart } from "./business-logic";
+import { getLoanDistributedAmount, getLoanPrincipalAmount, isAccountCollectionPayment, isRealCollectionPayment, loanWeekNumber, money, toMillis, weekStart } from "./business-logic";
 import { filterCustomersWithVillage } from "./utils";
 
 const coll = {
@@ -1395,7 +1395,7 @@ export async function getAccountSummaryForRange(
     .map((docSnap) => mapPaymentDoc(docSnap, customerIdByLoanId))
     .filter((payment) => {
       const ts = toMillis(payment.paymentDate ?? payment.date);
-      return ts >= startMs && ts <= endMs && isRealCollectionPayment(payment);
+      return ts >= startMs && ts <= endMs && isAccountCollectionPayment(payment);
     });
 
   const loans = loansSnap.docs
