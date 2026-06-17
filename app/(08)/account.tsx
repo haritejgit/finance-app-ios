@@ -35,15 +35,16 @@ import {
   addExpense,
   deleteExpense,
   updateExpense,
-  getAllPaymentsEver,
-  getAllLoansEver,
   getUserProfile,
   saveAccountNotes,
   saveWalletOpeningBalances,
   subscribeWalletData,
   Investment,
   Expense,
+  AllPaymentEver,
+  AllLoanEver,
 } from "../../src/repository";
+import { isRealCollectionPayment, money, toMillis } from "../../src/business-logic";
 import { PaymentMode, UserProfile, Village } from "../../src/types";
 import { openAccountStatementPrint, ExportTransaction, ExportTotals } from "../../src/exports";
 import {
@@ -146,6 +147,24 @@ function getStartOfDay(ts: number): number {
 function getEndOfDay(ts: number): number {
   const d = new Date(ts);
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
+}
+
+function paymentMillis(p: AllPaymentEver): number {
+  return toMillis(p.paymentDate ?? p.date);
+}
+
+function paymentAmount(p: AllPaymentEver): number {
+  return money(p.amountPaid ?? p.amount);
+}
+
+function loanMillis(l: AllLoanEver): number {
+  return toMillis(l.startDate ?? l.date);
+}
+
+function isCollectionInRange(p: AllPaymentEver, startTs: number, endTs: number): boolean {
+  if (!isRealCollectionPayment(p)) return false;
+  const ts = paymentMillis(p);
+  return ts >= startTs && ts <= endTs;
 }
 
 interface DatePickerFieldProps {
@@ -369,29 +388,20 @@ export default function AccountScreen() {
     setExpDate(formatDDMMYYYY(today.getTime()));
   }, []);
 
-  // Fetch Balancing Fund + villages + customers + export-related data (one-shot).
-  // NOTE: Wallet data (expenses, payments, loans, investments, userProfile) is now
-  // handled by the subscribeWalletData() real-time listener below.
+  // Fetch balancing fund, villages, and customers (one-shot).
+  // Wallet data (expenses, payments, loans, investments) comes from subscribeWalletData().
   const loadData = useCallback(async () => {
     if (!user) return;
     try {
       setLoading(true);
-      const [bfVal, dateBfs, invs, exps, pmts, lns, vills, custs] = await Promise.all([
+      const [bfVal, dateBfs, vills, custs] = await Promise.all([
         getBalancingFund(user.uid),
         getAllBalancingFunds(user.uid),
-        getInvestments(user.uid),
-        getExpenses(user.uid),
-        getAllPaymentsEver(user.uid),
-        getAllLoansEver(user.uid),
         getVillages(user.uid),
         getAllActiveCustomersWithVillages(user.uid),
       ]);
       setBf(bfVal);
       setDateSpecificBfs(dateBfs);
-      setInvestments(invs);
-      setExpenses(exps);
-      setPayments(pmts);
-      setLoans(lns);
       setVillages(vills);
       setCustomers(custs);
 
@@ -431,12 +441,16 @@ export default function AccountScreen() {
     const unsubscribe = subscribeWalletData(
       user.uid,
       (data) => {
-        // ONLY update live display state — these drive Section B (Live Balance)
+        // Real-time wallet + summary data (single source of truth)
         setLiveExpenses(data.expenses);
         setLivePayments(data.payments);
         setLiveLoans(data.loans);
         setLiveInvestments(data.investments);
         setLiveUserProfile(data.userProfile);
+        setExpenses(data.expenses);
+        setPayments(data.payments);
+        setLoans(data.loans);
+        setInvestments(data.investments);
 
         if (isFirstCallback) {
           isFirstCallback = false;
@@ -518,15 +532,12 @@ export default function AccountScreen() {
       .reduce((sum, i) => sum + i.amount, 0);
 
     const sumColls = payments
-      .filter((p) => {
-        const ts = p.date instanceof Date ? p.date.getTime() : p.date;
-        return p.paymentType === "REGULAR" && ts >= startLimit && ts <= prevDayEnd;
-      })
-      .reduce((sum, p) => sum + p.amount, 0);
+      .filter((p) => isCollectionInRange(p, startLimit, prevDayEnd))
+      .reduce((sum, p) => sum + paymentAmount(p), 0);
 
     const sumLoans = loans
       .filter((l) => {
-        const ts = l.date instanceof Date ? l.date.getTime() : l.date;
+        const ts = loanMillis(l);
         return ts >= startLimit && ts <= prevDayEnd;
       })
       .reduce((sum, l) => sum + l.amount, 0);
@@ -795,16 +806,13 @@ export default function AccountScreen() {
     const rangeInvs = investments.filter((i) => i.date >= startTs && i.date <= endTs);
     const sumInvs = rangeInvs.reduce((sum, i) => sum + i.amount, 0);
 
-    // Filter Collections (REGULAR customer payments)
-    const rangeColls = payments.filter((p) => {
-      const ts = p.date instanceof Date ? p.date.getTime() : p.date;
-      return (p.paymentType === "REGULAR") && ts >= startTs && ts <= endTs;
-    });
-    const sumColls = rangeColls.reduce((sum, p) => sum + p.amount, 0);
+    // Filter Collections (cash/phone payments and partial dues)
+    const rangeColls = payments.filter((p) => isCollectionInRange(p, startTs, endTs));
+    const sumColls = rangeColls.reduce((sum, p) => sum + paymentAmount(p), 0);
 
     // Filter Payments (distributed loans)
     const rangeLoans = loans.filter((l) => {
-      const ts = l.date instanceof Date ? l.date.getTime() : l.date;
+      const ts = loanMillis(l);
       return ts >= startTs && ts <= endTs;
     });
     const sumLoans = rangeLoans.reduce((sum, l) => sum + l.amount, 0);
@@ -879,15 +887,12 @@ export default function AccountScreen() {
         });
       });
 
-    // Filter Collections (REGULAR payments)
+    // Filter Collections
     payments
-      .filter((p) => {
-        const ts = p.date instanceof Date ? p.date.getTime() : p.date;
-        return p.paymentType === "REGULAR" && ts >= startTs && ts <= endTs;
-      })
+      .filter((p) => isCollectionInRange(p, startTs, endTs))
       .forEach((p) => {
-        const ts = p.date instanceof Date ? p.date.getTime() : p.date;
-        const cust = customerMap.get(p.customerId);
+        const ts = paymentMillis(p);
+        const cust = customerMap.get(p.customerId ?? "");
         const desc = cust
           ? `${cust.name} (${cust.numericalId})`
           : (isTe ? "వసూళ్లు" : "Collection");
@@ -895,7 +900,7 @@ export default function AccountScreen() {
           id: p.id,
           date: ts,
           type: "COLLECTION",
-          amount: p.amount,
+          amount: paymentAmount(p),
           desc,
           mode: p.paymentMode === "PHONE" ? "PhonePe" : "Cash",
         });
@@ -904,11 +909,11 @@ export default function AccountScreen() {
     // Filter Loans (disbursed loans)
     loans
       .filter((l) => {
-        const ts = l.date instanceof Date ? l.date.getTime() : l.date;
+        const ts = loanMillis(l);
         return ts >= startTs && ts <= endTs;
       })
       .forEach((l) => {
-        const ts = l.date instanceof Date ? l.date.getTime() : l.date;
+        const ts = loanMillis(l);
         const cust = customerMap.get(l.customerId);
         const desc = cust
           ? `${cust.name} (${cust.numericalId})`
@@ -1084,14 +1089,11 @@ export default function AccountScreen() {
       const start = todayStart - (6 - index) * 24 * 60 * 60 * 1000;
       const end = getEndOfDay(start);
       const collections = payments
-        .filter((p) => {
-          const ts = p.date instanceof Date ? p.date.getTime() : p.date;
-          return p.paymentType === "REGULAR" && ts >= start && ts <= end;
-        })
-        .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+        .filter((p) => isCollectionInRange(p, start, end))
+        .reduce((sum, p) => sum + paymentAmount(p), 0);
       const paid = loans
         .filter((l) => {
-          const ts = l.date instanceof Date ? l.date.getTime() : l.date;
+          const ts = loanMillis(l);
           return ts >= start && ts <= end;
         })
         .reduce((sum, l) => sum + Number(l.amount || 0), 0);
@@ -1170,17 +1172,16 @@ export default function AccountScreen() {
       : [];
 
     const filteredColls = payments.filter((p) => {
-      const ts = p.date instanceof Date ? p.date.getTime() : p.date;
-      if (ts < startTs || ts > endTs || p.paymentType !== "REGULAR") return false;
+      if (!isCollectionInRange(p, startTs, endTs)) return false;
       if (!isAllVillages) {
-        const cust = customerMap.get(p.customerId);
+        const cust = customerMap.get(p.customerId ?? "");
         if (!cust || cust.villageId !== selectedVillageId) return false;
       }
       return true;
     });
 
     const filteredLoans = loans.filter((l) => {
-      const ts = l.date instanceof Date ? l.date.getTime() : l.date;
+      const ts = loanMillis(l);
       if (ts < startTs || ts > endTs) return false;
       if (!isAllVillages) {
         const cust = customerMap.get(l.customerId);
@@ -1206,21 +1207,21 @@ export default function AccountScreen() {
     });
 
     filteredColls.forEach((p) => {
-      const cust = customerMap.get(p.customerId);
+      const cust = customerMap.get(p.customerId ?? "");
       const desc = cust ? `${cust.name} (${cust.numericalId})` : "Collections";
       transList.push({
-        date: p.date instanceof Date ? p.date.getTime() : p.date,
+        date: paymentMillis(p),
         type: "COLLECTION",
         desc,
-        amount: p.amount
+        amount: paymentAmount(p)
       });
     });
 
     filteredLoans.forEach((l) => {
-      const cust = customerMap.get(l.customerId);
+      const cust = customerMap.get(l.customerId ?? "");
       const desc = cust ? `${cust.name} (${cust.numericalId})` : "Payments";
       transList.push({
-        date: l.date instanceof Date ? l.date.getTime() : l.date,
+        date: loanMillis(l),
         type: "LOAN",
         desc,
         amount: l.amount
@@ -1241,7 +1242,7 @@ export default function AccountScreen() {
 
     // Calculate totals
     const sumInvs = filteredInvs.reduce((sum, i) => sum + i.amount, 0);
-    const sumColls = filteredColls.reduce((sum, p) => sum + p.amount, 0);
+    const sumColls = filteredColls.reduce((sum, p) => sum + paymentAmount(p), 0);
     const sumLoans = filteredLoans.reduce((sum, l) => sum + l.amount, 0);
     const sumExps = filteredExps.reduce((sum, e) => sum + e.amount, 0);
     const netTotal = periodBf + sumInvs + sumColls - sumLoans - sumExps;
