@@ -39,7 +39,7 @@ import {
   markDue,
   renewLoan,
   updateCustomer,
-  updateLoan,
+  updateCustomerAndLoan,
   updatePayment,
   getVillages,
   moveCustomerToVillage,
@@ -53,7 +53,7 @@ import { Customer, Loan, Payment, PaymentMode, PaymentType, Village } from "../.
 import { useTheme } from "../../src/theme-context";
 import { colors } from "../../src/theme";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { calculateDisbursedAmount, toMillis } from "../../src/business-logic";
+import { calculateDisbursedAmount, money, toMillis } from "../../src/business-logic";
 import { useLanguage } from "../../src/language-context";
 import { translateTelugu } from "../../src/exports";
 import { openCustomerLedgerPrint } from "../../src/exports";
@@ -291,6 +291,8 @@ export default function ProfileScreen() {
   const [dueOpen, setDueOpen] = useState(false);
   const [renewOpen, setRenewOpen] = useState(false);
   const [isRenewing, setIsRenewing] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isSavingPaymentEdit, setIsSavingPaymentEdit] = useState(false);
   const [isPaymentSaving, setIsPaymentSaving] = useState(false);
   const [amount, setAmount] = useState("");
   const [mode, setMode] = useState<PaymentMode>("CASH");
@@ -499,7 +501,7 @@ export default function ProfileScreen() {
 
   const [isLoading, setIsLoading] = useState(true);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (options?: { showLoading?: boolean; skipAutoDue?: boolean }) => {
     const requestId = loadRequestRef.current + 1;
     loadRequestRef.current = requestId;
     if (!user || !activeCustomerId) {
@@ -510,8 +512,9 @@ export default function ProfileScreen() {
       setIsLoading(false);
       return;
     }
+    const showLoading = options?.showLoading !== false;
     try {
-      setIsLoading(true);
+      if (showLoading) setIsLoading(true);
       const [c, l, p] = await Promise.all([
         getCustomerById(activeCustomerId),
         getActiveLoan(user.uid, activeCustomerId),
@@ -521,16 +524,15 @@ export default function ProfileScreen() {
       if (c && c.userId !== user.uid) {
         throw new Error("Customer does not belong to the active user.");
       }
-      // Auto-mark dues for any completed unpaid weeks
-      if (l) {
+      let freshPayments = p;
+      if (!options?.skipAutoDue && l) {
         try {
           await checkAndAutoMarkDues(user.uid, [l]);
+          freshPayments = await getPaymentsForCustomer(user.uid, activeCustomerId);
         } catch {
           // Non-critical: ignore silently
         }
       }
-      // Reload payments after auto-due so timeline is up to date
-      const freshPayments = l ? await getPaymentsForCustomer(user.uid, activeCustomerId) : p;
       if (loadRequestRef.current !== requestId) return;
       setCustomer(c);
       setLoan(l || null);
@@ -538,12 +540,14 @@ export default function ProfileScreen() {
     } catch (error) {
       if (loadRequestRef.current !== requestId) return;
       console.error('Error loading customer details:', error);
-      Alert.alert('Error', 'Failed to load customer details. Please try again.');
+      if (showLoading) {
+        Alert.alert('Error', 'Failed to load customer details. Please try again.');
+      }
       setCustomer(null);
       setLoan(null);
       setPayments([]);
     } finally {
-      if (loadRequestRef.current === requestId) {
+      if (loadRequestRef.current === requestId && showLoading) {
         setIsLoading(false);
       }
     }
@@ -851,7 +855,7 @@ export default function ProfileScreen() {
         await addPayment(loan, parsedAmount, finalDate, mode);
         setPayOpen(false);
         setAmount("");
-        await reload();
+        await reload({ showLoading: false, skipAutoDue: true });
       } catch {
         setPaymentDateError("Payment failed. Please try again.");
       } finally {
@@ -894,7 +898,7 @@ export default function ProfileScreen() {
     const finalDate = (toStartOfDay(parsedDate) === toStartOfDay(Date.now())) ? Date.now() : toStartOfDay(parsedDate);
     await markDue(loan, finalDate);
     setDueOpen(false);
-    await reload();
+    await reload({ showLoading: false, skipAutoDue: true });
   };
 
   const closeDueModal = () => {
@@ -926,7 +930,7 @@ export default function ProfileScreen() {
 
   const confirmEditPayment = async () => {
     Keyboard.dismiss();
-    if (!editingPayment) return;
+    if (!editingPayment || isSavingPaymentEdit) return;
     
     const parsedDate = parseDateInput(editPaymentDate);
     if (!parsedDate) {
@@ -939,16 +943,39 @@ export default function ProfileScreen() {
       return;
     }
     setEditPaymentError("");
-    
-    await updatePayment(
-      editingPayment,
-      parsedAmount,
-      (toStartOfDay(parsedDate) === toStartOfDay(Date.now())) ? Date.now() : toStartOfDay(parsedDate),
-      editPaymentMode
-    );
-    
-    closeEditPaymentModal();
-    await reload();
+
+    const finalDate = (toStartOfDay(parsedDate) === toStartOfDay(Date.now())) ? Date.now() : toStartOfDay(parsedDate);
+    const oldAmount = money(editingPayment.amountPaid);
+    const balanceDiff = oldAmount - parsedAmount;
+
+    try {
+      setIsSavingPaymentEdit(true);
+      await updatePayment(editingPayment, parsedAmount, finalDate, editPaymentMode);
+      setPayments((prev) =>
+        prev
+          .map((payment) =>
+            payment.id === editingPayment.id
+              ? { ...payment, amountPaid: parsedAmount, paymentDate: finalDate, paymentMode: editPaymentMode, type: editPaymentMode }
+              : payment
+          )
+          .sort((a, b) => toMillis(b.paymentDate) - toMillis(a.paymentDate))
+      );
+      if (loan) {
+        const newBalance = Math.max(0, loan.balanceAmount + balanceDiff);
+        setLoan({
+          ...loan,
+          balanceAmount: newBalance,
+          status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+        });
+      }
+      closeEditPaymentModal();
+      showToast("success", "Payment updated", "Payment changes were saved.");
+    } catch (error: any) {
+      console.error("Payment update failed:", error);
+      setEditPaymentError(error?.message || "Payment update failed. Please try again.");
+    } finally {
+      setIsSavingPaymentEdit(false);
+    }
   };
 
   // Payment delete handlers
@@ -964,7 +991,7 @@ export default function ProfileScreen() {
 
   // Combined edit confirm handler
   const confirmEdit = async () => {
-    if (!customer || !user) return;
+    if (!customer || !user || isSavingEdit) return;
     if (customer.id !== activeCustomerId) {
       setEditCoordinateError("Customer changed while editing. Reopen this customer and try again.");
       return;
@@ -984,69 +1011,90 @@ export default function ProfileScreen() {
     setEditCoordinateError("");
     setEditLocationStatus("");
 
-    if (normalizedAadhar) {
-      if (await isAadhaarBlocked(normalizedAadhar, user.uid)) {
-        setEditAadhaarBlocked(true);
-        setEditAadhaarWarning("This Aadhaar is blocked. Customer edits cannot be saved with this number.");
-        Alert.alert("Aadhaar Blocked", "This Aadhaar card has been blocked. Customer registration cannot proceed.");
-        return;
+    try {
+      setIsSavingEdit(true);
+      if (normalizedAadhar) {
+        const [blocked, existingCustomer] = await Promise.all([
+          isAadhaarBlocked(normalizedAadhar, user.uid),
+          getCustomerByAadhar(user.uid, normalizedAadhar, customer.id),
+        ]);
+        if (blocked) {
+          setEditAadhaarBlocked(true);
+          setEditAadhaarWarning("This Aadhaar is blocked. Customer edits cannot be saved with this number.");
+          Alert.alert("Aadhaar Blocked", "This Aadhaar card has been blocked. Customer registration cannot proceed.");
+          return;
+        }
+        if (existingCustomer && existingCustomer.id !== customer.id) {
+          Alert.alert(
+            'Duplicate Aadhar Detected',
+            `A customer with this Aadhar number already exists in our records.\n\nExisting Customer: ${existingCustomer.name}\nPhone: ${existingCustomer.phone}\nBook No: ${existingCustomer.numericalId}\n\nPlease verify the Aadhar number or contact the existing customer.`,
+            [{ text: 'OK', style: 'default' }]
+          );
+          return;
+        }
       }
-      const existingCustomer = await getCustomerByAadhar(user.uid, normalizedAadhar, customer.id);
-      if (existingCustomer && existingCustomer.id !== customer.id) {
-        Alert.alert(
-          'Duplicate Aadhar Detected',
-          `A customer with this Aadhar number already exists in our records.\n\nExisting Customer: ${existingCustomer.name}\nPhone: ${existingCustomer.phone}\nBook No: ${existingCustomer.numericalId}\n\nPlease verify the Aadhar number or contact the existing customer.`,
-          [{ text: 'OK', style: 'default' }]
-        );
-        return;
-      }
-    }
-    
-    const updatedCustomer = {
-      ...customer,
-      name: editForm.name,
-      phone: editForm.phone,
-      aadhar: normalizedAadhar,
-      locationDesc: editForm.locationDesc,
-      coName: editForm.coName,
-      coId: editForm.coId ? Number(editForm.coId) : undefined,
-      latitude: parsedLatitude,
-      longitude: parsedLongitude,
-      aadharSubmitted: editForm.aadharSubmitted,
-      passportPhotoSubmitted: editForm.passportPhotoSubmitted,
-    };
+      
+      const updatedCustomer = {
+        ...customer,
+        name: editForm.name,
+        phone: editForm.phone,
+        aadhar: normalizedAadhar,
+        locationDesc: editForm.locationDesc,
+        coName: editForm.coName,
+        coId: editForm.coId ? Number(editForm.coId) : undefined,
+        latitude: parsedLatitude,
+        longitude: parsedLongitude,
+        aadharSubmitted: editForm.aadharSubmitted,
+        passportPhotoSubmitted: editForm.passportPhotoSubmitted,
+      };
 
-    await updateCustomer(updatedCustomer);
-    setCustomer(updatedCustomer);
-    Alert.alert("Saved", "Customer location and details were updated.");
-    
-    // Update loan if exists
-    if (loan) {
-      const parsedDate = parseDateInput(editForm.loanStartDate);
-      if (parsedDate) {
-        await updateLoan(
-          loan,
-          Number(editForm.loanAmount || 0),
-          parsedDate,
-          editForm.loanDisbursementMode as PaymentMode
-        );
-      }
+      const parsedDate = loan ? parseDateInput(editForm.loanStartDate) : null;
+      const loanUpdates = loan && parsedDate
+        ? {
+            principalAmount: Number(editForm.loanAmount || 0),
+            startDate: parsedDate,
+            disbursementMode: editForm.loanDisbursementMode as PaymentMode,
+          }
+        : undefined;
+
+      const saved = await updateCustomerAndLoan(updatedCustomer, loan, loanUpdates);
+      setCustomer(saved.customer);
+      if (saved.loan) setLoan(saved.loan);
+      setEditOpen(false);
+      showToast("success", "Saved", "Customer and loan details were updated.");
+    } catch (error: any) {
+      console.error("Customer edit failed:", error);
+      Alert.alert("Save failed", error?.message || "Could not save customer details. Please try again.");
+    } finally {
+      setIsSavingEdit(false);
     }
-    
-    setEditOpen(false);
-    await reload();
   };
 
   const confirmDeletePayment = async () => {
     if (!deletingPayment) return;
-    const isDue = deletingPayment.paymentType === "DUE" || deletingPayment.type === "DUE";
-    if (isDue) {
-      await deleteDuePayment(deletingPayment);
-    } else {
-      await deletePayment(deletingPayment);
+    const paymentToDelete = deletingPayment;
+    const isDue = paymentToDelete.paymentType === "DUE" || paymentToDelete.type === "DUE";
+    try {
+      if (isDue) {
+        await deleteDuePayment(paymentToDelete);
+      } else {
+        await deletePayment(paymentToDelete);
+      }
+      setPayments((prev) => prev.filter((payment) => payment.id !== paymentToDelete.id));
+      if (loan && !isDue && money(paymentToDelete.amountPaid) > 0) {
+        const newBalance = loan.balanceAmount + money(paymentToDelete.amountPaid);
+        setLoan({
+          ...loan,
+          balanceAmount: newBalance,
+          status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+        });
+      }
+      closeDeletePaymentConfirm();
+      showToast("success", "Payment removed", "The payment entry was deleted.");
+    } catch (error: any) {
+      console.error("Delete payment failed:", error);
+      Alert.alert("Delete failed", error?.message || "Could not delete the payment.");
     }
-    closeDeletePaymentConfirm();
-    await reload();
   };
 
   return (
@@ -1635,7 +1683,7 @@ export default function ProfileScreen() {
                   await renewLoan(loan, newPrincipal, Date.now());
                   setRenewOpen(false);
                   setRenewAmount("");
-                  await reload();
+                  await reload({ showLoading: false, skipAutoDue: true });
                   showToast("success", "Loan renewed", "The loan was renewed successfully.");
                 } catch (error: any) {
                   console.error("Renewal failed:", error);
@@ -1871,8 +1919,8 @@ export default function ProfileScreen() {
                 <Pressable style={styles.cancelModalBtn} onPress={() => setEditOpen(false)}>
                   <Text style={styles.cancelModalBtnText}>Cancel</Text>
                 </Pressable>
-                <Pressable style={[styles.primary, editAadhaarBlocked && { opacity: 0.55 }]} onPress={confirmEdit} disabled={editAadhaarBlocked}>
-                  <Text style={styles.primaryText}>Save Changes</Text>
+                <Pressable style={[styles.primary, editAadhaarBlocked && { opacity: 0.55 }, isSavingEdit && styles.primaryDisabled]} onPress={confirmEdit} disabled={editAadhaarBlocked || isSavingEdit}>
+                  <Text style={styles.primaryText}>{isSavingEdit ? "Saving..." : "Save Changes"}</Text>
                 </Pressable>
               </View>
             </ScrollView>
@@ -1983,8 +2031,8 @@ export default function ProfileScreen() {
               <Pressable style={styles.cancelModalBtn} onPress={closeEditPaymentModal}>
                 <Text style={styles.cancelModalBtnText}>Cancel</Text>
               </Pressable>
-              <Pressable style={styles.primary} onPress={confirmEditPayment}>
-                <Text style={styles.primaryText}>Save Changes</Text>
+              <Pressable style={[styles.primary, isSavingPaymentEdit && styles.primaryDisabled]} onPress={confirmEditPayment} disabled={isSavingPaymentEdit}>
+                <Text style={styles.primaryText}>{isSavingPaymentEdit ? "Saving..." : "Save Changes"}</Text>
               </Pressable>
             </View>
           </View>

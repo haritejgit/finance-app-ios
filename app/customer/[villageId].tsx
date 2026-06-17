@@ -30,7 +30,7 @@ import { translateTelugu } from "../../src/exports";
 import { lightImpact } from "../../src/interactions";
 import { showToast } from "../../src/notify";
 import { getCachedCoordinates, LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
-import { addCustomerWithLoan, addPayment, addPaymentsBatch, checkAndAutoMarkDues, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersThisWeek, getVillageById, getCustomerLoanSummary, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, markDue, updateCustomer, isNumericalIdTaken, getNextNumericalId } from "../../src/repository";
+import { addCustomerWithLoan, addPayment, addPaymentsBatch, checkAndAutoMarkDues, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersThisWeek, getVillageById, getCustomerByAadhar, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, markDue, updateCustomer, isNumericalIdTaken, getNextNumericalId } from "../../src/repository";
 import { Customer, Loan, PaymentMode, Village } from "../../src/types";
 import { calculateDisbursedAmount, weekStart } from "../../src/business-logic";
 import { validateAadhaar, validateIndianPhone, validatePositiveAmount } from "../../src/validation";
@@ -511,6 +511,7 @@ export default function CustomerListScreen() {
   const [quickCollectSaving, setQuickCollectSaving] = useState(false);
   const [quickCollectValues, setQuickCollectValues] = useState<Record<string, { selected: boolean; amount: string }>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [isRegistering, setIsRegistering] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const scrollOffsetRef = useRef(0);
   const [aadharWarning, setAadharWarning] = useState("");
@@ -625,11 +626,11 @@ export default function CustomerListScreen() {
           }
         }
         setAadharBlocked(false);
-        const existingCustomer = await getCustomerLoanSummary(user.uid, normalizedAadhar);
+        const existingCustomer = await getCustomerByAadhar(user.uid, normalizedAadhar);
         if (cancelled) return;
-        if (existingCustomer.customer) {
+        if (existingCustomer) {
           setAadharWarning(
-            `Aadhar already exists for ${existingCustomer.customer.name} (Book No: ${existingCustomer.customer.numericalId})`
+            `Aadhar already exists for ${existingCustomer.name} (Book No: ${existingCustomer.numericalId})`
           );
         } else {
           setAadharWarning("");
@@ -1714,22 +1715,13 @@ export default function CustomerListScreen() {
 
                 <View style={styles.buttonContainer}>
                   <Pressable
-                    style={[styles.save, (!form.name || !form.phone || !form.principal || !form.numericalId || aadharBlocked) ? styles.saveDisabled : null]}
+                    style={[styles.save, (!form.name || !form.phone || !form.principal || !form.numericalId || aadharBlocked || isRegistering) ? styles.saveDisabled : null]}
                     onPress={async () => {
-                      if (!user || !village || !form.name || !form.phone || !form.principal || !form.numericalId || aadharBlocked) return;
+                      if (!user || !village || !form.name || !form.phone || !form.principal || !form.numericalId || aadharBlocked || isRegistering) return;
                       const customId = Number(form.numericalId);
                       if (isNaN(customId) || customId <= 0) {
                         setFormErrors((f) => ({ ...f, numericalId: "Valid ID is required" }));
                         showToast("error", "Invalid Book No", "Please enter a valid positive ID.");
-                        return;
-                      }
-                      const idTaken = await isNumericalIdTaken(user.uid, village.id, customId);
-                      if (idTaken) {
-                        setFormErrors((f) => ({ ...f, numericalId: "ID is already taken" }));
-                        Alert.alert(
-                          "Book No Taken",
-                          `ID ${customId} is already assigned to a customer or blocked in this village. Please enter a different ID.`
-                        );
                         return;
                       }
 
@@ -1750,56 +1742,79 @@ export default function CustomerListScreen() {
                         return;
                       }
                       
-                      // Check if customer already exists by Aadhar
                       const normalizedAadhar = normalizeAadhar(form.aadhar);
-                      if (normalizedAadhar) {
-                        if (await isAadhaarBlocked(normalizedAadhar, user.uid)) {
+                      try {
+                        setIsRegistering(true);
+                        const [idTaken, blocked, existingCustomer] = await Promise.all([
+                          isNumericalIdTaken(user.uid, village.id, customId),
+                          normalizedAadhar ? isAadhaarBlocked(normalizedAadhar, user.uid) : Promise.resolve(false),
+                          normalizedAadhar ? getCustomerByAadhar(user.uid, normalizedAadhar) : Promise.resolve(null),
+                        ]);
+
+                        if (idTaken) {
+                          setFormErrors((f) => ({ ...f, numericalId: "ID is already taken" }));
+                          Alert.alert(
+                            "Book No Taken",
+                            `ID ${customId} is already assigned to a customer or blocked in this village. Please enter a different ID.`
+                          );
+                          return;
+                        }
+                        if (blocked) {
                           setAadharBlocked(true);
                           setAadharWarning("This Aadhaar is blocked. Cannot register.");
                           Alert.alert("Aadhaar Blocked", "This Aadhaar card has been blocked. Registration cannot proceed.");
                           return;
                         }
-                        const existingCustomer = await getCustomerLoanSummary(user.uid, normalizedAadhar);
-                        if (existingCustomer.customer) {
+                        if (existingCustomer) {
                           Alert.alert(
                             'Duplicate Aadhar Detected',
-                            `A customer with this Aadhar number already exists in our records.\n\nExisting Customer: ${existingCustomer.customer.name}\nPhone: ${existingCustomer.customer.phone}\nBook No: ${existingCustomer.customer.numericalId}\n\nPlease verify the Aadhar number or contact the existing customer.`,
+                            `A customer with this Aadhar number already exists in our records.\n\nExisting Customer: ${existingCustomer.name}\nPhone: ${existingCustomer.phone}\nBook No: ${existingCustomer.numericalId}\n\nPlease verify the Aadhar number or contact the existing customer.`,
                             [{ text: 'OK', style: 'default' }]
                           );
                           return;
                         }
+
+                        const { customer: createdCustomer, loan: createdLoan } = await addCustomerWithLoan(
+                          user.uid,
+                          village.id,
+                          village.dayOfWeek,
+                          village.shift,
+                          {
+                            numericalId: customId,
+                            name: form.name,
+                            phone: form.phone,
+                            aadhar: normalizedAadhar,
+                            locationDesc: form.locationDesc,
+                            latitude: form.coordinates?.latitude,
+                            longitude: form.coordinates?.longitude,
+                            aadharSubmitted: form.aadharSubmitted,
+                            passportPhotoSubmitted: form.passportPhotoSubmitted,
+                            coName: form.coName || undefined,
+                            coId: form.coId ? Number(form.coId) : undefined,
+                          },
+                          Number(form.principal || 0),
+                          parsedDate,
+                          form.disbursementMode,
+                          village.name
+                        );
+
+                        setCustomers((prev) => [...prev, createdCustomer].sort((a, b) => a.numericalId - b.numericalId));
+                        setActiveLoans((prev) => ({ ...prev, [createdCustomer.id]: createdLoan }));
+                        setPaymentStatuses((prev) => ({ ...prev, [createdCustomer.id]: "none" }));
+                        setLastPaymentDates((prev) => ({ ...prev, [createdCustomer.id]: { lastPaymentDate: 0, paidLastWeek: false } }));
+                        setShowAdd(false);
+                        resetAddCustomerForm();
+                        showToast("success", "Customer registered", `${createdCustomer.name} has been created successfully.`);
+                      } catch (error: any) {
+                        console.error("Registration failed:", error);
+                        showToast("error", "Registration failed", error?.message || "Could not register customer. Please try again.");
+                      } finally {
+                        setIsRegistering(false);
                       }
-                      
-                      const createdCustomer = await addCustomerWithLoan(
-                        user.uid,
-                        village.id,
-                        village.dayOfWeek,
-                        village.shift,
-                        {
-                          numericalId: customId,
-                          name: form.name,
-                          phone: form.phone,
-                          aadhar: normalizedAadhar,
-                          locationDesc: form.locationDesc,
-                          latitude: form.coordinates?.latitude,
-                          longitude: form.coordinates?.longitude,
-                          aadharSubmitted: form.aadharSubmitted,
-                          passportPhotoSubmitted: form.passportPhotoSubmitted,
-                          coName: form.coName || undefined,
-                          coId: form.coId ? Number(form.coId) : undefined,
-                        },
-                        Number(form.principal || 0),
-                        parsedDate,
-                        form.disbursementMode
-                      );
-                      setShowAdd(false);
-                      resetAddCustomerForm();
-                      await reload();
-                      showToast("success", "Customer registered", `${createdCustomer.name} has been created successfully.`);
                     }}
-                    disabled={!form.name || !form.phone || !form.principal || aadharBlocked}
+                    disabled={!form.name || !form.phone || !form.principal || aadharBlocked || isRegistering}
                   >
-                    <Text style={styles.saveTxt}>Register Customer</Text>
+                    <Text style={styles.saveTxt}>{isRegistering ? "Registering..." : "Register Customer"}</Text>
                   </Pressable>
                   
                   <Pressable onPress={closeAddCustomer} style={styles.cancelBtn}>

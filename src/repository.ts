@@ -68,6 +68,19 @@ function clearCache() {
   cache.clear();
 }
 
+function invalidateCacheKeys(...keys: string[]) {
+  keys.forEach((key) => cache.delete(key));
+}
+
+function invalidateUserDataCache(userId: string, villageId?: string) {
+  for (const key of [...cache.keys()]) {
+    if (!key.startsWith(`${userId}:`)) continue;
+    if (!villageId || key.includes(`:customers:${villageId}`)) {
+      cache.delete(key);
+    }
+  }
+}
+
 function stripUndefined<T extends Record<string, any>>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
 }
@@ -283,15 +296,22 @@ export async function getAllActiveCustomersWithVillages(userId: string): Promise
 }
 
 export async function getNextNumericalId(userId: string, villageId: string) {
-  // Scope by village so the visible customer list has consecutive book numbers.
-  const customersSnap = await getDocs(query(coll.customers, where("userId", "==", userId), where("villageId", "==", villageId)));
+  const cacheKey = getCacheKey(userId, "customers", villageId);
+  const cached = getCached<Customer[]>(cacheKey);
   const assignedIds = new Set<number>();
-  customersSnap.docs.forEach((d) => {
-    const c = d.data() as Customer;
-    if ((c.isActive !== false || c.isBlocked === true) && Number.isInteger(c.numericalId) && c.numericalId > 0) {
-      assignedIds.add(c.numericalId);
+
+  const collectId = (customer: Customer) => {
+    if ((customer.isActive !== false || customer.isBlocked === true) && Number.isInteger(customer.numericalId) && customer.numericalId > 0) {
+      assignedIds.add(customer.numericalId);
     }
-  });
+  };
+
+  if (cached) {
+    cached.forEach(collectId);
+  } else {
+    const customersSnap = await getDocs(query(coll.customers, where("userId", "==", userId), where("villageId", "==", villageId)));
+    customersSnap.docs.forEach((d) => collectId(d.data() as Customer));
+  }
 
   let maxId = 0;
   assignedIds.forEach((id) => {
@@ -397,7 +417,8 @@ export async function addCustomerWithLoan(
   input: Omit<Customer, "id" | "userId" | "villageId" | "isActive" | "createdAt"> & { numericalId?: number },
   principalAmount: number,
   startDate: number,
-  disbursementMode: PaymentMode = "CASH"
+  disbursementMode: PaymentMode = "CASH",
+  villageName?: string
 ) {
   assertPositiveAmount(principalAmount, "Loan amount");
   const sanitizedInput = sanitizeCustomerInput(input);
@@ -408,8 +429,7 @@ export async function addCustomerWithLoan(
     : await getNextNumericalId(userId, villageId);
   const cycleStartDay = new Date(toMillis(startDate || Date.now())).getDay();
   const startWeekStr = getISOWeekString(startDate || Date.now());
-  const villageDoc = await getVillageById(villageId);
-  const villageName = villageDoc ? villageDoc.name : "";
+  const resolvedVillageName = villageName ?? (await getVillageById(villageId))?.name ?? "";
   const customer: Customer = {
     id: id(),
     numericalId,
@@ -421,7 +441,7 @@ export async function addCustomerWithLoan(
     villageHistory: [
       {
         villageId,
-        villageName,
+        villageName: resolvedVillageName,
         fromWeek: startWeekStr,
         toWeek: null,
         numericalId,
@@ -429,9 +449,9 @@ export async function addCustomerWithLoan(
     ],
     ...sanitizedInput,
   };
-  await setDoc(doc(db, "customers", customer.id), stripUndefined(customer));
   const interestAmount = principalAmount * 0.2;
   const totalPayable = principalAmount + interestAmount;
+  const mode = normalizeMode(disbursementMode);
   const loan: Loan = {
     id: id(),
     customerId: customer.id,
@@ -442,12 +462,15 @@ export async function addCustomerWithLoan(
     userId,
     startDate,
     status: "ACTIVE",
-    disbursement_mode: normalizeMode(disbursementMode),
-    disbursementMode: normalizeMode(disbursementMode),
+    disbursement_mode: mode,
+    disbursementMode: mode,
   };
-  await setDoc(doc(db, "loans", loan.id), stripUndefined(loan));
-  clearCache();
-  return customer;
+  const batch = writeBatch(db);
+  batch.set(doc(db, "customers", customer.id), stripUndefined(customer));
+  batch.set(doc(db, "loans", loan.id), stripUndefined(loan));
+  await batch.commit();
+  invalidateUserDataCache(userId, villageId);
+  return { customer, loan };
 }
 
 function getISOWeekStartString(timestamp: number, cycleStartDay: number): string {
@@ -641,12 +664,11 @@ export async function updateLoan(loan: Loan, newPrincipalAmount: number, newStar
   };
   
   await setDoc(doc(db, "loans", loan.id), stripUndefined(updatedLoan));
-  clearCache();
+  invalidateUserDataCache(loan.userId);
   return updatedLoan;
 }
 
 export async function getPaymentsForCustomer(userId: string, customerId: string) {
-  // Fast path for new writes where payment includes customerId.
   const fastQ = query(
     coll.payments,
     where("userId", "==", userId),
@@ -657,20 +679,22 @@ export async function getPaymentsForCustomer(userId: string, customerId: string)
   if (!fastSnap.empty) {
     return fastSnap.docs
       .map((d) => d.data() as Payment)
-      .sort((a, b) => b.paymentDate - a.paymentDate);
+      .sort((a, b) => toMillis(b.paymentDate) - toMillis(a.paymentDate));
   }
 
-  // Backward-compatible fallback for existing legacy payments without customerId.
   const loansQ = query(coll.loans, where("userId", "==", userId), where("customerId", "==", customerId));
   const loansSnap = await getDocs(loansQ);
-  const loanIds = new Set(loansSnap.docs.map((d) => (d.data() as Loan).id));
-  if (loanIds.size === 0) return [] as Payment[];
-  const legacyQ = query(coll.payments, where("userId", "==", userId), limit(1500));
-  const legacySnap = await getDocs(legacyQ);
-  return legacySnap.docs
-    .map((d) => d.data() as Payment)
-    .filter((p) => loanIds.has(p.loanId))
-    .sort((a, b) => b.paymentDate - a.paymentDate);
+  const loanIds = loansSnap.docs.map((d) => (d.data() as Loan).id);
+  if (loanIds.length === 0) return [] as Payment[];
+
+  const payments: Payment[] = [];
+  for (let i = 0; i < loanIds.length; i += 30) {
+    const chunk = loanIds.slice(i, i + 30);
+    const legacyQ = query(coll.payments, where("userId", "==", userId), where("loanId", "in", chunk));
+    const legacySnap = await getDocs(legacyQ);
+    legacySnap.docs.forEach((d) => payments.push(d.data() as Payment));
+  }
+  return payments.sort((a, b) => toMillis(b.paymentDate) - toMillis(a.paymentDate));
 }
 
 export async function getPaymentStatusesForCustomersThisWeek(userId: string, customerIds: string[]) {
@@ -864,7 +888,7 @@ export async function addPayment(loan: Loan, amountPaid: number, paymentDate: nu
       status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
     });
   });
-  clearCache();
+  invalidateUserDataCache(auth.currentUser?.uid || loan.userId);
 }
 
 export async function addPaymentsBatch(
@@ -898,7 +922,7 @@ export async function addPaymentsBatch(
   }
   
   await batch.commit();
-  clearCache();
+  invalidateUserDataCache(entries[0].loan.userId);
   return entries.length;
 }
 
@@ -911,21 +935,25 @@ export async function updatePayment(payment: Payment, newAmount: number, newDate
     paymentDate: newDate,
     paymentMode: normalizeMode(newMode),
     type: normalizeMode(newMode),
+    weekNumber: payment.weekNumber,
   };
-  await updateDoc(doc(db, "payments", payment.id), stripUndefined(updatedPayment));
-  
-  // Adjust loan balance
-  const loanSnap = await getDoc(doc(db, "loans", payment.loanId));
-  if (loanSnap.exists()) {
-    const loan = loanSnap.data() as Loan;
-    const balanceDiff = oldAmount - newAmount;
-    const newBalance = Math.max(0, loan.balanceAmount + balanceDiff);
-    await updateDoc(doc(db, "loans", payment.loanId), {
-      balanceAmount: newBalance,
-      status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
-    });
-  }
-  clearCache();
+
+  await runTransaction(db, async (transaction) => {
+    const paymentRef = doc(db, "payments", payment.id);
+    const loanRef = doc(db, "loans", payment.loanId);
+    const loanSnap = await transaction.get(loanRef);
+    transaction.update(paymentRef, stripUndefined(updatedPayment));
+    if (loanSnap.exists()) {
+      const loan = loanSnap.data() as Loan;
+      const balanceDiff = oldAmount - newAmount;
+      const newBalance = Math.max(0, loan.balanceAmount + balanceDiff);
+      transaction.update(loanRef, {
+        balanceAmount: newBalance,
+        status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+      });
+    }
+  });
+  invalidateUserDataCache(payment.userId);
 }
 
 export async function deletePayment(payment: Payment) {
@@ -943,7 +971,7 @@ export async function deletePayment(payment: Payment) {
       status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
     });
   }
-  clearCache();
+  invalidateUserDataCache(payment.userId);
 }
 
 export async function deleteDuePayment(payment: Payment) {
@@ -951,7 +979,7 @@ export async function deleteDuePayment(payment: Payment) {
     throw new Error("Only DUE entries can be deleted here.");
   }
   await deleteDoc(doc(db, "payments", payment.id));
-  clearCache();
+  invalidateUserDataCache(payment.userId);
 }
 
 export async function markDue(loan: Loan, paymentDate: number) {
@@ -968,7 +996,7 @@ export async function markDue(loan: Loan, paymentDate: number) {
     userId: auth.currentUser?.uid || loan.userId,
   };
   await setDoc(doc(db, "payments", payment.id), stripUndefined(payment));
-  clearCache();
+  invalidateUserDataCache(loan.userId);
 }
 
 export async function renewLoan(loan: Loan, newPrincipal: number, date: number) {
@@ -1013,7 +1041,7 @@ export async function renewLoan(loan: Loan, newPrincipal: number, date: number) 
   };
   batch.set(doc(db, "loans", newLoan.id), stripUndefined(newLoan));
   await batch.commit();
-  clearCache();
+  invalidateUserDataCache(userId);
 }
 
 export function getPersonalCycleStartTs(dateMs: number, cycleStartDay: number): number {
@@ -1497,7 +1525,6 @@ export async function getPaymentsByDate(userId: string, startDate: number, endDa
 
 export async function updateCustomer(customer: Customer) {
   const sanitized = sanitizeCustomerInput(customer);
-  // FIX: location scoped per-customer to prevent stale closure bug
   if ((sanitized as any).locationCustomerId && (sanitized as any).locationCustomerId !== customer.id) {
     console.warn("Skipping mismatched customer location save", {
       customerId: customer.id,
@@ -1511,7 +1538,52 @@ export async function updateCustomer(customer: Customer) {
     latitude: sanitized.latitude === undefined ? deleteField() : sanitized.latitude,
     longitude: sanitized.longitude === undefined ? deleteField() : sanitized.longitude,
   });
-  clearCache();
+  invalidateUserDataCache(customer.userId, customer.villageId);
+}
+
+export async function updateCustomerAndLoan(
+  customer: Customer,
+  loan?: Loan | null,
+  loanUpdates?: { principalAmount: number; startDate: number; disbursementMode?: PaymentMode }
+) {
+  const sanitized = sanitizeCustomerInput(customer);
+  if ((sanitized as any).locationCustomerId && (sanitized as any).locationCustomerId !== customer.id) {
+    sanitized.latitude = undefined;
+    sanitized.longitude = undefined;
+  }
+
+  const batch = writeBatch(db);
+  batch.update(doc(db, "customers", customer.id), {
+    ...stripUndefined(sanitized),
+    latitude: sanitized.latitude === undefined ? deleteField() : sanitized.latitude,
+    longitude: sanitized.longitude === undefined ? deleteField() : sanitized.longitude,
+  });
+
+  let updatedLoan: Loan | null = loan ?? null;
+  if (loan && loanUpdates) {
+    assertPositiveAmount(loanUpdates.principalAmount, "Loan amount");
+    const interestAmount = loanUpdates.principalAmount * 0.2;
+    const totalPayable = loanUpdates.principalAmount + interestAmount;
+    const paidSoFar = loan.totalPayable - loan.balanceAmount;
+    const finalMode = loanUpdates.disbursementMode
+      ? normalizeMode(loanUpdates.disbursementMode)
+      : normalizeMode(loan.disbursement_mode ?? loan.disbursementMode ?? "CASH");
+    updatedLoan = {
+      ...loan,
+      principalAmount: loanUpdates.principalAmount,
+      interestAmount,
+      totalPayable,
+      balanceAmount: totalPayable - paidSoFar,
+      startDate: loanUpdates.startDate,
+      disbursement_mode: finalMode,
+      disbursementMode: finalMode,
+    };
+    batch.set(doc(db, "loans", loan.id), stripUndefined(updatedLoan));
+  }
+
+  await batch.commit();
+  invalidateUserDataCache(customer.userId, customer.villageId);
+  return { customer: sanitized as Customer, loan: updatedLoan };
 }
 
 export async function deleteCustomer(userId: string, customerId: string) {
@@ -1557,11 +1629,24 @@ export async function getCustomerByAadhar(userId: string, aadhar: string, exclud
   const normalizedAadhar = normalizeAadhar(aadhar);
   if (!normalizedAadhar) return null;
 
-  const q = query(coll.customers, where("userId", "==", userId), limit(1500));
+  const indexedQ = query(
+    coll.customers,
+    where("userId", "==", userId),
+    where("aadhar", "==", normalizedAadhar),
+    limit(5)
+  );
+  const indexedSnap = await getDocs(indexedQ);
+  const indexedMatch = indexedSnap.docs
+    .map((d) => d.data() as Customer)
+    .find((customer) => customer.isActive !== false && customer.id !== excludeCustomerId);
+  if (indexedMatch) return indexedMatch;
+
+  // Legacy fallback for records saved before normalized Aadhaar indexing.
+  const q = query(coll.customers, where("userId", "==", userId), limit(300));
   const snap = await getDocs(q);
   return snap.docs
     .map((d) => d.data() as Customer)
-    .find((customer) => 
+    .find((customer) =>
       customer.isActive !== false &&
       customer.id !== excludeCustomerId &&
       normalizeAadhar(customer.aadhar) === normalizedAadhar
@@ -1573,7 +1658,7 @@ export async function getCustomerLoanSummary(userId: string, aadhar: string): Pr
   if (!customer) {
     return { customer: null, hasActiveLoan: false };
   }
-  
+
   const activeLoan = await getActiveLoan(userId, customer.id);
   return { customer, hasActiveLoan: !!activeLoan };
 }
@@ -1596,16 +1681,19 @@ export async function blockAadhaar(aadhaar: string, reason: string, userId: stri
 export async function isAadhaarBlocked(aadhaar: string, userId?: string): Promise<boolean> {
   const normalizedAadhaar = normalizeAadhar(aadhaar);
   if (normalizedAadhaar.length !== 12) return false;
-  const q = userId
-    ? query(coll.blockedAadhaar, where("aadhaarNumber", "==", normalizedAadhaar), where("userId", "==", userId), limit(1))
-    : query(coll.blockedAadhaar, where("aadhaarNumber", "==", normalizedAadhaar), limit(1));
-  const snap = await getDocs(q);
-  if (!snap.empty) return true;
-  const legacyQ = userId
-    ? query(coll.blockedAadhaar, where("aadhaar", "==", normalizedAadhaar), where("userId", "==", userId), limit(1))
-    : query(coll.blockedAadhaar, where("aadhaar", "==", normalizedAadhaar), limit(1));
-  const legacySnap = await getDocs(legacyQ);
-  return !legacySnap.empty;
+  const [snap, legacySnap] = await Promise.all([
+    getDocs(
+      userId
+        ? query(coll.blockedAadhaar, where("aadhaarNumber", "==", normalizedAadhaar), where("userId", "==", userId), limit(1))
+        : query(coll.blockedAadhaar, where("aadhaarNumber", "==", normalizedAadhaar), limit(1))
+    ),
+    getDocs(
+      userId
+        ? query(coll.blockedAadhaar, where("aadhaar", "==", normalizedAadhaar), where("userId", "==", userId), limit(1))
+        : query(coll.blockedAadhaar, where("aadhaar", "==", normalizedAadhaar), limit(1))
+    ),
+  ]);
+  return !snap.empty || !legacySnap.empty;
 }
 
 export async function getBlockedAadhaars(userId?: string): Promise<BlockedAadhaar[]> {
