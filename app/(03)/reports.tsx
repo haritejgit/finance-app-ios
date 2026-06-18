@@ -1303,6 +1303,7 @@ interface Payment {
 
                 if (renewalPayment) {
                   const previousBalance = money(renewalPayment.amountPaid);
+                  weeklyCollected[weekIdx] += previousBalance;
                   row.push(withCarryForward(`${Math.trunc(previousBalance)}\n${Math.trunc(displayedAmount)}`));
                   setStyle(rowIndex, colIndex, orangeStyle);
                 } else {
