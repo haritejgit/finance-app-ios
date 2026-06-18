@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getApp, getApps, initializeApp } from "firebase/app";
+// @ts-expect-error - getReactNativePersistence is only resolved/exported in React Native entry points
 import { getAuth, getReactNativePersistence, initializeAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { firebaseConfig } from "./firebase-config";

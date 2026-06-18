@@ -115,7 +115,7 @@ function hasCoordinates(customer: Customer) {
 
 function getSuggestedPaymentAmount(loan?: Loan | null) {
   if (!loan) return 0;
-  const principalVal = loan.principalAmount ?? loan.principal_amount ?? loan.loanAmount ?? loan.amount;
+  const principalVal = loan.principalAmount ?? (loan as any).principal_amount ?? (loan as any).loanAmount ?? (loan as any).amount;
   const principal = Number(principalVal);
   const balance = Number(loan.balanceAmount ?? 0);
   

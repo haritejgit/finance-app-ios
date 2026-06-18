@@ -1201,121 +1201,141 @@ export default function AccountScreen() {
     const endTs = getEndOfDay(parseDDMMYYYY(endDateStr) ?? Date.now());
     if (!startTs || !endTs || !user) return;
 
-    const summary = await getAccountSummaryForRange(user.uid, startTs, endTs);
-
-    // Build customer map
-    const customerMap = new Map<string, { name: string; villageId: string; numericalId: string }>();
-    customers.forEach((c) => {
-      customerMap.set(c.id, { name: c.name, villageId: c.villageId, numericalId: c.numericalId });
-    });
-
-    const isAllVillages = selectedVillageId === "ALL";
-
-    const filteredInvs = isAllVillages ? summary.investments : [];
-
-    const filteredColls = summary.payments.filter((p) => {
-      if (!isAllVillages) {
-        const cust = customerMap.get(p.customerId ?? "");
-        if (!cust || cust.villageId !== selectedVillageId) return false;
-      }
-      return true;
-    });
-
-    const filteredLoans = summary.loans.filter((l) => {
-      if (!isAllVillages) {
-        const cust = customerMap.get(l.customerId ?? "");
-        if (!cust || cust.villageId !== selectedVillageId) return false;
-      }
-      return true;
-    });
-
-    const filteredExps = isAllVillages ? summary.expenses : [];
-
-    const transList: ExportTransaction[] = [];
-
-    filteredInvs.forEach((i) => {
-      const invDesc = i.investorName ? `Investment(${i.investorName})` : "Investment";
-      transList.push({
-        date: i.date,
-        type: "INVESTMENT",
-        desc: invDesc,
-        amount: i.amount
-      });
-    });
-
-    filteredColls.forEach((p) => {
-      const cust = customerMap.get(p.customerId ?? "");
-      const desc = cust ? `${cust.name} (${cust.numericalId})` : "Collections";
-      transList.push({
-        date: paymentMillis(p),
-        type: "COLLECTION",
-        desc,
-        amount: paymentAmount(p)
-      });
-    });
-
-    filteredLoans.forEach((l) => {
-      const cust = customerMap.get(l.customerId ?? "");
-      const desc = cust ? `${cust.name} (${cust.numericalId})` : "Payments";
-      transList.push({
-        date: loanMillis(l),
-        type: "LOAN",
-        desc,
-        amount: l.amount
-      });
-    });
-
-    filteredExps.forEach((e) => {
-      transList.push({
-        date: e.date,
-        type: "EXPENSE",
-        desc: stripExpenseSuffix(e.description || "Expense"),
-        amount: e.amount
-      });
-    });
-
-    // Sort chronologically
-    transList.sort((a, b) => a.date - b.date);
-
-    // Calculate totals
-    const sumInvs = filteredInvs.reduce((sum, i) => sum + i.amount, 0);
-    const sumColls = filteredColls.reduce((sum, p) => sum + paymentAmount(p), 0);
-    const sumLoans = filteredLoans.reduce((sum, l) => sum + l.amount, 0);
-    const sumExps = filteredExps.reduce((sum, e) => sum + e.amount, 0);
-    const netTotal = periodBf + sumInvs + sumColls - sumLoans - sumExps;
-
-    const totalsObj: ExportTotals = {
-      sumInvs,
-      sumColls,
-      sumLoans,
-      sumExps,
-      netTotal
-    };
-
-    const targetVillageName = isAllVillages
-      ? "All Villages"
-      : (villages.find((v) => v.id === selectedVillageId)?.name ?? "Village");
-
-    const res = await openAccountStatementPrint(
-      startDateStr,
-      endDateStr,
-      periodBf,
-      transList,
-      totalsObj,
-      exportLanguage,
-      targetVillageName,
-      exportFormat,
-      user?.email ?? undefined
-    );
-
-    if (res.success) {
-      if (res.copied) {
-        Alert.alert(t("success"), exportLanguage === "te" ? "à°¨à°¿à°µà±‡à°¦à°¿à°• à°•à±à°²à°¿à°ªà±â€Œà°¬à±‹à°°à±à°¡à±â€Œà°•à± à°¨à°•à°²à± à°šà±‡à°¯à°¬à°¡à°¿à°‚à°¦à°¿!" : "Plain text report copied to clipboard!");
+    let win: any = null;
+    if (Platform.OS === "web") {
+      win = window.open("", "_blank", "width=600,height=780");
+      if (win) {
+        win.document.write("<html><head><title>Loading...</title></head><body style='font-family:sans-serif;padding:20px;text-align:center;'><h3>Generating Account Statement...</h3><p>Please wait a moment.</p></body></html>");
+        win.document.close();
       } else {
-        Alert.alert(t("success"), exportLanguage === "te" ? "à°¨à°¿à°µà±‡à°¦à°¿à°• à°µà°¿à°œà°¯à°µà°‚à°¤à°‚à°—à°¾ à°°à±‚à°ªà±Šà°‚à°¦à°¿à°‚à°šà°¬à°¡à°¿à°‚à°¦à°¿!" : "Report generated successfully!");
+        Alert.alert(t("error"), "Popup blocked. Please allow popups for this website to export statements.");
+        return;
       }
-    } else {
-      Alert.alert(t("error"), "Export failed. Please check your settings.");
+    }
+
+    try {
+      const summary = await getAccountSummaryForRange(user.uid, startTs, endTs);
+
+      // Build customer map
+      const customerMap = new Map<string, { name: string; villageId: string; numericalId: string }>();
+      customers.forEach((c) => {
+        customerMap.set(c.id, { name: c.name, villageId: c.villageId, numericalId: c.numericalId });
+      });
+
+      const isAllVillages = selectedVillageId === "ALL";
+
+      const filteredInvs = isAllVillages ? summary.investments : [];
+
+      const filteredColls = summary.payments.filter((p) => {
+        if (!isAllVillages) {
+          const cust = customerMap.get(p.customerId ?? "");
+          if (!cust || cust.villageId !== selectedVillageId) return false;
+        }
+        return true;
+      });
+
+      const filteredLoans = summary.loans.filter((l) => {
+        if (!isAllVillages) {
+          const cust = customerMap.get(l.customerId ?? "");
+          if (!cust || cust.villageId !== selectedVillageId) return false;
+        }
+        return true;
+      });
+
+      const filteredExps = isAllVillages ? summary.expenses : [];
+
+      const transList: ExportTransaction[] = [];
+
+      filteredInvs.forEach((i) => {
+        const invDesc = i.investorName ? `Investment(${i.investorName})` : "Investment";
+        transList.push({
+          date: i.date,
+          type: "INVESTMENT",
+          desc: invDesc,
+          amount: i.amount
+        });
+      });
+
+      filteredColls.forEach((p) => {
+        const cust = customerMap.get(p.customerId ?? "");
+        const desc = cust ? `${cust.name} (${cust.numericalId})` : "Collections";
+        transList.push({
+          date: paymentMillis(p),
+          type: "COLLECTION",
+          desc,
+          amount: paymentAmount(p)
+        });
+      });
+
+      filteredLoans.forEach((l) => {
+        const cust = customerMap.get(l.customerId ?? "");
+        const desc = cust ? `${cust.name} (${cust.numericalId})` : "Payments";
+        transList.push({
+          date: loanMillis(l),
+          type: "LOAN",
+          desc,
+          amount: l.amount
+        });
+      });
+
+      filteredExps.forEach((e) => {
+        transList.push({
+          date: e.date,
+          type: "EXPENSE",
+          desc: stripExpenseSuffix(e.description || "Expense"),
+          amount: e.amount
+        });
+      });
+
+      // Sort chronologically
+      transList.sort((a, b) => a.date - b.date);
+
+      // Calculate totals
+      const sumInvs = filteredInvs.reduce((sum, i) => sum + i.amount, 0);
+      const sumColls = filteredColls.reduce((sum, p) => sum + paymentAmount(p), 0);
+      const sumLoans = filteredLoans.reduce((sum, l) => sum + l.amount, 0);
+      const sumExps = filteredExps.reduce((sum, e) => sum + e.amount, 0);
+      const netTotal = periodBf + sumInvs + sumColls - sumLoans - sumExps;
+
+      const totalsObj: ExportTotals = {
+        sumInvs,
+        sumColls,
+        sumLoans,
+        sumExps,
+        netTotal
+      };
+
+      const targetVillageName = isAllVillages
+        ? "All Villages"
+        : (villages.find((v) => v.id === selectedVillageId)?.name ?? "Village");
+
+      const res = await openAccountStatementPrint(
+        startDateStr,
+        endDateStr,
+        periodBf,
+        transList,
+        totalsObj,
+        exportLanguage,
+        targetVillageName,
+        exportFormat,
+        user?.email ?? undefined,
+        win
+      );
+
+      if (res.success) {
+        if (res.copied) {
+          Alert.alert(t("success"), exportLanguage === "te" ? "నివేదిక క్లిప్‌బోర్డ్‌కు నకలు చేయబడింది!" : "Plain text report copied to clipboard!");
+        } else {
+          Alert.alert(t("success"), exportLanguage === "te" ? "నివేదిక విజయవంతంగా రూపొందించబడింది!" : "Report generated successfully!");
+        }
+      } else {
+        if (win) win.close();
+        Alert.alert(t("error"), "Export failed. Please check your settings.");
+      }
+    } catch (error) {
+      console.error("Error during export statement generation:", error);
+      if (win) win.close();
+      Alert.alert(t("error"), "An error occurred while generating the report.");
     }
   };
 

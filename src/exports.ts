@@ -547,7 +547,8 @@ export async function openAccountStatementPrint(
   language: "en" | "te",
   villageName: string,
   format: "pdf" | "jpg",
-  userEmail?: string
+  userEmail?: string,
+  existingWindow?: any
 ): Promise<{ success: boolean; platform: string; copied?: boolean }> {
   if (Platform.OS !== "web") {
     // Mobile fallback: copy to clipboard
@@ -567,7 +568,7 @@ export async function openAccountStatementPrint(
     email: userEmail,
   });
   const ledgerHtml = renderLedgerHtml(statementData, language);
-  const win = window.open("", "_blank", "width=600,height=780");
+  const win = existingWindow || window.open("", "_blank", "width=600,height=780");
   if (!win) return { success: false, platform: "web" };
   win.document.write(`
     <!doctype html>

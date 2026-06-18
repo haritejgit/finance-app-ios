@@ -224,7 +224,8 @@ export default function ReportsScreen() {
         { 'Payment Type': 'Cash', 'Count': reportSummary.cashPayments, 'Amount': reportData.filter(p => p.paymentMode === 'CASH').reduce((sum, p) => sum + p.amountPaid, 0) },
         { 'Payment Type': 'Phone', 'Count': reportSummary.phonePayments, 'Amount': reportData.filter(p => p.paymentMode === 'PHONE').reduce((sum, p) => sum + p.amountPaid, 0) },
         { 'Payment Type': 'Regular', 'Count': reportData.filter(p => p.paymentType === 'REGULAR').length, 'Amount': reportData.filter(p => p.paymentType === 'REGULAR').reduce((sum, p) => sum + p.amountPaid, 0) },
-        { 'Payment Type': 'Due', 'Count': reportSummary.duePayments, 'Amount': reportData.filter(p => p.paymentType === 'DUE').reduce((sum, p) => sum + p.amountPaid, 0) }
+        { 'Payment Type': 'Due', 'Count': reportSummary.duePayments, 'Amount': reportData.filter(p => p.paymentType === 'DUE').reduce((sum, p) => sum + p.amountPaid, 0) },
+        { 'Payment Type': 'Renewal Closure', 'Count': reportData.filter(p => p.paymentType === 'RENEWAL_CLOSURE').length, 'Amount': reportData.filter(p => p.paymentType === 'RENEWAL_CLOSURE').reduce((sum, p) => sum + p.amountPaid, 0) }
       ];
       
       const wsChart = XLSX.utils.json_to_sheet(chartData);

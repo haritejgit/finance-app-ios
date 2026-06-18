@@ -1450,10 +1450,10 @@ export const getAllPaymentsEver = async (userId?: string): Promise<AllPaymentEve
     userId ? getDocs(query(coll.loans, where("userId", "==", userId), limit(1500))) : Promise.resolve(null),
     userId ? getEligibleCustomerIds(userId) : Promise.resolve(null),
   ]);
-  const customerIdByLoanId = new Map(
+  const customerIdByLoanId = new Map<string, string>(
     loansSnap?.docs.map((d) => {
       const loan = d.data() as Loan;
-      return [loan.id, loan.customerId];
+      return [loan.id, loan.customerId] as [string, string];
     }) ?? []
   );
   return snap.docs.map((docSnap) => mapPaymentDoc(docSnap, customerIdByLoanId)).filter(
