@@ -557,7 +557,6 @@ export async function openAccountStatementPrint(
     return { success: true, platform: "mobile", copied: true };
   }
 
-  {
   const statementData = buildStatementData({
     startDate: periodStartStr,
     endDate: periodEndStr,
@@ -570,6 +569,9 @@ export async function openAccountStatementPrint(
   const ledgerHtml = renderLedgerHtml(statementData, language);
   const win = existingWindow || window.open("", "_blank", "width=600,height=780");
   if (!win) return { success: false, platform: "web" };
+  
+  const isTe = language === "te";
+  
   win.document.write(`
     <!doctype html>
     <html>
@@ -580,7 +582,7 @@ export async function openAccountStatementPrint(
         <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&family=Noto+Sans+Telugu:wght@400;500;700&display=swap" rel="stylesheet">
         <style>
           body { margin: 0; padding: 30px 15px; font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; display: flex; justify-content: center; }
-          #statement-card { background: #fff; width: 100%; max-width: 520px; border: 1px solid #cbd5e1; border-radius: 16px; padding: 32px 28px; box-sizing: border-box; }
+          #statement-card { background: #fff; width: 100%; max-width: 400px; border: 1px solid #cbd5e1; border-radius: 16px; padding: 30px 24px; box-sizing: border-box; }
           .header { text-align: center; margin-bottom: 18px; border-bottom: 2px dashed #cbd5e1; padding-bottom: 14px; }
           .header h2 { margin: 0; font-size: 20px; font-weight: 800; color: #0f172a; }
           .header h3 { margin: 5px 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; }
@@ -597,204 +599,7 @@ export async function openAccountStatementPrint(
           .ledger-total .ledger-label,
           .ledger-total .ledger-eq,
           .ledger-total .ledger-amount { font-weight: 900; }
-          @media (max-width: 420px) {
-            body { padding: 18px 8px; }
-            #statement-card { padding: 26px 18px; }
-            .ledger-table { font-size: 13px; gap: 6px; }
-            .ledger-row { grid-template-columns: minmax(0, 1fr) 16px minmax(92px, max-content); column-gap: 8px; }
-          }
-          @media print { body { background: #fff; padding: 0; } #statement-card { border: 0; border-radius: 0; } }
-        </style>
-      </head>
-      <body>
-        <div id="statement-card">
-          <div class="header">
-            <h2>Karthikeya Finance</h2>
-            <h3>ACCOUNT STATEMENT</h3>
-            <p>Period: ${escapeHtml(periodStartStr)} - ${escapeHtml(periodEndStr)}</p>
-            <p>Village: ${escapeHtml(villageName)}</p>
-            ${userEmail ? `<p>Email: ${escapeHtml(userEmail)}</p>` : ""}
-          </div>
-          ${ledgerHtml}
-        </div>
-        <script>setTimeout(function(){ window.print(); }, 400);</script>
-      </body>
-    </html>
-  `);
-  win.document.close();
-  return { success: true, platform: "web" };
-  }
-
-  const isTe = language === "te";
-  const title = isTe ? "కార్తికేయ ఫైనాన్స్" : "Karthikeya Finance";
-  const subTitle = isTe ? "ఆర్థిక ఖాతా నివేదిక" : "Account Statement";
-  
-  const formatVal = (v: number) => Math.round(v).toLocaleString("en-IN");
-  const isAllVillages = villageName === "All Villages" || villageName === "అన్ని గ్రామాలు";
-
-// Monospace formatter configuration
-const width = 45;
-const divider = "-".repeat(width);
-const doubleDivider = "=".repeat(width);
-
-// Helper to truncate long labels and add ellipsis
-const truncateLabel = (label: string, maxLen: number): string => {
-  if (maxLen <= 0) return "";
-  if (label.length <= maxLen) return label;
-  return label.slice(0, maxLen - 1) + "…";
-};
-
-// Formats a line ensuring the label, symbol and value occupy exactly `width` characters
-const formatLine = (label: string, value: string, symbol: string = "="): string => {
-  const valPart = `${symbol} ${value}`;
-  // Calculate max label length leaving at least one space before valPart
-  const maxLabelLen = width - valPart.length - 1;
-  const finalLabel = label.length > maxLabelLen ? truncateLabel(label, maxLabelLen) : label;
-  const padLength = width - finalLabel.length - valPart.length;
-  const padding = padLength > 0 ? " ".repeat(padLength) : "";
-  return `${finalLabel}${padding}${valPart}`;
-};
-
-let ledgerText = "";
-
-  if (isAllVillages) {
-    const lblBf = isTe ? "BF (ప్రారంభ నిల్వ)" : "BF";
-    const lblInvs = isTe ? "పెట్టుబడి" : "Investments";
-    const lblColls = isTe ? "వసూళ్లు" : "Collections";
-    const lblLoans = isTe ? "పంచిన డబ్బులు" : "Payments";
-    const lblTotal = isTe ? "మొత్తం (Total)" : "Total";
-
-    const lineBf = formatLine(lblBf, formatVal(bf));
-    const lineInvs = formatLine(lblInvs, formatVal(totals.sumInvs));
-    const firstSum = bf + totals.sumInvs;
-    const lineFirstSum = formatLine("", formatVal(firstSum));
-
-    const lineColls = formatLine(lblColls, formatVal(totals.sumColls));
-    const lineLoans = formatLine(lblLoans, formatVal(totals.sumLoans));
-    const secondSum = firstSum + totals.sumColls - totals.sumLoans;
-    const lineSecondSum = formatLine("", formatVal(secondSum));
-
-    ledgerText += `${lineBf}\n`;
-    if (totals.sumInvs > 0) {
-      ledgerText += `${lineInvs}\n`;
-      ledgerText += `${divider}\n`;
-      ledgerText += `${lineFirstSum}\n`;
-    }
-    ledgerText += `${lineColls}\n`;
-    ledgerText += `${lineLoans}\n`;
-    ledgerText += `${divider}\n`;
-    ledgerText += `${totals.sumInvs > 0 ? lineSecondSum : formatLine("", formatVal(bf + totals.sumColls - totals.sumLoans))}\n`;
-
-    const exps = transactions.filter((t) => t.type === "EXPENSE");
-    if (exps.length > 0) {
-      const expenseMap = new Map<string, { desc: string; amount: number }>();
-      exps.forEach((exp) => {
-        const label = (exp.desc || "Other").trim() || "Other";
-        const key = label.toLowerCase();
-        const existing = expenseMap.get(key);
-        expenseMap.set(key, {
-          desc: existing?.desc ?? label,
-          amount: (existing?.amount ?? 0) + (Number(exp.amount) || 0),
-        });
-      });
-      const groupedExps = Array.from(expenseMap.values()).sort((a, b) => b.amount - a.amount);
-
-      groupedExps.forEach((exp) => {
-        const lblExp = isTe ? translateTelugu(exp.desc) : exp.desc;
-        ledgerText += `${formatLine(lblExp, formatVal(exp.amount))}\n`;
-      });
-      ledgerText += `${divider}\n`;
-    }
-    ledgerText += `${formatLine(lblTotal, formatVal(totals.netTotal))}\n`;
-    ledgerText += `${doubleDivider}`;
-  } else {
-    const lblColls = isTe ? "వసూళ్లు" : "Village Collections";
-    const lblLoans = isTe ? "పంచిన డబ్బులు" : "Village Loans";
-    const lblNet = isTe ? "నికర నగదు ప్రవాహం" : "Net Cashflow";
-
-    ledgerText += `${formatLine(lblColls, formatVal(totals.sumColls))}\n`;
-    ledgerText += `${formatLine(lblLoans, formatVal(totals.sumLoans))}\n`;
-    ledgerText += `${divider}\n`;
-    ledgerText += `${formatLine(lblNet, formatVal(totals.sumColls - totals.sumLoans))}\n`;
-    ledgerText += `${doubleDivider}`;
-  }
-
-  const win = window.open("", "_blank", "width=600,height=780");
-  if (!win) return { success: false, platform: "web" };
-
-  win.document.write(`
-    <!doctype html>
-    <html>
-      <head>
-        <title>${escapeHtml(subTitle)}</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com">
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-        <style>
-          body {
-            margin: 0;
-            padding: 30px 15px;
-            font-family: system-ui, -apple-system, sans-serif;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          #statement-card {
-            background: #ffffff;
-            width: 100%;
-            max-width: 480px;
-            border: 1px solid #cbd5e1;
-            border-radius: 16px;
-            padding: 35px 30px;
-            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.2), 0 8px 10px -6px rgb(0 0 0 / 0.2);
-            box-sizing: border-box;
-          }
-          .header {
-            text-align: center;
-            margin-bottom: 20px;
-            border-bottom: 2px dashed #cbd5e1;
-            padding-bottom: 15px;
-          }
-          .header h2 {
-            margin: 0;
-            font-size: 20px;
-            font-weight: 800;
-            color: #0f172a;
-          }
-          .header h3 {
-            margin: 5px 0 10px 0;
-            font-size: 13px;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: #475569;
-          }
-          .header p {
-            margin: 3px 0;
-            font-size: 12px;
-            color: #64748b;
-          }
-          .ledger-content {
-            font-family: 'Roboto Mono', 'Courier New', Courier, monospace;
-            font-size: 13.5px;
-            line-height: 1.6;
-            color: #1e293b;
-            margin: 0 0 20px 0;
-            white-space: pre-wrap;
-            word-break: break-all;
-          }
-          .footer {
-            margin-top: 25px;
-            border-top: 1px solid #e2e8f0;
-            padding-top: 12px;
-            display: flex;
-            justify-content: space-between;
-            font-size: 9px;
-            color: #94a3b8;
-          }
+          
           .status-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -822,20 +627,16 @@ let ledgerText = "";
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
           }
+          @media (max-width: 420px) {
+            body { padding: 18px 8px; }
+            #statement-card { padding: 26px 18px; }
+            .ledger-table { font-size: 13px; gap: 6px; }
+            .ledger-row { grid-template-columns: minmax(0, 1fr) 16px minmax(92px, max-content); column-gap: 8px; }
+          }
           @media print {
-            body {
-              background: #ffffff !important;
-              padding: 0;
-            }
-            #statement-card {
-              border: 0;
-              box-shadow: none;
-              padding: 0;
-              max-width: 100%;
-            }
-            .status-overlay {
-              display: none !important;
-            }
+            body { background: #fff; padding: 0; }
+            #statement-card { border: 0; border-radius: 0; max-width: 100%; }
+            .status-overlay { display: none !important; }
           }
         </style>
       </head>
@@ -844,31 +645,27 @@ let ledgerText = "";
           <div class="status-overlay" id="status-overlay">
             <div class="spinner" id="status-spinner"></div>
             <div id="status-msg">
-              <strong>${isTe ? "చిత్ర నివేదికను రూపొందిస్తున్నాము..." : "Generating JPG Statement..."}</strong><br>
+              <strong>${language === "te" ? "చిత్ర నివేదికను రూపొందిస్తున్నాము..." : "Generating JPG Statement..."}</strong><br>
               <span style="font-size: 12px; color: #94a3b8; margin-top: 6px;">
-                ${isTe ? "దయచేసి కొన్ని క్షణాలు వేచి ఉండండి." : "Rendering statement using high-resolution Canvas."}
+                ${language === "te" ? "దయచేసి కొన్ని క్షణాలు వేచి ఉండండి." : "Rendering statement using high-resolution Canvas."}
               </span>
             </div>
           </div>
         ` : ""}
-
         <div id="statement-card">
           <div class="header">
-            <h2>${escapeHtml(title)}</h2>
-            <h3>${escapeHtml(subTitle)}</h3>
-            <p>${isTe ? "సమయం" : "Period"}: ${escapeHtml(periodStartStr)} - ${escapeHtml(periodEndStr)}</p>
-            <p>${isTe ? "గ్రామం" : "Village"}: ${escapeHtml(villageName)}</p>
+            <h2>Karthikeya Finance</h2>
+            <h3>ACCOUNT STATEMENT</h3>
+            <p>Period: ${escapeHtml(periodStartStr)} - ${escapeHtml(periodEndStr)}</p>
+            <p>Village: ${escapeHtml(villageName)}</p>
             ${userEmail ? `<p>Email: ${escapeHtml(userEmail)}</p>` : ""}
           </div>
-
-          <pre class="ledger-content">${escapeHtml(ledgerText)}</pre>
-
+          ${ledgerHtml}
           <div class="footer">
             <span>${isTe ? "ఫైనాన్స్ డ్యాష్‌బోర్డ్" : "Finance Dashboard"}</span>
             <span>${escapeHtml(new Date().toLocaleString())}</span>
           </div>
         </div>
-
         <script>
           setTimeout(function() {
             if ("${format}" === 'jpg') {
@@ -940,109 +737,5 @@ export function generatePlainTextStatement(
     "",
     formatAlignedStatementBody(statementData, language),
   ].join("\n");
-
-  const formatVal = (v: number) => Math.round(v).toLocaleString("en-IN");
-  const isTe = language === "te";
-  
-  const title = isTe ? "కార్తికేయ ఫైనాన్స్" : "KARTHIKEYA FINANCE";
-  const subTitle = isTe ? "ఖాతా నివేదిక" : "ACCOUNT STATEMENT";
-  const periodLbl = isTe ? "సమయం" : "Period";
-  const villageLbl = isTe ? "గ్రామం" : "Village";
-  const generatedLbl = isTe ? "సృష్టించబడిన తేదీ" : "Generated";
-  
-  const width = 45;
-  const divider = "-".repeat(width);
-  const doubleDivider = "=".repeat(width);
-
-// Helper to truncate long labels and add ellipsis
-const truncateLabel = (label: string, maxLen: number): string => {
-  if (maxLen <= 0) return "";
-  if (label.length <= maxLen) return label;
-  return label.slice(0, maxLen - 1) + "…";
-};
-
-// Formats a line ensuring the label, symbol and value occupy exactly `width` characters
-const formatLine = (label: string, value: string, symbol: string = "="): string => {
-  const valPart = `${symbol} ${value}`;
-  const maxLabelLen = width - valPart.length - 1;
-  const finalLabel = label.length > maxLabelLen ? truncateLabel(label, maxLabelLen) : label;
-  const padLength = width - finalLabel.length - valPart.length;
-  const padding = padLength > 0 ? " ".repeat(padLength) : "";
-  return `${finalLabel}${padding}${valPart}`;
-};
-
-  let output = `=============================================\n`;
-  output += `            ${title}\n`;
-  output += `            ${subTitle}\n`;
-  output += `=============================================\n`;
-  output += `${periodLbl}: ${periodStartStr} to ${periodEndStr}\n`;
-  output += `${villageLbl}: ${villageName}\n`;
-  output += `${generatedLbl}: ${new Date().toLocaleString()}\n\n`;
-
-  const isAllVillages = villageName === "All Villages" || villageName === "అన్ని గ్రామాలు";
-
-  if (isAllVillages) {
-    const lblBf = isTe ? "BF (ప్రారంభ నిల్వ)" : "BF";
-    const lblInvs = isTe ? "పెట్టుబడి" : "Investments";
-    const lblColls = isTe ? "వసూళ్లు" : "Collections";
-    const lblLoans = isTe ? "పంచిన డబ్బులు" : "Payments";
-    const lblTotal = isTe ? "మొత్తం (Total)" : "Total";
-
-    const lineBf = formatLine(lblBf, formatVal(bf));
-    const lineInvs = formatLine(lblInvs, formatVal(totals.sumInvs));
-    const firstSum = bf + totals.sumInvs;
-    const lineFirstSum = formatLine("", formatVal(firstSum));
-
-    const lineColls = formatLine(lblColls, formatVal(totals.sumColls));
-    const lineLoans = formatLine(lblLoans, formatVal(totals.sumLoans));
-    const secondSum = firstSum + totals.sumColls - totals.sumLoans;
-    const lineSecondSum = formatLine("", formatVal(secondSum));
-
-    output += `${lineBf}\n`;
-    if (totals.sumInvs > 0) {
-      output += `${lineInvs}\n`;
-      output += `${divider}\n`;
-      output += `${lineFirstSum}\n`;
-    }
-    output += `${lineColls}\n`;
-    output += `${lineLoans}\n`;
-    output += `${divider}\n`;
-    output += `${totals.sumInvs > 0 ? lineSecondSum : formatLine("", formatVal(bf + totals.sumColls - totals.sumLoans))}\n`;
-
-    const exps = transactions.filter((t) => t.type === "EXPENSE");
-    if (exps.length > 0) {
-      const expenseMap = new Map<string, { desc: string; amount: number }>();
-      exps.forEach((exp) => {
-        const label = (exp.desc || "Other").trim() || "Other";
-        const key = label.toLowerCase();
-        const existing = expenseMap.get(key);
-        expenseMap.set(key, {
-          desc: existing?.desc ?? label,
-          amount: (existing?.amount ?? 0) + (Number(exp.amount) || 0),
-        });
-      });
-      const groupedExps = Array.from(expenseMap.values()).sort((a, b) => b.amount - a.amount);
-
-      groupedExps.forEach((exp) => {
-        const lblExp = isTe ? translateTelugu(exp.desc) : exp.desc;
-        output += `${formatLine(lblExp, formatVal(exp.amount))}\n`;
-      });
-      output += `${divider}\n`;
-    }
-    output += `${formatLine(lblTotal, formatVal(totals.netTotal))}\n`;
-    output += `${doubleDivider}`;
-  } else {
-    const lblColls = isTe ? "వసూళ్లు" : "Village Collections";
-    const lblLoans = isTe ? "పంచిన డబ్బులు" : "Village Loans";
-    const lblNet = isTe ? "నికర నగదు ప్రవాహం" : "Net Cashflow";
-
-    output += `${formatLine(lblColls, formatVal(totals.sumColls))}\n`;
-    output += `${formatLine(lblLoans, formatVal(totals.sumLoans))}\n`;
-    output += `${divider}\n`;
-    output += `${formatLine(lblNet, formatVal(totals.sumColls - totals.sumLoans))}\n`;
-    output += `${doubleDivider}`;
-  }
-  
-  return output;
 }
 
