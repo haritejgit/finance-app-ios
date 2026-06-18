@@ -549,6 +549,13 @@ export async function openAccountStatementPrint(
   format: "pdf" | "jpg",
   userEmail?: string
 ): Promise<{ success: boolean; platform: string; copied?: boolean }> {
+  // Mobile fallback: copy to clipboard (no window.open support on mobile)
+  if (Platform.OS !== "web") {
+    const plainText = generatePlainTextStatement(periodStartStr, periodEndStr, bf, transactions, totals, language, villageName);
+    await Clipboard.setString(plainText);
+    return { success: true, platform: "mobile", copied: true };
+  }
+
   const isTe = language === "te";
   const title = isTe ? "కార్తికేయ ఫైనాన్స్" : "Karthikeya Finance";
   const subTitle = isTe ? "ఆర్థిక ఖాతా నివేదిక" : "Account Statement";
