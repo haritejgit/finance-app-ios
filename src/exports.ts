@@ -549,13 +549,6 @@ export async function openAccountStatementPrint(
   format: "pdf" | "jpg",
   userEmail?: string
 ): Promise<{ success: boolean; platform: string; copied?: boolean }> {
-  if (Platform.OS !== "web") {
-    // Mobile fallback: copy to clipboard
-    const plainText = generatePlainTextStatement(periodStartStr, periodEndStr, bf, transactions, totals, language, villageName);
-    await Clipboard.setString(plainText);
-    return { success: true, platform: "mobile", copied: true };
-  }
-
   const isTe = language === "te";
   const title = isTe ? "కార్తికేయ ఫైనాన్స్" : "Karthikeya Finance";
   const subTitle = isTe ? "ఆర్థిక ఖాతా నివేదిక" : "Account Statement";
@@ -650,10 +643,17 @@ let ledgerText = "";
     ledgerText += `${doubleDivider}`;
   }
 
-  const win = window.open("", "_blank", "width=600,height=780");
-  if (!win) return { success: false, platform: "web" };
+  const win = window.open("", "_blank", "width=600,height=780,scrollbars=yes,resizable=yes");
+  if (!win) {
+    console.error("Failed to open window for export - popup blocker might be active");
+    alert("Please allow popups for this site to enable export functionality");
+    return { success: false, platform: "web" };
+  }
 
-  win.document.write(`
+  try {
+    console.log("Export format:", format);
+    console.log("Ledger text length:", ledgerText.length);
+    win.document.write(`
     <!doctype html>
     <html>
       <head>
@@ -843,6 +843,11 @@ let ledgerText = "";
   `);
   win.document.close();
   return { success: true, platform: "web" };
+  } catch (error) {
+    console.error("Error during export:", error);
+    if (win) win.close();
+    return { success: false, platform: "web" };
+  }
 }
 
 export function generatePlainTextStatement(
