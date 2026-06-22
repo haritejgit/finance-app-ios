@@ -8,6 +8,8 @@ const db = admin.firestore();
 function toMillis(value) {
     if (typeof value === "number")
         return value;
+    if (typeof value === "string" && /^\d+$/.test(value))
+        return Number(value);
     if (value instanceof Date)
         return value.getTime();
     if (typeof value?.toMillis === "function")

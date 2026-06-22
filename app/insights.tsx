@@ -16,6 +16,7 @@ const weekMs = 7 * 24 * 60 * 60 * 1000;
 
 function toMillis(value: any) {
   if (typeof value === "number") return value;
+  if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
   if (value instanceof Date) return value.getTime();
   if (typeof value?.toMillis === "function") return value.toMillis();
   if (typeof value?.seconds === "number") return value.seconds * 1000;

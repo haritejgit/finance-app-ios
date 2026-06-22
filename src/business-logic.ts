@@ -5,6 +5,7 @@ export const WEEK_MS = 7 * DAY_MS;
 
 export function toMillis(value: any): number {
   if (typeof value === "number") return value;
+  if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
   if (value instanceof Date) return value.getTime();
   if (typeof value?.toMillis === "function") return value.toMillis();
   if (typeof value?.seconds === "number") return value.seconds * 1000;
