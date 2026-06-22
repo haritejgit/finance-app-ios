@@ -1377,12 +1377,11 @@ export async function getAccountSummaryForRange(
   expenses: Expense[];
   investments: Investment[];
 }> {
-  const [paymentsSnap, loansSnap, expensesSnap, investmentsSnap, eligibleCustomerIds] = await Promise.all([
+  const [paymentsSnap, loansSnap, expensesSnap, investmentsSnap] = await Promise.all([
     getDocs(query(coll.payments, where("userId", "==", userId))),
     getDocs(query(coll.loans, where("userId", "==", userId))),
     getDocs(query(coll.expenses, where("userId", "==", userId))),
     getDocs(query(coll.investments, where("userId", "==", userId))),
-    getEligibleCustomerIds(userId),
   ]);
 
   const customerIdByLoanId = new Map(
@@ -1400,8 +1399,7 @@ export async function getAccountSummaryForRange(
         ts >= startMs &&
         ts <= endMs &&
         isRealCollectionPayment(payment) &&
-        !!payment.customerId &&
-        eligibleCustomerIds.has(payment.customerId)
+        !!payment.customerId
       );
     });
 
@@ -1412,8 +1410,7 @@ export async function getAccountSummaryForRange(
       return (
         ts >= startMs &&
         ts <= endMs &&
-        !!loan.customerId &&
-        eligibleCustomerIds.has(loan.customerId)
+        !!loan.customerId
       );
     });
 
@@ -1445,10 +1442,9 @@ export async function getPaymentsForAccountRange(
 }
 
 export const getAllPaymentsEver = async (userId?: string): Promise<AllPaymentEver[]> => {
-  const [snap, loansSnap, eligibleCustomerIds] = await Promise.all([
+  const [snap, loansSnap] = await Promise.all([
     getDocs(userId ? query(coll.payments, where("userId", "==", userId), limit(1500)) : query(coll.payments, limit(1500))),
     userId ? getDocs(query(coll.loans, where("userId", "==", userId), limit(1500))) : Promise.resolve(null),
-    userId ? getEligibleCustomerIds(userId) : Promise.resolve(null),
   ]);
   const customerIdByLoanId = new Map<string, string>(
     loansSnap?.docs.map((d) => {
@@ -1457,17 +1453,16 @@ export const getAllPaymentsEver = async (userId?: string): Promise<AllPaymentEve
     }) ?? []
   );
   return snap.docs.map((docSnap) => mapPaymentDoc(docSnap, customerIdByLoanId)).filter(
-    (payment) => !eligibleCustomerIds || (!!payment.customerId && eligibleCustomerIds.has(payment.customerId))
+    (payment) => !!payment.customerId
   );
 };
 
 export const getAllLoansEver = async (userId?: string): Promise<AllLoanEver[]> => {
-  const [snap, eligibleCustomerIds] = await Promise.all([
+  const [snap] = await Promise.all([
     getDocs(userId ? query(coll.loans, where("userId", "==", userId), limit(1500)) : query(coll.loans, limit(1500))),
-    userId ? getEligibleCustomerIds(userId) : Promise.resolve(null),
   ]);
   const loans = snap.docs.map(mapLoanDoc).filter(
-    (loan) => !eligibleCustomerIds || (!!loan.customerId && eligibleCustomerIds.has(loan.customerId))
+    (loan) => !!loan.customerId
   );
   const seen = new Set<string>();
   return loans.filter((loan) => {
@@ -1488,8 +1483,7 @@ export const getWeeklyChartData = async (userId?: string): Promise<WeeklyChartPo
   const loansQuery = userId
     ? query(coll.loans, where("userId", "==", userId), limit(1500))
     : query(coll.loans);
-  const [eligibleCustomerIds, paymentsSnap, loansSnap] = await Promise.all([
-    userId ? getEligibleCustomerIds(userId) : Promise.resolve(null),
+  const [paymentsSnap, loansSnap] = await Promise.all([
     getDocs(paymentsQuery),
     getDocs(loansQuery),
   ]);
@@ -1505,8 +1499,7 @@ export const getWeeklyChartData = async (userId?: string): Promise<WeeklyChartPo
       date: new Date(millis || Date.now()),
       customerId: d.customerId ?? d.customer_id,
     };
-  }).filter((loan) => loan.date.getTime() >= twelveWeeksAgoMs)
-    .filter((loan) => !eligibleCustomerIds || (!!loan.customerId && eligibleCustomerIds.has(loan.customerId)));
+  }).filter((loan) => loan.date.getTime() >= twelveWeeksAgoMs);
 
   const customerIdByLoanId = new Map(loansRaw.map((l) => [l.id, l.customerId]));
 
@@ -1521,8 +1514,7 @@ export const getWeeklyChartData = async (userId?: string): Promise<WeeklyChartPo
       customerId: d.customerId ?? d.customer_id ?? customerIdByLoanId.get(d.loanId ?? d.loan_id),
       paymentType: d.paymentType ?? d.type,
     };
-  }).filter((payment) => payment.date.getTime() >= twelveWeeksAgoMs)
-    .filter((payment) => !eligibleCustomerIds || (!!payment.customerId && eligibleCustomerIds.has(payment.customerId)));
+  }).filter((payment) => payment.date.getTime() >= twelveWeeksAgoMs);
 
   const weekMap: Record<string, { collected: number; distributed: number; date: Date }> = {};
 
