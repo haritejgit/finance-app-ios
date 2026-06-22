@@ -42,6 +42,7 @@ import {
   saveWalletOpeningBalances,
   subscribeWalletData,
   getAccountSummaryForRange,
+  getAccountOpeningBalanceForDate,
   Investment,
   Expense,
   AllPaymentEver,
@@ -345,6 +346,7 @@ export default function AccountScreen() {
     expenses: Expense[];
     investments: Investment[];
   } | null>(null);
+  const [periodBf, setPeriodBf] = useState<number>(0);
   const [rangeSummaryLoading, setRangeSummaryLoading] = useState(false);
   const [sparklineSummary, setSparklineSummary] = useState<{
     payments: AllPaymentEver[];
@@ -512,8 +514,12 @@ export default function AccountScreen() {
     if (!startTs || !endTs) return;
     setRangeSummaryLoading(true);
     try {
-      const data = await getAccountSummaryForRange(user.uid, startTs, endTs);
+      const [data, openingBalance] = await Promise.all([
+        getAccountSummaryForRange(user.uid, startTs, endTs),
+        getAccountOpeningBalanceForDate(user.uid, startTs, { useExactDateOverride: false }),
+      ]);
       setRangeSummary(data);
+      setPeriodBf(openingBalance);
     } catch (err) {
       console.error("Range summary load error:", err);
     } finally {
@@ -850,11 +856,6 @@ export default function AccountScreen() {
       setSubmitting(false);
     }
   }, [user, editingInvestment, editInvAmount, editInvDate, editInvName, editInvPaymentMode, t]);
-
-  // Dynamic starting balance for the selected period
-  const periodBf = useMemo(() => {
-    return getBalancingFundForDateState(startDateStr).amount;
-  }, [startDateStr, getBalancingFundForDateState]);
 
   // Date Range Filtering and Summary Calculations
   const calculatedSummary = useMemo(() => {

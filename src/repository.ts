@@ -24,7 +24,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { BlockedAadhaar, Customer, Expense, Investment, Loan, Payment, PaymentMode, UserProfile, Village, VillageHistorySegment } from "./types";
-import { getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, loanWeekNumber, money, toMillis, weekStart } from "./business-logic";
+import { endOfDay, getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, loanWeekNumber, money, startOfDay, toMillis, weekStart } from "./business-logic";
 import { filterCustomersWithVillage } from "./utils";
 
 const coll = {
@@ -1429,6 +1429,94 @@ export async function getAccountSummaryForRange(
     .filter((investment) => investment.date >= startMs && investment.date <= endMs);
 
   return { payments, loans, expenses, investments };
+}
+
+function formatBalanceDateKey(ts: number): string {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function balanceDateKeyToMillis(dateStr?: string): number {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr ?? ""));
+  if (!match) return 0;
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const date = new Date(year, month, day);
+  return date.getFullYear() === year && date.getMonth() === month && date.getDate() === day
+    ? date.getTime()
+    : 0;
+}
+
+/** Opening BF for an account range, calculated from uncapped ledger data before startMs. */
+export async function getAccountOpeningBalanceForDate(
+  userId: string,
+  startMs: number,
+  options: { useExactDateOverride?: boolean } = {}
+): Promise<number> {
+  const targetStart = startOfDay(startMs);
+  const targetDateKey = formatBalanceDateKey(targetStart);
+  const previousDayEnd = endOfDay(targetStart - 1);
+
+  const [globalBfSnap, dateBfsSnap, paymentsSnap, loansSnap, expensesSnap, investmentsSnap] = await Promise.all([
+    getDoc(doc(db, "balancingFund", userId)),
+    getDocs(query(coll.balancingFund, where("userId", "==", userId))),
+    getDocs(query(coll.payments, where("userId", "==", userId))),
+    getDocs(query(coll.loans, where("userId", "==", userId))),
+    getDocs(query(coll.expenses, where("userId", "==", userId))),
+    getDocs(query(coll.investments, where("userId", "==", userId))),
+  ]);
+
+  const dateBfs = dateBfsSnap.docs.map((docSnap) => docSnap.data() as any);
+  const exactOverride = dateBfs.find((item) => item?.dateStr === targetDateKey);
+  if (options.useExactDateOverride !== false && exactOverride) {
+    return money(exactOverride.amount);
+  }
+
+  const latestOverride = dateBfs
+    .map((item) => ({ ...item, timestamp: balanceDateKeyToMillis(item?.dateStr) }))
+    .filter((item) => item.timestamp > 0 && item.timestamp <= previousDayEnd)
+    .sort((a, b) => b.timestamp - a.timestamp)[0];
+
+  const startBalance = latestOverride
+    ? money(latestOverride.amount)
+    : money(globalBfSnap.exists() ? globalBfSnap.data().amount : 0);
+  const startLimit = latestOverride ? startOfDay(latestOverride.timestamp) : 0;
+
+  const customerIdByLoanId = new Map(
+    loansSnap.docs.map((d) => {
+      const loan = d.data() as Loan;
+      return [loan.id, loan.customerId];
+    })
+  );
+
+  const sumInvs = investmentsSnap.docs
+    .map((d) => d.data() as Investment)
+    .filter((investment) => investment.date >= startLimit && investment.date <= previousDayEnd)
+    .reduce((sum, investment) => sum + money(investment.amount), 0);
+
+  const sumColls = paymentsSnap.docs
+    .map((docSnap) => mapPaymentDoc(docSnap, customerIdByLoanId))
+    .filter((payment) => {
+      const ts = toMillis(payment.paymentDate ?? payment.date);
+      return ts >= startLimit && ts <= previousDayEnd && isRealCollectionPayment(payment);
+    })
+    .reduce((sum, payment) => sum + money(payment.amountPaid ?? payment.amount), 0);
+
+  const sumLoans = loansSnap.docs
+    .map(mapLoanDoc)
+    .filter((loan) => {
+      const ts = toMillis(loan.startDate ?? loan.date);
+      return ts >= startLimit && ts <= previousDayEnd;
+    })
+    .reduce((sum, loan) => sum + money(loan.amount), 0);
+
+  const sumExps = expensesSnap.docs
+    .map((d) => d.data() as Expense)
+    .filter((expense) => expense.date >= startLimit && expense.date <= previousDayEnd)
+    .reduce((sum, expense) => sum + money(expense.amount), 0);
+
+  return startBalance + sumInvs + sumColls - sumLoans - sumExps;
 }
 
 /** All payments between two timestamps (inclusive), without the 1500-doc snapshot cap. */
