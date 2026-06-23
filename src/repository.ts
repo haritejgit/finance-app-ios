@@ -1032,9 +1032,10 @@ export async function markDue(loan: Loan, paymentDate: number) {
   invalidateUserDataCache(loan.userId);
 }
 
-export async function renewLoan(loan: Loan, newPrincipal: number, date: number) {
+export async function renewLoan(loan: Loan, newPrincipal: number, date: number, paymentMode: PaymentMode = "CASH") {
   assertPositiveAmount(newPrincipal, "Renewal amount");
   const userId = auth.currentUser?.uid || loan.userId;
+  const closureMode = normalizeMode(paymentMode);
   const disbursementMode = normalizeMode(loan.disbursement_mode ?? loan.disbursementMode);
   const batch = writeBatch(db);
 
@@ -1047,8 +1048,8 @@ export async function renewLoan(loan: Loan, newPrincipal: number, date: number) 
       paymentDate: date,
       weekNumber: loanWeekNumber(loan.startDate, date),
       paymentType: "RENEWAL_CLOSURE",
-      paymentMode: "CASH",
-      type: "CASH",
+      paymentMode: closureMode,
+      type: closureMode,
       notes: "Loan renewed - old balance cleared",
       userId,
     };

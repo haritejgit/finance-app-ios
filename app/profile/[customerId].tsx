@@ -297,6 +297,7 @@ export default function ProfileScreen() {
   const [amount, setAmount] = useState("");
   const [mode, setMode] = useState<PaymentMode>("CASH");
   const [renewAmount, setRenewAmount] = useState("");
+  const [renewMode, setRenewMode] = useState<PaymentMode>("CASH");
   const [paymentDateInput, setPaymentDateInput] = useState(formatDateInput(Date.now()));
   const [dueDateInput, setDueDateInput] = useState(formatDateInput(Date.now()));
   const [paymentDateError, setPaymentDateError] = useState("");
@@ -1634,6 +1635,23 @@ export default function ProfileScreen() {
             <Text style={[styles.modalTitle, { color: colors.text }]}>Renew Loan</Text>
             <TextInput placeholder="New Principal Amount" placeholderTextColor={colors.textMuted} value={renewAmount} onChangeText={setRenewAmount} style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]} keyboardType="numeric" />
             
+            <Text style={[styles.sectionLabel, { color: colors.text }]}>Closure Payment Mode</Text>
+            <View style={styles.modeRow}>
+              {(["CASH", "PHONE"] as const).map((m) => (
+                <Pressable
+                  key={m}
+                  onPress={() => setRenewMode(m)}
+                  style={[
+                    styles.chip,
+                    renewMode === m && styles.chipOn,
+                    renewMode === m && m === "PHONE" && styles.chipPhoneOn,
+                  ]}
+                >
+                  <Text style={renewMode === m ? styles.chipOnText : styles.chipText}>{m === "PHONE" ? "PhonePe" : "Cash"}</Text>
+                </Pressable>
+              ))}
+            </View>
+            
             {(() => {
               if (!loan || !renewAmount) return null;
               const newPrincipal = Number(renewAmount);
@@ -1681,9 +1699,10 @@ export default function ProfileScreen() {
 
                 try {
                   setIsRenewing(true);
-                  await renewLoan(loan, newPrincipal, Date.now());
+                  await renewLoan(loan, newPrincipal, Date.now(), renewMode);
                   setRenewOpen(false);
                   setRenewAmount("");
+                  setRenewMode("CASH");
                   await reload({ showLoading: false, skipAutoDue: true });
                   showToast("success", "Loan renewed", "The loan was renewed successfully.");
                 } catch (error: any) {
@@ -1702,6 +1721,7 @@ export default function ProfileScreen() {
               onPress={() => {
                 setRenewOpen(false);
                 setRenewAmount("");
+                setRenewMode("CASH");
               }}
             >
               <Text style={styles.cancelModalBtnText}>Cancel</Text>
