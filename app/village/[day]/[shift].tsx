@@ -16,6 +16,26 @@ import { lightImpact } from "../../../src/interactions";
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 const SHIFTS = ["Morning", "Evening"] as const;
 
+function formatDateInput(ts: number) {
+  const d = new Date(ts);
+  const y = d.getFullYear();
+  const m = `${d.getMonth() + 1}`.padStart(2, "0");
+  const day = `${d.getDate()}`.padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function parseDateInput(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const date = new Date(year, monthIndex, day);
+  if (date.getFullYear() !== year || date.getMonth() !== monthIndex || date.getDate() !== day) return null;
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
 export default function VillageListScreen() {
   const params = useLocalSearchParams<{ day: string; shift: string }>();
   const day = typeof params.day === 'string' ? params.day : Array.isArray(params.day) ? params.day[0] : "Monday";
@@ -34,6 +54,8 @@ export default function VillageListScreen() {
   const [editVillageName, setEditVillageName] = useState("");
   const [moveDay, setMoveDay] = useState<string>("Monday");
   const [moveShift, setMoveShift] = useState<string>("Morning");
+  const [moveEffectiveDate, setMoveEffectiveDate] = useState(formatDateInput(Date.now()));
+  const [moveDateError, setMoveDateError] = useState("");
   const [moveSaving, setMoveSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [renameModalVisible, setRenameModalVisible] = useState(false);
@@ -70,6 +92,8 @@ export default function VillageListScreen() {
     setEditVillageName(village.name);
     setMoveDay(village.dayOfWeek);
     setMoveShift(village.shift);
+    setMoveEffectiveDate(formatDateInput(Date.now()));
+    setMoveDateError("");
     setMoveModalVisible(true);
   };
 
@@ -77,6 +101,7 @@ export default function VillageListScreen() {
     setMoveModalVisible(false);
     setVillageToMove(null);
     setEditVillageName("");
+    setMoveDateError("");
   };
 
   const openRenameModal = (village: Village) => {
@@ -118,13 +143,19 @@ export default function VillageListScreen() {
 
   const saveMove = async () => {
     if (!villageToMove) return;
+    const effectiveDate = parseDateInput(moveEffectiveDate);
+    if (!effectiveDate) {
+      setMoveDateError("Enter effective date as YYYY-MM-DD");
+      return;
+    }
+    setMoveDateError("");
     try {
       setMoveSaving(true);
       // Update name if changed
       if (editVillageName.trim() && editVillageName.trim() !== villageToMove.name) {
         await updateVillageName(villageToMove.id, editVillageName.trim());
       }
-      await updateVillageDayShift(villageToMove.id, moveDay, moveShift);
+      await updateVillageDayShift(villageToMove.id, moveDay, moveShift, effectiveDate);
       closeMoveModal();
       await reload();
     } catch (err: any) {
@@ -331,6 +362,16 @@ export default function VillageListScreen() {
                 </Pressable>
               ))}
             </View>
+            <Text style={[styles.moveSectionLabel, { color: colors.textSecondary }]}>Effective date</Text>
+            <TextInput
+              placeholder="YYYY-MM-DD"
+              value={moveEffectiveDate}
+              onChangeText={setMoveEffectiveDate}
+              style={[styles.input, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border, color: colors.text, marginTop: 8, marginBottom: 4, width: "100%", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 }]}
+              placeholderTextColor={colors.textSecondary}
+              autoCapitalize="none"
+            />
+            {!!moveDateError && <Text style={[styles.moveDateError, { color: colors.error }]}>{moveDateError}</Text>}
             <Pressable
               style={[styles.moveSaveBtn, { backgroundColor: colors.primary }, moveSaving && styles.moveSaveBtnDisabled]}
               onPress={saveMove}
@@ -606,5 +647,10 @@ const styles = StyleSheet.create({
   moveDeleteLinkText: {
     fontSize: 14,
     fontWeight: "600",
+  },
+  moveDateError: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 8,
   },
 });

@@ -149,7 +149,15 @@ export async function getVillageById(villageId: string) {
 export async function addVillage(userId: string, name: string, dayOfWeek: string, shift: string) {
   const villageName = cleanText(name);
   if (!villageName) throw new Error("Village name is required.");
-  const village: Village = { id: id(), name: villageName, dayOfWeek, shift: shift as any, userId };
+  const now = startOfDay(Date.now());
+  const village: Village = {
+    id: id(),
+    name: villageName,
+    dayOfWeek,
+    shift: shift as any,
+    userId,
+    routeHistory: [{ dayOfWeek, shift: shift as any, fromDate: now, toDate: null }],
+  };
   await setDoc(doc(db, "villages", village.id), stripUndefined(village));
   clearCache();
 }
@@ -159,10 +167,35 @@ export async function deleteVillage(villageId: string) {
   clearCache();
 }
 
-export async function updateVillageDayShift(villageId: string, dayOfWeek: string, shift: string) {
+export async function updateVillageDayShift(villageId: string, dayOfWeek: string, shift: string, effectiveDate = Date.now()) {
+  const village = await getVillageById(villageId);
+  const effectiveStart = startOfDay(toMillis(effectiveDate) || Date.now());
+  const previousDayOfWeek = village?.dayOfWeek ?? dayOfWeek;
+  const previousShift = village?.shift ?? (shift as any);
+  const existingHistory = Array.isArray(village?.routeHistory) ? village.routeHistory : [];
+  const routeHistory = existingHistory.length > 0
+    ? existingHistory.map((segment, index) => {
+        const isOpenSegment = segment.toDate === null || segment.toDate === undefined;
+        if (!isOpenSegment || index !== existingHistory.length - 1) return segment;
+        return { ...segment, toDate: effectiveStart };
+      })
+    : [{ dayOfWeek: previousDayOfWeek, shift: previousShift, fromDate: 0, toDate: effectiveStart }];
+
+  const lastSegment = routeHistory[routeHistory.length - 1];
+  const alreadySameOpenSegment =
+    lastSegment &&
+    lastSegment.dayOfWeek === dayOfWeek &&
+    lastSegment.shift === shift &&
+    lastSegment.toDate === null;
+
+  if (!alreadySameOpenSegment) {
+    routeHistory.push({ dayOfWeek, shift: shift as any, fromDate: effectiveStart, toDate: null });
+  }
+
   await updateDoc(doc(db, "villages", villageId), {
     dayOfWeek,
     shift,
+    routeHistory,
   });
   clearCache();
 }

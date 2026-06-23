@@ -23,6 +23,14 @@ export type Village = {
   dayOfWeek: string;
   shift: Shift;
   userId: string;
+  routeHistory?: VillageRouteHistorySegment[];
+};
+
+export type VillageRouteHistorySegment = {
+  dayOfWeek: string;
+  shift: Shift;
+  fromDate: number;
+  toDate: number | null;
 };
 
 export type Customer = {
