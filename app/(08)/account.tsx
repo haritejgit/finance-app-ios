@@ -756,11 +756,26 @@ export default function AccountScreen() {
     const doDelete = async () => {
       try {
         setLoading(true);
+        console.log("[Expense Delete] Deleting:", id);
         await deleteExpense(id);
-        const exps = await getExpenses(user!.uid);
-        setExpenses(exps);
+        console.log("[Expense Delete] Firestore delete succeeded");
+        // Optimistically remove from local state immediately
+        // (avoids Firebase SDK cache returning stale data)
+        setExpenses((prev) => {
+          const filtered = prev.filter((e) => e.id !== id);
+          console.log("[Expense Delete] Removed from local state, count:", filtered.length);
+          return filtered;
+        });
+        // Async full refresh from server for consistency
+        getExpenses(user!.uid).then((exps) => {
+          setExpenses(exps);
+          console.log("[Expense Delete] Server refresh complete, count:", exps.length);
+        }).catch((refreshErr) => {
+          console.warn("[Expense Delete] Background refresh failed:", refreshErr);
+        });
       } catch (err: any) {
-        Alert.alert(t("error"), err.message);
+        console.error("[Expense Delete] Error:", err);
+        Alert.alert(t("error"), err.message || "Failed to delete expense.");
       } finally {
         setLoading(false);
       }
