@@ -53,7 +53,7 @@ import { Customer, Loan, Payment, PaymentMode, PaymentType, Village } from "../.
 import { useTheme } from "../../src/theme-context";
 import { colors } from "../../src/theme";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { calculateDisbursedAmount, money, toMillis } from "../../src/business-logic";
+import { calculateDisbursedAmount, money, toMillis, weekStart } from "../../src/business-logic";
 import { useLanguage } from "../../src/language-context";
 import { translateTelugu } from "../../src/exports";
 import { openCustomerLedgerPrint } from "../../src/exports";
@@ -575,17 +575,15 @@ export default function ProfileScreen() {
 
   const creditSummary = useMemo(() => calculateCreditScore(payments, loan), [loan, payments]);
 
-  const paidTodayAmount = useMemo(() => {
-    const today = new Date();
+  const paidThisWeekAmount = useMemo(() => {
+    const weekStartMs = weekStart(Date.now());
+    const weekEndMs = weekStartMs + 7 * 24 * 60 * 60 * 1000;
     return payments
       .filter((p) => {
         const pDate = p.paymentDate;
         if (!pDate) return false;
-        const d = new Date(pDate);
         return (p.paymentType === "REGULAR" || p.type === "REGULAR" || p.paymentType === "CASH" || p.paymentType === "PHONE" || p.type === "CASH" || p.type === "PHONE") &&
-          d.getDate() === today.getDate() &&
-          d.getMonth() === today.getMonth() &&
-          d.getFullYear() === today.getFullYear();
+          pDate >= weekStartMs && pDate < weekEndMs;
       })
       .reduce((sum, p) => sum + Number(p.amountPaid || p.amount || 0), 0);
   }, [payments]);
@@ -863,15 +861,18 @@ export default function ProfileScreen() {
       }
     };
 
-    if (paidTodayAmount > 0) {
-      Alert.alert(
-        "Already Paid Today",
-        `${customer?.name || "Customer"} has already paid Rs.${paidTodayAmount} today. Do you want to enter this additional amount of Rs.${parsedAmount}?`,
-        [
+    if (paidThisWeekAmount > 0) {
+      const msg = `${customer?.name || "Customer"} has already paid Rs.${paidThisWeekAmount} this week. Do you want to enter this additional amount of Rs.${parsedAmount}?`;
+      if (Platform.OS === "web") {
+        if (window.confirm(msg)) {
+          await proceed();
+        }
+      } else {
+        Alert.alert("Already Paid Today", msg, [
           { text: "Cancel", style: "cancel" },
-          { text: "Confirm", onPress: proceed }
-        ]
-      );
+          { text: "Confirm", onPress: proceed },
+        ]);
+      }
     } else {
       await proceed();
     }
@@ -1499,10 +1500,10 @@ export default function ProfileScreen() {
               </View>
             )}
             {!!paymentDateError && <Text style={styles.errorText}>{paymentDateError}</Text>}
-            {paidTodayAmount > 0 ? (
+            {paidThisWeekAmount > 0 ? (
               <View style={{ backgroundColor: "#FFF3CD", borderColor: "#FFEBAA", borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 12 }}>
                 <Text style={{ color: "#856404", fontSize: 13, fontWeight: "600", textAlign: "center" }}>
-                  ⚠️ {customer?.name || "Customer"} has already paid Rs.{paidTodayAmount} today. Any new entry will be recorded as an additional payment.
+                  ⚠️ {customer?.name || "Customer"} has already paid Rs.{paidThisWeekAmount} this week. Any new entry will be recorded as an additional payment.
                 </Text>
               </View>
             ) : null}
