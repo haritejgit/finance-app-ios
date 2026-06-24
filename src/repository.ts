@@ -638,8 +638,7 @@ export async function getActiveLoan(userId: string, customerId: string) {
   const q = query(
     coll.loans,
     where("userId", "==", userId),
-    where("customerId", "==", customerId),
-    where("status", "in", ["ACTIVE", "CLOSED"])
+    where("customerId", "==", customerId)
   );
   const snap = await getDocs(q);
   const loans = snap.docs.map((d) => d.data() as Loan);
@@ -670,12 +669,12 @@ export async function getActiveLoansByCustomerIds(userId: string, customerIds: s
       const q = query(
         coll.loans,
         where("userId", "==", userId),
-        where("status", "in", ["ACTIVE", "CLOSED"]),
         where("customerId", "in", chunk)
       );
       const snap = await getDocs(q);
       snap.docs.forEach((d) => {
         const loan = d.data() as Loan;
+        if (loan.status !== "ACTIVE" && loan.status !== "CLOSED") return;
         const existing = loansByCustomer[loan.customerId];
         if (!existing) {
           loansByCustomer[loan.customerId] = loan;
@@ -774,7 +773,6 @@ export async function getPaymentStatusesForCustomersThisWeek(userId: string, cus
       const loansQ = query(
         coll.loans,
         where("userId", "==", userId),
-        where("status", "in", ["ACTIVE", "CLOSED"]),
         where("customerId", "in", chunk)
       );
       const loansSnap = await getDocs(loansQ);
@@ -784,6 +782,7 @@ export async function getPaymentStatusesForCustomersThisWeek(userId: string, cus
       const loansGrouped = new Map<string, Loan[]>();
       loansSnap.docs.forEach((d) => {
         const loan = d.data() as Loan;
+        if (loan.status !== "ACTIVE" && loan.status !== "CLOSED") return;
         if (!loansGrouped.has(loan.customerId)) {
           loansGrouped.set(loan.customerId, []);
         }
@@ -884,7 +883,6 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
       const loansQ = query(
         coll.loans,
         where("userId", "==", userId),
-        where("status", "in", ["ACTIVE", "CLOSED"]),
         where("customerId", "in", chunk)
       );
       const loansSnap = await getDocs(loansQ);
@@ -894,6 +892,7 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
       const loansGrouped = new Map<string, Loan[]>();
       loansSnap.docs.forEach((d) => {
         const loan = d.data() as Loan;
+        if (loan.status !== "ACTIVE" && loan.status !== "CLOSED") return;
         if (!loansGrouped.has(loan.customerId)) {
           loansGrouped.set(loan.customerId, []);
         }
