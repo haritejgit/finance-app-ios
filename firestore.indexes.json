@@ -126,6 +126,39 @@
         { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "startDate", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "nestedAccounts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "nestedUserEmail", "order": "ASCENDING" },
+        { "fieldPath": "emailPending", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "nestedOtp",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "masterEmail", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "nestedPayments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "masterUserId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "nestedPayments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "nestedUserId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

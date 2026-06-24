@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "finance-for-ios"
-  }
+  },
+  "targets": {
+    "finance-for-ios": {
+      "hosting": {
+        "nested": [
+          "karthikeya-finance-nested"
+        ],
+        "app": [
+          "karthikeya-finance"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

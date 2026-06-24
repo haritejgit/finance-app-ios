@@ -191,6 +191,7 @@ const CustomerItem = React.memo(function CustomerItem({
   onManualPay,
   onMarkDue,
   onSaveCurrentLocation,
+  onCloseRenew,
   status,
   isNew,
   loan,
@@ -1291,20 +1292,21 @@ export default function CustomerListScreen() {
           customer={item} 
           onPress={openCustomer} 
           onOpenDirections={openDirections}
-        onQuickPay={handleQuickPay}
-        onManualPay={openManualPayment}
-        onMarkDue={markCustomerDue}
-        onSaveCurrentLocation={saveCurrentLocationForCustomer}
-        onCloseRenew={promptCloseOrRenew}
-        status={paymentStatuses[item.id] || 'none'} 
-        isNew={isNewThisWeek(item.createdAt)}
-        loan={activeLoans[item.id]}
-        lastPaymentDate={lastPaymentDates[item.id]?.lastPaymentDate}
-        paidLastWeek={lastPaymentDates[item.id]?.paidLastWeek}
-        isPaying={payingCustomerId === item.id}
-        isUpdatingLocation={updatingLocationCustomerId === item.id}
-      />
-    ),
+          onQuickPay={handleQuickPay}
+          onManualPay={openManualPayment}
+          onMarkDue={markCustomerDue}
+          onSaveCurrentLocation={saveCurrentLocationForCustomer}
+          onCloseRenew={promptCloseOrRenew}
+          status={paymentStatuses[item.id] || 'none'} 
+          isNew={isNewThisWeek(item.createdAt)}
+          loan={activeLoans[item.id]}
+          lastPaymentDate={lastPaymentDates[item.id]?.lastPaymentDate}
+          paidLastWeek={lastPaymentDates[item.id]?.paidLastWeek}
+          isPaying={payingCustomerId === item.id}
+          isUpdatingLocation={updatingLocationCustomerId === item.id}
+        />
+      );
+    },
     [activeLoans, lastPaymentDates, markCustomerDue, openCustomer, openDirections, openManualPayment, handleQuickPay, paymentStatuses, payingCustomerId, promptCloseOrRenew, saveCurrentLocationForCustomer, updatingLocationCustomerId, statusFilter, closedCustomerLoans, handleReopenCustomer]
   );
 

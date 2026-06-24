@@ -1,0 +1,10 @@
+{
+  "name": "nested-account",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Temporary nested/sub-account web app for collection assistants",
+  "scripts": {
+    "start": "echo 'Open index.html in your browser to run the app.'",
+    "deploy:rules": "cd .. && firebase deploy --only firestore"
+  }
+}

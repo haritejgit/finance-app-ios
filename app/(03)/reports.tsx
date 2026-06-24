@@ -1015,9 +1015,7 @@ interface Payment {
       };
 
       const villagesData = await fetchUserCollection<Village>('villages');
-      const customersData = (await fetchUserCollection<Customer>('customers')).filter(
-        (customer) => customer.isActive !== false
-      );
+      const allCustomers = await fetchUserCollection<Customer>('customers');
       const loansData = (await fetchUserCollection<Loan>('loans')).map((loan) => ({
         ...loan,
         startDate: toMillis(loan.startDate),
@@ -1029,6 +1027,29 @@ interface Payment {
         paymentDate: toMillis(payment.paymentDate),
         amountPaid: money(payment.amountPaid),
       }));
+
+      const reportStart = getStartOfDay(fromTs);
+      const reportEnd = getEndOfDay(toTs);
+
+      const customersData = allCustomers.filter((customer) => {
+        if (customer.isActive !== false) return true;
+        
+        const closedAt = customer.closedAt ? toMillis(customer.closedAt) : 0;
+        if (closedAt >= reportStart) return true;
+
+        const hasPaymentsInPeriod = paymentsData.some(
+          (p) => p.customerId === customer.id && p.paymentDate >= reportStart && p.paymentDate <= reportEnd
+        );
+        if (hasPaymentsInPeriod) return true;
+
+        const hasActiveLoanInPeriod = loansData.some(
+          (l) => l.customerId === customer.id &&
+                 l.startDate <= reportEnd &&
+                 (l.status === 'ACTIVE' ||
+                  (l.status === 'CLOSED' && toMillis((l as any).closedAt || (l as any).endDate || Date.now()) >= reportStart))
+        );
+        return hasActiveLoanInPeriod;
+      });
 
       if (customersData.length === 0 || villagesData.length === 0) {
         Alert.alert('No Data Found', 'No customers or villages found for this account.');
@@ -1064,6 +1085,10 @@ interface Payment {
         font: { bold: true, color: { rgb: 'FF8C00' } }, // Orange: #FF8C00
         alignment: baseAlignment,
       };
+      const closedStyle = {
+        font: { bold: true, color: { rgb: '7F7F7F' } }, // Gray text for Closed
+        alignment: baseAlignment,
+      };
       const orangeStyle = {
         font: { bold: true, color: { rgb: ORANGE } },
         alignment: baseAlignment,
@@ -1074,8 +1099,6 @@ interface Payment {
       };
 
       const wb = XLSX.utils.book_new();
-      const reportStart = getStartOfDay(fromTs);
-      const reportEnd = getEndOfDay(toTs);
       const orderedDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       const orderedShifts = ['Morning', 'Evening'];
       const makeSheetName = (dayName: string, shiftName: string) =>
@@ -1209,6 +1232,15 @@ interface Payment {
               if (movedOutThisWeekOrEarlier) {
                 row.push('MOVED');
                 setStyle(rowIndex, colIndex, movedStyle);
+                return;
+              }
+
+              const closedWeekStr = customer.closedAt ? getISOWeekString(toMillis(customer.closedAt)) : '';
+              const isClosedLaterWeek = customer.isActive === false && customer.closedAt && colWeekStr > closedWeekStr;
+
+              if (isClosedLaterWeek) {
+                row.push('Closed');
+                setStyle(rowIndex, colIndex, closedStyle);
                 return;
               }
 

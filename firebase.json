@@ -14,50 +14,63 @@
       "ui-debug.log"
     ]
   },
-  "hosting": {
-    "site": "karthikeya-finance",
-    "public": "dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "headers": [
-      {
-        "source": "/**/*.@(js|css|png|jpg|svg|woff2)",
-        "headers": [{ "key": "Cache-Control", "value": "max-age=31536000" }]
-      },
-      {
-        "source": "**/_expo/static/js/**",
-        "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
-      },
-      {
-        "source": "**/*.{css,png,jpg,jpeg,gif,webp,svg,ico}",
-        "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }]
-      },
-      {
-        "source": "**/*.ttf",
-        "headers": [
-          { "key": "Content-Type", "value": "font/ttf" },
-          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-        ]
-      },
-      {
-        "source": "**/*.woff",
-        "headers": [
-          { "key": "Content-Type", "value": "font/woff" },
-          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-        ]
-      },
-      {
-        "source": "**/*.woff2",
-        "headers": [
-          { "key": "Content-Type", "value": "font/woff2" },
-          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-        ]
-      }
-    ],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ]
-  }
+  "hosting": [
+    {
+      "target": "app",
+      "public": "dist",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "headers": [
+        {
+          "source": "/**/*.@(js|css|png|jpg|svg|woff2)",
+          "headers": [{ "key": "Cache-Control", "value": "max-age=31536000" }]
+        },
+        {
+          "source": "**/_expo/static/js/**",
+          "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+        },
+        {
+          "source": "**/*.{css,png,jpg,jpeg,gif,webp,svg,ico}",
+          "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }]
+        },
+        {
+          "source": "**/*.ttf",
+          "headers": [
+            { "key": "Content-Type", "value": "font/ttf" },
+            { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+          ]
+        },
+        {
+          "source": "**/*.woff",
+          "headers": [
+            { "key": "Content-Type", "value": "font/woff" },
+            { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+          ]
+        },
+        {
+          "source": "**/*.woff2",
+          "headers": [
+            { "key": "Content-Type", "value": "font/woff2" },
+            { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+          ]
+        }
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    },
+    {
+      "target": "nested",
+      "public": "nested-account",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "headers": [
+        {
+          "source": "/**/*.@(js|css|png|jpg|svg)",
+          "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }]
+        }
+      ]
+    }
+  ]
 }

@@ -145,4 +145,3 @@ export type InsightData = {
   dailyCollectionStreak: boolean[];
   customerRisks: CustomerRiskInsight[];
 };
-

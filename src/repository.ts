@@ -639,10 +639,20 @@ export async function getActiveLoan(userId: string, customerId: string) {
     coll.loans,
     where("userId", "==", userId),
     where("customerId", "==", customerId),
-    where("status", "==", "ACTIVE")
+    where("status", "in", ["ACTIVE", "CLOSED"])
   );
   const snap = await getDocs(q);
-  return snap.docs[0]?.data() as Loan | undefined;
+  const loans = snap.docs.map((d) => d.data() as Loan);
+  if (loans.length === 0) return undefined;
+  
+  const active = loans.find((l) => l.status === "ACTIVE");
+  if (active) return active;
+  
+  const closed = loans.filter((l) => l.status === "CLOSED");
+  if (closed.length > 0) {
+    return closed.sort((a, b) => b.startDate - a.startDate)[0];
+  }
+  return loans[0];
 }
 
 export async function getActiveLoansByCustomerIds(userId: string, customerIds: string[]) {
@@ -660,13 +670,26 @@ export async function getActiveLoansByCustomerIds(userId: string, customerIds: s
       const q = query(
         coll.loans,
         where("userId", "==", userId),
-        where("status", "==", "ACTIVE"),
+        where("status", "in", ["ACTIVE", "CLOSED"]),
         where("customerId", "in", chunk)
       );
       const snap = await getDocs(q);
       snap.docs.forEach((d) => {
         const loan = d.data() as Loan;
-        loansByCustomer[loan.customerId] = loan;
+        const existing = loansByCustomer[loan.customerId];
+        if (!existing) {
+          loansByCustomer[loan.customerId] = loan;
+        } else {
+          if (loan.status === "ACTIVE" && existing.status !== "ACTIVE") {
+            loansByCustomer[loan.customerId] = loan;
+          } else if (loan.status !== "ACTIVE" && existing.status === "ACTIVE") {
+            // Keep existing
+          } else {
+            if (loan.startDate > existing.startDate) {
+              loansByCustomer[loan.customerId] = loan;
+            }
+          }
+        }
       });
     })
   );
@@ -751,17 +774,28 @@ export async function getPaymentStatusesForCustomersThisWeek(userId: string, cus
       const loansQ = query(
         coll.loans,
         where("userId", "==", userId),
-        where("status", "==", "ACTIVE"),
+        where("status", "in", ["ACTIVE", "CLOSED"]),
         where("customerId", "in", chunk)
       );
       const loansSnap = await getDocs(loansQ);
       const activeLoanIdByCustomerId = new Map<string, string>();
       const customerIdByActiveLoanId = new Map<string, string>();
+
+      const loansGrouped = new Map<string, Loan[]>();
       loansSnap.docs.forEach((d) => {
         const loan = d.data() as Loan;
-        activeLoanIdByCustomerId.set(loan.customerId, loan.id);
-        customerIdByActiveLoanId.set(loan.id, loan.customerId);
+        if (!loansGrouped.has(loan.customerId)) {
+          loansGrouped.set(loan.customerId, []);
+        }
+        loansGrouped.get(loan.customerId)!.push(loan);
       });
+
+      for (const [customerId, customerLoans] of loansGrouped.entries()) {
+        const active = customerLoans.find((l) => l.status === "ACTIVE");
+        const selectedLoan = active || customerLoans.sort((a, b) => b.startDate - a.startDate)[0];
+        activeLoanIdByCustomerId.set(customerId, selectedLoan.id);
+        customerIdByActiveLoanId.set(selectedLoan.id, customerId);
+      }
 
       const activeLoanIds = Array.from(activeLoanIdByCustomerId.values());
       if (activeLoanIds.length === 0) return;
@@ -850,17 +884,28 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
       const loansQ = query(
         coll.loans,
         where("userId", "==", userId),
-        where("status", "==", "ACTIVE"),
+        where("status", "in", ["ACTIVE", "CLOSED"]),
         where("customerId", "in", chunk)
       );
       const loansSnap = await getDocs(loansQ);
       const activeLoanIdByCustomerId = new Map<string, string>();
       const customerIdByActiveLoanId = new Map<string, string>();
+
+      const loansGrouped = new Map<string, Loan[]>();
       loansSnap.docs.forEach((d) => {
         const loan = d.data() as Loan;
-        activeLoanIdByCustomerId.set(loan.customerId, loan.id);
-        customerIdByActiveLoanId.set(loan.id, loan.customerId);
+        if (!loansGrouped.has(loan.customerId)) {
+          loansGrouped.set(loan.customerId, []);
+        }
+        loansGrouped.get(loan.customerId)!.push(loan);
       });
+
+      for (const [customerId, customerLoans] of loansGrouped.entries()) {
+        const active = customerLoans.find((l) => l.status === "ACTIVE");
+        const selectedLoan = active || customerLoans.sort((a, b) => b.startDate - a.startDate)[0];
+        activeLoanIdByCustomerId.set(customerId, selectedLoan.id);
+        customerIdByActiveLoanId.set(selectedLoan.id, customerId);
+      }
 
       const activeLoanIds = Array.from(activeLoanIdByCustomerId.values());
       if (activeLoanIds.length === 0) return;
@@ -1892,7 +1937,8 @@ export async function getCustomerLoanSummary(userId: string, aadhar: string): Pr
   }
 
   const activeLoan = await getActiveLoan(userId, customer.id);
-  return { customer, hasActiveLoan: !!activeLoan };
+  const hasActive = !!activeLoan && activeLoan.status === "ACTIVE";
+  return { customer, hasActiveLoan: hasActive };
 }
 
 export async function blockAadhaar(aadhaar: string, reason: string, userId: string): Promise<void> {
