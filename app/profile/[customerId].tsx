@@ -29,6 +29,8 @@ import {
   addPayment,
   checkAndAutoMarkDues,
   deleteCustomer,
+  closeCustomer,
+  reopenCustomer,
   deleteDuePayment,
   deletePayment,
   getActiveLoan,
@@ -854,6 +856,32 @@ export default function ProfileScreen() {
         await addPayment(loan, parsedAmount, finalDate, mode);
         setPayOpen(false);
         setAmount("");
+        const newBal = loan.balanceAmount - parsedAmount;
+        if (newBal <= 0) {
+          if (Platform.OS === "web") {
+            const choice = window.confirm(
+              `${customer?.name || "Customer"} has fully paid their loan.\n\nClick OK to go to Renew\nClick Cancel to Close account`
+            );
+            if (!choice) {
+              await closeCustomer(activeCustomerId, user.uid);
+            }
+          } else {
+            const action = await new Promise((resolve) => {
+              Alert.alert(
+                "Loan Fully Paid",
+                `${customer?.name || "Customer"} fully paid. What now?`,
+                [
+                  { text: "Close Account", style: "destructive", onPress: () => resolve("close") },
+                  { text: "Continue (Renew later)", onPress: () => resolve("keep") },
+                  { text: "Cancel", style: "cancel", onPress: () => resolve("cancel") },
+                ]
+              );
+            });
+            if (action === "close") {
+              await closeCustomer(activeCustomerId, user.uid);
+            }
+          }
+        }
         await reload({ showLoading: false, skipAutoDue: true });
       } catch {
         setPaymentDateError("Payment failed. Please try again.");
@@ -1295,17 +1323,54 @@ export default function ProfileScreen() {
             )}
             <View style={styles.actionGrid}>
               <Pressable
-                style={[styles.actionBtn, noTextSelection, { backgroundColor: colors.paidGreen }]}
+                style={[styles.actionBtn, noTextSelection, { backgroundColor: colors.paidGreen }, !loan || (loan.balanceAmount <= 0) && styles.actionBtnDisabled]}
                 onPress={() => {
-                  setPaymentDateInput(formatDateInput(Date.now()));
-                  setPaymentDateError("");
-                  setAmount(loan ? getSuggestedPaymentAmount(loan).toString() : "");
-                  setPayOpen(true);
+                  if (loan && loan.balanceAmount > 0) {
+                    setPaymentDateInput(formatDateInput(Date.now()));
+                    setPaymentDateError("");
+                    setAmount(loan ? getSuggestedPaymentAmount(loan).toString() : "");
+                    setPayOpen(true);
+                  }
                 }}
+                disabled={!loan || loan.balanceAmount <= 0}
               >
                 <Icon name="cash" size={20} color={colors.white} style={{marginBottom: 4}} />
                 <Text selectable={false} style={styles.actionLabel}>Pay</Text>
               </Pressable>
+              {loan && loan.balanceAmount <= 0 && (
+                <Pressable
+                  style={[styles.actionBtn, noTextSelection, { backgroundColor: colors.missedRed }]}
+                  onPress={() => {
+                    Alert.alert(
+                      "Loan Fully Paid",
+                      `${customer?.name || "Customer"} has no outstanding balance. What would you like to do?`,
+                      [
+                        {
+                          text: "Close Account",
+                          style: "destructive",
+                          onPress: async () => {
+                            try {
+                              await closeCustomer(activeCustomerId, user.uid);
+                              showToast("success", "Closed", "Customer account closed.");
+                              router.back();
+                            } catch {
+                              showToast("error", "Failed", "Could not close customer.");
+                            }
+                          },
+                        },
+                        {
+                          text: "Renew Loan",
+                          onPress: () => setRenewOpen(true),
+                        },
+                        { text: "Cancel", style: "cancel" },
+                      ]
+                    );
+                  }}
+                >
+                  <Icon name="refresh" size={20} color={colors.white} style={{marginBottom: 4}} />
+                  <Text selectable={false} style={styles.actionLabel}>Close/Renew</Text>
+                </Pressable>
+              )}
               <Pressable
                 style={[styles.actionBtn, noTextSelection, { backgroundColor: colors.missedRed }]}
                 onPress={() => {

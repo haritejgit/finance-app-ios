@@ -30,7 +30,7 @@ import { translateTelugu } from "../../src/exports";
 import { lightImpact } from "../../src/interactions";
 import { showToast } from "../../src/notify";
 import { getCachedCoordinates, LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
-import { addCustomerWithLoan, addPayment, addPaymentsBatch, checkAndAutoMarkDues, getActiveLoansByCustomerIds, getCustomers, getPaymentStatusesForCustomersThisWeek, getVillageById, getCustomerByAadhar, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, markDue, updateCustomer, isNumericalIdTaken, getNextNumericalId } from "../../src/repository";
+import { addCustomerWithLoan, addPayment, addPaymentsBatch, checkAndAutoMarkDues, getActiveLoansByCustomerIds, getCustomers, getClosedCustomers, closeCustomer, reopenCustomer, getPaymentStatusesForCustomersThisWeek, getVillageById, getCustomerByAadhar, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, markDue, updateCustomer, isNumericalIdTaken, getNextNumericalId, renewLoan } from "../../src/repository";
 import { Customer, Loan, PaymentMode, Village } from "../../src/types";
 import { calculateDisbursedAmount, weekStart } from "../../src/business-logic";
 import { validateAadhaar, validateIndianPhone, validatePositiveAmount } from "../../src/validation";
@@ -79,16 +79,15 @@ function isToday(timestamp: number): boolean {
     date.getFullYear() === today.getFullYear();
 }
 
-// Helper to check if date is in the current week (Monday to Sunday)
+// Helper to check if date is within the last 7 days (rolling window)
 function isNewThisWeek(timestamp: number): boolean {
-  const startMs = weekStart(Date.now());
-  const endMs = startMs + 7 * 24 * 60 * 60 * 1000 - 1;
-  return timestamp >= startMs && timestamp <= endMs;
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  return timestamp >= sevenDaysAgo;
 }
 
 // Get customer payment status for today
 type PaymentStatus = 'paid' | 'due' | 'none';
-type CustomerFilter = "all" | "pending" | "paid" | "due" | "new" | "docs";
+type CustomerFilter = "all" | "pending" | "paid" | "due" | "new" | "docs" | "closed";
 type AadhaarScanResult = {
   name?: string | null;
   aadhaar?: string | null;
@@ -103,6 +102,7 @@ const CUSTOMER_FILTERS: { key: CustomerFilter; label: string }[] = [
   { key: "due", label: "Due" },
   { key: "new", label: "New" },
   { key: "docs", label: "Docs" },
+  { key: "closed", label: "Closed" },
 ];
 
 function normalizeAadhar(aadhar?: string) {
@@ -206,6 +206,7 @@ const CustomerItem = React.memo(function CustomerItem({
   onManualPay: (customer: Customer, mode: PaymentMode) => void;
   onMarkDue: (customer: Customer) => void;
   onSaveCurrentLocation: (customer: Customer) => void;
+  onCloseRenew?: (customer: Customer, loan: Loan) => void;
   status: PaymentStatus;
   isNew?: boolean;
   loan?: Loan;
@@ -218,6 +219,7 @@ const CustomerItem = React.memo(function CustomerItem({
   const lastActionPressAtRef = useRef(0);
   const hasLocation = hasCoordinates(customer);
   const canPay = !!loan && loan.balanceAmount > 0 && !isPaying;
+  const isFullyPaid = !!loan && loan.balanceAmount <= 0 && loan.status !== "RENEWED";
   const didntPayLastWeek = !!loan && loan.status === "ACTIVE" && loan.startDate < weekStart(Date.now()) && !paidLastWeek;
   
   const getStatusBadge = useCallback(() => {
@@ -437,6 +439,21 @@ const CustomerItem = React.memo(function CustomerItem({
             <Icon name="document-text-outline" size={15} color="#FFFFFF" />
           </View>
         </Pressable>
+        {isFullyPaid && (
+          <Pressable
+            accessibilityLabel={`Close or Renew ${customer.name}`}
+            style={[styles.actionRow]}
+            onPress={(e) => {
+              markActionPress(e);
+              lightImpact();
+              if (onCloseRenew && loan) onCloseRenew(customer, loan);
+            }}
+          >
+            <View style={[styles.actionIconSquare, { backgroundColor: "#1565C0", width: 42, height: 28 }]}>
+              <Icon name="refresh" size={14} color="#FFFFFF" />
+            </View>
+          </Pressable>
+        )}
       </View>
     </Pressable>
   );
@@ -485,6 +502,8 @@ export default function CustomerListScreen() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const cameraRef = useRef<any>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [closedCustomers, setClosedCustomers] = useState<Customer[]>([]);
+  const [closedCustomerLoans, setClosedCustomerLoans] = useState<Record<string, Loan>>({});
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<CustomerFilter>("all");
@@ -562,6 +581,19 @@ export default function CustomerListScreen() {
       ]);
       setPaymentStatuses(statuses);
       setLastPaymentDates(latestPayments);
+
+      // Also fetch closed customers for this village
+      try {
+        const closedList = await getClosedCustomers(user.uid, villageId);
+        setClosedCustomers(closedList);
+        const closedIds = closedList.map((c) => c.id);
+        if (closedIds.length > 0) {
+          const closedLoans = await getActiveLoansByCustomerIds(user.uid, closedIds);
+          setClosedCustomerLoans(closedLoans);
+        }
+      } catch {
+        // Non-critical
+      }
 
       // Restore scroll position after data loads
       if (preserveScroll && scrollOffsetRef.current > 0) {
@@ -864,8 +896,21 @@ export default function CustomerListScreen() {
         return textMatch || phoneMatch;
       });
     }
+    if (statusFilter === "closed") {
+      result = closedCustomers;
+      if (debouncedQuery) {
+        result = result.filter((c) => {
+          const textMatch = [c.name, c.phone, c.numericalId.toString(), c.coName || "", c.coId?.toString() || ""]
+            .join(" ")
+            .toLowerCase()
+            .includes(debouncedQuery);
+          const phoneMatch = numericQuery.length > 0 && (c.phone || "").replace(/\D/g, "").includes(numericQuery);
+          return textMatch || phoneMatch;
+        });
+      }
+    }
     return [...result].sort((a, b) => a.numericalId - b.numericalId);
-  }, [customers, debouncedQuery, paymentStatuses, statusFilter]);
+  }, [customers, closedCustomers, debouncedQuery, paymentStatuses, statusFilter]);
 
   const customerStats = useMemo(() => {
     return filtered.reduce(
@@ -909,6 +954,53 @@ export default function CustomerListScreen() {
     router.push(`/profile/${customerId}`);
   }, []);
 
+  const handleCloseCustomer = useCallback(async (customer: Customer) => {
+    if (!user) return;
+    try {
+      await closeCustomer(customer.id, user.uid);
+      setCustomers((prev) => prev.filter((c) => c.id !== customer.id));
+      setClosedCustomers((prev) => [...prev, { ...customer, isActive: false }]);
+      showToast("success", "Customer closed", `${customer.name} has been closed and removed from active list.`);
+    } catch {
+      showToast("error", "Close failed", "Could not close this customer.");
+    }
+  }, [user]);
+
+  const handleReopenCustomer = useCallback(async (customer: Customer) => {
+    if (!user) return;
+    try {
+      await reopenCustomer(customer.id, user.uid);
+      setClosedCustomers((prev) => prev.filter((c) => c.id !== customer.id));
+      setCustomers((prev) => [...prev, { ...customer, isActive: true }].sort((a, b) => a.numericalId - b.numericalId));
+      showToast("success", "Customer reopened", `${customer.name} has been restored to active list.`);
+    } catch {
+      showToast("error", "Reopen failed", "Could not reopen this customer.");
+    }
+  }, [user]);
+
+  const promptCloseOrRenew = useCallback((customer: Customer, loan: Loan) => {
+    if (Platform.OS === "web") {
+      const choice = window.confirm(
+        `${customer.name} has fully paid their loan.\n\nClick OK to Renew\nClick Cancel to Close`
+      );
+      if (choice) {
+        router.push(`/profile/${customer.id}`);
+      } else {
+        handleCloseCustomer(customer);
+      }
+    } else {
+      Alert.alert(
+        "Loan Fully Paid",
+        `${customer.name} has paid all their balance. What would you like to do?`,
+        [
+          { text: "Close Account", style: "destructive", onPress: () => handleCloseCustomer(customer) },
+          { text: "Renew Loan", onPress: () => router.push(`/profile/${customer.id}`) },
+          { text: "Cancel", style: "cancel" },
+        ]
+      );
+    }
+  }, [handleCloseCustomer]);
+
   const openDirections = useCallback((customer: Customer) => {
     if (!hasCoordinates(customer)) return;
     const destination = `${customer.latitude},${customer.longitude}`;
@@ -945,15 +1037,21 @@ export default function CustomerListScreen() {
         setPayingCustomerId(customer.id);
         await addPayment(loan, suggested, Date.now(), mode);
         setPaymentStatuses((current) => ({ ...current, [customer.id]: "paid" }));
+        const newBalance = Math.max(0, loan.balanceAmount - suggested);
         setActiveLoans((current) => ({
           ...current,
-          [customer.id]: { ...loan, balanceAmount: Math.max(0, loan.balanceAmount - suggested) },
+          [customer.id]: { ...loan, balanceAmount: newBalance },
         }));
         showToast(
           "success",
           "✅ Payment Registered!",
           `Paid Rs.${suggested.toLocaleString("en-IN")} via ${mode === "PHONE" ? "PhonePe" : "Cash"} for ${customer.name}`
         );
+        setPayingCustomerId(null);
+        if (newBalance <= 0) {
+          promptCloseOrRenew(customer, loan);
+        }
+        return;
       } catch (err: any) {
         console.error("Quick pay failed:", err);
         const errMsg = err?.message || String(err);
@@ -975,7 +1073,7 @@ export default function CustomerListScreen() {
     } else {
       await proceed();
     }
-  }, [activeLoans, user, paymentStatuses]);
+  }, [activeLoans, user, paymentStatuses, promptCloseOrRenew]);
 
   const openQuickCollect = useCallback(() => {
     const nextValues: Record<string, { selected: boolean; amount: string }> = {};
@@ -1016,12 +1114,33 @@ export default function CustomerListScreen() {
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
     if (entries.length === 0) return;
+    // Compute which customers will reach zero balance (before API to avoid stale state)
+    const fullyPaidIds = new Set(
+      entries
+        .filter((e) => e.loan.balanceAmount - e.amountPaid <= 0)
+        .map((e) => e.loan.customerId)
+    );
     try {
       setQuickCollectSaving(true);
       await addPaymentsBatch(entries);
       showToast("success", "Payments recorded", `${entries.length} payments recorded`);
       setQuickCollectOpen(false);
       await reload();
+      // Prompt for fully paid customers
+      if (fullyPaidIds.size === 1) {
+        const id = [...fullyPaidIds][0];
+        const c = quickCollectCustomers.find((c2) => c2.id === id);
+        if (c) {
+          const loan = activeLoans[c.id];
+          if (loan) promptCloseOrRenew(c, loan);
+        }
+      } else if (fullyPaidIds.size > 1) {
+        Alert.alert(
+          'Fully Paid',
+          `${fullyPaidIds.size} customers have fully paid their loans. Use the Close or Renew button on their cards to proceed.`,
+          [{ text: 'OK' }]
+        );
+      }
     } catch {
       Alert.alert("Quick collect failed", "Could not record these payments. Please try again.");
     } finally {
@@ -1059,14 +1178,19 @@ export default function CustomerListScreen() {
         setPayingCustomerId(manualPaymentCustomer.id);
         await addPayment(loan, amount, Date.now(), manualPaymentMode);
         setPaymentStatuses((current) => ({ ...current, [manualPaymentCustomer.id]: "paid" }));
+        const newBal = Math.max(0, loan.balanceAmount - amount);
         setActiveLoans((current) => ({
           ...current,
           [manualPaymentCustomer.id]: {
             ...loan,
-            balanceAmount: Math.max(0, loan.balanceAmount - amount),
+            balanceAmount: newBal,
           },
         }));
+        const capturedCustomer = manualPaymentCustomer;
         closeManualPayment();
+        if (newBal <= 0 && capturedCustomer) {
+          promptCloseOrRenew(capturedCustomer, loan);
+        }
       } catch {
         Alert.alert("Payment failed", "Could not save this payment. Please try again.");
       } finally {
@@ -1126,15 +1250,52 @@ export default function CustomerListScreen() {
   }, [activeLoans]);
 
   const renderCustomer = useCallback(
-    ({ item }: { item: Customer }) => (
-      <CustomerItem 
-        customer={item} 
-        onPress={openCustomer} 
-        onOpenDirections={openDirections}
+    ({ item }: { item: Customer }) => {
+      if (statusFilter === "closed") {
+        const closedLoan = closedCustomerLoans[item.id];
+        return (
+          <Pressable
+            style={[styles.item, noTextSelection, { backgroundColor: "#F0F0F0" }]}
+            onPress={() => openCustomer(item.id)}
+          >
+            <View style={styles.leftCol}>
+              <CustomerIdBadge numericalId={item.numericalId} id={item.id} style={{ ...styles.premiumBadge, backgroundColor: "#6B7280" }} textStyle={styles.premiumBadgeText} />
+            </View>
+            <View style={styles.centerCol}>
+              <Text style={[styles.cardName, { color: "#6B7280" }]} numberOfLines={1}>
+                {item.name} <Text style={{ fontSize: 10, color: "#9CA3AF" }}>[Closed]</Text>
+              </Text>
+              <Text style={styles.cardPhone}>{item.phone || "\u2014"}</Text>
+              {closedLoan ? (
+                <Text style={[styles.cardAmount, { color: "#9CA3AF" }]}>Last Balance: Rs.{Math.round(closedLoan.balanceAmount).toLocaleString("en-IN")}</Text>
+              ) : null}
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.rightCol}>
+              <Pressable style={[styles.actionRow, { justifyContent: "center" }]} onPress={() => router.push(`/profile/${item.id}`)}>
+                <View style={[styles.actionIconSquare, { backgroundColor: "#1565C0", width: 42, height: 34 }]}>
+                  <Icon name="refresh" size={14} color={colors.white} />
+                </View>
+              </Pressable>
+              <Pressable style={[styles.actionRow, { justifyContent: "center" }]} onPress={() => handleReopenCustomer(item)}>
+                <View style={[styles.actionIconSquare, { backgroundColor: "#059669", width: 42, height: 34 }]}>
+                  <Text style={{ color: "#FFFFFF", fontSize: 12, fontWeight: "bold" }}>\u21A9</Text>
+                </View>
+              </Pressable>
+            </View>
+          </Pressable>
+        );
+      }
+      return (
+        <CustomerItem 
+          customer={item} 
+          onPress={openCustomer} 
+          onOpenDirections={openDirections}
         onQuickPay={handleQuickPay}
         onManualPay={openManualPayment}
         onMarkDue={markCustomerDue}
         onSaveCurrentLocation={saveCurrentLocationForCustomer}
+        onCloseRenew={promptCloseOrRenew}
         status={paymentStatuses[item.id] || 'none'} 
         isNew={isNewThisWeek(item.createdAt)}
         loan={activeLoans[item.id]}
@@ -1144,7 +1305,7 @@ export default function CustomerListScreen() {
         isUpdatingLocation={updatingLocationCustomerId === item.id}
       />
     ),
-    [activeLoans, lastPaymentDates, markCustomerDue, openCustomer, openDirections, openManualPayment, handleQuickPay, paymentStatuses, payingCustomerId, saveCurrentLocationForCustomer, updatingLocationCustomerId]
+    [activeLoans, lastPaymentDates, markCustomerDue, openCustomer, openDirections, openManualPayment, handleQuickPay, paymentStatuses, payingCustomerId, promptCloseOrRenew, saveCurrentLocationForCustomer, updatingLocationCustomerId, statusFilter, closedCustomerLoans, handleReopenCustomer]
   );
 
   return (
@@ -1217,6 +1378,21 @@ export default function CustomerListScreen() {
             style={styles.list}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            ListFooterComponent={
+              statusFilter === "closed" && filtered.length > 0 ? (
+                <Pressable
+                  style={styles.reopenAllSection}
+                  onPress={() => {
+                    filtered.forEach((c) => {
+                      handleReopenCustomer(c);
+                    });
+                  }}
+                >
+                  <Icon name="refresh" size={16} color={colors.white} />
+                  <Text style={styles.reopenAllText}>Reopen All Shown</Text>
+                </Pressable>
+              ) : null
+            }
             initialNumToRender={15}
             maxToRenderPerBatch={10}
             windowSize={5}
@@ -1927,6 +2103,8 @@ const styles = StyleSheet.create({
   webScannerSheet: { margin: 16, borderRadius: 16, overflow: "hidden", backgroundColor: colors.white, borderWidth: 1, borderColor: "#D1D5DB", paddingBottom: 14, gap: 2 },
   manualAadhaarInput: { minHeight: 50, borderRadius: 12, borderWidth: 1, borderColor: "#D1D5DB", paddingHorizontal: 14, fontSize: 16, color: colors.ink },
   manualInputError: { color: "#b91c1c", fontSize: 12, fontWeight: "700" },
+  reopenAllSection: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14, marginTop: 8, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.16)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)" },
+  reopenAllText: { color: colors.white, fontSize: 13, fontWeight: "900" },
   routeSummary: { flexDirection: "row", gap: 6, marginBottom: 8 },
   routeSummaryCard: { flex: 1, minHeight: 44, borderRadius: 10, paddingHorizontal: 5, paddingVertical: 6, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.14)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)" },
   routeSummaryLabel: { color: "rgba(255,255,255,0.72)", fontSize: 8, fontWeight: "800", textTransform: "uppercase", textAlign: "center" },

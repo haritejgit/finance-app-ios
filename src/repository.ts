@@ -37,6 +37,7 @@ const coll = {
   investments: collection(db, "investments"),
   expenses: collection(db, "expenses"),
   users: collection(db, "users"),
+
 };
 
 export type { Expense, Investment };
@@ -1727,6 +1728,33 @@ export async function getPaymentsByDate(userId: string, startDate: number, endDa
   return snap.docs.map((d) => d.data() as Payment);
 }
 
+export async function getClosedCustomers(userId: string, villageId: string) {
+  const q = query(
+    coll.customers,
+    where("userId", "==", userId),
+    where("villageId", "==", villageId),
+    where("isActive", "==", false)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.data() as Customer);
+}
+
+export async function closeCustomer(customerId: string, userId: string) {
+  await updateDoc(doc(db, "customers", customerId), {
+    isActive: false,
+    closedAt: Date.now(),
+  });
+  invalidateUserDataCache(userId);
+}
+
+export async function reopenCustomer(customerId: string, userId: string) {
+  await updateDoc(doc(db, "customers", customerId), {
+    isActive: true,
+    closedAt: null,
+  });
+  invalidateUserDataCache(userId);
+}
+
 export async function updateCustomer(customer: Customer) {
   const sanitized = sanitizeCustomerInput(customer);
   if ((sanitized as any).locationCustomerId && (sanitized as any).locationCustomerId !== customer.id) {
@@ -2097,7 +2125,8 @@ export async function saveWalletOpeningBalances(
   clearCache();
 }
 
-/**
+
+/*
  * subscribeWalletData — sets up real-time onSnapshot listeners for all collections
  * that feed into the Live Calculated Balance. Calls `callback` with the latest
  * raw arrays whenever any collection changes.
