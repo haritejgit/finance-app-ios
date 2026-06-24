@@ -17,6 +17,10 @@ service cloud.firestore {
       return request.resource.data.userId == resource.data.userId;
     }
 
+    function isCollector() {
+      return isSignedIn() && request.auth.token.role == 'collector';
+    }
+
     function isNestedReader(masterUserId) {
       return isSignedIn()
         && exists(/databases/$(database)/documents/nestedAccounts/$(request.auth.uid))
@@ -26,7 +30,7 @@ service cloud.firestore {
     function canReadDoc() {
       return isSignedIn() && (
         resource.data.userId == request.auth.uid
-        || isNestedReader(resource.data.userId)
+        || (isCollector() && isNestedReader(resource.data.userId))
       );
     }
 
@@ -181,7 +185,7 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read: if isSignedIn() && (request.auth.uid == uid || isNestedReader(uid));
+      allow read: if isSignedIn() && (request.auth.uid == uid || (isNestedReader(uid) && !isCollector()));
       allow create, update: if isSignedIn() && request.auth.uid == uid && validUserProfileFields();
       allow delete: if false;
     }
@@ -222,21 +226,21 @@ service cloud.firestore {
     }
 
     match /balancingFund/{docId} {
-      allow read: if canReadDoc();
+      allow read: if canReadDoc() && !isCollector();
       allow create: if createsOwnDoc() && validNonNegative('amount') && validString('dateStr', 20);
       allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validNonNegative('amount') && validString('dateStr', 20);
       allow delete: if ownsExistingDoc();
     }
 
     match /investments/{docId} {
-      allow read: if canReadDoc();
+      allow read: if canReadDoc() && !isCollector();
       allow create: if createsOwnDoc() && validMoneyEntryFields();
       allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validMoneyEntryFields();
       allow delete: if ownsExistingDoc();
     }
 
     match /expenses/{docId} {
-      allow read: if canReadDoc();
+      allow read: if canReadDoc() && !isCollector();
       allow create: if createsOwnDoc() && validExpenseFields();
       allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validExpenseFields();
       allow delete: if ownsExistingDoc();
@@ -259,8 +263,28 @@ service cloud.firestore {
 
     // Nested Payments: nested user records payments; master reads them
     match /nestedPayments/{docId} {
-      allow read: if isSignedIn() && (resource.data.masterUserId == request.auth.uid || resource.data.nestedUserId == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.nestedUserId == request.auth.uid;
+      allow read: if isSignedIn() && (
+        resource.data.masterUserId == request.auth.uid 
+        || (resource.data.nestedUserId == request.auth.uid && isCollector())
+      );
+      allow create: if isSignedIn() 
+        && request.resource.data.nestedUserId == request.auth.uid 
+        && isCollector()
+        && isNestedReader(request.resource.data.masterUserId);
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // Nested Customers: nested user records temporary new registrations; master reads them
+    match /nestedCustomers/{docId} {
+      allow read: if isSignedIn() && (
+        resource.data.masterUserId == request.auth.uid 
+        || (resource.data.nestedUserId == request.auth.uid && isCollector())
+      );
+      allow create: if isSignedIn() 
+        && request.resource.data.nestedUserId == request.auth.uid 
+        && isCollector()
+        && isNestedReader(request.resource.data.masterUserId);
       allow update: if false;
       allow delete: if false;
     }

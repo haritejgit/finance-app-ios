@@ -25,3 +25,8 @@ web-dist
 firebase-debug.log
 firestore-debug.log
 /scratch
+
+# Service account keys
+service-account-key.json
+functions/service-account-key.json
+
