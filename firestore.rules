@@ -18,7 +18,7 @@ service cloud.firestore {
     }
 
     function isCollector() {
-      return isSignedIn() && request.auth.token.role == 'collector';
+      return isSignedIn() && 'role' in request.auth.token && request.auth.token.role == 'collector';
     }
 
     function isNestedReader(masterUserId) {
