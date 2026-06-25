@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { collection, doc, getDocs, limit, onSnapshot, query, where, type Unsubscribe } from "firebase/firestore";
+import { collection, doc, getDocs, onSnapshot, query, where, type Unsubscribe } from "firebase/firestore";
 import { db } from "./firebase";
 import { Customer, Loan, Payment, Village } from "./types";
 import { DAY_MS as DAY, endOfMonth, getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, money, startOfDay, startOfMonth, toMillis, weekStart } from "./business-logic";
@@ -122,7 +122,7 @@ function changeText(current: number, previous: number, label: string) {
 }
 
 async function getUserCollection<T>(userId: string, name: string): Promise<T[]> {
-  const snap = await getDocs(query(collection(db, name), where("userId", "==", userId), limit(2000)));
+  const snap = await getDocs(query(collection(db, name), where("userId", "==", userId)));
   return snap.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as object) })) as T[];
 }
 
@@ -692,7 +692,7 @@ export function subscribeDashboardAnalytics(
   };
 
   const watch = (name: string) =>
-    onSnapshot(query(collection(db, name), where("userId", "==", userId), limit(2000)), refresh, (error) => onError?.(error));
+    onSnapshot(query(collection(db, name), where("userId", "==", userId)), refresh, (error) => onError?.(error));
 
   const unsubs = [
     watch("villages"),

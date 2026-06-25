@@ -1494,12 +1494,21 @@ export async function getAccountSummaryForRange(
   expenses: Expense[];
   investments: Investment[];
 }> {
-  const [paymentsSnap, loansSnap, expensesSnap, investmentsSnap] = await Promise.all([
+  const [paymentsSnap, loansSnap, expensesSnap, investmentsSnap, villagesSnap, customersSnap] = await Promise.all([
     getDocs(query(coll.payments, where("userId", "==", userId))),
     getDocs(query(coll.loans, where("userId", "==", userId))),
     getDocs(query(coll.expenses, where("userId", "==", userId))),
     getDocs(query(coll.investments, where("userId", "==", userId))),
+    getDocs(query(coll.villages, where("userId", "==", userId))),
+    getDocs(query(coll.customers, where("userId", "==", userId))),
   ]);
+
+  const villages = villagesSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+  const customersRaw = customersSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+  const villageById = new Map(villages.map((village) => [village.id, village]));
+  const customers = filterCustomersWithVillage(customersRaw)
+    .filter((customer) => customer.isActive !== false && villageById.has(customer.villageId));
+  const customerById = new Map(customers.map((customer) => [customer.id, customer]));
 
   const customerIdByLoanId = new Map(
     loansSnap.docs.map((d) => {
@@ -1516,7 +1525,8 @@ export async function getAccountSummaryForRange(
         ts >= startMs &&
         ts <= endMs &&
         isRealCollectionPayment(payment) &&
-        !!payment.customerId
+        !!payment.customerId &&
+        customerById.has(payment.customerId)
       );
     });
 
@@ -1527,7 +1537,8 @@ export async function getAccountSummaryForRange(
       return (
         ts >= startMs &&
         ts <= endMs &&
-        !!loan.customerId
+        !!loan.customerId &&
+        customerById.has(loan.customerId)
       );
     });
 
@@ -1575,13 +1586,15 @@ export async function getAccountOpeningBalanceForDate(
   const targetDateKey = formatBalanceDateKey(targetStart);
   const previousDayEnd = endOfDay(targetStart - 1);
 
-  const [globalBfSnap, dateBfsSnap, paymentsSnap, loansSnap, expensesSnap, investmentsSnap] = await Promise.all([
+  const [globalBfSnap, dateBfsSnap, paymentsSnap, loansSnap, expensesSnap, investmentsSnap, villagesSnap, customersSnap] = await Promise.all([
     getDoc(doc(db, "balancingFund", userId)),
     getDocs(query(coll.balancingFund, where("userId", "==", userId))),
     getDocs(query(coll.payments, where("userId", "==", userId))),
     getDocs(query(coll.loans, where("userId", "==", userId))),
     getDocs(query(coll.expenses, where("userId", "==", userId))),
     getDocs(query(coll.investments, where("userId", "==", userId))),
+    getDocs(query(coll.villages, where("userId", "==", userId))),
+    getDocs(query(coll.customers, where("userId", "==", userId))),
   ]);
 
   const dateBfs = dateBfsSnap.docs.map((docSnap) => docSnap.data() as any);
@@ -1600,6 +1613,13 @@ export async function getAccountOpeningBalanceForDate(
     : money(globalBfSnap.exists() ? globalBfSnap.data().amount : 0);
   const startLimit = latestOverride ? startOfDay(latestOverride.timestamp) : 0;
 
+  const villages = villagesSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+  const customersRaw = customersSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+  const villageById = new Map(villages.map((village) => [village.id, village]));
+  const customers = filterCustomersWithVillage(customersRaw)
+    .filter((customer) => customer.isActive !== false && villageById.has(customer.villageId));
+  const customerById = new Map(customers.map((customer) => [customer.id, customer]));
+
   const customerIdByLoanId = new Map(
     loansSnap.docs.map((d) => {
       const loan = d.data() as Loan;
@@ -1616,7 +1636,13 @@ export async function getAccountOpeningBalanceForDate(
     .map((docSnap) => mapPaymentDoc(docSnap, customerIdByLoanId))
     .filter((payment) => {
       const ts = toMillis(payment.paymentDate ?? payment.date);
-      return ts >= startLimit && ts <= previousDayEnd && isRealCollectionPayment(payment);
+      return (
+        ts >= startLimit &&
+        ts <= previousDayEnd &&
+        isRealCollectionPayment(payment) &&
+        payment.customerId &&
+        customerById.has(payment.customerId)
+      );
     })
     .reduce((sum, payment) => sum + money(payment.amountPaid ?? payment.amount), 0);
 
@@ -1624,7 +1650,12 @@ export async function getAccountOpeningBalanceForDate(
     .map(mapLoanDoc)
     .filter((loan) => {
       const ts = toMillis(loan.startDate ?? loan.date);
-      return ts >= startLimit && ts <= previousDayEnd;
+      return (
+        ts >= startLimit &&
+        ts <= previousDayEnd &&
+        loan.customerId &&
+        customerById.has(loan.customerId)
+      );
     })
     .reduce((sum, loan) => sum + money(loan.amount), 0);
 
@@ -1647,31 +1678,63 @@ export async function getPaymentsForAccountRange(
 }
 
 export const getAllPaymentsEver = async (userId?: string): Promise<AllPaymentEver[]> => {
-  const [snap, loansSnap] = await Promise.all([
-    getDocs(userId ? query(coll.payments, where("userId", "==", userId), limit(1500)) : query(coll.payments, limit(1500))),
-    userId ? getDocs(query(coll.loans, where("userId", "==", userId), limit(1500))) : Promise.resolve(null),
+  const [snap, loansSnap, villagesSnap, customersSnap] = await Promise.all([
+    getDocs(userId ? query(coll.payments, where("userId", "==", userId)) : query(coll.payments)),
+    userId ? getDocs(query(coll.loans, where("userId", "==", userId))) : Promise.resolve(null),
+    userId ? getDocs(query(coll.villages, where("userId", "==", userId))) : Promise.resolve(null),
+    userId ? getDocs(query(coll.customers, where("userId", "==", userId))) : Promise.resolve(null),
   ]);
+
+  let customerById: Map<string, any> | null = null;
+  if (userId && villagesSnap && customersSnap) {
+    const villages = villagesSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    const customersRaw = customersSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    const villageById = new Map(villages.map((v) => [v.id, v]));
+    const customers = filterCustomersWithVillage(customersRaw)
+      .filter((c) => c.isActive !== false && villageById.has(c.villageId));
+    customerById = new Map(customers.map((c) => [c.id, c]));
+  }
+
   const customerIdByLoanId = new Map<string, string>(
     loansSnap?.docs.map((d) => {
       const loan = d.data() as Loan;
       return [loan.id, loan.customerId] as [string, string];
     }) ?? []
   );
-  return snap.docs.map((docSnap) => mapPaymentDoc(docSnap, customerIdByLoanId)).filter(
-    (payment) => !!payment.customerId
-  );
+  return snap.docs
+    .map((docSnap) => mapPaymentDoc(docSnap, customerIdByLoanId))
+    .filter((payment) => {
+      if (!payment.customerId) return false;
+      if (customerById && !customerById.has(payment.customerId)) return false;
+      return true;
+    });
 };
 
 export const getAllLoansEver = async (userId?: string): Promise<AllLoanEver[]> => {
-  const [snap] = await Promise.all([
-    getDocs(userId ? query(coll.loans, where("userId", "==", userId), limit(1500)) : query(coll.loans, limit(1500))),
+  const [snap, villagesSnap, customersSnap] = await Promise.all([
+    getDocs(userId ? query(coll.loans, where("userId", "==", userId)) : query(coll.loans)),
+    userId ? getDocs(query(coll.villages, where("userId", "==", userId))) : Promise.resolve(null),
+    userId ? getDocs(query(coll.customers, where("userId", "==", userId))) : Promise.resolve(null),
   ]);
-  const loans = snap.docs.map(mapLoanDoc).filter(
-    (loan) => !!loan.customerId
-  );
+
+  let customerById: Map<string, any> | null = null;
+  if (userId && villagesSnap && customersSnap) {
+    const villages = villagesSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    const customersRaw = customersSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    const villageById = new Map(villages.map((v) => [v.id, v]));
+    const customers = filterCustomersWithVillage(customersRaw)
+      .filter((c) => c.isActive !== false && villageById.has(c.villageId));
+    customerById = new Map(customers.map((c) => [c.id, c]));
+  }
+
+  const loans = snap.docs.map(mapLoanDoc).filter((loan) => {
+    if (!loan.customerId) return false;
+    if (customerById && !customerById.has(loan.customerId)) return false;
+    return true;
+  });
   const seen = new Set<string>();
   return loans.filter((loan) => {
-    const key = `${loan.customerId ?? ""}:${loan.date.getTime()}:${loan.amount}:${loan.status}`;
+    const key = `${loan.customerId ?? ""}:${loan.startDate}:${loan.amount}:${loan.status}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -1683,10 +1746,10 @@ export const getWeeklyChartData = async (userId?: string): Promise<WeeklyChartPo
   const twelveWeeksAgoMs = Date.now() - 12 * 7 * 24 * 60 * 60 * 1000;
 
   const paymentsQuery = userId
-    ? query(coll.payments, where("userId", "==", userId), limit(1500))
+    ? query(coll.payments, where("userId", "==", userId))
     : query(coll.payments);
   const loansQuery = userId
-    ? query(coll.loans, where("userId", "==", userId), limit(1500))
+    ? query(coll.loans, where("userId", "==", userId))
     : query(coll.loans);
   const [paymentsSnap, loansSnap] = await Promise.all([
     getDocs(paymentsQuery),
@@ -2259,9 +2322,47 @@ export function subscribeWalletData(
     if (!cancelled) onError?.(err);
   };
 
+  // Local raw data stores to support active-customer filtering in real time
+  let rawPayments: AllPaymentEver[] = [];
+  let rawLoans: AllLoanEver[] = [];
+  let rawCustomers: any[] = [];
+  let rawVillages: any[] = [];
+
+  const updateAndNotify = () => {
+    const villageById = new Map(rawVillages.map((v) => [v.id, v]));
+    const customers = filterCustomersWithVillage(rawCustomers)
+      .filter((c) => c.isActive !== false && villageById.has(c.villageId));
+    const customerById = new Map(customers.map((c) => [c.id, c]));
+
+    const customerIdByLoanId = new Map(rawLoans.map((l) => [l.id, l.customerId]));
+
+    const mappedPayments = rawPayments.map((p) => ({
+      ...p,
+      customerId: p.customerId ?? customerIdByLoanId.get(p.loanId),
+    }));
+
+    state.payments = mappedPayments.filter(
+      (p) => p.customerId && customerById.has(p.customerId)
+    );
+
+    const seen = new Set<string>();
+    const uniqueLoans = rawLoans.filter((loan) => {
+      const key = `${loan.customerId ?? ""}:${loan.startDate}:${loan.amount}:${loan.status}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    state.loans = uniqueLoans.filter(
+      (l) => l.customerId && customerById.has(l.customerId)
+    );
+
+    notify();
+  };
+
   // Listener: expenses
   const unsubExpenses = onSnapshot(
-    query(coll.expenses, where("userId", "==", userId), limit(1500)),
+    query(coll.expenses, where("userId", "==", userId)),
     (snap) => {
       state.expenses = snap.docs
         .map((d) => {
@@ -2276,7 +2377,7 @@ export function subscribeWalletData(
 
   // Listener: investments
   const unsubInvestments = onSnapshot(
-    query(coll.investments, where("userId", "==", userId), limit(1500)),
+    query(coll.investments, where("userId", "==", userId)),
     (snap) => {
       state.investments = snap.docs
         .map((d) => {
@@ -2291,20 +2392,40 @@ export function subscribeWalletData(
 
   // Listener: payments — mapped to AllPaymentEver shape
   const unsubPayments = onSnapshot(
-    query(coll.payments, where("userId", "==", userId), limit(1500)),
+    query(coll.payments, where("userId", "==", userId)),
     (snap) => {
-      state.payments = snap.docs.map((docSnap) => mapPaymentDoc(docSnap));
-      notify();
+      rawPayments = snap.docs.map((docSnap) => mapPaymentDoc(docSnap));
+      updateAndNotify();
     },
     handleError
   );
 
   // Listener: loans — mapped to AllLoanEver shape
   const unsubLoans = onSnapshot(
-    query(coll.loans, where("userId", "==", userId), limit(1500)),
+    query(coll.loans, where("userId", "==", userId)),
     (snap) => {
-      state.loans = snap.docs.map((docSnap) => mapLoanDoc(docSnap));
-      notify();
+      rawLoans = snap.docs.map(mapLoanDoc);
+      updateAndNotify();
+    },
+    handleError
+  );
+
+  // Listener: customers
+  const unsubCustomers = onSnapshot(
+    query(coll.customers, where("userId", "==", userId)),
+    (snap) => {
+      rawCustomers = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      updateAndNotify();
+    },
+    handleError
+  );
+
+  // Listener: villages
+  const unsubVillages = onSnapshot(
+    query(coll.villages, where("userId", "==", userId)),
+    (snap) => {
+      rawVillages = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      updateAndNotify();
     },
     handleError
   );
@@ -2335,6 +2456,8 @@ export function subscribeWalletData(
     unsubInvestments();
     unsubPayments();
     unsubLoans();
+    unsubCustomers();
+    unsubVillages();
     unsubUser();
   };
 }
