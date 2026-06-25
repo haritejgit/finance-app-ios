@@ -600,6 +600,17 @@ export async function openAccountStatementPrint(
           .ledger-total .ledger-eq,
           .ledger-total .ledger-amount { font-weight: 900; }
           
+          .footer {
+            margin-top: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 10px;
+            color: #94a3b8;
+            opacity: 0.55;
+            font-family: 'Noto Sans Telugu', system-ui, -apple-system, sans-serif;
+          }
+          
           .status-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
