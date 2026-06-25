@@ -7,6 +7,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getDocsFromServer,
   limit,
   onSnapshot,
   orderBy,
@@ -634,13 +635,22 @@ export async function getCustomerById(customerId: string) {
   return snap.exists() ? (snap.data() as Customer) : null;
 }
 
-export async function getActiveLoan(userId: string, customerId: string) {
+export async function getActiveLoan(userId: string, customerId: string, forceRefresh = false) {
   const q = query(
     coll.loans,
     where("userId", "==", userId),
     where("customerId", "==", customerId)
   );
-  const snap = await getDocs(q);
+  let snap;
+  if (forceRefresh) {
+    try {
+      snap = await getDocsFromServer(q);
+    } catch (e) {
+      snap = await getDocs(q);
+    }
+  } else {
+    snap = await getDocs(q);
+  }
   const loans = snap.docs.map((d) => d.data() as Loan);
   if (loans.length === 0) return undefined;
   
@@ -724,14 +734,24 @@ export async function updateLoan(loan: Loan, newPrincipalAmount: number, newStar
   return updatedLoan;
 }
 
-export async function getPaymentsForCustomer(userId: string, customerId: string) {
+export async function getPaymentsForCustomer(userId: string, customerId: string, forceRefresh = false) {
   const fastQ = query(
     coll.payments,
     where("userId", "==", userId),
     where("customerId", "==", customerId),
     limit(500)
   );
-  const fastSnap = await getDocs(fastQ);
+  let fastSnap;
+  if (forceRefresh) {
+    try {
+      fastSnap = await getDocsFromServer(fastQ);
+    } catch (e) {
+      fastSnap = await getDocs(fastQ);
+    }
+  } else {
+    fastSnap = await getDocs(fastQ);
+  }
+  
   if (!fastSnap.empty) {
     return fastSnap.docs
       .map((d) => d.data() as Payment)
@@ -739,7 +759,16 @@ export async function getPaymentsForCustomer(userId: string, customerId: string)
   }
 
   const loansQ = query(coll.loans, where("userId", "==", userId), where("customerId", "==", customerId));
-  const loansSnap = await getDocs(loansQ);
+  let loansSnap;
+  if (forceRefresh) {
+    try {
+      loansSnap = await getDocsFromServer(loansQ);
+    } catch (e) {
+      loansSnap = await getDocs(loansQ);
+    }
+  } else {
+    loansSnap = await getDocs(loansQ);
+  }
   const loanIds = loansSnap.docs.map((d) => (d.data() as Loan).id);
   if (loanIds.length === 0) return [] as Payment[];
 
@@ -747,7 +776,16 @@ export async function getPaymentsForCustomer(userId: string, customerId: string)
   for (let i = 0; i < loanIds.length; i += 30) {
     const chunk = loanIds.slice(i, i + 30);
     const legacyQ = query(coll.payments, where("userId", "==", userId), where("loanId", "in", chunk));
-    const legacySnap = await getDocs(legacyQ);
+    let legacySnap;
+    if (forceRefresh) {
+      try {
+        legacySnap = await getDocsFromServer(legacyQ);
+      } catch (e) {
+        legacySnap = await getDocs(legacyQ);
+      }
+    } else {
+      legacySnap = await getDocs(legacyQ);
+    }
     legacySnap.docs.forEach((d) => payments.push(d.data() as Payment));
   }
   return payments.sort((a, b) => toMillis(b.paymentDate) - toMillis(a.paymentDate));

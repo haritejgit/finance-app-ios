@@ -504,7 +504,7 @@ export default function ProfileScreen() {
 
   const [isLoading, setIsLoading] = useState(true);
 
-  const reload = useCallback(async (options?: { showLoading?: boolean; skipAutoDue?: boolean }) => {
+  const reload = useCallback(async (options?: { showLoading?: boolean; skipAutoDue?: boolean; forceRefresh?: boolean }) => {
     const requestId = loadRequestRef.current + 1;
     loadRequestRef.current = requestId;
     if (!user || !activeCustomerId) {
@@ -516,12 +516,13 @@ export default function ProfileScreen() {
       return;
     }
     const showLoading = options?.showLoading !== false;
+    const forceRefresh = options?.forceRefresh === true;
     try {
       if (showLoading) setIsLoading(true);
       const [c, l, p] = await Promise.all([
         getCustomerById(activeCustomerId),
-        getActiveLoan(user.uid, activeCustomerId),
-        getPaymentsForCustomer(user.uid, activeCustomerId),
+        getActiveLoan(user.uid, activeCustomerId, forceRefresh),
+        getPaymentsForCustomer(user.uid, activeCustomerId, forceRefresh),
       ]);
       if (loadRequestRef.current !== requestId || (c && activeCustomerId !== c.id)) return;
       if (c && c.userId !== user.uid) {
@@ -882,7 +883,7 @@ export default function ProfileScreen() {
             }
           }
         }
-        await reload({ showLoading: false, skipAutoDue: true });
+        await reload({ showLoading: false, skipAutoDue: true, forceRefresh: true });
       } catch {
         setPaymentDateError("Payment failed. Please try again.");
       } finally {
@@ -928,7 +929,7 @@ export default function ProfileScreen() {
     const finalDate = (toStartOfDay(parsedDate) === toStartOfDay(Date.now())) ? Date.now() : toStartOfDay(parsedDate);
     await markDue(loan, finalDate);
     setDueOpen(false);
-    await reload({ showLoading: false, skipAutoDue: true });
+    await reload({ showLoading: false, skipAutoDue: true, forceRefresh: true });
   };
 
   const closeDueModal = () => {
@@ -1768,7 +1769,7 @@ export default function ProfileScreen() {
                   setRenewOpen(false);
                   setRenewAmount("");
                   setRenewMode("CASH");
-                  await reload({ showLoading: false, skipAutoDue: true });
+                  await reload({ showLoading: false, skipAutoDue: true, forceRefresh: true });
                   showToast("success", "Loan renewed", "The loan was renewed successfully.");
                 } catch (error: any) {
                   console.error("Renewal failed:", error);
