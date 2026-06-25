@@ -46,7 +46,7 @@ export function calculateWalletBalances(
   investments: Investment[]
 ): WalletBalances {
   // PRIVATE — never export
-  const openingDate = toMillis(profile.walletOpeningDate) || Date.now();
+  const openingDate = toMillis(profile.walletOpeningDate) || 0;
   const cashOpening = money(profile.cashOpeningBalance);
   const phoneOpening = money(profile.phonePeOpeningBalance);
 

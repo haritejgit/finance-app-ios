@@ -166,7 +166,8 @@ class ExcelExporter {
                         case "DISBURSEMENT":
                             cellValue = String(payment.amount)
                             cellStyle = createCellStyle(fontColor: orangeColor, alignment: .center)
-                            totalDisbursed += payment.amount
+                            let deduction = floor(payment.amount / 1000.0) * 20.0
+                            totalDisbursed += payment.amount - deduction
                         case "REGULAR":
                             cellValue = String(payment.amount)
                             cellStyle = createCellStyle(fontColor: blackColor, alignment: .center)
@@ -249,7 +250,7 @@ class ExcelExporter {
                 ))
                 
                 let totalDisbursedValueCell = totalRow.createCell(6)
-                totalDisbursedValueCell.setCellValue(String(format: "%.2f", totalDisbursed - (totalDisbursed * 0.02)))
+                totalDisbursedValueCell.setCellValue(String(format: "%.2f", totalDisbursed))
                 totalDisbursedValueCell.setCellStyle(createCellStyle(fontColor: redColor, alignment: .center))
             }
             

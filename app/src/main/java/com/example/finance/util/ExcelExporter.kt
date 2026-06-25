@@ -248,8 +248,9 @@ class ExcelExporter(private val context: Context, private val repository: Financ
                         if (loanStartingThisWeek != null) {
                             val renewalPayment = weekPayments.find { it.paymentType == "RENEWAL_CLOSURE" }
                             val displayedAmount = loanStartingThisWeek.totalPayable // Cell shows with interest
-                            val principalAmount = loanStartingThisWeek.principalAmount // Summary total uses principal only
-                            weeklyDisbursed[weekIdx] += principalAmount
+                            val principalAmount = loanStartingThisWeek.principalAmount
+                            val disbursedAmount = principalAmount - (Math.floor(principalAmount / 1000.0) * 20.0)
+                            weeklyDisbursed[weekIdx] += disbursedAmount
 
                             if (renewalPayment != null) {
                                 val prevBal = renewalPayment.amountPaid
@@ -318,8 +319,7 @@ class ExcelExporter(private val context: Context, private val repository: Financ
                     cellStyle = totalLabelStyle
                 }
                 weekDates.forEachIndexed { i, _ ->
-                    val originalDisbursed = weeklyDisbursed[i]
-                    val reducedDisbursed = originalDisbursed - (originalDisbursed / 100.0 * 2.0)
+                    val reducedDisbursed = weeklyDisbursed[i]
                     disbursedTotalRow.createCell(4 + i).apply {
                         setCellValue(reducedDisbursed)
                         cellStyle = disbursedTotalStyle

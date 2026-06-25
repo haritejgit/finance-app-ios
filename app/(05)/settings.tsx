@@ -15,7 +15,7 @@ import Icon from "../../src/Icon";
 import { Customer, Loan, Payment, Village } from "../../src/types";
 import { createBackupSnapshot, makeBackupFilename, parseBackupSnapshot, restoreBackupSnapshot } from "../../src/backup";
 import { downloadTextFile } from "../../src/exports";
-import { toMillis, money, startOfDay, isRealCollectionPayment } from "../../src/business-logic";
+import { toMillis, money, startOfDay, isRealCollectionPayment, getLoanDistributedAmount } from "../../src/business-logic";
 import { useLanguage } from "../../src/language-context";
 
 const BUSINESS_START_DATE = new Date(2026, 3, 1).getTime();
@@ -188,8 +188,7 @@ export default function SettingsScreen() {
                 if (loanStartingThisWeek) {
                   const renewalPayment = weekPayments.find((payment) => payment.paymentType === "RENEWAL_CLOSURE");
                   const displayedAmount = money(loanStartingThisWeek.totalPayable);
-                  const principalAmount = money(loanStartingThisWeek.principalAmount);
-                  weeklyDisbursed[weekIndex] += principalAmount;
+                  weeklyDisbursed[weekIndex] += getLoanDistributedAmount(loanStartingThisWeek);
                   if (renewalPayment) {
                     const previousBalance = money(renewalPayment.amountPaid);
                     weeklyCollected[weekIndex] += previousBalance;
@@ -224,7 +223,7 @@ export default function SettingsScreen() {
           const collectedRowIndex = sheetData.length;
           sheetData.push(["", "", "", "TOTAL COLLECTED", ...weeklyCollected]);
           const disbursedRowIndex = sheetData.length;
-          sheetData.push(["", "", "", "TOTAL DISBURSED", ...weeklyDisbursed.map((amount) => amount - (amount / 100) * 2)]);
+          sheetData.push(["", "", "", "TOTAL DISBURSED", ...weeklyDisbursed]);
           weekDates.forEach((_, index) => {
             setStyle(collectedRowIndex, 4 + index, orangeStyle);
             setStyle(disbursedRowIndex, 4 + index, redTextStyle);

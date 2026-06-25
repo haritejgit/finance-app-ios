@@ -1119,7 +1119,7 @@ export async function renewLoan(loan: Loan, newPrincipal: number, date: number, 
   assertPositiveAmount(newPrincipal, "Renewal amount");
   const userId = auth.currentUser?.uid || loan.userId;
   const closureMode = normalizeMode(paymentMode);
-  const disbursementMode = normalizeMode(loan.disbursement_mode ?? loan.disbursementMode);
+  const disbursementMode = closureMode;
   const batch = writeBatch(db);
 
   if (loan.balanceAmount > 0) {
