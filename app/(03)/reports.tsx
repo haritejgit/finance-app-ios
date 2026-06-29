@@ -1402,11 +1402,8 @@ interface Payment {
             for (let col = 0; col < 4; col += 1) setStyle(rowIndex, col, standardStyle);
 
             weekDates.forEach((weekDate, weekIdx) => {
-              const startOfWeek = getStartOfDay(weekDate);
-              const nextWeekDate = weekDates[weekIdx + 1];
-              const endOfWeek = nextWeekDate 
-                ? getStartOfDay(nextWeekDate) - 1000 
-                : getEndOfDay(weekDate + 6 * 24 * 60 * 60 * 1000 + 23 * 60 * 60 * 1000 + 59 * 60 * 1000);
+              const startOfWeek = getStartOfDay(mondayWeeks[weekIdx]);
+              const endOfWeek = getEndOfDay(mondayWeeks[weekIdx] + 6 * 24 * 60 * 60 * 1000 + 23 * 60 * 60 * 1000 + 59 * 60 * 1000);
               const colIndex = 4 + weekIdx;
               const colWeekStr = getISOWeekString(weekDate);
               const startsAfterThisWeek = colWeekStr < segment.fromWeek;
@@ -1434,7 +1431,7 @@ interface Payment {
               }
 
               // Check if the village itself was scheduled on this day/shift during this week
-              const isVillageOnThisSheetThisWeek = villageCollectionDates.includes(startOfWeek);
+              const isVillageOnThisSheetThisWeek = villageCollectionDates.some((d) => d >= startOfWeek && d <= endOfWeek);
 
               if (!isVillageOnThisSheetThisWeek) {
                 // If it was on this sheet in a previous week, show "MOVED". Otherwise, show empty "".
