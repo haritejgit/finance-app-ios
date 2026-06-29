@@ -985,7 +985,7 @@ export default function CustomerListScreen() {
         `${customer.name} has fully paid their loan.\n\nClick OK to Renew\nClick Cancel to Close`
       );
       if (choice) {
-        router.push(`/profile/${customer.id}`);
+        router.push(`/profile/${customer.id}?renew=true`);
       } else {
         handleCloseCustomer(customer);
       }
@@ -995,7 +995,7 @@ export default function CustomerListScreen() {
         `${customer.name} has paid all their balance. What would you like to do?`,
         [
           { text: "Close Account", style: "destructive", onPress: () => handleCloseCustomer(customer) },
-          { text: "Renew Loan", onPress: () => router.push(`/profile/${customer.id}`) },
+          { text: "Renew Loan", onPress: () => router.push(`/profile/${customer.id}?renew=true`) },
           { text: "Cancel", style: "cancel" },
         ]
       );

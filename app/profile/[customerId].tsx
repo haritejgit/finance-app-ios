@@ -279,7 +279,7 @@ function createEmptyEditForm() {
 }
 
 export default function ProfileScreen() {
-  const { customerId } = useLocalSearchParams<{ customerId: string }>();
+  const { customerId, renew } = useLocalSearchParams<{ customerId: string; renew?: string }>();
   const activeCustomerId = Array.isArray(customerId) ? customerId[0] : customerId;
   const { user, loading: authLoading } = useAuth();
   const { colors } = useTheme();
@@ -577,6 +577,12 @@ export default function ProfileScreen() {
     if (authLoading) return;
     reload();
   }, [authLoading, reload]));
+
+  useEffect(() => {
+    if (renew === "true" && loan) {
+      setRenewOpen(true);
+    }
+  }, [renew, loan]);
 
   const creditSummary = useMemo(() => calculateCreditScore(payments, loan), [loan, payments]);
 

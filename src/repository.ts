@@ -1136,8 +1136,8 @@ export async function renewLoan(loan: Loan, newPrincipal: number, date: number, 
     };
     batch.set(doc(db, "payments", closure.id), stripUndefined(closure));
   }
-
   batch.update(doc(db, "loans", loan.id), { balanceAmount: 0, status: "RENEWED" });
+  batch.update(doc(db, "customers", loan.customerId), { isActive: true });
 
   const interest = newPrincipal * 0.2;
   const totalPayable = newPrincipal + interest;
