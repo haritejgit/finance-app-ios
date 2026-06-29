@@ -79,10 +79,9 @@ function isToday(timestamp: number): boolean {
     date.getFullYear() === today.getFullYear();
 }
 
-// Helper to check if date is within the last 7 days (rolling window)
+// Helper to check if date is within the current calendar week
 function isNewThisWeek(timestamp: number): boolean {
-  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  return timestamp >= sevenDaysAgo;
+  return timestamp >= weekStart(Date.now());
 }
 
 // Get customer payment status for today

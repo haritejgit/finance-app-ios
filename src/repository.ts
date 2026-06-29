@@ -878,8 +878,6 @@ export async function getPaymentStatusesForCustomersThisWeek(userId: string, cus
         where("customerId", "in", chunk)
       );
       const customerPaymentsSnap = await getDocs(customerPaymentsQ);
-      const now = Date.now();
-      const renewalGreenWindowMs = 6 * 24 * 60 * 60 * 1000;
 
       customerPaymentsSnap.docs.forEach((d) => {
         const payment = d.data() as Payment;
@@ -889,7 +887,7 @@ export async function getPaymentStatusesForCustomersThisWeek(userId: string, cus
         if (!customerId || !(customerId in statuses)) return;
 
         const paymentDate = toMillis(payment.paymentDate);
-        if (paymentDate <= now && now <= paymentDate + renewalGreenWindowMs) {
+        if (paymentDate >= startMs && paymentDate <= endMs) {
           statuses[customerId] = "paid";
         }
       });
