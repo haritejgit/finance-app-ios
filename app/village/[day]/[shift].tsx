@@ -285,34 +285,56 @@ export default function VillageListScreen() {
       <Modal
         visible={addModalVisible}
         transparent={true}
-        animationType="fade"
+        animationType="slide"
         onRequestClose={closeAddModal}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.confirmDialog, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.confirmTitle, { color: colors.text }]}>{t("addVillageTitle")}</Text>
-            <Text style={[styles.addHint, { color: colors.textSecondary }]}>{day} / {shift}</Text>
+        <View style={styles.moveModalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeAddModal} />
+          <View style={[styles.moveSheet, { backgroundColor: colors.card, paddingBottom: Math.max(insets.bottom, 16), borderColor: colors.border }]}>
+            <View style={{ width: 40, height: 4, backgroundColor: colors.border, borderRadius: 2, alignSelf: "center", marginBottom: 16 }} />
+            
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: colors.primary + '15', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                <Icon name="business-outline" size={20} color={colors.primary} />
+              </View>
+              <Text style={[styles.moveTitle, { color: colors.text, textAlign: 'left' }]}>{t("addVillageTitle")}</Text>
+            </View>
+            
+            <Text style={[styles.moveSectionLabel, { color: colors.textSecondary, marginBottom: 4 }]}>Schedule Route</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+              <View style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundSecondary, alignItems: 'center' }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textSecondary }}>Day</Text>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text, marginTop: 2 }}>{day}</Text>
+              </View>
+              <View style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.backgroundSecondary, alignItems: 'center' }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textSecondary }}>Shift</Text>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text, marginTop: 2 }}>{shift}</Text>
+              </View>
+            </View>
+
+            <Text style={[styles.moveSectionLabel, { color: colors.textSecondary, marginBottom: 8 }]}>Village Name</Text>
             <TextInput
               placeholder={t("villageNamePlaceholder")}
               value={newVillageName}
               onChangeText={setNewVillageName}
-              style={[styles.input, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border, color: colors.text }]}
+              style={[styles.input, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border, color: colors.text, width: "100%", borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 20 }]}
               placeholderTextColor={colors.textSecondary}
               autoCapitalize="words"
               autoCorrect={false}
+              autoFocus={true}
             />
-            <View style={styles.confirmButtons}>
-              <Pressable style={[styles.cancelBtn, { backgroundColor: colors.border }]} onPress={closeAddModal}>
-                <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>{t("cancel")}</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.deleteBtn, { backgroundColor: colors.primary }, !newVillageName.trim() && styles.addBtnDisabled]}
-                onPress={saveVillage}
-                disabled={!newVillageName.trim()}
-              >
-                <Text style={[styles.deleteBtnText, { color: colors.white }]}>{t("add")}</Text>
-              </Pressable>
-            </View>
+
+            <Pressable
+              style={[styles.moveSaveBtn, { backgroundColor: colors.primary }, !newVillageName.trim() && styles.moveSaveBtnDisabled]}
+              onPress={saveVillage}
+              disabled={!newVillageName.trim()}
+            >
+              <Text style={[styles.moveSaveText, { color: colors.white }]}>{t("add")}</Text>
+            </Pressable>
+
+            <Pressable style={styles.moveCancelBtn} onPress={closeAddModal}>
+              <Text style={[styles.moveCancelText, { color: colors.textSecondary }]}>{t("cancel")}</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>

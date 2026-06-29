@@ -519,6 +519,7 @@ export default function CustomerListScreen() {
   const [registrationDate, setRegistrationDate] = useState(formatDateInput(Date.now()));
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [tempRegistrationDate, setTempRegistrationDate] = useState<Date>(new Date());
+  const processingPaymentsRef = useRef<Set<string>>(new Set());
   const [paymentStatuses, setPaymentStatuses] = useState<Record<string, PaymentStatus>>({});
   const [activeLoans, setActiveLoans] = useState<Record<string, Loan>>({});
   const [lastPaymentDates, setLastPaymentDates] = useState<Record<string, { lastPaymentDate: number; paidLastWeek: boolean }>>({});
@@ -1025,6 +1026,8 @@ export default function CustomerListScreen() {
   }, [activeLoans]);
 
   const handleQuickPay = useCallback(async (customer: Customer, mode: PaymentMode) => {
+    if (processingPaymentsRef.current.has(customer.id)) return;
+
     const loan = activeLoans[customer.id];
     if (!loan || loan.balanceAmount <= 0) {
       Alert.alert("No active loan", "This customer does not have an active loan to mark paid.");
@@ -1052,25 +1055,36 @@ export default function CustomerListScreen() {
         if (newBalance <= 0) {
           promptCloseOrRenew(customer, loan);
         }
-        return;
       } catch (err: any) {
         console.error("Quick pay failed:", err);
         const errMsg = err?.message || String(err);
         showToast("error", "Payment failed", errMsg);
       } finally {
+        processingPaymentsRef.current.delete(customer.id);
         setPayingCustomerId(null);
       }
     };
 
+    processingPaymentsRef.current.add(customer.id);
+
     if (paymentStatuses[customer.id] === "paid") {
-      Alert.alert(
-        "Already Paid",
-        `${customer.name} has already paid this week. Do you want to register an additional payment of Rs.${suggested.toLocaleString("en-IN")}?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Confirm", onPress: proceed }
-        ]
-      );
+      const msg = `${customer.name} has already paid this week. Do you want to register an additional payment of Rs.${suggested.toLocaleString("en-IN")}?`;
+      if (Platform.OS === "web") {
+        if (window.confirm(msg)) {
+          await proceed();
+        } else {
+          processingPaymentsRef.current.delete(customer.id);
+        }
+      } else {
+        Alert.alert(
+          "Already Paid",
+          msg,
+          [
+            { text: "Cancel", style: "cancel", onPress: () => processingPaymentsRef.current.delete(customer.id) },
+            { text: "Confirm", onPress: proceed }
+          ]
+        );
+      }
     } else {
       await proceed();
     }
@@ -1158,6 +1172,8 @@ export default function CustomerListScreen() {
 
   const confirmManualPayment = useCallback(async () => {
     if (!user || !manualPaymentCustomer) return;
+    if (processingPaymentsRef.current.has(manualPaymentCustomer.id)) return;
+
     const loan = activeLoans[manualPaymentCustomer.id];
     const amount = Number(manualPaymentAmount);
     if (!loan) {
@@ -1195,19 +1211,31 @@ export default function CustomerListScreen() {
       } catch {
         Alert.alert("Payment failed", "Could not save this payment. Please try again.");
       } finally {
+        processingPaymentsRef.current.delete(manualPaymentCustomer.id);
         setPayingCustomerId(null);
       }
     };
 
+    processingPaymentsRef.current.add(manualPaymentCustomer.id);
+
     if (paymentStatuses[manualPaymentCustomer.id] === "paid") {
-      Alert.alert(
-        "Already Paid",
-        `${manualPaymentCustomer.name} has already paid this week. Do you want to register an additional payment of Rs.${amount.toLocaleString("en-IN")}?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Confirm", onPress: proceed }
-        ]
-      );
+      const msg = `${manualPaymentCustomer.name} has already paid this week. Do you want to register an additional payment of Rs.${amount.toLocaleString("en-IN")}?`;
+      if (Platform.OS === "web") {
+        if (window.confirm(msg)) {
+          await proceed();
+        } else {
+          processingPaymentsRef.current.delete(manualPaymentCustomer.id);
+        }
+      } else {
+        Alert.alert(
+          "Already Paid",
+          msg,
+          [
+            { text: "Cancel", style: "cancel", onPress: () => processingPaymentsRef.current.delete(manualPaymentCustomer.id) },
+            { text: "Confirm", onPress: proceed }
+          ]
+        );
+      }
     } else {
       await proceed();
     }

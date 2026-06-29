@@ -1507,7 +1507,7 @@ export async function getAccountSummaryForRange(
   const customersRaw = customersSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
   const villageById = new Map(villages.map((village) => [village.id, village]));
   const customers = filterCustomersWithVillage(customersRaw)
-    .filter((customer) => customer.isActive !== false && villageById.has(customer.villageId));
+    .filter((customer) => villageById.has(customer.villageId));
   const customerById = new Map(customers.map((customer) => [customer.id, customer]));
 
   const customerIdByLoanId = new Map(
@@ -1617,7 +1617,7 @@ export async function getAccountOpeningBalanceForDate(
   const customersRaw = customersSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
   const villageById = new Map(villages.map((village) => [village.id, village]));
   const customers = filterCustomersWithVillage(customersRaw)
-    .filter((customer) => customer.isActive !== false && villageById.has(customer.villageId));
+    .filter((customer) => villageById.has(customer.villageId));
   const customerById = new Map(customers.map((customer) => [customer.id, customer]));
 
   const customerIdByLoanId = new Map(
@@ -1691,7 +1691,7 @@ export const getAllPaymentsEver = async (userId?: string): Promise<AllPaymentEve
     const customersRaw = customersSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
     const villageById = new Map(villages.map((v) => [v.id, v]));
     const customers = filterCustomersWithVillage(customersRaw)
-      .filter((c) => c.isActive !== false && villageById.has(c.villageId));
+      .filter((c) => villageById.has(c.villageId));
     customerById = new Map(customers.map((c) => [c.id, c]));
   }
 
@@ -1723,7 +1723,7 @@ export const getAllLoansEver = async (userId?: string): Promise<AllLoanEver[]> =
     const customersRaw = customersSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
     const villageById = new Map(villages.map((v) => [v.id, v]));
     const customers = filterCustomersWithVillage(customersRaw)
-      .filter((c) => c.isActive !== false && villageById.has(c.villageId));
+      .filter((c) => villageById.has(c.villageId));
     customerById = new Map(customers.map((c) => [c.id, c]));
   }
 
@@ -1824,7 +1824,6 @@ export async function getTodayDashboardStats(userId: string) {
   const activeCustomerIds = new Set(
     customersSnap.docs
       .map((d) => d.data() as Customer)
-      .filter((customer) => customer.isActive !== false)
       .map((customer) => customer.id)
   );
   const activeLoanCustomerById = new Map<string, string>();
@@ -2331,7 +2330,7 @@ export function subscribeWalletData(
   const updateAndNotify = () => {
     const villageById = new Map(rawVillages.map((v) => [v.id, v]));
     const customers = filterCustomersWithVillage(rawCustomers)
-      .filter((c) => c.isActive !== false && villageById.has(c.villageId));
+      .filter((c) => villageById.has(c.villageId));
     const customerById = new Map(customers.map((c) => [c.id, c]));
 
     const customerIdByLoanId = new Map(rawLoans.map((l) => [l.id, l.customerId]));

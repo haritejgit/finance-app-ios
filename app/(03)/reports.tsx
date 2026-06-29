@@ -76,6 +76,34 @@ function formatFilenameDate(ts: number) {
   return `${d.getDate()}-${d.getMonth() + 1}-${String(d.getFullYear()).slice(-2)}`;
 }
 
+function getVillageScheduleAtTime(village: any, ts: number): { dayOfWeek: string; shift: string } | null {
+  if (!village) return null;
+  const time = toMillis(ts);
+  if (Array.isArray(village.routeHistory) && village.routeHistory.length > 0) {
+    const segment = village.routeHistory.find((seg: any) => {
+      const from = toMillis(seg.fromDate);
+      const to = seg.toDate === null || seg.toDate === undefined ? Number.MAX_SAFE_INTEGER : toMillis(seg.toDate);
+      return time >= from && time < to;
+    });
+    if (segment) {
+      return { dayOfWeek: segment.dayOfWeek, shift: segment.shift };
+    }
+  }
+  return { dayOfWeek: village.dayOfWeek || "", shift: village.shift || "" };
+}
+
+function isVillageOnDayShiftInPeriod(village: any, day: string, shift: string, startTs: number, endTs: number): boolean {
+  if (Array.isArray(village.routeHistory) && village.routeHistory.length > 0) {
+    return village.routeHistory.some((seg: any) => {
+      if (seg.dayOfWeek !== day || seg.shift !== shift) return false;
+      const from = toMillis(seg.fromDate);
+      const to = seg.toDate === null || seg.toDate === undefined ? Number.MAX_SAFE_INTEGER : toMillis(seg.toDate);
+      return Math.max(from, startTs) <= Math.min(to, endTs);
+    });
+  }
+  return village.dayOfWeek === day && village.shift === shift;
+}
+
 export default function ReportsScreen() {
   const { user } = useAuth();
   const { colors } = useTheme();
@@ -784,31 +812,41 @@ interface Payment {
       // Calculate for each day and shift
       for (const dayName of dayNames) {
         for (const shiftName of shifts) {
-          const shiftVillages = villages.filter(v => v.dayOfWeek === dayName && v.shift === shiftName);
-          const shiftCustomers = activeCustomers.filter(c => shiftVillages.some(v => v.id === c.villageId));
-          const shiftCustomerIds = new Set(shiftCustomers.map((customer) => customer.id));
-          const shiftLoans = activeLoans.filter(l => shiftCustomerIds.has(l.customerId));
           const shiftPayments = payments.filter((payment) => {
+            const paymentDate = toMillis(payment.paymentDate);
+            if (paymentDate < from || paymentDate > to) return false;
+            if (!isRealCollectionPayment(payment)) return false;
+
             const customerId = payment.customerId ?? loanCustomerById.get(payment.loanId);
-            return !!customerId && shiftCustomerIds.has(customerId);
+            if (!customerId) return false;
+            const customer = customers.find(c => c.id === customerId);
+            if (!customer) return false;
+            const village = villages.find(v => v.id === customer.villageId);
+            if (!village) return false;
+
+            const schedule = getVillageScheduleAtTime(village, paymentDate);
+            return schedule && schedule.dayOfWeek === dayName && schedule.shift === shiftName;
           });
-          
+
+          const shiftLoans = loans.filter((loan) => {
+            const loanDate = toMillis(loan.startDate);
+            if (loanDate < from || loanDate > to) return false;
+
+            const customerId = loan.customerId;
+            const customer = customers.find(c => c.id === customerId);
+            if (!customer) return false;
+            const village = villages.find(v => v.id === customer.villageId);
+            if (!village) return false;
+
+            const schedule = getVillageScheduleAtTime(village, loanDate);
+            return schedule && schedule.dayOfWeek === dayName && schedule.shift === shiftName;
+          });
+
           // Calculate collected amount (excluding DUE payments)
-          const collected = shiftPayments
-            .filter(p => {
-              const paymentDate = toMillis(p.paymentDate);
-              return isRealCollectionPayment(p) && paymentDate >= from && paymentDate <= to;
-            })
-            .reduce((sum, p) => sum + Number(p.amountPaid ?? 0), 0);
+          const collected = shiftPayments.reduce((sum, p) => sum + Number(p.amountPaid ?? 0), 0);
           
           // Calculate distributed amount (loans disbursed in date range)
-          const distributedRaw = shiftLoans
-            .filter(l => {
-              const startDate = toMillis(l.startDate);
-              return startDate >= from && startDate <= to;
-            })
-            .reduce((sum, l) => sum + getLoanDistributedAmount(l as any), 0);
-          const distributed = distributedRaw;
+          const distributed = shiftLoans.reduce((sum, l) => sum + getLoanDistributedAmount(l as any), 0);
           
           totalCollected += collected;
           totalDistributed += distributed;
@@ -875,35 +913,31 @@ interface Payment {
         getDocs(query(collection(db, "villages"), where("userId", "==", user.uid))),
       ]);
       const selectedDayName = startOfDay.toLocaleDateString("en-US", { weekday: "long" });
-      const shiftVillageIds = new Set(
-        villagesSnap.docs
-          .map((d) => d.data() as any)
-          .filter((village) => village.dayOfWeek === selectedDayName && village.shift === dayReportShift)
-          .map((village) => village.id)
-      );
-      const shiftCustomerIds = new Set(
-        customersSnap.docs
-          .map((d) => d.data() as any)
-          .filter((customer) => customer.isActive !== false && shiftVillageIds.has(customer.villageId))
-          .map((customer) => customer.id)
-      );
-      const activeLoans = loansSnap.docs
-        .map((d) => d.data() as any)
-        .filter((loan) => shiftCustomerIds.has(loan.customerId));
-      const loanCustomerById = new Map(activeLoans.map((loan) => [loan.id, loan.customerId]));
-      const dayPayments = paymentsSnap.docs
-        .map((d) => d.data() as any)
-        .filter((p) => {
-          const paymentDate = toMillis(p.paymentDate);
-          const customerId = p.customerId ?? loanCustomerById.get(p.loanId);
-          return (
-            paymentDate >= startMs &&
-            paymentDate <= endMs &&
-            isRealCollectionPayment(p) &&
-            !!customerId &&
-            shiftCustomerIds.has(customerId)
-          );
-        });
+      const villages = villagesSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as object) })) as Village[];
+      const customers = customersSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as object) })) as Customer[];
+      const loans = loansSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as object) })) as Loan[];
+      const payments = paymentsSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as object) })) as Payment[];
+      
+      const activeCustomers = customers.filter((c) => c.isActive !== false);
+      const activeCustomerIds = new Set(activeCustomers.map((c) => c.id));
+      const activeLoans = loans.filter((l) => activeCustomerIds.has(l.customerId));
+      const loanCustomerById = new Map(activeLoans.map((l) => [l.id, l.customerId]));
+
+      const dayPayments = payments.filter((p) => {
+        const paymentDate = toMillis(p.paymentDate);
+        if (paymentDate < startMs || paymentDate > endMs) return false;
+        if (!isRealCollectionPayment(p)) return false;
+
+        const customerId = p.customerId ?? loanCustomerById.get(p.loanId);
+        if (!customerId) return false;
+        const customer = customers.find((c) => c.id === customerId);
+        if (!customer) return false;
+        const village = villages.find((v) => v.id === customer.villageId);
+        if (!village) return false;
+
+        const schedule = getVillageScheduleAtTime(village, startMs);
+        return schedule && schedule.dayOfWeek === selectedDayName && schedule.shift === dayReportShift;
+      });
 
       // Calculate collections by mode
       let cashCollection = 0;
@@ -919,10 +953,19 @@ interface Payment {
 
       const dayLoans = activeLoans.filter((loan) => {
         const loanDate = toMillis(loan.startDate);
-        return loanDate >= startMs && loanDate <= endMs;
+        if (loanDate < startMs || loanDate > endMs) return false;
+
+        const customerId = loan.customerId;
+        const customer = customers.find((c) => c.id === customerId);
+        if (!customer) return false;
+        const village = villages.find((v) => v.id === customer.villageId);
+        if (!village) return false;
+
+        const schedule = getVillageScheduleAtTime(village, startMs);
+        return schedule && schedule.dayOfWeek === selectedDayName && schedule.shift === dayReportShift;
       });
 
-      const totalDistributedRaw = dayLoans.reduce((sum, loan) => sum + getLoanDistributedAmount(loan), 0);
+      const totalDistributedRaw = dayLoans.reduce((sum, loan) => sum + getLoanDistributedAmount(loan as any), 0);
       const totalDistributed = totalDistributedRaw;
 
       const newData = {
@@ -1106,7 +1149,10 @@ interface Payment {
 
       for (const dayName of orderedDays) {
         for (const shiftName of orderedShifts) {
-          const shiftVillages = villagesData.filter((v) => v.dayOfWeek === dayName && v.shift === shiftName);
+          const shiftVillages = villagesData.filter((v) => {
+            const schedule = getVillageScheduleAtTime(v, reportEnd);
+            return schedule && schedule.dayOfWeek === dayName && schedule.shift === shiftName;
+          });
           const shiftCustomers = customersData.filter((customer) => {
             const history = (customer as any).villageHistory || [];
             if (history.length > 0) {
@@ -1117,14 +1163,30 @@ interface Payment {
           });
           if (shiftCustomers.length === 0) continue;
 
-          const weekDates: number[] = [];
-          let currentWeek = getCollectionWeekStart(reportStart, dayName);
-          while (currentWeek <= reportEnd) {
-            weekDates.push(currentWeek);
-            const next = new Date(currentWeek);
+          const mondayWeeks: number[] = [];
+          let currMonday = getCollectionWeekStart(reportStart, 'Monday');
+          while (currMonday <= reportEnd) {
+            mondayWeeks.push(currMonday);
+            const next = new Date(currMonday);
             next.setDate(next.getDate() + 7);
-            currentWeek = next.getTime();
+            currMonday = next.getTime();
           }
+
+          const refVillage = shiftVillages[0];
+          const weekDates: number[] = mondayWeeks.map((mondayStr) => {
+            if (!refVillage) {
+              const dayMap: Record<string, number> = { Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6 };
+              const targetDay = dayMap[dayName];
+              const offset = targetDay === 0 ? 6 : targetDay - 1;
+              return mondayStr + offset * 24 * 60 * 60 * 1000;
+            }
+            const schedule = getVillageScheduleAtTime(refVillage, mondayStr);
+            const dayMap: Record<string, number> = { Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6 };
+            const targetDay = dayMap[schedule?.dayOfWeek || dayName];
+            const offset = targetDay === 0 ? 6 : targetDay - 1;
+            return mondayStr + offset * 24 * 60 * 60 * 1000;
+          });
+
           if (weekDates.length === 0) continue;
 
           const weeklyDisbursed = new Array(weekDates.length).fill(0);
@@ -1216,8 +1278,11 @@ interface Payment {
             for (let col = 0; col < 4; col += 1) setStyle(rowIndex, col, standardStyle);
 
             weekDates.forEach((weekDate, weekIdx) => {
-              const startOfWeek = weekDate;
-              const endOfWeek = weekDate + 7 * 24 * 60 * 60 * 1000 - 1000;
+              const startOfWeek = getStartOfDay(weekDate);
+              const nextWeekDate = weekDates[weekIdx + 1];
+              const endOfWeek = nextWeekDate 
+                ? getStartOfDay(nextWeekDate) - 1000 
+                : getEndOfDay(weekDate + 6 * 24 * 60 * 60 * 1000 + 23 * 60 * 60 * 1000 + 59 * 60 * 1000);
               const colIndex = 4 + weekIdx;
               const colWeekStr = getISOWeekString(weekDate);
               const startsAfterThisWeek = colWeekStr < segment.fromWeek;
@@ -1241,6 +1306,28 @@ interface Payment {
               if (isClosedLaterWeek) {
                 row.push('Closed');
                 setStyle(rowIndex, colIndex, closedStyle);
+                return;
+              }
+
+              // Check if the village itself was scheduled on this day/shift during this week
+              const scheduleAtWeek = getVillageScheduleAtTime(village, weekDate);
+              const isVillageOnThisSheetThisWeek = !!scheduleAtWeek;
+
+              if (!isVillageOnThisSheetThisWeek) {
+                // If it was on this sheet in a previous week, show "MOVED". Otherwise, show empty "".
+                const wasOnThisSheetPreviously = Array.isArray(village.routeHistory) && village.routeHistory.some((seg: any) => 
+                  seg.dayOfWeek === dayName && 
+                  seg.shift === shiftName && 
+                  toMillis(seg.fromDate) < weekDate
+                );
+                
+                if (wasOnThisSheetPreviously) {
+                  row.push('MOVED');
+                  setStyle(rowIndex, colIndex, movedStyle);
+                } else {
+                  row.push('');
+                  setStyle(rowIndex, colIndex, standardStyle);
+                }
                 return;
               }
 

@@ -182,8 +182,11 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
   }
 
   const villageById = new Map(villages.map((village) => [village.id, village]));
-  const customers = filterCustomersWithVillage(customersRaw)
-    .filter((customer) => customer.isActive !== false && villageById.has(customer.villageId));
+  const allCustomers = filterCustomersWithVillage(customersRaw)
+    .filter((customer) => villageById.has(customer.villageId));
+  const allCustomersById = new Map(allCustomers.map((customer) => [customer.id, customer]));
+
+  const customers = allCustomers.filter((customer) => customer.isActive !== false);
   const customerById = new Map(customers.map((customer) => [customer.id, customer]));
   // NOTE: UI-only filter. Customer documents in Firestore are NOT modified.
   const namedListCustomerIds = new Set(customers.map((customer) => customer.id));
@@ -212,7 +215,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
       amountPaid: money(payment.amountPaid),
       customerId: payment.customerId ?? customerIdByLoanId.get(payment.loanId),
     }))
-    .filter((payment) => !!payment.customerId && customerById.has(payment.customerId));
+    .filter((payment) => !!payment.customerId && allCustomersById.has(payment.customerId));
 
   const todayStart = startOfDay(Date.now());
   const todayEnd = todayStart + DAY - 1;
@@ -234,11 +237,11 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
     .reduce((sum, payment) => sum + payment.amountPaid, 0);
   const pendingAmount = activeLoans.reduce((sum, loan) => sum + loan.balanceAmount, 0);
   const distributedThisMonth = loans
-    .filter((loan) => customerById.has(loan.customerId))
+    .filter((loan) => allCustomersById.has(loan.customerId))
     .filter((loan) => loan.startDate >= monthStart && loan.startDate <= monthEnd)
     .reduce((sum, loan) => sum + loan.distributedAmount, 0);
   const distributedToday = loans
-    .filter((loan) => customerById.has(loan.customerId))
+    .filter((loan) => allCustomersById.has(loan.customerId))
     .filter((loan) => loan.startDate >= todayStart && loan.startDate <= todayEnd)
     .reduce((sum, loan) => sum + loan.distributedAmount, 0);
 
@@ -257,7 +260,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
 
   // Net cash position: BF + Investments + Collections - Distributions - Expenses
   const totalDistributed = loans
-    .filter((loan) => customerById.has(loan.customerId))
+    .filter((loan) => allCustomersById.has(loan.customerId))
     .reduce((sum, loan) => sum + loan.distributedAmount, 0);
   const netCashPosition = bfAmount + totalInvestments + totalCollection - totalDistributed - totalExpenses;
   const walletBalances = calculateWalletBalances(userProfile, loans as any[], payments as any[], expensesRaw, investmentsRaw);
@@ -276,7 +279,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
         .filter((payment) => payment.paymentDate >= start && payment.paymentDate <= end)
         .reduce((sum, payment) => sum + payment.amountPaid, 0),
       distribution: loans
-        .filter((loan) => loan.startDate >= start && loan.startDate <= end && customerById.has(loan.customerId))
+        .filter((loan) => loan.startDate >= start && loan.startDate <= end && allCustomersById.has(loan.customerId))
         .reduce((sum, loan) => sum + loan.distributedAmount, 0),
       dues: payments.filter((payment) => payment.paymentType === "DUE" && payment.paymentDate >= start && payment.paymentDate <= end).length,
       investments: investmentsRaw
@@ -299,7 +302,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
         .filter((p) => p.paymentDate >= start && p.paymentDate <= end)
         .reduce((sum, p) => sum + p.amountPaid, 0),
       distributed: loans
-        .filter((l) => l.startDate >= start && l.startDate <= end && customerById.has(l.customerId))
+        .filter((l) => l.startDate >= start && l.startDate <= end && allCustomersById.has(l.customerId))
         .reduce((sum, l) => sum + l.distributedAmount, 0),
       invested: investmentsRaw
         .filter((inv) => inv.date >= start && inv.date <= end)
@@ -318,7 +321,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
       .reduce((sum, payment) => sum + payment.amountPaid, 0);
     const outflow =
       loans
-        .filter((loan) => loan.startDate >= start && loan.startDate <= end && customerById.has(loan.customerId))
+        .filter((loan) => loan.startDate >= start && loan.startDate <= end && allCustomersById.has(loan.customerId))
         .reduce((sum, loan) => sum + loan.distributedAmount, 0) +
       expensesRaw
         .filter((expense) => expense.date >= start && expense.date <= end)
@@ -391,8 +394,8 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
   const recentTransactions = regularPayments
     .sort((a, b) => b.paymentDate - a.paymentDate)
     .map((payment) => {
-      const customer = payment.customerId ? customerById.get(payment.customerId) : undefined;
-      if (!customer || !namedListCustomerIds.has(customer.id)) return null;
+      const customer = payment.customerId ? allCustomersById.get(payment.customerId) : undefined;
+      if (!customer) return null;
       const village = customer ? villageById.get(customer.villageId) : undefined;
       return {
         id: payment.id,

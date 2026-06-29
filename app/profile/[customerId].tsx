@@ -286,6 +286,7 @@ export default function ProfileScreen() {
   const { language } = useLanguage();
   const loadRequestRef = useRef(0);
   const locationRequestRef = useRef(0);
+  const paymentSavingRef = useRef(false);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [loan, setLoan] = useState<Loan | null>(null);
   const [payments, setPayments] = useState<any[]>([]);
@@ -832,7 +833,7 @@ export default function ProfileScreen() {
 
   const confirmPayment = async () => {
     Keyboard.dismiss();
-    if (isPaymentSaving) return;
+    if (isPaymentSaving || paymentSavingRef.current) return;
     if (!loan) return;
     const parsedDate = parseDateInput(paymentDateInput);
     if (!parsedDate) {
@@ -853,6 +854,7 @@ export default function ProfileScreen() {
     
     const proceed = async () => {
       try {
+        paymentSavingRef.current = true;
         setIsPaymentSaving(true);
         await addPayment(loan, parsedAmount, finalDate, mode);
         setPayOpen(false);
@@ -887,6 +889,7 @@ export default function ProfileScreen() {
       } catch {
         setPaymentDateError("Payment failed. Please try again.");
       } finally {
+        paymentSavingRef.current = false;
         setIsPaymentSaving(false);
       }
     };
