@@ -104,6 +104,118 @@ function isVillageOnDayShiftInPeriod(village: any, day: string, shift: string, s
   return village.dayOfWeek === day && village.shift === shift;
 }
 
+const BUSINESS_START_DATE = new Date(2026, 3, 1).getTime(); // April 1, 2026
+
+function getCollectionWeekStart(startDate: number, dayName: string): number {
+  const dayMap: Record<string, number> = {
+    Sunday: 0,
+    Monday: 1,
+    Tuesday: 2,
+    Wednesday: 3,
+    Thursday: 4,
+    Friday: 5,
+    Saturday: 6,
+  };
+  const targetDay = dayMap[dayName];
+  const d = new Date(startDate);
+  d.setHours(0, 0, 0, 0);
+  while (targetDay !== undefined && d.getDay() !== targetDay) {
+    d.setDate(d.getDate() - 1);
+  }
+  return d.getTime();
+}
+
+export function getCollectionDatesForVillage(village: any, reportEnd: number): number[] {
+  const candidates: { date: number; dayOfWeek: string; shift: string }[] = [];
+  const dayMap: Record<string, number> = { Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6 };
+  
+  // 1. Get all history segments
+  const segments = Array.isArray(village.routeHistory) && village.routeHistory.length > 0
+    ? [...village.routeHistory].sort((a: any, b: any) => toMillis(a.fromDate) - toMillis(b.fromDate))
+    : [{ dayOfWeek: village.dayOfWeek, shift: village.shift, fromDate: BUSINESS_START_DATE, toDate: null }];
+  
+  // Adjust the first segment's fromDate if it is 0 or less
+  if (toMillis(segments[0].fromDate) <= 0) {
+    segments[0].fromDate = BUSINESS_START_DATE;
+  }
+  
+  // 2. Generate candidate collection dates for each segment
+  segments.forEach((seg: any) => {
+    const from = toMillis(seg.fromDate);
+    const to = seg.toDate === null || seg.toDate === undefined ? Number.MAX_SAFE_INTEGER : toMillis(seg.toDate);
+    
+    // Find the Monday of the week containing 'from'
+    let currMonday = getCollectionWeekStart(from, 'Monday');
+    
+    while (currMonday < to && currMonday <= reportEnd) {
+      const targetDay = dayMap[seg.dayOfWeek];
+      if (targetDay !== undefined) {
+        const offset = targetDay === 0 ? 6 : targetDay - 1;
+        const targetDate = currMonday + offset * 24 * 60 * 60 * 1000;
+        
+        // Check if targetDate falls within the segment's active range [from, to)
+        if (targetDate >= from && targetDate < to && targetDate <= reportEnd) {
+          candidates.push({
+            date: targetDate,
+            dayOfWeek: seg.dayOfWeek,
+            shift: seg.shift
+          });
+        }
+      }
+      currMonday += 7 * 24 * 60 * 60 * 1000;
+    }
+  });
+  
+  // Sort candidates by date
+  candidates.sort((a, b) => a.date - b.date);
+  
+  // 3. Filter candidates based on the gap rule
+  const printedDates: number[] = [];
+  let prevSchedule: { dayOfWeek: string; shift: string } | null = null;
+  let skipUntil: number | null = null;
+  
+  candidates.forEach((cand) => {
+    const targetDate = cand.date;
+    
+    if (prevSchedule === null) {
+      printedDates.push(targetDate);
+      prevSchedule = cand;
+    } else {
+      const scheduleChanged = cand.dayOfWeek !== prevSchedule.dayOfWeek || cand.shift !== prevSchedule.shift;
+      
+      if (scheduleChanged) {
+        const lastPrintedDate = printedDates[printedDates.length - 1];
+        if (lastPrintedDate !== undefined) {
+          const gap = Math.round((targetDate - lastPrintedDate) / (24 * 60 * 60 * 1000));
+          if (gap >= 6) {
+            printedDates.push(targetDate);
+            skipUntil = null;
+          } else {
+            // gap < 6: skip targetDate, next entry must be >= targetDate + 7 days
+            skipUntil = targetDate + 7 * 24 * 60 * 60 * 1000;
+          }
+        } else {
+          printedDates.push(targetDate);
+        }
+        prevSchedule = cand;
+      } else {
+        // Normal week (no reschedule)
+        if (skipUntil !== null) {
+          if (targetDate >= skipUntil) {
+            printedDates.push(targetDate);
+            skipUntil = null;
+          }
+        } else {
+          printedDates.push(targetDate);
+        }
+      }
+    }
+  });
+  
+  return printedDates;
+}
+
+
 export default function ReportsScreen() {
   const { user } = useAuth();
   const { colors } = useTheme();
@@ -1173,19 +1285,29 @@ interface Payment {
           }
 
           const refVillage = shiftVillages[0];
-          const weekDates: number[] = mondayWeeks.map((mondayStr) => {
-            if (!refVillage) {
+          let weekDates: number[] = [];
+          if (refVillage) {
+            const allRefDates = getCollectionDatesForVillage(refVillage, reportEnd);
+            weekDates = mondayWeeks.map((mondayStr) => {
+              const startW = getStartOfDay(mondayStr);
+              const endW = getEndOfDay(mondayStr + 6 * 24 * 60 * 60 * 1000 + 23 * 60 * 60 * 1000 + 59 * 60 * 1000);
+              const dateInWeek = allRefDates.find((d) => d >= startW && d <= endW);
+              if (dateInWeek !== undefined) {
+                return dateInWeek;
+              }
+              // Fallback if that week was skipped: use the schedule active in that week
+              const schedule = getVillageScheduleAtTime(refVillage, mondayStr);
               const dayMap: Record<string, number> = { Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6 };
-              const targetDay = dayMap[dayName];
+              const targetDay = dayMap[schedule?.dayOfWeek || dayName];
               const offset = targetDay === 0 ? 6 : targetDay - 1;
               return mondayStr + offset * 24 * 60 * 60 * 1000;
-            }
-            const schedule = getVillageScheduleAtTime(refVillage, mondayStr);
+            });
+          } else {
             const dayMap: Record<string, number> = { Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6 };
-            const targetDay = dayMap[schedule?.dayOfWeek || dayName];
+            const targetDay = dayMap[dayName];
             const offset = targetDay === 0 ? 6 : targetDay - 1;
-            return mondayStr + offset * 24 * 60 * 60 * 1000;
-          });
+            weekDates = mondayWeeks.map((mondayStr) => mondayStr + offset * 24 * 60 * 60 * 1000);
+          }
 
           if (weekDates.length === 0) continue;
 
@@ -1231,6 +1353,8 @@ interface Payment {
               });
             
             if (villageCustomers.length === 0) return;
+            
+            const villageCollectionDates = getCollectionDatesForVillage(village, reportEnd);
             
             // Add village header row
             const villageHeaderRow = sheetData.length;
@@ -1310,8 +1434,7 @@ interface Payment {
               }
 
               // Check if the village itself was scheduled on this day/shift during this week
-              const scheduleAtWeek = getVillageScheduleAtTime(village, weekDate);
-              const isVillageOnThisSheetThisWeek = !!scheduleAtWeek;
+              const isVillageOnThisSheetThisWeek = villageCollectionDates.includes(startOfWeek);
 
               if (!isVillageOnThisSheetThisWeek) {
                 // If it was on this sheet in a previous week, show "MOVED". Otherwise, show empty "".
