@@ -808,54 +808,24 @@ export async function getPaymentStatusesForCustomersThisWeek(userId: string, cus
 
   await Promise.all(
     chunks.map(async (chunk) => {
-      const loansQ = query(
-        coll.loans,
-        where("userId", "==", userId),
-        where("customerId", "in", chunk)
-      );
-      const loansSnap = await getDocs(loansQ);
-      const activeLoanIdByCustomerId = new Map<string, string>();
-      const customerIdByActiveLoanId = new Map<string, string>();
+      const [loansSnap, customerPaymentsSnap] = await Promise.all([
+        getDocs(query(coll.loans, where("userId", "==", userId), where("customerId", "in", chunk))),
+        getDocs(query(coll.payments, where("userId", "==", userId), where("customerId", "in", chunk))),
+      ]);
 
-      const loansGrouped = new Map<string, Loan[]>();
+      const customerIdByLoanId = new Map<string, string>();
       loansSnap.docs.forEach((d) => {
         const loan = d.data() as Loan;
-        if (loan.status !== "ACTIVE" && loan.status !== "CLOSED") return;
-        if (!loansGrouped.has(loan.customerId)) {
-          loansGrouped.set(loan.customerId, []);
-        }
-        loansGrouped.get(loan.customerId)!.push(loan);
+        customerIdByLoanId.set(loan.id, loan.customerId);
       });
 
-      for (const [customerId, customerLoans] of loansGrouped.entries()) {
-        const active = customerLoans.find((l) => l.status === "ACTIVE");
-        const selectedLoan = active || customerLoans.sort((a, b) => b.startDate - a.startDate)[0];
-        activeLoanIdByCustomerId.set(customerId, selectedLoan.id);
-        customerIdByActiveLoanId.set(selectedLoan.id, customerId);
-      }
-
-      const activeLoanIds = Array.from(activeLoanIdByCustomerId.values());
-      if (activeLoanIds.length === 0) return;
-
-      // Fetch ALL payments for active loans, then filter dates in-memory
-      // using toMillis() to handle both Firestore Timestamps and raw numbers
-      const paymentsQ = query(
-        coll.payments,
-        where("userId", "==", userId),
-        where("loanId", "in", activeLoanIds)
-      );
-      const paymentsSnap = await getDocs(paymentsQ);
-
-      paymentsSnap.docs.forEach((d) => {
+      customerPaymentsSnap.docs.forEach((d) => {
         const payment = d.data() as Payment;
+        const customerId = payment.customerId ?? customerIdByLoanId.get(payment.loanId);
+        if (!customerId || !(customerId in statuses)) return;
+
         const paymentDate = toMillis(payment.paymentDate);
         if (paymentDate < startMs || paymentDate > endMs) return;
-
-        const customerId = payment.customerId ?? customerIdByActiveLoanId.get(payment.loanId);
-        if (!customerId) return;
-
-        const activeLoanId = activeLoanIdByCustomerId.get(customerId);
-        if (!activeLoanId || payment.loanId !== activeLoanId) return;
 
         if (payment.paymentType === "DUE") {
           if (statuses[customerId] !== "paid") {
@@ -863,31 +833,12 @@ export async function getPaymentStatusesForCustomersThisWeek(userId: string, cus
           }
         } else if (
           payment.paymentType === "REGULAR" ||
+          payment.paymentType === "RENEWAL_CLOSURE" ||
           (payment as any).paymentType === "CASH" ||
           (payment as any).paymentType === "PHONE" ||
           (payment as any).type === "CASH" ||
           (payment as any).type === "PHONE"
         ) {
-          statuses[customerId] = "paid";
-        }
-      });
-
-      const customerPaymentsQ = query(
-        coll.payments,
-        where("userId", "==", userId),
-        where("customerId", "in", chunk)
-      );
-      const customerPaymentsSnap = await getDocs(customerPaymentsQ);
-
-      customerPaymentsSnap.docs.forEach((d) => {
-        const payment = d.data() as Payment;
-        if (payment.paymentType !== "RENEWAL_CLOSURE") return;
-
-        const customerId = payment.customerId;
-        if (!customerId || !(customerId in statuses)) return;
-
-        const paymentDate = toMillis(payment.paymentDate);
-        if (paymentDate >= startMs && paymentDate <= endMs) {
           statuses[customerId] = "paid";
         }
       });
@@ -916,51 +867,23 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
 
   await Promise.all(
     chunks.map(async (chunk) => {
-      const loansQ = query(
-        coll.loans,
-        where("userId", "==", userId),
-        where("customerId", "in", chunk)
-      );
-      const loansSnap = await getDocs(loansQ);
-      const activeLoanIdByCustomerId = new Map<string, string>();
-      const customerIdByActiveLoanId = new Map<string, string>();
+      const [loansSnap, customerPaymentsSnap] = await Promise.all([
+        getDocs(query(coll.loans, where("userId", "==", userId), where("customerId", "in", chunk))),
+        getDocs(query(coll.payments, where("userId", "==", userId), where("customerId", "in", chunk))),
+      ]);
 
-      const loansGrouped = new Map<string, Loan[]>();
+      const customerIdByLoanId = new Map<string, string>();
       loansSnap.docs.forEach((d) => {
         const loan = d.data() as Loan;
-        if (loan.status !== "ACTIVE" && loan.status !== "CLOSED") return;
-        if (!loansGrouped.has(loan.customerId)) {
-          loansGrouped.set(loan.customerId, []);
-        }
-        loansGrouped.get(loan.customerId)!.push(loan);
+        customerIdByLoanId.set(loan.id, loan.customerId);
       });
 
-      for (const [customerId, customerLoans] of loansGrouped.entries()) {
-        const active = customerLoans.find((l) => l.status === "ACTIVE");
-        const selectedLoan = active || customerLoans.sort((a, b) => b.startDate - a.startDate)[0];
-        activeLoanIdByCustomerId.set(customerId, selectedLoan.id);
-        customerIdByActiveLoanId.set(selectedLoan.id, customerId);
-      }
-
-      const activeLoanIds = Array.from(activeLoanIdByCustomerId.values());
-      if (activeLoanIds.length === 0) return;
-
-      const paymentsQ = query(
-        coll.payments,
-        where("userId", "==", userId),
-        where("loanId", "in", activeLoanIds)
-      );
-      const paymentsSnap = await getDocs(paymentsQ);
-
-      paymentsSnap.docs
+      customerPaymentsSnap.docs
         .map((d) => d.data() as Payment)
         .filter(isRealCollectionPayment)
         .forEach((payment) => {
-          const customerId = payment.customerId ?? customerIdByActiveLoanId.get(payment.loanId);
-          if (!customerId) return;
-
-          const activeLoanId = activeLoanIdByCustomerId.get(customerId);
-          if (!activeLoanId || payment.loanId !== activeLoanId) return;
+          const customerId = payment.customerId ?? customerIdByLoanId.get(payment.loanId);
+          if (!customerId || !(customerId in latest)) return;
 
           const paymentDate = toMillis(payment.paymentDate);
           if (paymentDate > latest[customerId].lastPaymentDate) {
