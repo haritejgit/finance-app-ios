@@ -1997,211 +1997,217 @@ export default function ProfileScreen() {
 
       <Modal visible={renewOpen} transparent animationType="slide">
         <KeyboardAvoidingView style={styles.modalWrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <View style={[styles.modal, { backgroundColor: colors.card }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Renew Loan</Text>
-            <TextInput placeholder="New Principal Amount" placeholderTextColor={colors.textMuted} value={renewAmount} onChangeText={setRenewAmount} style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]} keyboardType="numeric" />
-            
-            <Text style={[styles.sectionLabel, { color: colors.text }]}>Renewal Date</Text>
-            <TextInput
-              placeholder="DD/MM/YYYY"
-              placeholderTextColor={colors.textMuted}
-              value={renewDateInput}
-              onChangeText={setRenewDateInput}
-              style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
-              autoCapitalize="none"
-            />
-            {parseDateInput(renewDateInput) && (
-              <Text style={styles.dayDisplay}>
-                {formatDateWithDay(parseDateInput(renewDateInput)!)}
-              </Text>
-            )}
-            <Pressable style={styles.dateBtn} onPress={() => {
-              setTempRenewDate(new Date(parseDateInput(renewDateInput) ?? Date.now()));
-              setShowRenewDatePicker(true);
-            }}>
-              <Text style={styles.dateBtnText}>Pick Renewal Date</Text>
-            </Pressable>
+          <View style={[styles.modal, { backgroundColor: colors.card, maxHeight: "85%", padding: 0 }]}>
+            <ScrollView
+              style={{ width: "100%", borderRadius: 16 }}
+              contentContainerStyle={{ padding: 20, alignItems: "center", gap: 12 }}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Renew Loan</Text>
+              <TextInput placeholder="New Principal Amount" placeholderTextColor={colors.textMuted} value={renewAmount} onChangeText={setRenewAmount} style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]} keyboardType="numeric" />
+              
+              <Text style={[styles.sectionLabel, { color: colors.text }]}>Renewal Date</Text>
+              <TextInput
+                placeholder="DD/MM/YYYY"
+                placeholderTextColor={colors.textMuted}
+                value={renewDateInput}
+                onChangeText={setRenewDateInput}
+                style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
+                autoCapitalize="none"
+              />
+              {parseDateInput(renewDateInput) && (
+                <Text style={styles.dayDisplay}>
+                  {formatDateWithDay(parseDateInput(renewDateInput)!)}
+                </Text>
+              )}
+              <Pressable style={styles.dateBtn} onPress={() => {
+                setTempRenewDate(new Date(parseDateInput(renewDateInput) ?? Date.now()));
+                setShowRenewDatePicker(true);
+              }}>
+                <Text style={styles.dateBtnText}>Pick Renewal Date</Text>
+              </Pressable>
 
-            {showRenewDatePicker && (
-              <View style={Platform.OS === "ios" ? styles.pickerContainer : null}>
-                <DateTimePicker
-                  value={tempRenewDate}
-                  mode="date"
-                  display={Platform.OS === "ios" ? "spinner" : "default"}
-                  style={Platform.OS === "ios" ? { backgroundColor: colors.white } : null}
-                  themeVariant="light"
-                  onChange={(event, selected) => {
-                    if (selected) {
-                      setTempRenewDate(selected);
-                      if (Platform.OS === "ios") {
-                        setRenewDateInput(formatDateInput(selected.getTime()));
+              {showRenewDatePicker && (
+                <View style={Platform.OS === "ios" ? styles.pickerContainer : null}>
+                  <DateTimePicker
+                    value={tempRenewDate}
+                    mode="date"
+                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                    style={Platform.OS === "ios" ? { backgroundColor: colors.white } : null}
+                    themeVariant="light"
+                    onChange={(event, selected) => {
+                      if (selected) {
+                        setTempRenewDate(selected);
+                        if (Platform.OS === "ios") {
+                          setRenewDateInput(formatDateInput(selected.getTime()));
+                        }
                       }
-                    }
-                    if (Platform.OS === "ios") {
-                      if (event.type === "dismissed") {
+                      if (Platform.OS === "ios") {
+                        if (event.type === "dismissed") {
+                          setShowRenewDatePicker(false);
+                        }
+                      } else {
+                        if (selected) {
+                          setRenewDateInput(formatDateInput(selected.getTime()));
+                        }
                         setShowRenewDatePicker(false);
                       }
-                    } else {
-                      if (selected) {
-                        setRenewDateInput(formatDateInput(selected.getTime()));
-                      }
+                    }}
+                  />
+                  {Platform.OS === "ios" && (
+                    <Pressable style={styles.pickerDoneBtn} onPress={() => {
+                      setRenewDateInput(formatDateInput(tempRenewDate.getTime()));
                       setShowRenewDatePicker(false);
-                    }
-                  }}
-                />
-                {Platform.OS === "ios" && (
-                  <Pressable style={styles.pickerDoneBtn} onPress={() => {
-                    setRenewDateInput(formatDateInput(tempRenewDate.getTime()));
-                    setShowRenewDatePicker(false);
-                  }}>
-                    <Text style={styles.pickerDoneBtnText}>Done</Text>
-                  </Pressable>
-                )}
-              </View>
-            )}
-            {!!renewDateError && <Text style={styles.errorText}>{renewDateError}</Text>}
-
-            <Text style={[styles.sectionLabel, { color: colors.text }]}>Closure Payment Mode</Text>
-            <View style={styles.modeRow}>
-              {(["CASH", "PHONE"] as const).map((m) => (
-                <Pressable
-                  key={m}
-                  onPress={() => setRenewMode(m)}
-                  style={[
-                    styles.chip,
-                    renewMode === m && styles.chipOn,
-                    renewMode === m && m === "PHONE" && styles.chipPhoneOn,
-                  ]}
-                >
-                  <Text style={renewMode === m ? styles.chipOnText : styles.chipText}>{m === "PHONE" ? "PhonePe" : "Cash"}</Text>
-                </Pressable>
-              ))}
-            </View>
-            
-            {(() => {
-              if (!loan || !renewAmount) return null;
-              const newPrincipal = Number(renewAmount);
-              if (isNaN(newPrincipal) || newPrincipal <= 0) return null;
-              const { deduction, disbursed, netToGive } = buildRenewalSummary(newPrincipal, loan.balanceAmount);
-              
-              return (
-                <View style={{ marginVertical: 12, padding: 12, backgroundColor: colors.surfaceTint, borderRadius: 10, borderWidth: 1, borderColor: colors.border, width: "100%" }}>
-                  <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 4 }}>
-                    New Disbursed Amount: <Text style={{ fontWeight: "700", color: colors.text }}>Rs.{disbursed.toLocaleString("en-IN")}</Text> (after Rs.{deduction} deduction)
-                  </Text>
-                  <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 4 }}>
-                    Old Loan Balance: <Text style={{ fontWeight: "700", color: colors.text }}>Rs.{Math.round(loan.balanceAmount).toLocaleString("en-IN")}</Text>
-                  </Text>
-                  <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 6 }} />
-                  <Text style={{ fontSize: 14, fontWeight: "700", color: netToGive >= 0 ? "#059669" : "#dc3545" }}>
-                    {netToGive >= 0 ? "Net Cash to Give Customer: " : "Net Cash to Collect: "}
-                    Rs.{Math.abs(netToGive).toLocaleString("en-IN")}/-
-                  </Text>
+                    }}>
+                      <Text style={styles.pickerDoneBtnText}>Done</Text>
+                    </Pressable>
+                  )}
                 </View>
-              );
-            })()}
+              )}
+              {!!renewDateError && <Text style={styles.errorText}>{renewDateError}</Text>}
 
-            <Pressable
-              style={[styles.primary, isRenewing && styles.primaryDisabled]}
-              disabled={isRenewing}
-              onPress={async () => {
-                const activeLoanObj = localLoan || loan;
-                if (!activeLoanObj || isRenewing) return;
+              <Text style={[styles.sectionLabel, { color: colors.text }]}>Closure Payment Mode</Text>
+              <View style={styles.modeRow}>
+                {(["CASH", "PHONE"] as const).map((m) => (
+                  <Pressable
+                    key={m}
+                    onPress={() => setRenewMode(m)}
+                    style={[
+                      styles.chip,
+                      renewMode === m && styles.chipOn,
+                      renewMode === m && m === "PHONE" && styles.chipPhoneOn,
+                    ]}
+                  >
+                    <Text style={renewMode === m ? styles.chipOnText : styles.chipText}>{m === "PHONE" ? "PhonePe" : "Cash"}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              
+              {(() => {
+                if (!loan || !renewAmount) return null;
                 const newPrincipal = Number(renewAmount);
-                if (isNaN(newPrincipal) || newPrincipal <= 0) {
-                  showToast("error", "Invalid amount", "Please enter a valid principal amount.");
-                  return;
-                }
-                const renewalDateMs = parseDateInput(renewDateInput);
-                if (!renewalDateMs) {
-                  setRenewDateError("Invalid date format. Use DD/MM/YYYY");
-                  return;
-                }
-                setRenewDateError("");
+                if (isNaN(newPrincipal) || newPrincipal <= 0) return null;
+                const { deduction, disbursed, netToGive } = buildRenewalSummary(newPrincipal, loan.balanceAmount);
+                
+                return (
+                  <View style={{ marginVertical: 12, padding: 12, backgroundColor: colors.surfaceTint, borderRadius: 10, borderWidth: 1, borderColor: colors.border, width: "100%" }}>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 4 }}>
+                      New Disbursed Amount: <Text style={{ fontWeight: "700", color: colors.text }}>Rs.{disbursed.toLocaleString("en-IN")}</Text> (after Rs.{deduction} deduction)
+                    </Text>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 4 }}>
+                      Old Loan Balance: <Text style={{ fontWeight: "700", color: colors.text }}>Rs.{Math.round(loan.balanceAmount).toLocaleString("en-IN")}</Text>
+                    </Text>
+                    <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 6 }} />
+                    <Text style={{ fontSize: 14, fontWeight: "700", color: netToGive >= 0 ? "#059669" : "#dc3545" }}>
+                      {netToGive >= 0 ? "Net Cash to Give Customer: " : "Net Cash to Collect: "}
+                      Rs.{Math.abs(netToGive).toLocaleString("en-IN")}/-
+                    </Text>
+                  </View>
+                );
+              })()}
 
-                const { deduction, disbursed, netToGive } = buildRenewalSummary(newPrincipal, activeLoanObj.balanceAmount);
-                const msg =
-                  `Please confirm the renewal details:\n\n` +
-                  `New Loan: Rs.${newPrincipal.toLocaleString("en-IN")}\n` +
-                  `Actual Disbursed: Rs.${disbursed.toLocaleString("en-IN")} (after Rs.${deduction} deduction)\n` +
-                  `Less Old Balance: -Rs.${Math.round(activeLoanObj.balanceAmount).toLocaleString("en-IN")}\n\n` +
-                  `Net Amount to ${netToGive >= 0 ? "GIVE" : "COLLECT"}: Rs.${Math.abs(netToGive).toLocaleString("en-IN")}/-\n\n` +
-                  `Do you want to confirm renewal?`;
+              <Pressable
+                style={[styles.primary, isRenewing && styles.primaryDisabled]}
+                disabled={isRenewing}
+                onPress={async () => {
+                  const activeLoanObj = localLoan || loan;
+                  if (!activeLoanObj || isRenewing) return;
+                  const newPrincipal = Number(renewAmount);
+                  if (isNaN(newPrincipal) || newPrincipal <= 0) {
+                    showToast("error", "Invalid amount", "Please enter a valid principal amount.");
+                    return;
+                  }
+                  const renewalDateMs = parseDateInput(renewDateInput);
+                  if (!renewalDateMs) {
+                    setRenewDateError("Invalid date format. Use DD/MM/YYYY");
+                    return;
+                  }
+                  setRenewDateError("");
 
-                const confirmed = await confirmRenewal(msg);
-                if (!confirmed) return;
+                  const { deduction, disbursed, netToGive } = buildRenewalSummary(newPrincipal, activeLoanObj.balanceAmount);
+                  const msg =
+                    `Please confirm the renewal details:\n\n` +
+                    `New Loan: Rs.${newPrincipal.toLocaleString("en-IN")}\n` +
+                    `Actual Disbursed: Rs.${disbursed.toLocaleString("en-IN")} (after Rs.${deduction} deduction)\n` +
+                    `Less Old Balance: -Rs.${Math.round(activeLoanObj.balanceAmount).toLocaleString("en-IN")}\n\n` +
+                    `Net Amount to ${netToGive >= 0 ? "GIVE" : "COLLECT"}: Rs.${Math.abs(netToGive).toLocaleString("en-IN")}/-\n\n` +
+                    `Do you want to confirm renewal?`;
 
-                try {
-                  setIsRenewing(true);
-                  if (!isOwner) {
-                    // 1. Add RENEWAL_CLOSURE to nestedTransactions (if balance > 0)
-                    if (activeLoanObj.balanceAmount > 0) {
+                  const confirmed = await confirmRenewal(msg);
+                  if (!confirmed) return;
+
+                  try {
+                    setIsRenewing(true);
+                    if (!isOwner) {
+                      // 1. Add RENEWAL_CLOSURE to nestedTransactions (if balance > 0)
+                      if (activeLoanObj.balanceAmount > 0) {
+                        await addNestedTransaction({
+                          ownerUid: effectiveOwnerId!,
+                          nestedUid: user.uid,
+                          nestedEmail: user.email || "",
+                          customerId: activeCustomerId,
+                          customerName: customer?.name || "",
+                          amount: activeLoanObj.balanceAmount,
+                          type: "RENEWAL_CLOSURE",
+                          date: renewalDateMs,
+                          notes: "Loan renewed - old balance cleared (closure)",
+                        });
+                      }
+                      
+                      // 2. Add RENEWAL_DISBURSEMENT to nestedTransactions
                       await addNestedTransaction({
                         ownerUid: effectiveOwnerId!,
                         nestedUid: user.uid,
                         nestedEmail: user.email || "",
                         customerId: activeCustomerId,
                         customerName: customer?.name || "",
-                        amount: activeLoanObj.balanceAmount,
-                        type: "RENEWAL_CLOSURE",
-                        date: renewalDateMs,
-                        notes: "Loan renewed - old balance cleared (closure)",
+                        amount: newPrincipal,
+                        type: "RENEWAL_DISBURSEMENT",
+                        date: renewalDateMs + 1,
+                        notes: `New loan disbursed via renewal (disbursement) | Mode: ${renewMode}`,
                       });
+                      
+                      setRenewOpen(false);
+                      setRenewAmount("");
+                      setRenewMode("CASH");
+                      setRenewDateInput(formatDateInput(Date.now()));
+                      setRenewDateError("");
+                      await reload({ showLoading: false, skipAutoDue: true, forceRefresh: true });
+                      showToast("success", "Loan renewed", "Renewal recorded successfully.");
+                    } else {
+                      await renewLoan(activeLoanObj as Loan, newPrincipal, renewalDateMs, renewMode);
+                      setRenewOpen(false);
+                      setRenewAmount("");
+                      setRenewMode("CASH");
+                      setRenewDateInput(formatDateInput(Date.now()));
+                      setRenewDateError("");
+                      await reload({ showLoading: false, skipAutoDue: true, forceRefresh: true });
+                      showToast("success", "Loan renewed", "The loan was renewed successfully.");
                     }
-                    
-                    // 2. Add RENEWAL_DISBURSEMENT to nestedTransactions
-                    await addNestedTransaction({
-                      ownerUid: effectiveOwnerId!,
-                      nestedUid: user.uid,
-                      nestedEmail: user.email || "",
-                      customerId: activeCustomerId,
-                      customerName: customer?.name || "",
-                      amount: newPrincipal,
-                      type: "RENEWAL_DISBURSEMENT",
-                      date: renewalDateMs + 1,
-                      notes: `New loan disbursed via renewal (disbursement) | Mode: ${renewMode}`,
-                    });
-                    
-                    setRenewOpen(false);
-                    setRenewAmount("");
-                    setRenewMode("CASH");
-                    setRenewDateInput(formatDateInput(Date.now()));
-                    setRenewDateError("");
-                    await reload({ showLoading: false, skipAutoDue: true, forceRefresh: true });
-                    showToast("success", "Loan renewed", "Renewal recorded successfully.");
-                  } else {
-                    await renewLoan(activeLoanObj as Loan, newPrincipal, renewalDateMs, renewMode);
-                    setRenewOpen(false);
-                    setRenewAmount("");
-                    setRenewMode("CASH");
-                    setRenewDateInput(formatDateInput(Date.now()));
-                    setRenewDateError("");
-                    await reload({ showLoading: false, skipAutoDue: true, forceRefresh: true });
-                    showToast("success", "Loan renewed", "The loan was renewed successfully.");
+                  } catch (error: any) {
+                    console.error("Renewal failed:", error);
+                    showToast("error", "Renewal failed", error?.message || "Could not renew the loan. Please try again.");
+                  } finally {
+                    setIsRenewing(false);
                   }
-                } catch (error: any) {
-                  console.error("Renewal failed:", error);
-                  showToast("error", "Renewal failed", error?.message || "Could not renew the loan. Please try again.");
-                } finally {
-                  setIsRenewing(false);
-                }
-              }}
-            >
-              <Text style={styles.primaryText}>{isRenewing ? "Renewing..." : "Renew Now"}</Text>
-            </Pressable>
-            
-            <Pressable
-              style={styles.cancelModalBtn}
-              onPress={() => {
-                setRenewOpen(false);
-                setRenewAmount("");
-                setRenewMode("CASH");
-                setRenewDateInput(formatDateInput(Date.now()));
-                setRenewDateError("");
-              }}
-            >
-              <Text style={styles.cancelModalBtnText}>Cancel</Text>
-            </Pressable>
+                }}
+              >
+                <Text style={styles.primaryText}>{isRenewing ? "Renewing..." : "Renew Now"}</Text>
+              </Pressable>
+              
+              <Pressable
+                style={styles.cancelModalBtn}
+                onPress={() => {
+                  setRenewOpen(false);
+                  setRenewAmount("");
+                  setRenewMode("CASH");
+                  setRenewDateInput(formatDateInput(Date.now()));
+                  setRenewDateError("");
+                }}
+              >
+                <Text style={styles.cancelModalBtnText}>Cancel</Text>
+              </Pressable>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
