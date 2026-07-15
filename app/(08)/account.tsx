@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState, useMemo } from "react";
 import {
   ActivityIndicator,
-  Alert,
+  Alert as RNAlert,
   Dimensions,
   KeyboardAvoidingView,
   Platform,
@@ -11,6 +11,7 @@ import {
   Text,
   TextInput,
   View,
+  Modal,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import Clipboard from "@react-native-clipboard/clipboard";
@@ -65,6 +66,40 @@ import {
 import { calculateWalletBalances } from "../../src/wallet-balances";
 
 import { useLanguage } from "../../src/language-context";
+
+const Alert = {
+  alert: (title: string, message?: string, buttons?: { text: string; onPress?: () => void; style?: "default" | "cancel" | "destructive" }[]) => {
+    if (Platform.OS === "web") {
+      const formattedMessage = message ? `${title}\n\n${message}` : title;
+      if (!buttons || buttons.length === 0) {
+        window.alert(formattedMessage);
+      } else if (buttons.length === 1) {
+        window.alert(formattedMessage);
+        if (buttons[0].onPress) buttons[0].onPress();
+      } else if (buttons.length === 2) {
+        const result = window.confirm(formattedMessage);
+        const cancelButton = buttons.find(b => b.style === "cancel" || b.text.toLowerCase() === "cancel") || buttons[0];
+        const confirmButton = buttons.find(b => b.style !== "cancel" && b.text.toLowerCase() !== "cancel") || buttons[1];
+        if (result) {
+          if (confirmButton && confirmButton.onPress) confirmButton.onPress();
+        } else {
+          if (cancelButton && cancelButton.onPress) cancelButton.onPress();
+        }
+      } else {
+        const result = window.confirm(formattedMessage);
+        if (result) {
+          const btn = buttons.find(b => b.style !== "cancel" && b.text.toLowerCase() !== "cancel") || buttons[0];
+          if (btn && btn.onPress) btn.onPress();
+        } else {
+          const btn = buttons.find(b => b.style === "cancel" || b.text.toLowerCase() === "cancel") || buttons[buttons.length - 1];
+          if (btn && btn.onPress) btn.onPress();
+        }
+      }
+    } else {
+      RNAlert.alert(title, message, buttons as any);
+    }
+  }
+};
 
 type InvestmentPerson = "Hari" | "Satish" | "Ganapathi";
 
@@ -250,6 +285,88 @@ function DatePickerField({ value, onChange, placeholder, style }: DatePickerFiel
           }}
         />
       </div>
+    );
+  }
+
+  if (Platform.OS === "ios") {
+    return (
+      <View style={{ width: "100%" }}>
+        <Pressable
+          onPress={() => setShowPicker(true)}
+          style={[
+            {
+              backgroundColor: colors.surfaceTint || "#f6fffe",
+              borderWidth: 1,
+              borderColor: colors.border || "#d8f7f4",
+              borderRadius: 12,
+              paddingVertical: 12,
+              paddingHorizontal: 14,
+              minHeight: 45,
+              justifyContent: "center",
+            },
+            style,
+          ]}
+        >
+          <Text style={{ fontSize: 15, color: value ? (colors.text || "#111827") : (colors.textMuted || "#78909c") }}>
+            {value || placeholder || "DD/MM/YYYY"}
+          </Text>
+        </Pressable>
+
+        <Modal
+          visible={showPicker}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowPicker(false)}
+        >
+          <View style={{
+            flex: 1,
+            backgroundColor: "rgba(0, 0, 0, 0.4)",
+            justifyContent: "flex-end",
+          }}>
+            <View style={{
+              backgroundColor: "#ffffff",
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              padding: 16,
+              paddingBottom: 30,
+              gap: 16,
+            }}>
+              <View style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                borderBottomWidth: 1,
+                borderBottomColor: "#f1f5f9",
+                paddingBottom: 12,
+              }}>
+                <Text style={{ fontSize: 16, fontWeight: "800", color: "#1e293b" }}>
+                  Select Date
+                </Text>
+                <Pressable onPress={() => setShowPicker(false)} style={{ padding: 6 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "800", color: "#1565C0" }}>
+                    Done
+                  </Text>
+                </Pressable>
+              </View>
+
+              <DateTimePicker
+                value={dateValue}
+                mode="date"
+                display="spinner"
+                themeVariant="light"
+                onChange={(event, selectedDate) => {
+                  if (selectedDate) {
+                    const day = String(selectedDate.getDate()).padStart(2, "0");
+                    const month = String(selectedDate.getMonth() + 1).padStart(2, "0");
+                    const year = selectedDate.getFullYear();
+                    onChange(`${day}/${month}/${year}`);
+                  }
+                }}
+              />
+            </View>
+          </View>
+        </Modal>
+      </View>
     );
   }
 

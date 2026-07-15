@@ -6,7 +6,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 
 import {
   ActivityIndicator,
-  Alert,
+  Alert as RNAlert,
   FlatList,
   KeyboardAvoidingView,
   Linking,
@@ -40,6 +40,41 @@ import { validateAadhaar, validateIndianPhone, validatePositiveAmount } from "..
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 const noTextSelection = Platform.OS === "web" ? ({ userSelect: "none", WebkitUserSelect: "none" } as any) : undefined;
+
+const Alert = {
+  alert: (title: string, message?: string, buttons?: { text: string; onPress?: () => void; style?: "default" | "cancel" | "destructive" }[]) => {
+    if (Platform.OS === "web") {
+      const formattedMessage = message ? `${title}\n\n${message}` : title;
+      if (!buttons || buttons.length === 0) {
+        window.alert(formattedMessage);
+      } else if (buttons.length === 1) {
+        window.alert(formattedMessage);
+        if (buttons[0].onPress) buttons[0].onPress();
+      } else if (buttons.length === 2) {
+        const result = window.confirm(formattedMessage);
+        const cancelButton = buttons.find(b => b.style === "cancel" || b.text.toLowerCase() === "cancel") || buttons[0];
+        const confirmButton = buttons.find(b => b.style !== "cancel" && b.text.toLowerCase() !== "cancel") || buttons[1];
+        if (result) {
+          if (confirmButton && confirmButton.onPress) confirmButton.onPress();
+        } else {
+          if (cancelButton && cancelButton.onPress) cancelButton.onPress();
+        }
+      } else {
+        // Multi-button: window.confirm
+        const result = window.confirm(formattedMessage + "\n\n(OK: " + buttons[0].text + ", Cancel: " + buttons[buttons.length - 1].text + ")");
+        if (result) {
+          const btn = buttons.find(b => b.style !== "cancel" && b.text.toLowerCase() !== "cancel") || buttons[0];
+          if (btn && btn.onPress) btn.onPress();
+        } else {
+          const btn = buttons.find(b => b.style === "cancel" || b.text.toLowerCase() === "cancel") || buttons[buttons.length - 1];
+          if (btn && btn.onPress) btn.onPress();
+        }
+      }
+    } else {
+      RNAlert.alert(title, message, buttons as any);
+    }
+  }
+};
 
 type AddCustomerForm = {
   numericalId: string;
