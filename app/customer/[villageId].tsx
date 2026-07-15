@@ -365,6 +365,11 @@ const CustomerItem = React.memo(function CustomerItem({
             <Text style={[styles.cardAmount, loan.balanceAmount <= 0 && styles.balanceCleared]}>
               Rs.{Math.round(loan.balanceAmount).toLocaleString("en-IN")}
             </Text>
+            {loan.balanceAmount > 0 && (
+              <Text style={{ fontSize: 10, color: "#9CA3AF", marginLeft: 4 }}>
+                ({Math.round(getSuggestedPaymentAmount(loan))}/-)
+              </Text>
+            )}
             {didntPayLastWeek && (
               <Icon name="warning" size={13} color="#dc3545" style={{ marginLeft: 2 }} />
             )}
@@ -610,7 +615,7 @@ export default function CustomerListScreen() {
     }
   }, []);
 
-  const reload = useCallback(async (preserveScroll = false) => {
+  const reload = useCallback(async (preserveScroll = false, forceRefresh = false) => {
     await logDebug("reload start", {
       userUid: user?.uid || null,
       userProfileRole: userProfile?.role || null,
@@ -667,7 +672,7 @@ export default function CustomerListScreen() {
       setVillage(villageDetails);
 
       const customerIds = sortedList.map((customer) => customer.id);
-      const loansByCustomer = await getActiveLoansByCustomerIds(effectiveOwnerId, customerIds);
+      const loansByCustomer = await getActiveLoansByCustomerIds(effectiveOwnerId, customerIds, undefined, forceRefresh);
 
       // Mock active loans for temporary customers so they can collect payments for them
       if (!isOwner) {
@@ -773,7 +778,7 @@ export default function CustomerListScreen() {
   // On initial load and dependency updates
   useEffect(() => {
     if (authLoading || !user || !villageId || !effectiveOwnerId) return;
-    reload();
+    reload(false, true);
   }, [authLoading, villageId, user, effectiveOwnerId, reload]);
 
   // Load nested accounts so owner can assign BF when registering customers
@@ -795,7 +800,7 @@ export default function CustomerListScreen() {
   useFocusEffect(useCallback(() => {
     if (authLoading || !user || !villageId) return;
     // Reload data but restore scroll position
-    reload(true);
+    reload(true, true);
   }, [authLoading, reload, user, villageId]));
 
   useEffect(() => {

@@ -707,13 +707,13 @@ export default function ProfileScreen() {
   // Load and reload on dependency changes
   useEffect(() => {
     if (authLoading || !user || !activeCustomerId || !effectiveOwnerId) return;
-    reload();
+    reload({ forceRefresh: true });
   }, [authLoading, activeCustomerId, user, effectiveOwnerId, reload]);
 
   useFocusEffect(useCallback(() => {
     // Wait for Firebase Auth to resolve before fetching
     if (authLoading) return;
-    reload();
+    reload({ forceRefresh: true });
   }, [authLoading, reload]));
 
   useEffect(() => {

@@ -677,7 +677,14 @@ export async function getActiveLoan(userId: string, customerId: string, forceRef
   }
   
   const active = loans.find((l) => l.status === "ACTIVE");
-  if (active) return active;
+  if (active) {
+    const correctedBalance = await reconcileLoanBalance(active.id);
+    active.balanceAmount = correctedBalance;
+    if (correctedBalance <= 0) {
+      active.status = "CLOSED";
+    }
+    return active;
+  }
   
   const closed = loans.filter((l) => l.status === "CLOSED");
   if (closed.length > 0) {
@@ -686,7 +693,7 @@ export async function getActiveLoan(userId: string, customerId: string, forceRef
   return loans[0];
 }
 
-export async function getActiveLoansByCustomerIds(userId: string, customerIds: string[], targetDate?: number) {
+export async function getActiveLoansByCustomerIds(userId: string, customerIds: string[], targetDate?: number, forceRefresh = false) {
   if (customerIds.length === 0) return {} as Record<string, Loan>;
 
   const chunks: string[][] = [];
@@ -703,7 +710,16 @@ export async function getActiveLoansByCustomerIds(userId: string, customerIds: s
         where("userId", "==", userId),
         where("customerId", "in", chunk)
       );
-      const snap = await getDocs(q);
+      let snap;
+      if (forceRefresh) {
+        try {
+          snap = await getDocsFromServer(q);
+        } catch (e) {
+          snap = await getDocs(q);
+        }
+      } else {
+        snap = await getDocs(q);
+      }
       
       const customerLoans: Record<string, Loan[]> = {};
       snap.docs.forEach((d) => {
@@ -960,6 +976,40 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
   return latest;
 }
 
+export async function reconcileLoanBalance(loanId: string): Promise<number> {
+  const loanRef = doc(db, "loans", loanId);
+  const loanSnap = await getDoc(loanRef);
+  if (!loanSnap.exists()) return 0;
+  
+  const loan = loanSnap.data() as Loan;
+  if (loan.status !== "ACTIVE") {
+    if (loan.balanceAmount !== 0) {
+      await updateDoc(loanRef, { balanceAmount: 0 });
+    }
+    return 0;
+  }
+  
+  const q = query(coll.payments, where("loanId", "==", loanId));
+  const paymentsSnap = await getDocs(q);
+  const payments = paymentsSnap.docs.map((d) => d.data() as Payment);
+  
+  const totalPaid = payments
+    .filter(isRealCollectionPayment)
+    .reduce((sum, p) => sum + (p.amountPaid ?? 0), 0);
+  
+  const calculatedBalance = Math.max(0, loan.totalPayable - totalPaid);
+  
+  if (Math.round(loan.balanceAmount) !== Math.round(calculatedBalance)) {
+    console.log(`[Reconcile] Loan ${loanId} balance mismatch: stored=${loan.balanceAmount}, calculated=${calculatedBalance}. Fixing...`);
+    await updateDoc(loanRef, {
+      balanceAmount: calculatedBalance,
+      status: calculatedBalance <= 0 ? "CLOSED" : "ACTIVE"
+    });
+  }
+  
+  return calculatedBalance;
+}
+
 export async function addPayment(loan: Loan, amountPaid: number, paymentDate: number, mode: PaymentMode, nestedUid?: string) {
   assertPositiveAmount(amountPaid, "Payment amount");
   const paymentMode = normalizeMode(mode);
@@ -1012,6 +1062,7 @@ export async function addPayment(loan: Loan, amountPaid: number, paymentDate: nu
       });
     }
   });
+  await reconcileLoanBalance(loan.id);
   invalidateUserDataCache(auth.currentUser?.uid || loan.userId);
 }
 
@@ -1070,6 +1121,9 @@ export async function addPaymentsBatch(
   }
   
   await batch.commit();
+  for (const { loan } of entries) {
+    await reconcileLoanBalance(loan.id);
+  }
   invalidateUserDataCache(userId);
   return entries.length;
 }
@@ -1145,6 +1199,11 @@ export async function addBulkPaymentsAndDues(
   }
 
   await batch.commit();
+  for (const { loan, isDue } of entries) {
+    if (!isDue) {
+      await reconcileLoanBalance(loan.id);
+    }
+  }
   invalidateUserDataCache(userId);
   return entries.length;
 }
@@ -1199,6 +1258,7 @@ export async function updatePayment(payment: Payment, newAmount: number, newDate
       }
     }
   });
+  await reconcileLoanBalance(payment.loanId);
   invalidateUserDataCache(payment.userId);
 }
 
@@ -1245,6 +1305,7 @@ export async function deletePayment(payment: Payment) {
     }
   }
   await batch.commit();
+  await reconcileLoanBalance(payment.loanId);
   invalidateUserDataCache(payment.userId);
 }
 
@@ -1755,7 +1816,9 @@ export async function getAccountOpeningBalanceForDate(
     getDocs(query(coll.customers, where("userId", "==", userId))),
   ]);
 
-  const dateBfs = dateBfsSnap.docs.map((docSnap) => docSnap.data() as any);
+  const dateBfs = dateBfsSnap.docs
+    .map((docSnap) => docSnap.data() as any)
+    .filter((item) => item?.isNestedBF !== true);
   const exactOverride = dateBfs.find((item) => item?.dateStr === targetDateKey);
   if (options.useExactDateOverride !== false && exactOverride) {
     return money(exactOverride.amount);
@@ -2286,7 +2349,9 @@ export async function saveBalancingFundForDate(userId: string, amount: number, d
 export async function getAllBalancingFunds(userId: string): Promise<any[]> {
   const q = query(coll.balancingFund, where("userId", "==", userId));
   const snap = await getDocs(q);
-  return snap.docs.map((docSnap) => docSnap.data());
+  return snap.docs
+    .map((docSnap) => docSnap.data())
+    .filter((item: any) => item?.isNestedBF !== true);
 }
 
 export async function getInvestments(userId: string): Promise<Investment[]> {
@@ -2957,6 +3022,7 @@ export async function reconcileNestedTransactions(ids: string[], action: "export
           status: "CLOSED",
         });
         await batch.commit();
+        await reconcileLoanBalance(loan.id);
       }
     } else if (txn.type === "RENEWAL_DISBURSEMENT") {
       const newLoanId = id();
