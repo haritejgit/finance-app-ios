@@ -353,12 +353,16 @@ export default function ProfileScreen() {
   const [renewMode, setRenewMode] = useState<PaymentMode>("CASH");
   const [paymentDateInput, setPaymentDateInput] = useState(formatDateInput(Date.now()));
   const [dueDateInput, setDueDateInput] = useState(formatDateInput(Date.now()));
+  const [renewDateInput, setRenewDateInput] = useState(formatDateInput(Date.now()));
   const [paymentDateError, setPaymentDateError] = useState("");
   const [dueDateError, setDueDateError] = useState("");
+  const [renewDateError, setRenewDateError] = useState("");
   const [showPaymentPicker, setShowPaymentPicker] = useState(false);
   const [showDuePicker, setShowDuePicker] = useState(false);
+  const [showRenewDatePicker, setShowRenewDatePicker] = useState(false);
   const [tempPaymentDate, setTempPaymentDate] = useState<Date>(new Date());
   const [tempDueDate, setTempDueDate] = useState<Date>(new Date());
+  const [tempRenewDate, setTempRenewDate] = useState<Date>(new Date());
   // Payment edit/delete state
   const [editingPayment, setEditingPayment] = useState<any | null>(null);
   const [editPaymentOpen, setEditPaymentOpen] = useState(false);
@@ -1997,6 +2001,66 @@ export default function ProfileScreen() {
             <Text style={[styles.modalTitle, { color: colors.text }]}>Renew Loan</Text>
             <TextInput placeholder="New Principal Amount" placeholderTextColor={colors.textMuted} value={renewAmount} onChangeText={setRenewAmount} style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]} keyboardType="numeric" />
             
+            <Text style={[styles.sectionLabel, { color: colors.text }]}>Renewal Date</Text>
+            <TextInput
+              placeholder="DD/MM/YYYY"
+              placeholderTextColor={colors.textMuted}
+              value={renewDateInput}
+              onChangeText={setRenewDateInput}
+              style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
+              autoCapitalize="none"
+            />
+            {parseDateInput(renewDateInput) && (
+              <Text style={styles.dayDisplay}>
+                {formatDateWithDay(parseDateInput(renewDateInput)!)}
+              </Text>
+            )}
+            <Pressable style={styles.dateBtn} onPress={() => {
+              setTempRenewDate(new Date(parseDateInput(renewDateInput) ?? Date.now()));
+              setShowRenewDatePicker(true);
+            }}>
+              <Text style={styles.dateBtnText}>Pick Renewal Date</Text>
+            </Pressable>
+
+            {showRenewDatePicker && (
+              <View style={Platform.OS === "ios" ? styles.pickerContainer : null}>
+                <DateTimePicker
+                  value={tempRenewDate}
+                  mode="date"
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  style={Platform.OS === "ios" ? { backgroundColor: colors.white } : null}
+                  themeVariant="light"
+                  onChange={(event, selected) => {
+                    if (selected) {
+                      setTempRenewDate(selected);
+                      if (Platform.OS === "ios") {
+                        setRenewDateInput(formatDateInput(selected.getTime()));
+                      }
+                    }
+                    if (Platform.OS === "ios") {
+                      if (event.type === "dismissed") {
+                        setShowRenewDatePicker(false);
+                      }
+                    } else {
+                      if (selected) {
+                        setRenewDateInput(formatDateInput(selected.getTime()));
+                      }
+                      setShowRenewDatePicker(false);
+                    }
+                  }}
+                />
+                {Platform.OS === "ios" && (
+                  <Pressable style={styles.pickerDoneBtn} onPress={() => {
+                    setRenewDateInput(formatDateInput(tempRenewDate.getTime()));
+                    setShowRenewDatePicker(false);
+                  }}>
+                    <Text style={styles.pickerDoneBtnText}>Done</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+            {!!renewDateError && <Text style={styles.errorText}>{renewDateError}</Text>}
+
             <Text style={[styles.sectionLabel, { color: colors.text }]}>Closure Payment Mode</Text>
             <View style={styles.modeRow}>
               {(["CASH", "PHONE"] as const).map((m) => (
@@ -2048,6 +2112,13 @@ export default function ProfileScreen() {
                   showToast("error", "Invalid amount", "Please enter a valid principal amount.");
                   return;
                 }
+                const renewalDateMs = parseDateInput(renewDateInput);
+                if (!renewalDateMs) {
+                  setRenewDateError("Invalid date format. Use DD/MM/YYYY");
+                  return;
+                }
+                setRenewDateError("");
+
                 const { deduction, disbursed, netToGive } = buildRenewalSummary(newPrincipal, activeLoanObj.balanceAmount);
                 const msg =
                   `Please confirm the renewal details:\n\n` +
@@ -2073,7 +2144,7 @@ export default function ProfileScreen() {
                         customerName: customer?.name || "",
                         amount: activeLoanObj.balanceAmount,
                         type: "RENEWAL_CLOSURE",
-                        date: Date.now(),
+                        date: renewalDateMs,
                         notes: "Loan renewed - old balance cleared (closure)",
                       });
                     }
@@ -2087,20 +2158,24 @@ export default function ProfileScreen() {
                       customerName: customer?.name || "",
                       amount: newPrincipal,
                       type: "RENEWAL_DISBURSEMENT",
-                      date: Date.now() + 1,
+                      date: renewalDateMs + 1,
                       notes: `New loan disbursed via renewal (disbursement) | Mode: ${renewMode}`,
                     });
                     
                     setRenewOpen(false);
                     setRenewAmount("");
                     setRenewMode("CASH");
+                    setRenewDateInput(formatDateInput(Date.now()));
+                    setRenewDateError("");
                     await reload({ showLoading: false, skipAutoDue: true, forceRefresh: true });
                     showToast("success", "Loan renewed", "Renewal recorded successfully.");
                   } else {
-                    await renewLoan(activeLoanObj as Loan, newPrincipal, Date.now(), renewMode);
+                    await renewLoan(activeLoanObj as Loan, newPrincipal, renewalDateMs, renewMode);
                     setRenewOpen(false);
                     setRenewAmount("");
                     setRenewMode("CASH");
+                    setRenewDateInput(formatDateInput(Date.now()));
+                    setRenewDateError("");
                     await reload({ showLoading: false, skipAutoDue: true, forceRefresh: true });
                     showToast("success", "Loan renewed", "The loan was renewed successfully.");
                   }
@@ -2121,6 +2196,8 @@ export default function ProfileScreen() {
                 setRenewOpen(false);
                 setRenewAmount("");
                 setRenewMode("CASH");
+                setRenewDateInput(formatDateInput(Date.now()));
+                setRenewDateError("");
               }}
             >
               <Text style={styles.cancelModalBtnText}>Cancel</Text>
