@@ -38,6 +38,7 @@ import {
   getCustomerById,
   getPaymentsForCustomer,
   isAadhaarBlocked,
+  isNumericalIdTaken,
   markDue,
   renewLoan,
   updateCustomer,
@@ -309,6 +310,7 @@ function getSuggestedPaymentAmount(loan?: Loan | null) {
 
 function createEmptyEditForm() {
   return {
+    numericalId: "",
     name: "",
     phone: "",
     aadhar: "",
@@ -407,6 +409,7 @@ export default function ProfileScreen() {
   const openEditModal = () => {
     if (!customer) return;
     setEditForm({
+      numericalId: customer.numericalId?.toString() || "",
       name: customer.name,
       phone: customer.phone,
       aadhar: customer.aadhar,
@@ -1313,11 +1316,27 @@ export default function ProfileScreen() {
       setEditCoordinateError("Enter both latitude and longitude, or leave both empty.");
       return;
     }
+    const newNumericalId = Number(editForm.numericalId);
+    if (isNaN(newNumericalId) || newNumericalId <= 0 || !Number.isInteger(newNumericalId)) {
+      setEditCoordinateError("Customer ID (Book No) must be a valid positive integer.");
+      return;
+    }
+
     setEditCoordinateError("");
     setEditLocationStatus("");
 
     try {
       setIsSavingEdit(true);
+
+      if (newNumericalId !== customer.numericalId) {
+        const isTaken = await isNumericalIdTaken(effectiveOwnerId!, customer.villageId, newNumericalId);
+        if (isTaken) {
+          Alert.alert("Customer ID Taken", `Customer ID (Book No) ${newNumericalId} is already taken in this village.`);
+          setIsSavingEdit(false);
+          return;
+        }
+      }
+
       if (normalizedAadhar) {
         const [blocked, existingCustomer] = await Promise.all([
           isAadhaarBlocked(normalizedAadhar, user.uid),
@@ -1327,6 +1346,7 @@ export default function ProfileScreen() {
           setEditAadhaarBlocked(true);
           setEditAadhaarWarning("This Aadhaar is blocked. Customer edits cannot be saved with this number.");
           Alert.alert("Aadhaar Blocked", "This Aadhaar card has been blocked. Customer registration cannot proceed.");
+          setIsSavingEdit(false);
           return;
         }
         if (existingCustomer && existingCustomer.id !== customer.id) {
@@ -1335,12 +1355,14 @@ export default function ProfileScreen() {
             `A customer with this Aadhar number already exists in our records.\n\nExisting Customer: ${existingCustomer.name}\nPhone: ${existingCustomer.phone}\nBook No: ${existingCustomer.numericalId}\n\nPlease verify the Aadhar number or contact the existing customer.`,
             [{ text: 'OK', style: 'default' }]
           );
+          setIsSavingEdit(false);
           return;
         }
       }
       
       const updatedCustomer = {
         ...customer,
+        numericalId: newNumericalId,
         name: editForm.name,
         phone: editForm.phone,
         aadhar: normalizedAadhar,
@@ -2222,6 +2244,15 @@ export default function ProfileScreen() {
               {/* Customer Section */}
               <Text style={[styles.sectionLabel, { color: colors.primary }]}>Customer Details</Text>
               
+              <TextInput
+                placeholder="Customer ID (Book No)"
+                placeholderTextColor={colors.textMuted}
+                value={editForm.numericalId}
+                onChangeText={(text) => setEditForm(prev => ({ ...prev, numericalId: text }))}
+                style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
+                keyboardType="numeric"
+              />
+
               <TextInput
                 placeholder="Customer Name"
                 placeholderTextColor={colors.textMuted}
