@@ -137,9 +137,9 @@ function getMonthRange(offset: number): { start: number; end: number; label: str
   return { start, end, label, month: targetDate.getMonth(), year: targetDate.getFullYear() };
 }
 
-export async function getDashboardAnalytics(userId: string, nestedUserId?: string): Promise<DashboardAnalytics> {
+export async function getDashboardAnalytics(userId: string, nestedUserId?: string, selectedVillageId?: string): Promise<DashboardAnalytics> {
   // For nested users, never use cache — their collectionToday changes frequently
-  const cacheKey = `${DASHBOARD_CACHE_PREFIX}${userId}:${nestedUserId || ""}:${startOfDay(Date.now())}`;
+  const cacheKey = `${DASHBOARD_CACHE_PREFIX}${userId}:${nestedUserId || ""}:${selectedVillageId || "ALL"}:${startOfDay(Date.now())}`;
   let cached: DashboardAnalytics | null = null;
   if (!nestedUserId) {
     try {
@@ -285,6 +285,21 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
         nestedUserId
       }).catch(() => {});
     }
+  }
+
+  if (selectedVillageId && selectedVillageId !== "ALL") {
+    customersRaw = customersRaw.filter((c) => c.villageId === selectedVillageId);
+    nestedCusts = nestedCusts.filter((c) => c.villageId === selectedVillageId);
+    const allowedCustIds = new Set([
+      ...customersRaw.map((c) => c.id),
+      ...nestedCusts.map((c) => c.id)
+    ]);
+    nestedTxns = nestedTxns.filter((t) => t.customerId && allowedCustIds.has(t.customerId));
+    investmentsRaw = [];
+    expensesRaw = [];
+    bfAmount = 0;
+    nestedBfAmount = 0;
+    nestedExpenses = [];
   }
 
   if (nestedUserId && nestedCusts.length > 0) {
@@ -955,7 +970,8 @@ export function subscribeDashboardAnalytics(
   userId: string,
   onData: (analytics: DashboardAnalytics) => void,
   onError?: (error: unknown) => void,
-  nestedUserId?: string
+  nestedUserId?: string,
+  selectedVillageId?: string
 ): Unsubscribe {
   let cancelled = false;
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -963,7 +979,7 @@ export function subscribeDashboardAnalytics(
   const refresh = () => {
     if (refreshTimer) clearTimeout(refreshTimer);
     refreshTimer = setTimeout(() => {
-      getDashboardAnalytics(userId, nestedUserId)
+      getDashboardAnalytics(userId, nestedUserId, selectedVillageId)
         .then((analytics) => {
           if (!cancelled) onData(analytics);
         })

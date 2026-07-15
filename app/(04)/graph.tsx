@@ -26,7 +26,8 @@ import {
   type PredictionItem,
 } from "../../src/finance-analytics";
 import Icon from "../../src/Icon";
-import { getWeeklyChartData, type WeeklyChartPoint } from "../../src/repository";
+import { getWeeklyChartData, getVillages, type WeeklyChartPoint } from "../../src/repository";
+import type { Village } from "../../src/types";
 import { formatAmountInKM } from "../../src/utils";
 import { Gradients, Colors } from "../../src/theme";
 import { db } from "../../src/firebase";
@@ -363,6 +364,56 @@ function CashPositionCard({
   );
 }
 
+function VillageSelector({
+  value,
+  onChange,
+  villages
+}: {
+  value: string;
+  onChange: (id: string) => void;
+  villages: Village[];
+}) {
+  return (
+    <View style={{ marginBottom: 6 }}>
+      <Text style={{ color: Colors.nearBlack, fontSize: 11, fontWeight: "900", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>
+        Filter by Village
+      </Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
+        <Pressable
+          style={[
+            styles.periodChip,
+            { minWidth: 80, paddingHorizontal: 12, minHeight: 32, backgroundColor: "rgba(255,255,255,0.16)", borderRadius: 10 },
+            value === "ALL" && { backgroundColor: Colors.white }
+          ]}
+          onPress={() => onChange("ALL")}
+        >
+          <Text style={[{ fontSize: 11, fontWeight: "900", color: "rgba(255,255,255,0.82)" }, value === "ALL" && { color: Colors.nearBlack }]}>
+            All Villages
+          </Text>
+        </Pressable>
+        {villages.map((v) => {
+          const active = value === v.id;
+          return (
+            <Pressable
+              key={v.id}
+              style={[
+                styles.periodChip,
+                { minWidth: 80, paddingHorizontal: 12, minHeight: 32, backgroundColor: "rgba(255,255,255,0.16)", borderRadius: 10 },
+                active && { backgroundColor: Colors.white }
+              ]}
+              onPress={() => onChange(v.id)}
+            >
+              <Text style={[{ fontSize: 11, fontWeight: "900", color: "rgba(255,255,255,0.82)" }, active && { color: Colors.nearBlack }]}>
+                {v.name}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
 // ——— Main Screen ———
 
 export default function GraphScreen() {
@@ -374,6 +425,8 @@ export default function GraphScreen() {
     }
   }, [userProfile, authLoading]);
 
+  const [selectedVillageId, setSelectedVillageId] = useState<string>("ALL");
+  const [villages, setVillages] = useState<Village[]>([]);
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [weeklyChartData, setWeeklyChartData] = useState<WeeklyChartPoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -391,17 +444,19 @@ export default function GraphScreen() {
     }
     if (showLoader) setLoading(true);
     try {
-      const [nextAnalytics, nextWeeklyChartData] = await Promise.all([
-        getDashboardAnalytics(user.uid),
-        getWeeklyChartData(user.uid),
+      const [nextAnalytics, nextWeeklyChartData, nextVillages] = await Promise.all([
+        getDashboardAnalytics(user.uid, undefined, selectedVillageId),
+        getWeeklyChartData(user.uid, selectedVillageId),
+        getVillages(user.uid),
       ]);
       setAnalytics(nextAnalytics);
       setWeeklyChartData(nextWeeklyChartData);
+      setVillages(nextVillages);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user]);
+  }, [user, selectedVillageId]);
 
   useEffect(() => {
     if (authLoading) return undefined;
@@ -411,7 +466,7 @@ export default function GraphScreen() {
     }
     let cancelled = false;
     const hydrateWeekly = async () => {
-      const nextWeeklyChartData = await getWeeklyChartData(user.uid);
+      const nextWeeklyChartData = await getWeeklyChartData(user.uid, selectedVillageId);
       if (!cancelled) {
         setWeeklyChartData(nextWeeklyChartData);
         setLoading(false);
@@ -425,13 +480,15 @@ export default function GraphScreen() {
       },
       () => {
         load(false);
-      }
+      },
+      undefined,
+      selectedVillageId
     );
     return () => {
       cancelled = true;
       unsub();
     };
-  }, [authLoading, load, user]);
+  }, [authLoading, load, user, selectedVillageId]);
 
   const recoveryRate = useMemo(() => {
     if (!analytics || analytics.totals.distributedThisMonth <= 0) return 0;
@@ -560,6 +617,13 @@ export default function GraphScreen() {
                   </Text>
                 </View>
               </View>
+
+              {/* Village Selector */}
+              <VillageSelector
+                value={selectedVillageId}
+                onChange={setSelectedVillageId}
+                villages={villages}
+              />
 
               {/* Cash Position Hero Card */}
               {analytics && (

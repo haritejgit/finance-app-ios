@@ -1973,7 +1973,7 @@ export const getAllLoansEver = async (userId?: string): Promise<AllLoanEver[]> =
   });
 };
 
-export const getWeeklyChartData = async (userId?: string): Promise<WeeklyChartPoint[]> => {
+export const getWeeklyChartData = async (userId?: string, villageId?: string): Promise<WeeklyChartPoint[]> => {
   // Only load data from the last 12 weeks for the chart
   const twelveWeeksAgoMs = Date.now() - 12 * 7 * 24 * 60 * 60 * 1000;
 
@@ -1983,9 +1983,19 @@ export const getWeeklyChartData = async (userId?: string): Promise<WeeklyChartPo
   const loansQuery = userId
     ? query(coll.loans, where("userId", "==", userId))
     : query(coll.loans);
-  const [paymentsSnap, loansSnap] = await Promise.all([
+
+  const [paymentsSnap, loansSnap, allowedCustomerIds] = await Promise.all([
     getDocs(paymentsQuery),
     getDocs(loansQuery),
+    (async () => {
+      const ids = new Set<string>();
+      if (userId && villageId && villageId !== "ALL") {
+        const q = query(coll.customers, where("userId", "==", userId), where("villageId", "==", villageId));
+        const snap = await getDocs(q);
+        snap.docs.forEach((doc) => ids.add(doc.id));
+      }
+      return ids;
+    })(),
   ]);
 
   // Build loan customerId lookup for payments that only have loanId
@@ -1999,7 +2009,11 @@ export const getWeeklyChartData = async (userId?: string): Promise<WeeklyChartPo
       date: new Date(millis || Date.now()),
       customerId: d.customerId ?? d.customer_id,
     };
-  }).filter((loan) => loan.date.getTime() >= twelveWeeksAgoMs);
+  }).filter((loan) => {
+    if (loan.date.getTime() < twelveWeeksAgoMs) return false;
+    if (villageId && villageId !== "ALL" && !allowedCustomerIds.has(loan.customerId)) return false;
+    return true;
+  });
 
   const customerIdByLoanId = new Map(loansRaw.map((l) => [l.id, l.customerId]));
 
@@ -2014,7 +2028,11 @@ export const getWeeklyChartData = async (userId?: string): Promise<WeeklyChartPo
       customerId: d.customerId ?? d.customer_id ?? customerIdByLoanId.get(d.loanId ?? d.loan_id),
       paymentType: d.paymentType ?? d.type,
     };
-  }).filter((payment) => payment.date.getTime() >= twelveWeeksAgoMs);
+  }).filter((payment) => {
+    if (payment.date.getTime() < twelveWeeksAgoMs) return false;
+    if (villageId && villageId !== "ALL" && (!payment.customerId || !allowedCustomerIds.has(payment.customerId))) return false;
+    return true;
+  });
 
   const weekMap: Record<string, { collected: number; distributed: number; date: Date }> = {};
 
