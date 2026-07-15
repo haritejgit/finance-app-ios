@@ -658,6 +658,24 @@ export async function getActiveLoan(userId: string, customerId: string, forceRef
   const loans = snap.docs.map((d) => d.data() as Loan);
   if (loans.length === 0) return undefined;
   
+  const activeLoans = loans.filter((l) => l.status === "ACTIVE");
+  if (activeLoans.length > 1) {
+    activeLoans.sort((a, b) => b.startDate - a.startDate);
+    const latestActive = activeLoans[0];
+    const batch = writeBatch(db);
+    for (let i = 1; i < activeLoans.length; i++) {
+      const oldLoan = activeLoans[i];
+      batch.update(doc(db, "loans", oldLoan.id), {
+        status: "RENEWED",
+        balanceAmount: 0
+      });
+      oldLoan.status = "RENEWED";
+      oldLoan.balanceAmount = 0;
+    }
+    await batch.commit();
+    return latestActive;
+  }
+  
   const active = loans.find((l) => l.status === "ACTIVE");
   if (active) return active;
   
@@ -668,7 +686,7 @@ export async function getActiveLoan(userId: string, customerId: string, forceRef
   return loans[0];
 }
 
-export async function getActiveLoansByCustomerIds(userId: string, customerIds: string[]) {
+export async function getActiveLoansByCustomerIds(userId: string, customerIds: string[], targetDate?: number) {
   if (customerIds.length === 0) return {} as Record<string, Loan>;
 
   const chunks: string[][] = [];
@@ -686,24 +704,63 @@ export async function getActiveLoansByCustomerIds(userId: string, customerIds: s
         where("customerId", "in", chunk)
       );
       const snap = await getDocs(q);
+      
+      const customerLoans: Record<string, Loan[]> = {};
       snap.docs.forEach((d) => {
         const loan = d.data() as Loan;
-        if (loan.status !== "ACTIVE" && loan.status !== "CLOSED") return;
-        const existing = loansByCustomer[loan.customerId];
-        if (!existing) {
-          loansByCustomer[loan.customerId] = loan;
-        } else {
-          if (loan.status === "ACTIVE" && existing.status !== "ACTIVE") {
-            loansByCustomer[loan.customerId] = loan;
-          } else if (loan.status !== "ACTIVE" && existing.status === "ACTIVE") {
-            // Keep existing
+        if (!customerLoans[loan.customerId]) {
+          customerLoans[loan.customerId] = [];
+        }
+        customerLoans[loan.customerId].push(loan);
+      });
+
+      const batch = writeBatch(db);
+      let needsCommit = false;
+
+      Object.entries(customerLoans).forEach(([custId, loans]) => {
+        const activeLoans = loans.filter((l) => l.status === "ACTIVE");
+        if (activeLoans.length > 1) {
+          activeLoans.sort((a, b) => b.startDate - a.startDate);
+          const latestActive = activeLoans[0];
+          for (let i = 1; i < activeLoans.length; i++) {
+            const oldLoan = activeLoans[i];
+            batch.update(doc(db, "loans", oldLoan.id), {
+              status: "RENEWED",
+              balanceAmount: 0
+            });
+            oldLoan.status = "RENEWED";
+            oldLoan.balanceAmount = 0;
+            needsCommit = true;
+          }
+        }
+
+        if (targetDate !== undefined) {
+          const sorted = [...loans].sort((a, b) => b.startDate - a.startDate);
+          const loanOnDate = sorted.find((l) => l.startDate <= targetDate);
+          if (loanOnDate) {
+            loansByCustomer[custId] = loanOnDate;
           } else {
-            if (loan.startDate > existing.startDate) {
-              loansByCustomer[loan.customerId] = loan;
+            const oldest = sorted[sorted.length - 1];
+            if (oldest) loansByCustomer[custId] = oldest;
+          }
+        } else {
+          const active = loans.find((l) => l.status === "ACTIVE");
+          if (active) {
+            loansByCustomer[custId] = active;
+          } else {
+            const closed = loans.filter((l) => l.status === "CLOSED");
+            if (closed.length > 0) {
+              loansByCustomer[custId] = closed.sort((a, b) => b.startDate - a.startDate)[0];
+            } else if (loans.length > 0) {
+              loansByCustomer[custId] = loans[0];
             }
           }
         }
       });
+
+      if (needsCommit) {
+        await batch.commit();
+      }
     })
   );
 
@@ -923,12 +980,37 @@ export async function addPayment(loan: Loan, amountPaid: number, paymentDate: nu
     const loanRef = doc(db, "loans", loan.id);
     const loanSnap = await transaction.get(loanRef);
     const liveLoan = loanSnap.exists() ? (loanSnap.data() as Loan) : loan;
-    const newBalance = Math.max(0, money(liveLoan.balanceAmount) - amountPaid);
+    
     transaction.set(doc(db, "payments", payment.id), stripUndefined(payment));
-    transaction.update(loanRef, {
-      balanceAmount: newBalance,
-      status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
-    });
+
+    if (liveLoan.status === "RENEWED") {
+      const closureQuery = query(
+        coll.payments,
+        where("loanId", "==", loan.id),
+        where("paymentType", "==", "RENEWAL_CLOSURE")
+      );
+      const closureSnap = await getDocs(closureQuery);
+      if (!closureSnap.empty) {
+        const closureDoc = closureSnap.docs[0];
+        const closureData = closureDoc.data() as Payment;
+        const newClosureAmount = Math.max(0, closureData.amountPaid - amountPaid);
+        transaction.update(doc(db, "payments", closureDoc.id), {
+          amountPaid: newClosureAmount
+        });
+      } else {
+        const newBalance = Math.max(0, money(liveLoan.balanceAmount) - amountPaid);
+        transaction.update(loanRef, {
+          balanceAmount: newBalance,
+          status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+        });
+      }
+    } else {
+      const newBalance = Math.max(0, money(liveLoan.balanceAmount) - amountPaid);
+      transaction.update(loanRef, {
+        balanceAmount: newBalance,
+        status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+      });
+    }
   });
   invalidateUserDataCache(auth.currentUser?.uid || loan.userId);
 }
@@ -938,6 +1020,7 @@ export async function addPaymentsBatch(
 ) {
   if (entries.length === 0) return 0;
   const batch = writeBatch(db);
+  const userId = auth.currentUser?.uid || entries[0].loan.userId;
   
   for (const { loan, amountPaid, paymentDate, mode } of entries) {
     assertPositiveAmount(amountPaid, "Payment amount");
@@ -952,19 +1035,42 @@ export async function addPaymentsBatch(
       paymentType: "REGULAR",
       paymentMode,
       type: paymentMode,
-      userId: auth.currentUser?.uid || loan.userId,
+      userId,
     };
-
-    const newBalance = Math.max(0, loan.balanceAmount - amountPaid);
     batch.set(doc(db, "payments", payment.id), stripUndefined(payment));
-    batch.update(doc(db, "loans", loan.id), {
-      balanceAmount: newBalance,
-      status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
-    });
+
+    if (loan.status === "RENEWED") {
+      const closureQuery = query(
+        coll.payments,
+        where("loanId", "==", loan.id),
+        where("paymentType", "==", "RENEWAL_CLOSURE")
+      );
+      const closureSnap = await getDocs(closureQuery);
+      if (!closureSnap.empty) {
+        const closureDoc = closureSnap.docs[0];
+        const closureData = closureDoc.data() as Payment;
+        const newClosureAmount = Math.max(0, closureData.amountPaid - amountPaid);
+        batch.update(doc(db, "payments", closureDoc.id), {
+          amountPaid: newClosureAmount
+        });
+      } else {
+        const newBalance = Math.max(0, money(loan.balanceAmount) - amountPaid);
+        batch.update(doc(db, "loans", loan.id), {
+          balanceAmount: newBalance,
+          status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+        });
+      }
+    } else {
+      const newBalance = Math.max(0, money(loan.balanceAmount) - amountPaid);
+      batch.update(doc(db, "loans", loan.id), {
+        balanceAmount: newBalance,
+        status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+      });
+    }
   }
   
   await batch.commit();
-  invalidateUserDataCache(entries[0].loan.userId);
+  invalidateUserDataCache(userId);
   return entries.length;
 }
 
@@ -1005,12 +1111,36 @@ export async function addBulkPaymentsAndDues(
         type: "CASH",
         userId,
       };
-      const newBalance = Math.max(0, money(loan.balanceAmount) - amountPaid);
       batch.set(doc(db, "payments", payment.id), stripUndefined(payment));
-      batch.update(doc(db, "loans", loan.id), {
-        balanceAmount: newBalance,
-        status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
-      });
+
+      if (loan.status === "RENEWED") {
+        const closureQuery = query(
+          coll.payments,
+          where("loanId", "==", loan.id),
+          where("paymentType", "==", "RENEWAL_CLOSURE")
+        );
+        const closureSnap = await getDocs(closureQuery);
+        if (!closureSnap.empty) {
+          const closureDoc = closureSnap.docs[0];
+          const closureData = closureDoc.data() as Payment;
+          const newClosureAmount = Math.max(0, closureData.amountPaid - amountPaid);
+          batch.update(doc(db, "payments", closureDoc.id), {
+            amountPaid: newClosureAmount
+          });
+        } else {
+          const newBalance = Math.max(0, money(loan.balanceAmount) - amountPaid);
+          batch.update(doc(db, "loans", loan.id), {
+            balanceAmount: newBalance,
+            status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+          });
+        }
+      } else {
+        const newBalance = Math.max(0, money(loan.balanceAmount) - amountPaid);
+        batch.update(doc(db, "loans", loan.id), {
+          balanceAmount: newBalance,
+          status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+        });
+      }
     }
   }
 
@@ -1039,31 +1169,82 @@ export async function updatePayment(payment: Payment, newAmount: number, newDate
     if (loanSnap.exists()) {
       const loan = loanSnap.data() as Loan;
       const balanceDiff = oldAmount - newAmount;
-      const newBalance = Math.max(0, loan.balanceAmount + balanceDiff);
-      transaction.update(loanRef, {
-        balanceAmount: newBalance,
-        status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
-      });
+      if (loan.status === "RENEWED") {
+        const closureQuery = query(
+          coll.payments,
+          where("loanId", "==", payment.loanId),
+          where("paymentType", "==", "RENEWAL_CLOSURE")
+        );
+        const closureSnap = await getDocs(closureQuery);
+        if (!closureSnap.empty) {
+          const closureDoc = closureSnap.docs[0];
+          const closureData = closureDoc.data() as Payment;
+          const newClosureAmount = Math.max(0, closureData.amountPaid + balanceDiff);
+          transaction.update(doc(db, "payments", closureDoc.id), {
+            amountPaid: newClosureAmount
+          });
+        } else {
+          const newBalance = Math.max(0, loan.balanceAmount + balanceDiff);
+          transaction.update(loanRef, {
+            balanceAmount: newBalance,
+            status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+          });
+        }
+      } else {
+        const newBalance = Math.max(0, loan.balanceAmount + balanceDiff);
+        transaction.update(loanRef, {
+          balanceAmount: newBalance,
+          status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+        });
+      }
     }
   });
   invalidateUserDataCache(payment.userId);
 }
 
 export async function deletePayment(payment: Payment) {
-  await deleteDoc(doc(db, "payments", payment.id));
+  const batch = writeBatch(db);
+  batch.delete(doc(db, "payments", payment.id));
   
-  // DUE entries are zero-value ledger marks and must not affect loan balance.
   const amountPaid = money(payment.amountPaid);
   const isDue = payment.paymentType === "DUE" || payment.type === "DUE";
-  const loanSnap = amountPaid > 0 && !isDue ? await getDoc(doc(db, "loans", payment.loanId)) : null;
-  if (loanSnap?.exists()) {
-    const loan = loanSnap.data() as Loan;
-    const newBalance = loan.balanceAmount + amountPaid;
-    await updateDoc(doc(db, "loans", payment.loanId), {
-      balanceAmount: newBalance,
-      status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
-    });
+  
+  if (amountPaid > 0 && !isDue) {
+    const loanRef = doc(db, "loans", payment.loanId);
+    const loanSnap = await getDoc(loanRef);
+    if (loanSnap.exists()) {
+      const loan = loanSnap.data() as Loan;
+      if (loan.status === "RENEWED") {
+        const closureQuery = query(
+          coll.payments,
+          where("loanId", "==", payment.loanId),
+          where("paymentType", "==", "RENEWAL_CLOSURE")
+        );
+        const closureSnap = await getDocs(closureQuery);
+        if (!closureSnap.empty) {
+          const closureDoc = closureSnap.docs[0];
+          const closureData = closureDoc.data() as Payment;
+          const newClosureAmount = closureData.amountPaid + amountPaid;
+          batch.update(doc(db, "payments", closureDoc.id), {
+            amountPaid: newClosureAmount
+          });
+        } else {
+          const newBalance = loan.balanceAmount + amountPaid;
+          batch.update(loanRef, {
+            balanceAmount: newBalance,
+            status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+          });
+        }
+      } else {
+        const newBalance = loan.balanceAmount + amountPaid;
+        batch.update(loanRef, {
+          balanceAmount: newBalance,
+          status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+        });
+      }
+    }
   }
+  await batch.commit();
   invalidateUserDataCache(payment.userId);
 }
 

@@ -1412,7 +1412,7 @@ export default function ProfileScreen() {
           await deletePayment(paymentToDelete);
         }
         setPayments((prev) => prev.filter((payment) => payment.id !== paymentToDelete.id));
-        if (loan && !isDue && money(paymentToDelete.amountPaid) > 0) {
+        if (loan && loan.id === paymentToDelete.loanId && !isDue && money(paymentToDelete.amountPaid) > 0) {
           const newBalance = loan.balanceAmount + money(paymentToDelete.amountPaid);
           setLoan({
             ...loan,

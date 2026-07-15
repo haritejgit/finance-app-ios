@@ -588,7 +588,7 @@ export default function AccountScreen() {
     }
   }, [activeTab, bulkVillageId, villages]);
 
-  // Fetch active loans when the bulk entry village is changed
+  // Fetch active loans when the bulk entry village or date is changed
   useEffect(() => {
     if (!user || !bulkVillageId) {
       setBulkActiveLoans({});
@@ -606,7 +606,8 @@ export default function AccountScreen() {
       try {
         setBulkLoading(true);
         const ids = villageCustomers.map((c) => c.id);
-        const loansMap = await getActiveLoansByCustomerIds(user.uid, ids);
+        const targetDate = parseDDMMYYYY(bulkDateStr) || Date.now();
+        const loansMap = await getActiveLoansByCustomerIds(user.uid, ids, targetDate);
         setBulkActiveLoans(loansMap);
 
         const initialAmounts: Record<string, string> = {};
@@ -628,7 +629,7 @@ export default function AccountScreen() {
     };
 
     fetchLoans();
-  }, [user, bulkVillageId, customers, t]);
+  }, [user, bulkVillageId, bulkDateStr, customers, t]);
 
   useEffect(() => {
     const nextLanguage = isTe ? "te" : "en";
