@@ -490,6 +490,11 @@ export default function GraphScreen() {
     };
   }, [authLoading, load, user, selectedVillageId]);
 
+  useEffect(() => {
+    if (!user) return;
+    getVillages(user.uid).then((v) => setVillages(v)).catch(console.error);
+  }, [user]);
+
   const recoveryRate = useMemo(() => {
     if (!analytics || analytics.totals.distributedThisMonth <= 0) return 0;
     return (analytics.totals.monthlyRevenue / analytics.totals.distributedThisMonth) * 100;
