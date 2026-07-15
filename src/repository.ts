@@ -6,6 +6,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
   getDocsFromServer,
   limit,
@@ -978,7 +979,12 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
 
 export async function reconcileLoanBalance(loanId: string): Promise<number> {
   const loanRef = doc(db, "loans", loanId);
-  const loanSnap = await getDoc(loanRef);
+  let loanSnap;
+  try {
+    loanSnap = await getDocFromServer(loanRef);
+  } catch (e) {
+    loanSnap = await getDoc(loanRef);
+  }
   if (!loanSnap.exists()) return 0;
   
   const loan = loanSnap.data() as Loan;
@@ -990,7 +996,12 @@ export async function reconcileLoanBalance(loanId: string): Promise<number> {
   }
   
   const q = query(coll.payments, where("loanId", "==", loanId));
-  const paymentsSnap = await getDocs(q);
+  let paymentsSnap;
+  try {
+    paymentsSnap = await getDocsFromServer(q);
+  } catch (e) {
+    paymentsSnap = await getDocs(q);
+  }
   const payments = paymentsSnap.docs.map((d) => d.data() as Payment);
   
   const totalPaid = payments
