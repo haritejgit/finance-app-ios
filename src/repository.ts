@@ -24,6 +24,9 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
+import { deleteApp, initializeApp } from "firebase/app";
+import { createUserWithEmailAndPassword, getAuth, initializeAuth, inMemoryPersistence, signOut as secondarySignOut } from "firebase/auth";
+import { firebaseConfig } from "./firebase-config";
 import { BlockedAadhaar, Customer, Expense, Investment, Loan, Payment, PaymentMode, UserProfile, Village, VillageHistorySegment } from "./types";
 import { endOfDay, getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, loanWeekNumber, money, startOfDay, toMillis, weekStart } from "./business-logic";
 import { filterCustomersWithVillage } from "./utils";
@@ -38,6 +41,7 @@ const coll = {
   investments: collection(db, "investments"),
   expenses: collection(db, "expenses"),
   users: collection(db, "users"),
+  nestedExpenses: collection(db, "nestedExpenses"),
 
 };
 
@@ -899,7 +903,7 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
   return latest;
 }
 
-export async function addPayment(loan: Loan, amountPaid: number, paymentDate: number, mode: PaymentMode) {
+export async function addPayment(loan: Loan, amountPaid: number, paymentDate: number, mode: PaymentMode, nestedUid?: string) {
   assertPositiveAmount(amountPaid, "Payment amount");
   const paymentMode = normalizeMode(mode);
   const payment: Payment = {
@@ -913,6 +917,7 @@ export async function addPayment(loan: Loan, amountPaid: number, paymentDate: nu
     paymentMode,
     type: paymentMode,
     userId: auth.currentUser?.uid || loan.userId,
+    nestedUid: nestedUid || undefined,
   };
   await runTransaction(db, async (transaction) => {
     const loanRef = doc(db, "loans", loan.id);
@@ -960,6 +965,57 @@ export async function addPaymentsBatch(
   
   await batch.commit();
   invalidateUserDataCache(entries[0].loan.userId);
+  return entries.length;
+}
+
+export async function addBulkPaymentsAndDues(
+  entries: { loan: Loan; amountPaid: number; isDue: boolean }[],
+  paymentDate: number
+) {
+  if (entries.length === 0) return 0;
+  const batch = writeBatch(db);
+  const userId = auth.currentUser?.uid || entries[0].loan.userId;
+
+  for (const { loan, amountPaid, isDue } of entries) {
+    if (isDue) {
+      const payment: Payment = {
+        id: id(),
+        loanId: loan.id,
+        customerId: loan.customerId,
+        amountPaid: 0,
+        paymentDate,
+        weekNumber: loanWeekNumber(loan.startDate, paymentDate),
+        paymentType: "DUE",
+        paymentMode: "CASH",
+        type: "DUE",
+        userId,
+      };
+      batch.set(doc(db, "payments", payment.id), stripUndefined(payment));
+    } else {
+      assertPositiveAmount(amountPaid, "Payment amount");
+      const payment: Payment = {
+        id: id(),
+        loanId: loan.id,
+        customerId: loan.customerId,
+        amountPaid,
+        paymentDate,
+        weekNumber: loanWeekNumber(loan.startDate, paymentDate),
+        paymentType: "REGULAR",
+        paymentMode: "CASH",
+        type: "CASH",
+        userId,
+      };
+      const newBalance = Math.max(0, money(loan.balanceAmount) - amountPaid);
+      batch.set(doc(db, "payments", payment.id), stripUndefined(payment));
+      batch.update(doc(db, "loans", loan.id), {
+        balanceAmount: newBalance,
+        status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+      });
+    }
+  }
+
+  await batch.commit();
+  invalidateUserDataCache(userId);
   return entries.length;
 }
 
@@ -2380,4 +2436,462 @@ export function subscribeWalletData(
     unsubVillages();
     unsubUser();
   };
+}
+
+export async function createNestedAuthUser(email: string, password: string): Promise<string> {
+  const appName = "nestedAppInstance_" + Math.random().toString(36).slice(2);
+  const secondaryApp = initializeApp(firebaseConfig, appName);
+  let secondaryAuth;
+  try {
+    secondaryAuth = initializeAuth(secondaryApp, {
+      persistence: inMemoryPersistence,
+    });
+  } catch (err) {
+    secondaryAuth = getAuth(secondaryApp);
+  }
+  try {
+    const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    const newUid = userCredential.user.uid;
+    try {
+      await secondarySignOut(secondaryAuth);
+    } catch {}
+    return newUid;
+  } finally {
+    try {
+      await deleteApp(secondaryApp);
+    } catch {}
+  }
+}
+
+export async function addNestedTransaction(txn: {
+  ownerUid: string;
+  nestedUid: string;
+  nestedEmail: string;
+  customerId: string;
+  customerName: string;
+  amount: number;
+  type: string;
+  date: number;
+  notes: string;
+}): Promise<void> {
+  const ref = doc(collection(db, "nestedTransactions"));
+  await setDoc(ref, {
+    ...txn,
+    id: ref.id,
+    exported: false,
+    createdAt: Date.now()
+  });
+}
+
+export async function deleteNestedTransaction(id: string): Promise<void> {
+  await deleteDoc(doc(db, "nestedTransactions", id));
+}
+
+export async function updateNestedTransaction(id: string, amount: number, notes: string): Promise<void> {
+  await updateDoc(doc(db, "nestedTransactions", id), {
+    amount,
+    notes,
+    updatedAt: Date.now()
+  });
+}
+
+export async function deleteNestedExpense(id: string): Promise<void> {
+  await deleteDoc(doc(db, "nestedExpenses", id));
+}
+
+export async function updateNestedExpense(id: string, amount: number, note: string): Promise<void> {
+  await updateDoc(doc(db, "nestedExpenses", id), {
+    amount,
+    note: note.trim(),
+    updatedAt: Date.now()
+  });
+}
+
+
+
+export async function addNestedTransactionsBatch(
+  entries: {
+    ownerUid: string;
+    nestedUid: string;
+    nestedEmail: string;
+    customerId: string;
+    customerName: string;
+    amount: number;
+    type: string;
+    date: number;
+    notes: string;
+  }[]
+): Promise<void> {
+  if (entries.length === 0) return;
+  const batch = writeBatch(db);
+  for (const entry of entries) {
+    const ref = doc(collection(db, "nestedTransactions"));
+    batch.set(ref, {
+      ...entry,
+      id: ref.id,
+      exported: false,
+      createdAt: Date.now()
+    });
+  }
+  await batch.commit();
+}
+
+export async function getNestedTransactionsForCustomer(nestedUid: string, customerId: string) {
+  const q = query(
+    collection(db, "nestedTransactions"),
+    where("nestedUid", "==", nestedUid),
+    where("customerId", "==", customerId),
+    where("exported", "==", false)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(doc => doc.data() as any);
+}
+
+export async function getNestedTransactionsForOwner(ownerUid: string) {
+  const q = query(
+    collection(db, "nestedTransactions"),
+    where("ownerUid", "==", ownerUid)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(doc => doc.data() as any);
+}
+
+export async function getOwnerNestedAccounts(ownerUid: string) {
+  const q = query(
+    collection(db, "nestedAccounts"),
+    where("ownerUid", "==", ownerUid)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(doc => doc.data() as any);
+}
+
+export async function updateNestedAccountStatus(nestedUid: string, active: boolean): Promise<void> {
+  const batch = writeBatch(db);
+  batch.update(doc(db, "nestedAccounts", nestedUid), { active });
+  batch.update(doc(db, "users", nestedUid), { active });
+  await batch.commit();
+}
+
+export async function deleteNestedAccount(nestedUid: string): Promise<void> {
+  const batch = writeBatch(db);
+  batch.delete(doc(db, "nestedAccounts", nestedUid));
+  batch.delete(doc(db, "users", nestedUid));
+  await batch.commit();
+}
+
+export async function reconcileNestedTransactions(ids: string[], action: "export" | "delete"): Promise<void> {
+  if (ids.length === 0) return;
+
+  if (action === "delete") {
+    const batch = writeBatch(db);
+    for (const id of ids) {
+      batch.delete(doc(db, "nestedTransactions", id));
+    }
+    await batch.commit();
+    return;
+  }
+
+  // Fetch all selected transactions
+  const txns: any[] = [];
+  for (const id of ids) {
+    const snap = await getDoc(doc(db, "nestedTransactions", id));
+    if (snap.exists()) {
+      txns.push({ id: snap.id, ...snap.data() });
+    }
+  }
+
+  // Sort chronologically (oldest first) so that new customer registrations/loans are set up before payments are applied
+  txns.sort((a, b) => (a.date || 0) - (b.date || 0));
+
+  for (const txn of txns) {
+    if (txn.exported) continue;
+
+    let targetCustomerId = txn.customerId;
+    let targetLoanId: string | null = null;
+
+    // Check if temporary customer
+    if (targetCustomerId && targetCustomerId.startsWith("temp_cust_")) {
+      const nestedCustRef = doc(db, "nestedCustomers", targetCustomerId);
+      const nestedCustSnap = await getDoc(nestedCustRef);
+      if (nestedCustSnap.exists()) {
+        const nestedCustData = nestedCustSnap.data() as any;
+        if (nestedCustData.realCustomerId) {
+          targetCustomerId = nestedCustData.realCustomerId;
+          targetLoanId = nestedCustData.realLoanId || null;
+        } else {
+          // Import temporary customer as a real customer
+          const newCustId = id();
+          const newLoanId = id();
+          
+          const principal = Number(nestedCustData.principal || 0);
+          const interest = principal * 0.2;
+          const totalPayable = principal + interest;
+          const mode = normalizeMode(nestedCustData.disbursementMode || "CASH");
+          
+          const startDate = nestedCustData.createdAt || Date.now();
+          const cycleStartDay = new Date(startDate).getDay();
+          const startWeekStr = getISOWeekString(startDate);
+          const resolvedVillageName = (await getVillageById(nestedCustData.villageId))?.name ?? "";
+          
+          const customer: Customer = {
+            id: newCustId,
+            numericalId: nestedCustData.numericalId || 999999,
+            villageId: nestedCustData.villageId,
+            userId: txn.ownerUid,
+            isActive: true,
+            createdAt: startDate,
+            cycleStartDay,
+            villageHistory: [
+              {
+                villageId: nestedCustData.villageId,
+                villageName: resolvedVillageName,
+                fromWeek: startWeekStr,
+                toWeek: null,
+                numericalId: nestedCustData.numericalId || 999999,
+              }
+            ],
+            name: nestedCustData.name || "Customer",
+            phone: nestedCustData.phone || "",
+            aadhar: nestedCustData.aadhar || "",
+            coName: nestedCustData.coName || "",
+            coId: nestedCustData.coId || null,
+            locationDesc: nestedCustData.locationDesc || "",
+            latitude: nestedCustData.latitude || null,
+            longitude: nestedCustData.longitude || null,
+          };
+          
+          const loan: Loan = {
+            id: newLoanId,
+            customerId: newCustId,
+            principalAmount: principal,
+            interestAmount: interest,
+            totalPayable,
+            balanceAmount: totalPayable,
+            userId: txn.ownerUid,
+            startDate,
+            status: "ACTIVE",
+            disbursement_mode: mode,
+            disbursementMode: mode,
+          };
+
+          const importBatch = writeBatch(db);
+          importBatch.set(doc(db, "customers", newCustId), stripUndefined(customer));
+          importBatch.set(doc(db, "loans", newLoanId), stripUndefined(loan));
+          importBatch.update(nestedCustRef, {
+            realCustomerId: newCustId,
+            realLoanId: newLoanId
+          });
+          await importBatch.commit();
+          
+          targetCustomerId = newCustId;
+          targetLoanId = newLoanId;
+        }
+      }
+    }
+
+    // Apply the nested transaction to the real database
+    if (txn.type === "payment") {
+      let loan: Loan | null = null;
+      if (targetLoanId) {
+        const loanSnap = await getDoc(doc(db, "loans", targetLoanId));
+        if (loanSnap.exists()) {
+          loan = loanSnap.data() as Loan;
+        }
+      } else {
+        const q = query(
+          collection(db, "loans"),
+          where("userId", "==", txn.ownerUid),
+          where("customerId", "==", targetCustomerId),
+          where("status", "==", "ACTIVE")
+        );
+        const loansSnap = await getDocs(q);
+        if (!loansSnap.empty) {
+          loan = loansSnap.docs[0].data() as Loan;
+        }
+      }
+
+      if (loan) {
+        await addPayment(loan, txn.amount, txn.date || Date.now(), txn.notes?.includes("PhonePe") ? "PHONE" : "CASH", txn.nestedUid);
+      }
+    } else if (txn.type === "DUE") {
+      let loan: Loan | null = null;
+      if (targetLoanId) {
+        const loanSnap = await getDoc(doc(db, "loans", targetLoanId));
+        if (loanSnap.exists()) {
+          loan = loanSnap.data() as Loan;
+        }
+      } else {
+        const q = query(
+          collection(db, "loans"),
+          where("userId", "==", txn.ownerUid),
+          where("customerId", "==", targetCustomerId),
+          where("status", "==", "ACTIVE")
+        );
+        const loansSnap = await getDocs(q);
+        if (!loansSnap.empty) {
+          loan = loansSnap.docs[0].data() as Loan;
+        }
+      }
+
+      if (loan) {
+        await markDue(loan, txn.date || Date.now());
+      }
+    } else if (txn.type === "RENEWAL_CLOSURE") {
+      let loan: Loan | null = null;
+      if (targetLoanId) {
+        const loanSnap = await getDoc(doc(db, "loans", targetLoanId));
+        if (loanSnap.exists()) {
+          loan = loanSnap.data() as Loan;
+        }
+      } else {
+        const q = query(
+          collection(db, "loans"),
+          where("userId", "==", txn.ownerUid),
+          where("customerId", "==", targetCustomerId),
+          where("status", "==", "ACTIVE")
+        );
+        const loansSnap = await getDocs(q);
+        if (!loansSnap.empty) {
+          loan = loansSnap.docs[0].data() as Loan;
+        }
+      }
+
+      if (loan) {
+        const batch = writeBatch(db);
+        const closure: Payment = {
+          id: id(),
+          loanId: loan.id,
+          customerId: loan.customerId,
+          amountPaid: loan.balanceAmount,
+          paymentDate: txn.date || Date.now(),
+          weekNumber: loanWeekNumber(loan.startDate, txn.date || Date.now()),
+          paymentType: "REGULAR",
+          paymentMode: "CASH",
+          type: "CASH",
+          userId: txn.ownerUid,
+        };
+        batch.set(doc(db, "payments", closure.id), stripUndefined(closure));
+        batch.update(doc(db, "loans", loan.id), {
+          balanceAmount: 0,
+          status: "CLOSED",
+        });
+        await batch.commit();
+      }
+    } else if (txn.type === "RENEWAL_DISBURSEMENT") {
+      const newLoanId = id();
+      const principal = Number(txn.amount || 0);
+      const interest = principal * 0.2;
+      const totalPayable = principal + interest;
+      
+      const newLoan: Loan = {
+        id: newLoanId,
+        customerId: targetCustomerId,
+        principalAmount: principal,
+        interestAmount: interest,
+        totalPayable,
+        balanceAmount: totalPayable,
+        userId: txn.ownerUid,
+        startDate: txn.date || Date.now(),
+        status: "ACTIVE",
+        disbursement_mode: "CASH",
+        disbursementMode: "CASH",
+      };
+      
+      await setDoc(doc(db, "loans", newLoanId), stripUndefined(newLoan));
+      targetLoanId = newLoanId;
+    }
+
+    await updateDoc(doc(db, "nestedTransactions", txn.id), { exported: true });
+  }
+
+  invalidateUserDataCache(auth.currentUser?.uid || "");
+}
+
+// ─────────────────────────────────────────
+// Nested BF (Opening Balance)
+// ─────────────────────────────────────────
+
+/** Save a BF amount for a specific nested user for a specific date */
+export async function saveNestedBF(
+  ownerUid: string,
+  nestedUid: string,
+  amount: number,
+  dateStr: string // YYYY-MM-DD
+): Promise<void> {
+  const docId = `${ownerUid}_nested_${nestedUid}_${dateStr}`;
+  await setDoc(doc(db, "balancingFund", docId), {
+    id: docId,
+    ownerUid,
+    nestedUid,
+    userId: ownerUid,
+    amount,
+    dateStr,
+    isNestedBF: true,
+    updatedAt: Date.now(),
+  });
+  clearCache();
+}
+
+/** Get the BF amount for a nested user for a specific date */
+export async function getNestedBF(
+  ownerUid: string,
+  nestedUid: string,
+  dateStr: string // YYYY-MM-DD
+): Promise<number> {
+  const docId = `${ownerUid}_nested_${nestedUid}_${dateStr}`;
+  const snap = await getDoc(doc(db, "balancingFund", docId));
+  if (snap.exists()) {
+    return Number(snap.data().amount || 0);
+  }
+  return 0;
+}
+
+// ─────────────────────────────────────────
+// Nested Expenses
+// ─────────────────────────────────────────
+
+export interface NestedExpense {
+  id: string;
+  nestedUid: string;
+  ownerUid: string;
+  amount: number;
+  note: string;
+  date: number; // ms timestamp
+  createdAt: number;
+}
+
+/** Add a new expense for a nested user */
+export async function addNestedExpense(
+  ownerUid: string,
+  nestedUid: string,
+  amount: number,
+  note: string,
+  date: number = Date.now()
+): Promise<NestedExpense> {
+  const docId = `nexp_${nestedUid}_${Date.now()}`;
+  const expense: NestedExpense = {
+    id: docId,
+    nestedUid,
+    ownerUid,
+    amount,
+    note: note.trim(),
+    date,
+    createdAt: Date.now(),
+  };
+  await setDoc(doc(db, "nestedExpenses", docId), expense);
+  return expense;
+}
+
+/** Fetch all expenses for a nested user */
+export async function getNestedExpenses(
+  nestedUid: string
+): Promise<NestedExpense[]> {
+  const q = query(
+    coll.nestedExpenses,
+    where("nestedUid", "==", nestedUid),
+    orderBy("date", "desc"),
+    limit(500)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.data() as NestedExpense);
 }

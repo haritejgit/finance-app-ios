@@ -23,6 +23,27 @@ export default function Index() {
   }, [intro]);
 
   useEffect(() => {
+    // Force clear stale Service Worker cache to update client JS bundle
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        if (registrations.length > 0) {
+          for (let registration of registrations) {
+            registration.unregister().then((success) => {
+              if (success && window.caches) {
+                window.caches.keys().then((keys) => {
+                  return Promise.all(keys.map(key => window.caches.delete(key)));
+                }).then(() => {
+                  window.location.reload();
+                });
+              }
+            });
+          }
+        }
+      });
+    }
+  }, []);
+
+  useEffect(() => {
     if (!loading) {
       void SplashScreen.hideAsync().catch(() => undefined);
     }

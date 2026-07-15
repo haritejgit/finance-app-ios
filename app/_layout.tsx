@@ -32,6 +32,29 @@ function RootLayoutContent() {
   }, []);
 
   useEffect(() => {
+    if (Platform.OS === "web" && typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const registration of registrations) {
+          registration.unregister().then((unregistered) => {
+            if (unregistered) {
+              console.log("Service worker unregistered successfully");
+              if (typeof caches !== "undefined") {
+                caches.keys().then((keys) => {
+                  return Promise.all(keys.map((k) => caches.delete(k)));
+                }).then(() => {
+                  window.location.reload();
+                });
+              } else {
+                window.location.reload();
+              }
+            }
+          });
+        }
+      });
+    }
+  }, []);
+
+  useEffect(() => {
     if (!authLoading) {
       void SplashScreen.hideAsync().catch(() => undefined);
     }

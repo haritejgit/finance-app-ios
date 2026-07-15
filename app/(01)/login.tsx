@@ -154,189 +154,45 @@ export default function LoginScreen() {
     try {
       setNestedLoading(true);
       setNestedError(null);
-      await fbSignIn(auth, nestedEmail, nestedPassword);
-      setNestedStep(2);
+      setNestedSuccess(null);
+
+      // 1. Sign in with Firebase Auth
+      const userCredential = await fbSignIn(auth, nestedEmail, nestedPassword);
+      const currentUid = userCredential.user?.uid;
+      if (!currentUid) {
+        throw new Error("Authentication failed");
+      }
+
+      // 2. Fetch the nested account document directly
+      const nestedSnap = await getDoc(doc(db, "nestedAccounts", currentUid));
+      if (!nestedSnap.exists()) {
+        await signOut(auth);
+        setNestedError("This nested account does not exist or has been deleted.");
+        return;
+      }
+
+      const nestedData = nestedSnap.data();
+      if (!nestedData || nestedData.active !== true) {
+        await signOut(auth);
+        setNestedError("This nested account has been deactivated.");
+        return;
+      }
+
+      // 3. Success! Set states and route to shift selection
+      isNestedFlow.current = false;
+      setNestedStep(0);
+      router.replace("/shift-selection");
     } catch (e: any) {
       setNestedError(e?.message ?? "Sign-in failed");
+      try {
+        if (auth.currentUser) {
+          await signOut(auth);
+        }
+      } catch {}
     } finally {
       setNestedLoading(false);
     }
   }, [nestedEmail, nestedPassword]);
-
-  const handleNestedStep2 = useCallback(async () => {
-    if (!nestedMasterEmail) {
-      setNestedError("Enter the main account owner's email.");
-      return;
-    }
-    const currentUid = auth.currentUser?.uid;
-    if (!currentUid) {
-      setNestedError("Session expired. Please start over.");
-      return;
-    }
-    try {
-      setNestedLoading(true);
-      setNestedError(null);
-
-      // Generate 6-digit OTP
-      const otp = String(Math.floor(100000 + Math.random() * 900000));
-
-      // Check for master's pending invite
-      const pendingSnap = await getDocs(
-        query(
-          collection(db, "nestedAccounts"),
-          where("nestedUserEmail", "==", nestedEmail),
-          where("emailPending", "==", true)
-        )
-      );
-      let masterUid: string | null = null;
-      if (!pendingSnap.empty) {
-        masterUid = pendingSnap.docs[0].data().masterUserId;
-      }
-
-      // Create OTP request doc
-      const otpDoc = {
-        masterEmail: nestedMasterEmail,
-        masterUserId: masterUid,
-        nestedUserId: currentUid,
-        nestedEmail: nestedEmail,
-        otp: otp,
-        status: "pending",
-        createdAt: Date.now(),
-        expiresAt: Date.now() + 15 * 60 * 1000,
-      };
-      const otpRef = await addDoc(collection(db, "nestedOtp"), otpDoc);
-      setNestedOtpDocId(otpRef.id);
-      setNestedStep(3);
-      setNestedSuccess("OTP sent! Ask the main account owner to check Admin → Pending OTP Requests for the code.");
-    } catch (e: any) {
-      setNestedError(e?.message ?? "Failed to request OTP");
-    } finally {
-      setNestedLoading(false);
-    }
-  }, [nestedMasterEmail, nestedEmail]);
-
-  const handleNestedStep3 = useCallback(async () => {
-    if (!nestedOtp || nestedOtp.length !== 6) {
-      setNestedError("Enter the 6-digit OTP code.");
-      return;
-    }
-    if (!nestedOtpDocId) {
-      setNestedError("Session expired. Start over.");
-      return;
-    }
-    const currentUid = auth.currentUser?.uid;
-    if (!currentUid) {
-      setNestedError("Session expired. Start over.");
-      return;
-    }
-    try {
-      setNestedLoading(true);
-      setNestedError(null);
-      setNestedSuccess(null);
-
-      // Verify OTP
-      const otpSnap = await getDoc(doc(db, "nestedOtp", nestedOtpDocId));
-      if (!otpSnap.exists()) {
-        setNestedError("OTP request expired. Start over.");
-        setNestedLoading(false);
-        return;
-      }
-      const otpData = otpSnap.data();
-      if (otpData.status !== "pending") {
-        setNestedError("This OTP has already been used or cancelled.");
-        setNestedLoading(false);
-        return;
-      }
-      if (Date.now() > otpData.expiresAt) {
-        setNestedError("OTP expired (15 min limit). Start over.");
-        setNestedLoading(false);
-        return;
-      }
-      if (otpData.otp !== nestedOtp) {
-        setNestedError("Wrong OTP. Ask the main account owner for the correct code.");
-        setNestedLoading(false);
-        return;
-      }
-
-      // OTP verified — mark as approved
-      await updateDoc(doc(db, "nestedOtp", nestedOtpDocId), {
-        status: "approved",
-        verifiedAt: Date.now(),
-      });
-
-      // Determine master UID
-      let resolvedMasterUid = otpData.masterUserId;
-      if (!resolvedMasterUid || resolvedMasterUid === "pending") {
-        const pendingSnap = await getDocs(
-          query(
-            collection(db, "nestedAccounts"),
-            where("nestedUserEmail", "==", nestedEmail),
-            where("emailPending", "==", true)
-          )
-        );
-        if (!pendingSnap.empty) {
-          resolvedMasterUid = pendingSnap.docs[0].data().masterUserId;
-        }
-      }
-
-      if (resolvedMasterUid && resolvedMasterUid !== "pending") {
-        // Full link — create nested account mapping
-        await setDoc(doc(db, "nestedAccounts", currentUid), {
-          id: currentUid,
-          masterUserId: resolvedMasterUid,
-          nestedUserId: currentUid,
-          nestedUserEmail: nestedEmail,
-          masterEmail: nestedMasterEmail,
-          label: "OTP-approved nested account",
-          createdAt: Date.now(),
-          otpVerified: true,
-          otpDocId: nestedOtpDocId,
-        });
-
-        // Clean up pending invites
-        const pendingCleanup = await getDocs(
-          query(
-            collection(db, "nestedAccounts"),
-            where("nestedUserEmail", "==", nestedEmail),
-            where("emailPending", "==", true)
-          )
-        );
-        pendingCleanup.forEach((d) => deleteDoc(d.ref).catch(() => undefined));
-
-        isNestedFlow.current = false;
-        setNestedStep(0);
-        setNestedSuccess(null);
-        // User is now linked — will auto-redirect to app
-        router.replace("/shift-selection");
-      } else {
-        // No master UID — store with masterEmail, master must approve
-        await setDoc(doc(db, "nestedAccounts", currentUid), {
-          id: currentUid,
-          masterUserId: "unresolved",
-          masterEmail: nestedMasterEmail,
-          nestedUserId: currentUid,
-          nestedUserEmail: nestedEmail,
-          label: "OTP-approved (pending master approval)",
-          createdAt: Date.now(),
-          otpVerified: true,
-          otpDocId: nestedOtpDocId,
-        });
-
-        // Sign out so the login page shows cleanly
-        await signOut(auth);
-        isNestedFlow.current = false;
-        setNestedStep(0);
-        setNestedSuccess(null);
-        setMessage(
-          "✅ OTP verified! Ask the main account owner to log in and approve your link in Admin → OTP Requests. Then log in again to access the dashboard."
-        );
-      }
-    } catch (e: any) {
-      setNestedError(e?.message ?? "OTP verification failed");
-    } finally {
-      setNestedLoading(false);
-    }
-  }, [nestedOtp, nestedOtpDocId, nestedEmail, nestedMasterEmail]);
 
   // ─── Render ───
 
@@ -458,14 +314,10 @@ export default function LoginScreen() {
                 // ─── Nested Login Flow ───
                 <>
                   <Text style={[styles.formTitle, { color: colors.text }]}>
-                    {nestedStep === 1 ? "Step 1: Sign In" : nestedStep === 2 ? "Step 2: Master's Email" : "Step 3: Enter OTP"}
+                    Nested Login
                   </Text>
                   <Text style={[styles.formSub, { color: colors.textSecondary }]}>
-                    {nestedStep === 1
-                      ? "Sign in with your own account."
-                      : nestedStep === 2
-                      ? "Enter the email of the main account owner."
-                      : "Ask the main account owner for the 6-digit OTP code."}
+                    Sign in with your nested account credentials.
                   </Text>
 
                   {!!nestedError && <Text style={styles.error}>{nestedError}</Text>}
@@ -483,36 +335,6 @@ export default function LoginScreen() {
                       </View>
                       <Pressable style={[styles.button, nestedLoading ? styles.buttonDisabled : null]} onPress={handleNestedStep1} disabled={nestedLoading}>
                         {nestedLoading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Sign In →</Text>}
-                      </Pressable>
-                    </>
-                  )}
-
-                  {nestedStep === 2 && (
-                    <>
-                      <View style={[styles.inputShell, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
-                        <Icon name="person-outline" size={18} color={colors.gray} />
-                        <TextInput value={nestedMasterEmail} onChangeText={setNestedMasterEmail} placeholder="Main Account Email" style={[styles.input, { color: colors.text }]} placeholderTextColor={colors.gray} autoCapitalize="none" />
-                      </View>
-                      <Pressable style={[styles.button, nestedLoading ? styles.buttonDisabled : null]} onPress={handleNestedStep2} disabled={nestedLoading}>
-                        {nestedLoading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Request OTP →</Text>}
-                      </Pressable>
-                    </>
-                  )}
-
-                  {nestedStep === 3 && (
-                    <>
-                      <View style={[styles.otpRow]}>
-                        <TextInput
-                          value={nestedOtp}
-                          onChangeText={setNestedOtp}
-                          placeholder="000000"
-                          maxLength={6}
-                          style={[styles.otpInput, { color: colors.text, backgroundColor: colors.surfaceTint, borderColor: colors.border }]}
-                          keyboardType="number-pad"
-                        />
-                      </View>
-                      <Pressable style={[styles.button, nestedLoading || nestedOtp.length !== 6 ? styles.buttonDisabled : null]} onPress={handleNestedStep3} disabled={nestedLoading || nestedOtp.length !== 6}>
-                        {nestedLoading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Verify & Access</Text>}
                       </Pressable>
                     </>
                   )}

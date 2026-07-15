@@ -126,7 +126,7 @@ function getCollectionWeekStart(startDate: number, dayName: string): number {
 }
 
 export function getCollectionDatesForVillage(village: any, reportEnd: number): number[] {
-  const candidates: { date: number; dayOfWeek: string; shift: string }[] = [];
+  const candidates: { date: number; dayOfWeek: string; shift: string; segmentIndex: number }[] = [];
   const dayMap: Record<string, number> = { Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6 };
   
   // 1. Get all history segments
@@ -140,7 +140,7 @@ export function getCollectionDatesForVillage(village: any, reportEnd: number): n
   }
   
   // 2. Generate candidate collection dates for each segment
-  segments.forEach((seg: any) => {
+  segments.forEach((seg: any, segIdx: number) => {
     const from = toMillis(seg.fromDate);
     const to = seg.toDate === null || seg.toDate === undefined ? Number.MAX_SAFE_INTEGER : toMillis(seg.toDate);
     
@@ -158,7 +158,8 @@ export function getCollectionDatesForVillage(village: any, reportEnd: number): n
           candidates.push({
             date: targetDate,
             dayOfWeek: seg.dayOfWeek,
-            shift: seg.shift
+            shift: seg.shift,
+            segmentIndex: segIdx
           });
         }
       }
@@ -169,47 +170,23 @@ export function getCollectionDatesForVillage(village: any, reportEnd: number): n
   // Sort candidates by date
   candidates.sort((a, b) => a.date - b.date);
   
-  // 3. Filter candidates based on the gap rule
-  const printedDates: number[] = [];
-  let prevSchedule: { dayOfWeek: string; shift: string } | null = null;
-  let skipUntil: number | null = null;
-  
+  // 3. Group candidates by week start (Monday) and select the latest segment's candidate for each week
+  const weeksMap = new Map<number, typeof candidates>();
   candidates.forEach((cand) => {
-    const targetDate = cand.date;
-    
-    if (prevSchedule === null) {
-      printedDates.push(targetDate);
-      prevSchedule = cand;
-    } else {
-      const scheduleChanged = cand.dayOfWeek !== prevSchedule.dayOfWeek || cand.shift !== prevSchedule.shift;
-      
-      if (scheduleChanged) {
-        const lastPrintedDate = printedDates[printedDates.length - 1];
-        if (lastPrintedDate !== undefined) {
-          const gap = Math.round((targetDate - lastPrintedDate) / (24 * 60 * 60 * 1000));
-          if (gap >= 6) {
-            printedDates.push(targetDate);
-            skipUntil = null;
-          } else {
-            // gap < 6: skip targetDate, next entry must be >= targetDate + 7 days
-            skipUntil = targetDate + 7 * 24 * 60 * 60 * 1000;
-          }
-        } else {
-          printedDates.push(targetDate);
-        }
-        prevSchedule = cand;
-      } else {
-        // Normal week (no reschedule)
-        if (skipUntil !== null) {
-          if (targetDate >= skipUntil) {
-            printedDates.push(targetDate);
-            skipUntil = null;
-          }
-        } else {
-          printedDates.push(targetDate);
-        }
-      }
+    const monday = getCollectionWeekStart(cand.date, 'Monday');
+    if (!weeksMap.has(monday)) {
+      weeksMap.set(monday, []);
     }
+    weeksMap.get(monday)!.push(cand);
+  });
+
+  const printedDates: number[] = [];
+  const sortedMondays = Array.from(weeksMap.keys()).sort((a, b) => a - b);
+  sortedMondays.forEach((monday) => {
+    const weekCands = weeksMap.get(monday)!;
+    // Sort by segmentIndex descending so the latest segment comes first
+    weekCands.sort((a, b) => b.segmentIndex - a.segmentIndex);
+    printedDates.push(weekCands[0].date);
   });
   
   return printedDates;
@@ -1542,7 +1519,10 @@ interface Payment {
                 weeklyDisbursed[weekIdx] += getLoanDistributedAmount(loanStartingThisWeek as any);
 
                 if (renewalPayment) {
-                  const previousBalance = money(renewalPayment.amountPaid);
+                  const otherPaymentsSum = weekPayments
+                    .filter((payment) => payment.id !== renewalPayment.id && isRealCollectionPayment(payment))
+                    .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
+                  const previousBalance = money(renewalPayment.amountPaid) + otherPaymentsSum;
                   weeklyCollected[weekIdx] += previousBalance;
                   row.push(withCarryForward(`${Math.trunc(previousBalance)}\n${Math.trunc(displayedAmount)}`));
                   setStyle(rowIndex, colIndex, orangeStyle);

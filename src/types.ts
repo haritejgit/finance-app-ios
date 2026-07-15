@@ -96,6 +96,7 @@ export type Payment = {
   type?: PaymentMode | "DUE";
   notes?: string;
   userId: string;
+  nestedUid?: string;
 };
 
 export type Investment = {

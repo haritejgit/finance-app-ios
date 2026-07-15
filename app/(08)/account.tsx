@@ -43,6 +43,8 @@ import {
   subscribeWalletData,
   getAccountSummaryForRange,
   getAccountOpeningBalanceForDate,
+  addBulkPaymentsAndDues,
+  getActiveLoansByCustomerIds,
   Investment,
   Expense,
   AllPaymentEver,
@@ -295,17 +297,24 @@ function DatePickerField({ value, onChange, placeholder, style }: DatePickerFiel
 }
 
 export default function AccountScreen() {
-  const { user } = useAuth();
+  const { user, userProfile: authProfile, loading: authLoading } = useAuth();
   const { colors } = useTheme();
   const router = useRouter();
+  
+  React.useEffect(() => {
+    if (!authLoading && authProfile && authProfile.role === "nested") {
+      router.replace("/shift-selection");
+    }
+  }, [authProfile, authLoading, router]);
+
   const { t, language } = useLanguage();
   const isTe = language === "te";
   const isNarrow = Dimensions.get("window").width < 600;
 
 
 
-  // Selected Tab state: 'summary' | 'investments' | 'expenses' | 'notes'
-  const [activeTab, setActiveTab] = useState<"summary" | "investments" | "expenses" | "notes">("summary");
+  // Selected Tab state: 'summary' | 'investments' | 'expenses' | 'notes' | 'bulk'
+  const [activeTab, setActiveTab] = useState<"summary" | "investments" | "expenses" | "notes" | "bulk">("summary");
 
   // Loading States
   const [loading, setLoading] = useState(true);
@@ -371,6 +380,15 @@ export default function AccountScreen() {
   const [accountNotesInput, setAccountNotesInput] = useState("");
   const [notesStatus, setNotesStatus] = useState<"idle" | "saved" | "error">("idle");
 
+  // Bulk Entry States
+  const [bulkVillageId, setBulkVillageId] = useState<string>("");
+  const [bulkDateStr, setBulkDateStr] = useState<string>("");
+  const [bulkActiveLoans, setBulkActiveLoans] = useState<Record<string, any>>({});
+  const [bulkAmounts, setBulkAmounts] = useState<Record<string, string>>({});
+  const [bulkSelected, setBulkSelected] = useState<Record<string, boolean>>({});
+  const [bulkLoading, setBulkLoading] = useState<boolean>(false);
+  const [bulkSubmitting, setBulkSubmitting] = useState<boolean>(false);
+
   // Edit Expense Modal State
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [editExpAmount, setEditExpAmount] = useState<string>("");
@@ -403,6 +421,7 @@ export default function AccountScreen() {
     // Set form date defaults to today
     setInvDate(formatDDMMYYYY(today.getTime()));
     setExpDate(formatDDMMYYYY(today.getTime()));
+    setBulkDateStr(formatDDMMYYYY(today.getTime()));
   }, []);
 
   // Fetch balancing fund, villages, customers, and transaction lists (one-shot).
@@ -444,6 +463,55 @@ export default function AccountScreen() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // If bulk entry tab is opened and no village is selected, select the first village
+  useEffect(() => {
+    if (activeTab === "bulk" && !bulkVillageId && villages.length > 0) {
+      setBulkVillageId(villages[0].id);
+    }
+  }, [activeTab, bulkVillageId, villages]);
+
+  // Fetch active loans when the bulk entry village is changed
+  useEffect(() => {
+    if (!user || !bulkVillageId) {
+      setBulkActiveLoans({});
+      return;
+    }
+    const villageCustomers = customers.filter((c) => c.villageId === bulkVillageId);
+    if (villageCustomers.length === 0) {
+      setBulkActiveLoans({});
+      setBulkAmounts({});
+      setBulkSelected({});
+      return;
+    }
+
+    const fetchLoans = async () => {
+      try {
+        setBulkLoading(true);
+        const ids = villageCustomers.map((c) => c.id);
+        const loansMap = await getActiveLoansByCustomerIds(user.uid, ids);
+        setBulkActiveLoans(loansMap);
+
+        const initialAmounts: Record<string, string> = {};
+        const initialSelected: Record<string, boolean> = {};
+
+        villageCustomers.forEach((c) => {
+          initialAmounts[c.id] = "";
+          initialSelected[c.id] = true;
+        });
+
+        setBulkAmounts(initialAmounts);
+        setBulkSelected(initialSelected);
+      } catch (err: any) {
+        console.error("Error loading active loans for bulk entry:", err);
+        Alert.alert(t("error"), "Failed to load active loans for this village.");
+      } finally {
+        setBulkLoading(false);
+      }
+    };
+
+    fetchLoans();
+  }, [user, bulkVillageId, customers, t]);
 
   useEffect(() => {
     const nextLanguage = isTe ? "te" : "en";
@@ -836,6 +904,75 @@ export default function AccountScreen() {
       setSubmitting(false);
     }
   }, [user, editingExpense, editExpAmount, editExpDesc, editExpDate, editExpPaymentMode, t]);
+
+  const handleBulkSubmit = useCallback(async () => {
+    if (!user) return;
+    const paymentDate = parseDDMMYYYY(bulkDateStr);
+    if (!paymentDate) {
+      Alert.alert(t("error"), "Please enter a valid date in DD/MM/YYYY format.");
+      return;
+    }
+
+    const villageCustomers = customers.filter((c) => c.villageId === bulkVillageId);
+    const entries: { loan: any; amountPaid: number; isDue: boolean }[] = [];
+
+    for (const c of villageCustomers) {
+      const isSel = bulkSelected[c.id] !== false; // Defaultly every person should be selected
+      if (!isSel) continue;
+
+      const loan = bulkActiveLoans[c.id];
+      if (!loan || loan.status !== "ACTIVE") {
+        // Skip customers who don't have an active loan to pay/due
+        continue;
+      }
+
+      const amtStr = bulkAmounts[c.id]?.trim() || "";
+      if (amtStr === "") {
+        entries.push({
+          loan,
+          amountPaid: 0,
+          isDue: true,
+        });
+      } else {
+        const amt = parseFloat(amtStr);
+        if (isNaN(amt) || amt <= 0) {
+          Alert.alert(t("error"), `Invalid payment amount for ${c.name}`);
+          return;
+        }
+        entries.push({
+          loan,
+          amountPaid: amt,
+          isDue: false,
+        });
+      }
+    }
+
+    if (entries.length === 0) {
+      Alert.alert(t("error"), "No active loans found or no customers selected.");
+      return;
+    }
+
+    try {
+      setBulkSubmitting(true);
+      await addBulkPaymentsAndDues(entries, paymentDate);
+      Alert.alert(t("success"), "Bulk entry recorded successfully.");
+      
+      // Clear inputs
+      const clearedAmounts: Record<string, string> = {};
+      villageCustomers.forEach((c) => {
+        clearedAmounts[c.id] = "";
+      });
+      setBulkAmounts(clearedAmounts);
+
+      // Trigger standard data reload
+      await loadData();
+    } catch (err: any) {
+      console.error("Bulk entry save error:", err);
+      Alert.alert(t("error"), err?.message ?? "An error occurred while saving bulk entry.");
+    } finally {
+      setBulkSubmitting(false);
+    }
+  }, [user, bulkDateStr, bulkVillageId, customers, bulkSelected, bulkActiveLoans, bulkAmounts, t, loadData]);
 
   // Edit Investment
   const handleEditInvestment = useCallback((investment: Investment) => {
@@ -1475,6 +1612,171 @@ export default function AccountScreen() {
     </View>
   );
 
+  const renderBulkEntryCard = () => {
+    const villageCustomers = customers.filter((c) => c.villageId === bulkVillageId);
+    
+    // Filter to customers with active loans
+    const activeCustomers = villageCustomers.filter((c) => {
+      const loan = bulkActiveLoans[c.id];
+      return loan && loan.status === "ACTIVE";
+    });
+
+    return (
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>{t("bulkEntry")}</Text>
+        <Text style={styles.cardDesc}>Record payments or dues for a village on a specific date.</Text>
+
+        {/* Date Selector */}
+        <View style={styles.inputContainer}>
+          <Text style={styles.inputLabel}>{t("selectDate")}</Text>
+          <DatePickerField
+            value={bulkDateStr}
+            onChange={setBulkDateStr}
+            placeholder="DD/MM/YYYY"
+          />
+        </View>
+
+        {/* Village Scrollable list */}
+        <View style={styles.inputContainer}>
+          <Text style={styles.inputLabel}>{t("selectVillage")}</Text>
+          {villages.length === 0 ? (
+            <Text style={styles.emptyText}>No villages found.</Text>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: "row", marginVertical: 4 }}>
+              {villages.map((v) => (
+                <Pressable
+                  key={v.id}
+                  style={[{
+                    paddingHorizontal: 16,
+                    paddingVertical: 10,
+                    borderRadius: 20,
+                    backgroundColor: bulkVillageId === v.id ? "#1565C0" : "#F5F9FF",
+                    borderWidth: 1,
+                    borderColor: bulkVillageId === v.id ? "#1565C0" : "#dbeafe",
+                    marginRight: 8,
+                  }]}
+                  onPress={() => setBulkVillageId(v.id)}
+                >
+                  <Text style={{
+                    color: bulkVillageId === v.id ? "#ffffff" : "#546E7A",
+                    fontSize: 13,
+                    fontWeight: "800",
+                  }}>{v.name}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+
+        <View style={styles.walletDivider} />
+
+        {/* Info label about deselecting */}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#eff6ff", padding: 10, borderRadius: 10, borderWidth: 1, borderColor: "#bfdbfe" }}>
+          <Icon name="information-circle-outline" size={16} color="#1e40af" />
+          <Text style={{ fontSize: 11, fontWeight: "700", color: "#1e40af", flex: 1 }}>
+            {t("deselectHint")}
+          </Text>
+        </View>
+
+        {/* Customer List */}
+        <Text style={[styles.inputLabel, { marginTop: 10 }]}>Customers List</Text>
+        {bulkLoading ? (
+          <View style={{ paddingVertical: 20, alignItems: "center" }}>
+            <ActivityIndicator size="small" color="#1565C0" />
+          </View>
+        ) : !bulkVillageId ? (
+          <Text style={styles.emptyText}>Please select a village above.</Text>
+        ) : activeCustomers.length === 0 ? (
+          <Text style={styles.emptyText}>No customers with active loans in this village.</Text>
+        ) : (
+          <View style={{ gap: 4 }}>
+            {activeCustomers.map((c) => {
+              const isSelected = bulkSelected[c.id] !== false;
+              const loan = bulkActiveLoans[c.id];
+              return (
+                <View
+                  key={c.id}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingVertical: 10,
+                    borderBottomWidth: 1,
+                    borderBottomColor: "#f1f5f9",
+                    opacity: isSelected ? 1 : 0.5,
+                  }}
+                >
+                  {/* Checkbox and Customer details */}
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+                    <Pressable
+                      onPress={() => {
+                        setBulkSelected((prev) => ({ ...prev, [c.id]: !isSelected }));
+                      }}
+                      style={{ padding: 4 }}
+                    >
+                      <Icon
+                        name={isSelected ? "checkbox" : "square-outline"}
+                        size={24}
+                        color={isSelected ? "#1565C0" : "#64748b"}
+                      />
+                    </Pressable>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontWeight: "800", color: "#1e293b" }}>
+                        {c.name}
+                      </Text>
+                      <Text style={{ fontSize: 11, fontWeight: "600", color: "#64748b" }}>
+                        ID: {c.numericalId} {loan ? `| Active Bal: Rs.${loan.balanceAmount}` : ""}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Amount Input */}
+                  <TextInput
+                    style={{
+                      width: 90,
+                      backgroundColor: isSelected ? "#f8fafc" : "#e2e8f0",
+                      borderWidth: 1,
+                      borderColor: "#cbd5e1",
+                      borderRadius: 8,
+                      paddingVertical: 6,
+                      paddingHorizontal: 10,
+                      fontSize: 14,
+                      color: "#0f172a",
+                      textAlign: "right",
+                    }}
+                    placeholder={isSelected ? "Due" : "N/A"}
+                    placeholderTextColor="#94a3b8"
+                    keyboardType="numeric"
+                    value={bulkAmounts[c.id] || ""}
+                    onChangeText={(val) => {
+                      setBulkAmounts((prev) => ({ ...prev, [c.id]: val }));
+                    }}
+                    editable={isSelected}
+                  />
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Done/Submit Button */}
+        {activeCustomers.length > 0 && (
+          <Pressable
+            style={[styles.primaryButton, (bulkSubmitting || bulkLoading) && styles.btnDisabled, { marginTop: 12 }]}
+            onPress={handleBulkSubmit}
+            disabled={bulkSubmitting || bulkLoading}
+          >
+            {bulkSubmitting ? (
+              <ActivityIndicator size="small" color="#111827" />
+            ) : (
+              <Text style={styles.primaryButtonText}>{t("done")}</Text>
+            )}
+          </Pressable>
+        )}
+      </View>
+    );
+  };
+
   const renderHistoryCard = () => (
     <View style={styles.card}>
       <Text style={styles.cardTitle}>{t("historyLog")}</Text>
@@ -1593,7 +1895,7 @@ export default function AccountScreen() {
                 showsHorizontalScrollIndicator={false} 
                 contentContainerStyle={styles.tabBar}
               >
-                {(["summary", "investments", "expenses", "notes"] as const).map((tab) => {
+                {(["summary", "investments", "expenses", "notes", "bulk"] as const).map((tab) => {
                   const active = activeTab === tab;
                   const label = tab === "summary"
                     ? t("bfSummary")
@@ -1601,7 +1903,10 @@ export default function AccountScreen() {
                         ? t("investments")
                         : (tab === "expenses"
                             ? t("expenses")
-                            : "Notes"
+                            : (tab === "notes"
+                                ? "Notes"
+                                : t("bulkEntry")
+                              )
                           )
                       );
                   return (
@@ -2017,6 +2322,12 @@ export default function AccountScreen() {
                 {activeTab === "notes" && (
                   <View style={styles.cardContainer}>
                     {renderNotesCard()}
+                  </View>
+                )}
+
+                {activeTab === "bulk" && (
+                  <View style={styles.cardContainer}>
+                    {renderBulkEntryCard()}
                   </View>
                 )}
 

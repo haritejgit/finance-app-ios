@@ -1,6 +1,8 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { router, useRouter } from "expo-router";
+import { router, useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { db } from "../../src/firebase";
+import { collection, query, where, onSnapshot, getDocs } from "firebase/firestore";
 import {
   Alert,
   Animated,
@@ -8,6 +10,7 @@ import {
   Easing,
   FlatList,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -25,7 +28,7 @@ import { CustomerIdBadge } from "../../src/components/CustomerIdBadge";
 import { getDashboardAnalytics, subscribeDashboardAnalytics, type CustomerState, type DashboardAnalytics } from "../../src/finance-analytics";
 import Icon from "../../src/Icon";
 import { lightImpact } from "../../src/interactions";
-import { CustomerSearchResult, getAllActiveCustomersWithVillages, runRetroactiveCleanup } from "../../src/repository";
+import { CustomerSearchResult, getAllActiveCustomersWithVillages, runRetroactiveCleanup, addNestedExpense, updateNestedExpense, deleteNestedExpense, type NestedExpense } from "../../src/repository";
 import { Colors, Gradients } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
 import { useLanguage } from "../../src/language-context";
@@ -164,7 +167,7 @@ function BottomNavButton({ label, icon, onPress }: { label: string; icon: string
 
 export default function ShiftSelectionScreen() {
   const nav = useRouter();
-  const { user, logout } = useAuth();
+  const { user, userProfile, logout } = useAuth();
   const { colors } = useTheme();
   const { t, language } = useLanguage();
   const [selectedDay, setSelectedDay] = useState("Monday");
@@ -180,6 +183,82 @@ export default function ShiftSelectionScreen() {
   const [searchLoading, setSearchLoading] = useState(false);
   const intro = useRef(new Animated.Value(0)).current;
 
+  const logDebug = useCallback(async (message: string, extra: any = {}) => {
+    try {
+      const { addDoc, collection } = await import("firebase/firestore");
+      await addDoc(collection(db, "debugLogs"), {
+        timestamp: Date.now(),
+        message,
+        ...extra
+      });
+    } catch (e) {
+      console.error("Failed to write debug log", e);
+    }
+  }, []);
+
+  const isOwner = !userProfile || userProfile.role !== "nested";
+  const effectiveOwnerId = isOwner ? user?.uid : userProfile?.parentUid;
+
+  const [nestedActivity, setNestedActivity] = useState<any[]>([]);
+  const [nestedAccounts, setNestedAccounts] = useState<any[]>([]);
+
+  // Nested expenses state (for nested user's own panel)
+  const [nestedExpenses, setNestedExpenses] = useState<NestedExpense[]>([]);
+  const [showAddExpense, setShowAddExpense] = useState(false);
+  const [expenseAmount, setExpenseAmount] = useState("");
+  const [expenseNote, setExpenseNote] = useState("");
+  const [savingExpense, setSavingExpense] = useState(false);
+
+  // States for editing expenses
+  const [editingExpense, setEditingExpense] = useState<NestedExpense | null>(null);
+  const [showEditExpense, setShowEditExpense] = useState(false);
+  const [editExpenseAmount, setEditExpenseAmount] = useState("");
+  const [editExpenseNote, setEditExpenseNote] = useState("");
+  const [savingEditExpense, setSavingEditExpense] = useState(false);
+
+  useEffect(() => {
+    if (user?.uid && isOwner) {
+      const qAccounts = query(
+        collection(db, "nestedAccounts"),
+        where("ownerUid", "==", user.uid)
+      );
+      const unsubAccounts = onSnapshot(qAccounts, (snap) => {
+        setNestedAccounts(snap.docs.map(doc => doc.data()));
+      });
+
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayStartMs = todayStart.getTime();
+
+      const qTxns = query(
+        collection(db, "nestedTransactions"),
+        where("ownerUid", "==", user.uid),
+        where("date", ">=", todayStartMs)
+      );
+      const unsubTxns = onSnapshot(qTxns, (snap) => {
+        setNestedActivity(snap.docs.map(doc => doc.data()));
+      });
+
+      return () => {
+        unsubAccounts();
+        unsubTxns();
+      };
+    }
+  }, [user?.uid, isOwner]);
+
+  const groupedActivity = useMemo(() => {
+    const map: Record<string, { label: string; email: string; payments: any[] }> = {};
+    nestedActivity.forEach((act) => {
+      const acc = nestedAccounts.find(a => a.nestedUid === act.nestedUid);
+      const name = acc?.label || act.nestedEmail || acc?.nestedEmail || "Nested Account";
+      if (!map[act.nestedUid]) {
+        map[act.nestedUid] = { label: name, email: acc?.nestedEmail || "", payments: [] };
+      }
+      map[act.nestedUid].payments.push(act);
+    });
+    return Object.values(map);
+  }, [nestedActivity, nestedAccounts]);
+
   useEffect(() => {
     Animated.timing(intro, {
       toValue: 1,
@@ -190,10 +269,10 @@ export default function ShiftSelectionScreen() {
   }, [intro]);
 
   useEffect(() => {
-    if (user?.uid) {
+    if (user?.uid && isOwner) {
       runRetroactiveCleanup(user.uid);
     }
-  }, [user?.uid]);
+  }, [user?.uid, isOwner]);
 
   useEffect(() => {
     const timeout = setTimeout(() => setDebouncedQuery(searchQuery.trim().toLowerCase()), 220);
@@ -201,14 +280,14 @@ export default function ShiftSelectionScreen() {
   }, [searchQuery]);
 
   const loadDashboard = useCallback(async () => {
-    if (!user) {
+    if (!user || !effectiveOwnerId) {
       setLoading(false);
       setRefreshing(false);
       return;
     }
     try {
       setLoading(true);
-      setAnalytics(await getDashboardAnalytics(user.uid));
+      setAnalytics(await getDashboardAnalytics(effectiveOwnerId, isOwner ? undefined : user.uid));
     } catch (error) {
       console.error("Dashboard load failed", error);
       Alert.alert("Dashboard unavailable", "Could not load finance analytics. Please try again.");
@@ -216,16 +295,34 @@ export default function ShiftSelectionScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user]);
+  }, [user, effectiveOwnerId, isOwner]);
+
+  // For nested users: refresh dashboard every time they navigate back to this screen
+  // (e.g. after recording a payment or registering a customer)
+  useFocusEffect(
+    useCallback(() => {
+      if (!isOwner) {
+        loadDashboard();
+        // Also refresh nested expenses
+        if (user?.uid && effectiveOwnerId) {
+          import("firebase/firestore").then(({ getDocs: gd, query: q, collection: col, where: wh, orderBy }) => {
+            gd(q(col(db, "nestedExpenses"), wh("nestedUid", "==", user.uid))).then((snap) => {
+              setNestedExpenses(snap.docs.map((d) => d.data() as NestedExpense));
+            }).catch(() => {});
+          });
+        }
+      }
+    }, [isOwner, loadDashboard, user?.uid, effectiveOwnerId])
+  );
 
   useEffect(() => {
-    if (!user) {
+    if (!user || !effectiveOwnerId) {
       setLoading(false);
       return undefined;
     }
     setLoading(true);
     const unsub = subscribeDashboardAnalytics(
-      user.uid,
+      effectiveOwnerId,
       (nextAnalytics) => {
         setAnalytics(nextAnalytics);
         setLoading(false);
@@ -233,10 +330,11 @@ export default function ShiftSelectionScreen() {
       },
       () => {
         loadDashboard();
-      }
+      },
+      isOwner ? undefined : user.uid
     );
     return unsub;
-  }, [loadDashboard, user]);
+  }, [loadDashboard, user, effectiveOwnerId, isOwner]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -246,16 +344,50 @@ export default function ShiftSelectionScreen() {
   const openCustomerSearch = useCallback(async () => {
     lightImpact();
     setSearchOpen(true);
-    if (!user || allCustomers.length > 0) return;
+    if (!user || !effectiveOwnerId || allCustomers.length > 0) return;
     try {
       setSearchLoading(true);
-      setAllCustomers(await getAllActiveCustomersWithVillages(user.uid));
-    } catch {
+      let list = await getAllActiveCustomersWithVillages(effectiveOwnerId);
+      if (!isOwner) {
+        // Fetch nested customers registered by this nested user
+        const qNestedCust = query(
+          collection(db, "nestedCustomers"),
+          where("nestedUserId", "==", user.uid)
+        );
+        const nestedCustSnap = await getDocs(qNestedCust);
+        
+        // Fetch villages to resolve day/shift/names for temp customers
+        const villagesSnap = await getDocs(query(collection(db, "villages"), where("userId", "==", effectiveOwnerId)));
+        const villageMap = new Map(villagesSnap.docs.map(doc => [doc.id, doc.data() as any]));
+
+        const nestedCusts = nestedCustSnap.docs.map(doc => {
+          const data = doc.data();
+          const v = villageMap.get(data.villageId);
+          return {
+            id: doc.id,
+            name: data.name,
+            phone: data.phone,
+            aadhar: data.aadhar,
+            numericalId: data.numericalId || 999999,
+            coName: data.coName || "",
+            coId: data.coId || null,
+            villageId: data.villageId,
+            villageName: v?.name || "",
+            villageDayOfWeek: v?.dayOfWeek || "",
+            villageShift: v?.shift || "",
+            isTemp: true,
+          } as any;
+        });
+        list = [...list, ...nestedCusts];
+      }
+      setAllCustomers(list);
+    } catch (error) {
+      console.error("Search failed:", error);
       Alert.alert("Search failed", "Could not load customers. Please try again.");
     } finally {
       setSearchLoading(false);
     }
-  }, [allCustomers.length, user]);
+  }, [allCustomers.length, user, effectiveOwnerId, isOwner]);
 
   const searchResults = useMemo(() => {
     const numericQuery = debouncedQuery.replace(/\D/g, "");
@@ -287,14 +419,20 @@ export default function ShiftSelectionScreen() {
   const displayName = useMemo(() => (user?.displayName || user?.email || "User").split(/[ @]/)[0], [user?.displayName, user?.email]);
   const todayLabel = useMemo(() => new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" }), []);
   const bottomActions = useMemo(
-    () => [
-      { label: t("reports"), icon: "document-text-outline", action: () => nav.push("/reports") },
-      { label: t("account"), icon: "wallet-outline", action: () => nav.push("/account") },
-      { label: t("analytics"), icon: "bar-chart-outline", action: () => nav.push("/graph") },
-      { label: t("history"), icon: "time-outline", action: () => nav.push("/history") },
-      { label: t("settings"), icon: "settings-outline", action: () => nav.push("/settings") },
-    ],
-    [nav, t]
+    () => {
+      const actions = [
+        { key: "reports", label: t("reports"), icon: "document-text-outline", action: () => nav.push("/reports") },
+        { key: "account", label: t("account"), icon: "wallet-outline", action: () => nav.push("/account") },
+        { key: "analytics", label: t("analytics"), icon: "bar-chart-outline", action: () => nav.push("/graph") },
+        { key: "history", label: t("history"), icon: "time-outline", action: () => nav.push("/history") },
+        { key: "settings", label: t("settings"), icon: "settings-outline", action: () => nav.push("/settings") },
+      ];
+      if (!isOwner) {
+        return actions.filter(act => act.key !== "account" && act.key !== "analytics" && act.key !== "reports");
+      }
+      return actions;
+    },
+    [nav, t, isOwner]
   );
 
   const startCollection = useCallback(() => {
@@ -305,7 +443,14 @@ export default function ShiftSelectionScreen() {
   const totals = analytics?.totals;
   const balance = (totals?.totalCollection ?? 0) - (totals?.pendingAmount ?? 0);
   const savings = (totals?.monthlyRevenue ?? 0) - (totals?.distributedThisMonth ?? 0);
+  // Main account current amount: BF + collection - distribution - expenses
+  const mainCurrentAmount = (totals?.balancingFund ?? 0) + (totals?.totalCollection ?? 0) - (totals?.totalDistributed ?? 0) - (totals?.totalExpenses ?? 0);
   const dueAlerts = analytics?.dueAlerts ?? [];
+  // Nested account current amount: BF + collectionToday - distributedToday - expensesToday
+  const nestedExpensesToday = useMemo(() => {
+    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+    return nestedExpenses.filter(e => e.date >= todayStart.getTime()).reduce((s,e) => s + e.amount, 0);
+  }, [nestedExpenses]);
 
   const activeRouteKey = `${selectedDay}:${selectedShift}`;
   const routeProgress = analytics?.routeProgresses?.[activeRouteKey] ?? {
@@ -321,6 +466,111 @@ export default function ShiftSelectionScreen() {
   const progressPercent = Math.min(100, paidPercent + duePercent);
   const remainingTarget = Math.max(0, routeProgress.target - routeProgress.collected - routeProgress.dueAmount);
   const remainingCustomers = Math.max(0, routeProgress.customerCount - routeProgress.paidCustomerCount - routeProgress.dueCustomerCount);
+
+  const handleAddExpense = useCallback(async () => {
+    const amount = parseFloat(expenseAmount);
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert("Invalid Amount", "Please enter a valid expense amount greater than 0.");
+      return;
+    }
+    if (!user || !effectiveOwnerId) return;
+    try {
+      setSavingExpense(true);
+      const exp = await addNestedExpense(effectiveOwnerId, user.uid, amount, expenseNote || "Expense", Date.now());
+      setNestedExpenses((prev) => [exp, ...prev]);
+      setExpenseAmount("");
+      setExpenseNote("");
+      setShowAddExpense(false);
+      loadDashboard();
+    } catch (e: any) {
+      await logDebug("handleAddExpense failed", {
+        errorName: e?.name || null,
+        errorMessage: e?.message || null,
+        errorStack: e?.stack || null,
+        ownerUid: effectiveOwnerId,
+        nestedUid: user?.uid || null,
+        amount,
+        note: expenseNote
+      });
+      Alert.alert("Error", "Could not save expense. Please try again.");
+    } finally {
+      setSavingExpense(false);
+    }
+  }, [expenseAmount, expenseNote, user, effectiveOwnerId, loadDashboard]);
+
+  const handleOpenEditExpense = (expense: NestedExpense) => {
+    setEditingExpense(expense);
+    setEditExpenseAmount(expense.amount.toString());
+    setEditExpenseNote(expense.note);
+    setShowEditExpense(true);
+  };
+
+  const handleSaveEditExpense = useCallback(async () => {
+    const amount = parseFloat(editExpenseAmount);
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert("Invalid Amount", "Please enter a valid expense amount greater than 0.");
+      return;
+    }
+    if (!editingExpense) return;
+    try {
+      setSavingEditExpense(true);
+      await updateNestedExpense(editingExpense.id, amount, editExpenseNote || "Expense");
+      setNestedExpenses((prev) =>
+        prev.map((e) => (e.id === editingExpense.id ? { ...e, amount, note: editExpenseNote || "Expense" } : e))
+      );
+      setEditingExpense(null);
+      setEditExpenseAmount("");
+      setEditExpenseNote("");
+      setShowEditExpense(false);
+      loadDashboard();
+    } catch (e: any) {
+      await logDebug("handleSaveEditExpense failed", {
+        errorName: e?.name || null,
+        errorMessage: e?.message || null,
+        errorStack: e?.stack || null,
+        expenseId: editingExpense.id,
+        amount,
+        note: editExpenseNote
+      });
+      Alert.alert("Error", "Could not update expense. Please try again.");
+    } finally {
+      setSavingEditExpense(false);
+    }
+  }, [editingExpense, editExpenseAmount, editExpenseNote, loadDashboard]);
+
+  const handleConfirmDeleteExpense = (expense: NestedExpense) => {
+    const performDelete = async () => {
+      try {
+        await deleteNestedExpense(expense.id);
+        setNestedExpenses((prev) => prev.filter((e) => e.id !== expense.id));
+        loadDashboard();
+      } catch (e: any) {
+        await logDebug("handleDeleteExpense failed", {
+          errorName: e?.name || null,
+          errorMessage: e?.message || null,
+          errorStack: e?.stack || null,
+          expenseId: expense.id
+        });
+        Alert.alert("Error", "Could not delete expense.");
+      }
+    };
+
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm(`Are you sure you want to delete the expense of Rs.${expense.amount}?`);
+      if (confirmed) {
+        performDelete();
+      }
+    } else {
+      Alert.alert(
+        "Delete Expense",
+        `Are you sure you want to delete the expense of Rs.${expense.amount}?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete", style: "destructive", onPress: performDelete }
+        ]
+      );
+    }
+  };
 
   return (
     <AnimatedScreen style={styles.root}>
@@ -346,7 +596,10 @@ export default function ShiftSelectionScreen() {
                       <Icon name="wallet-outline" size={19} color={colors.primary} />
                     </View>
                     <View style={styles.headerCopy}>
-                      <Text style={[styles.eyebrow, { color: colors.textMuted }]}>{t("premiumWorkspace")}</Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <Text style={[styles.eyebrow, { color: colors.textMuted }]}>{t("premiumWorkspace")}</Text>
+                        <Text style={{ fontSize: 9, fontWeight: "900", color: "#FFFFFF", backgroundColor: colors.primary, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, overflow: "hidden" }}>v1.0.3</Text>
+                      </View>
                       <Text style={[styles.header, { color: colors.text }]}>{t("financeDashboard")}</Text>
                       <Text style={[styles.welcome, { color: colors.textSecondary }]}>{getGreeting(t)}, {displayName} | {todayLabel}</Text>
                     </View>
@@ -483,12 +736,107 @@ export default function ShiftSelectionScreen() {
                     </View>
                   </DashboardPanel>
 
+                  {isOwner && nestedActivity.length > 0 && (
+                    <DashboardPanel
+                      title="Nested Activity Today"
+                      subtitle="Payments entered by nested accounts"
+                    >
+                      {groupedActivity.map((group) => {
+                        const totalGroupAmount = group.payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+                        return (
+                          <View key={group.label} style={styles.nestedGroupContainer}>
+                            <View style={[styles.nestedGroupHeader, { borderBottomColor: colors.border }]}>
+                              <Text style={[styles.nestedGroupTitle, { color: colors.text }]}>{group.label}</Text>
+                              <Text style={[styles.nestedGroupTotal, { color: colors.primary }]}>Total: Rs.{totalGroupAmount.toLocaleString("en-IN")}</Text>
+                            </View>
+                            {group.payments.map((p: any) => (
+                              <View key={p.id} style={[styles.nestedActivityRow, { borderBottomColor: colors.border }]}>
+                                <View style={styles.nestedActivityLeft}>
+                                  <Text style={[styles.nestedActivityName, { color: colors.text }]}>{p.customerName || "Customer"}</Text>
+                                  <Text style={[styles.nestedActivityTime, { color: colors.textSecondary }]}>
+                                    {new Date(p.date || p.createdAt).toLocaleTimeString('en-IN', {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      hour12: true,
+                                    })}
+                                  </Text>
+                                </View>
+                                <Text style={[styles.nestedActivityAmount, { color: colors.paidGreen || "#2E7D32" }]}>+Rs.{p.amount}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        );
+                      })}
+                    </DashboardPanel>
+                  )}
+
                   <View style={styles.metricGrid}>
-                    <DashboardMetric title={t("balance")} value={formatMoney(balance)} caption={t("collectedMinusPending")} icon="wallet-outline" tone="#FFFFFF" />
-                    <DashboardMetric title={t("income")} value={formatMoney(totals?.monthlyRevenue ?? 0)} caption={t("collectedThisMonth")} icon="cash-outline" tone={Colors.lightSeaGreen} />
-                    <DashboardMetric title={t("expense")} value={formatMoney(totals?.distributedThisMonth ?? 0)} caption={t("distributedThisMonth")} icon="trending-up-outline" tone={Colors.amberGlow} />
-                    <DashboardMetric title={t("savings")} value={formatMoney(savings)} caption={t("needsRecoveryFocus")} icon="alert-circle-outline" tone={Colors.danger} />
+                    {isOwner ? (
+                      <>
+                        <DashboardMetric title={t("balance")} value={formatMoney(balance)} caption={t("collectedMinusPending")} icon="wallet-outline" tone="#FFFFFF" />
+                        <DashboardMetric title={t("income")} value={formatMoney(totals?.monthlyRevenue ?? 0)} caption={t("collectedThisMonth")} icon="cash-outline" tone={Colors.lightSeaGreen} />
+                        <DashboardMetric title={t("expense")} value={formatMoney(totals?.distributedThisMonth ?? 0)} caption={t("distributedThisMonth")} icon="trending-up-outline" tone={Colors.amberGlow} />
+                        <DashboardMetric title="Current Amount" value={formatMoney(mainCurrentAmount)} caption="BF + collection − dist. − exp." icon="calculator-outline" tone={Colors.lightSeaGreen} />
+                      </>
+                    ) : (
+                      <>
+                        <DashboardMetric title="BF (Opening)" value={formatMoney(totals?.balancingFund ?? 0)} caption="Opening balance" icon="wallet-outline" tone="#FFFFFF" />
+                        <DashboardMetric title="Current Amount" value={formatMoney(totals?.netCashPosition ?? 0)} caption="BF + collected − dist. − exp." icon="calculator-outline" tone={Colors.lightSeaGreen} />
+                        <DashboardMetric title="Today Collected" value={formatMoney(totals?.collectionToday ?? 0)} caption="Collected today" icon="cash-outline" tone={Colors.lightSeaGreen} />
+                        <DashboardMetric title="Today Distributed" value={formatMoney(totals?.distributedToday ?? 0)} caption="Distributed today" icon="trending-up-outline" tone={Colors.amberGlow} />
+                        <DashboardMetric title="Total Collected" value={formatMoney(totals?.totalCollection ?? 0)} caption="All-time collected" icon="cash-outline" tone={Colors.lightSeaGreen} />
+                        <DashboardMetric title="Total Distributed" value={formatMoney(totals?.totalDistributed ?? 0)} caption="All-time distributed" icon="trending-up-outline" tone={Colors.amberGlow} />
+                      </>
+                    )}
                   </View>
+
+                  {/* Nested Expenses Panel — only for nested (non-owner) users */}
+                  {!isOwner && (
+                    <DashboardPanel
+                      title="Expenses"
+                      subtitle="Track your daily expenses"
+                      action={
+                        <Pressable
+                          style={[styles.csvButton, { backgroundColor: Colors.danger + "18", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, flexDirection: "row", alignItems: "center", gap: 4 }]}
+                          onPress={() => setShowAddExpense(true)}
+                        >
+                          <Icon name="add-circle-outline" size={14} color={Colors.danger} />
+                          <Text style={[styles.csvText, { color: Colors.danger }]}>Add</Text>
+                        </Pressable>
+                      }
+                    >
+                      {nestedExpenses.length === 0 ? (
+                        <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: "center", paddingVertical: 8 }}>
+                          No expenses logged yet. Tap "Add" to record one.
+                        </Text>
+                      ) : (
+                        nestedExpenses.slice(0, 10).map((exp) => (
+                          <View
+                            key={exp.id}
+                            style={[styles.nestedActivityRow, { borderBottomColor: colors.border, alignItems: "center" }]}
+                          >
+                            <View style={styles.nestedActivityLeft}>
+                              <Text style={[styles.nestedActivityName, { color: colors.text }]}>{exp.note || "Expense"}</Text>
+                              <Text style={[styles.nestedActivityTime, { color: colors.textSecondary }]}>
+                                {new Date(exp.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                                {" · "}
+                                {new Date(exp.date).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                              </Text>
+                            </View>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                              <Text style={[styles.nestedActivityAmount, { color: Colors.danger }]}>−Rs.{exp.amount.toLocaleString("en-IN")}</Text>
+                              <Pressable onPress={() => handleOpenEditExpense(exp)} style={{ padding: 4 }}>
+                                <Icon name="create-outline" size={16} color={colors.primary} />
+                              </Pressable>
+                              <Pressable onPress={() => handleConfirmDeleteExpense(exp)} style={{ padding: 4 }}>
+                                <Icon name="trash-outline" size={16} color={Colors.danger} />
+                              </Pressable>
+                            </View>
+                          </View>
+                        ))
+                      )}
+                    </DashboardPanel>
+                  )}
 
                   {analytics ? (
                     <>
@@ -619,6 +967,84 @@ export default function ShiftSelectionScreen() {
           </ScrollView>
         </SafeAreaView>
 
+        {/* Add Expense Modal — nested users only */}
+        <Modal visible={showAddExpense} transparent animationType="slide" onRequestClose={() => setShowAddExpense(false)}>
+          <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.45)" }}>
+            <View style={[styles.expenseModal, { backgroundColor: colors.card }]}>
+              <View style={styles.expenseModalHeader}>
+                <Text style={[styles.expenseModalTitle, { color: colors.text }]}>Add Expense</Text>
+                <Pressable onPress={() => { setShowAddExpense(false); setExpenseAmount(""); setExpenseNote(""); }}>
+                  <Icon name="close" size={22} color={colors.textSecondary} />
+                </Pressable>
+              </View>
+              <Text style={[styles.expenseModalLabel, { color: colors.textSecondary }]}>Amount *</Text>
+              <TextInput
+                placeholder="Enter expense amount"
+                placeholderTextColor={colors.textMuted}
+                value={expenseAmount}
+                onChangeText={setExpenseAmount}
+                keyboardType="numeric"
+                autoFocus
+                style={[styles.expenseInput, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
+              />
+              <Text style={[styles.expenseModalLabel, { color: colors.textSecondary }]}>Note (optional)</Text>
+              <TextInput
+                placeholder="e.g. Petrol, Tea, Lunch..."
+                placeholderTextColor={colors.textMuted}
+                value={expenseNote}
+                onChangeText={setExpenseNote}
+                style={[styles.expenseInput, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
+              />
+              <Pressable
+                style={[styles.expenseSaveBtn, savingExpense && { opacity: 0.6 }]}
+                onPress={handleAddExpense}
+                disabled={savingExpense}
+              >
+                <Text style={styles.expenseSaveBtnText}>{savingExpense ? "Saving..." : "Save Expense"}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Edit Expense Modal — nested users only */}
+        <Modal visible={showEditExpense} transparent animationType="slide" onRequestClose={() => { setShowEditExpense(false); setEditingExpense(null); }}>
+          <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.45)" }}>
+            <View style={[styles.expenseModal, { backgroundColor: colors.card }]}>
+              <View style={styles.expenseModalHeader}>
+                <Text style={[styles.expenseModalTitle, { color: colors.text }]}>Edit Expense</Text>
+                <Pressable onPress={() => { setShowEditExpense(false); setEditingExpense(null); setEditExpenseAmount(""); setEditExpenseNote(""); }}>
+                  <Icon name="close" size={22} color={colors.textSecondary} />
+                </Pressable>
+              </View>
+              <Text style={[styles.expenseModalLabel, { color: colors.textSecondary }]}>Amount *</Text>
+              <TextInput
+                placeholder="Enter expense amount"
+                placeholderTextColor={colors.textMuted}
+                value={editExpenseAmount}
+                onChangeText={setEditExpenseAmount}
+                keyboardType="numeric"
+                autoFocus
+                style={[styles.expenseInput, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
+              />
+              <Text style={[styles.expenseModalLabel, { color: colors.textSecondary }]}>Note (optional)</Text>
+              <TextInput
+                placeholder="e.g. Petrol, Tea, Lunch..."
+                placeholderTextColor={colors.textMuted}
+                value={editExpenseNote}
+                onChangeText={setEditExpenseNote}
+                style={[styles.expenseInput, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
+              />
+              <Pressable
+                style={[styles.expenseSaveBtn, savingEditExpense && { opacity: 0.6 }]}
+                onPress={handleSaveEditExpense}
+                disabled={savingEditExpense}
+              >
+                <Text style={styles.expenseSaveBtnText}>{savingEditExpense ? "Saving..." : "Save Changes"}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+
         <Modal visible={searchOpen} animationType="slide" onRequestClose={() => setSearchOpen(false)}>
           <SafeAreaView style={[styles.searchModalSafe, { backgroundColor: colors.background }]}>
             <View style={[styles.searchModalHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
@@ -717,16 +1143,18 @@ export default function ShiftSelectionScreen() {
           </SafeAreaView>
         </Modal>
 
-        <Pressable
-          accessibilityLabel="Open AI Business Advisor"
-          style={styles.aiFab}
-          onPress={() => {
-            lightImpact();
-            nav.push("/ai-advisor" as any);
-          }}
-        >
-          <Icon name="sparkles-outline" size={24} color="#FFFFFF" />
-        </Pressable>
+        {isOwner && (
+          <Pressable
+            accessibilityLabel="Open AI Business Advisor"
+            style={styles.aiFab}
+            onPress={() => {
+              lightImpact();
+              nav.push("/ai-advisor" as any);
+            }}
+          >
+            <Icon name="sparkles-outline" size={24} color="#FFFFFF" />
+          </Pressable>
+        )}
       </LinearGradient>
     </AnimatedScreen>
   );
@@ -870,4 +1298,21 @@ const styles = StyleSheet.create({
   searchCustomerPhone: { color: "#9CA3AF", fontSize: 12, marginTop: 2 },
   statePill: { color: Colors.lightSeaGreen, backgroundColor: Colors.frozenWater, fontSize: 10, fontWeight: "700", paddingHorizontal: 8, paddingVertical: 5, borderRadius: 999, overflow: "hidden", textTransform: "uppercase" },
   aiFab: { position: "absolute", right: 18, bottom: 24, width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: Colors.amberGlow, shadowColor: Colors.amberGlow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.45, shadowRadius: 14, elevation: 8 },
+  nestedGroupContainer: { marginBottom: 16, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: "#E2E8F0" },
+  nestedGroupHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8, borderBottomWidth: 1, paddingBottom: 6 },
+  nestedGroupTitle: { fontSize: 14, fontWeight: "700" },
+  nestedGroupTotal: { fontSize: 14, fontWeight: "800" },
+  nestedActivityRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6, borderBottomWidth: 1 },
+  nestedActivityLeft: { flex: 1 },
+  nestedActivityName: { fontSize: 13, fontWeight: "600" },
+  nestedActivityTime: { fontSize: 11, marginTop: 2 },
+  nestedActivityAmount: { fontSize: 13, fontWeight: "700" },
+  // Expense modal styles
+  expenseModal: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40, gap: 10 },
+  expenseModalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
+  expenseModalTitle: { fontSize: 20, fontWeight: "800" },
+  expenseModalLabel: { fontSize: 13, fontWeight: "600", marginTop: 4 },
+  expenseInput: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
+  expenseSaveBtn: { backgroundColor: Colors.danger, borderRadius: 14, paddingVertical: 14, alignItems: "center", marginTop: 8 },
+  expenseSaveBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "800" },
 });

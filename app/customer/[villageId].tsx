@@ -21,6 +21,9 @@ import {
 } from "react-native";
 import { useAuth } from "../../src/auth-context";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
+import { db } from "../../src/firebase";
+import { collection, query as firestoreQuery, where, getDocs, doc, setDoc } from "firebase/firestore";
+import { addNestedTransaction, addNestedTransactionsBatch } from "../../src/repository";
 import { CustomerIdBadge } from "../../src/components/CustomerIdBadge";
 import Icon from "../../src/Icon";
 import { colors } from "../../src/theme";
@@ -30,7 +33,7 @@ import { translateTelugu } from "../../src/exports";
 import { lightImpact } from "../../src/interactions";
 import { showToast } from "../../src/notify";
 import { getCachedCoordinates, LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
-import { addCustomerWithLoan, addPayment, addPaymentsBatch, checkAndAutoMarkDues, getActiveLoansByCustomerIds, getCustomers, getClosedCustomers, closeCustomer, reopenCustomer, getPaymentStatusesForCustomersThisWeek, getVillageById, getCustomerByAadhar, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, markDue, updateCustomer, isNumericalIdTaken, getNextNumericalId, renewLoan } from "../../src/repository";
+import { addCustomerWithLoan, addPayment, addPaymentsBatch, checkAndAutoMarkDues, getActiveLoansByCustomerIds, getCustomers, getClosedCustomers, closeCustomer, reopenCustomer, getPaymentStatusesForCustomersThisWeek, getVillageById, getCustomerByAadhar, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, markDue, updateCustomer, isNumericalIdTaken, getNextNumericalId, renewLoan, saveNestedBF } from "../../src/repository";
 import { Customer, Loan, PaymentMode, Village } from "../../src/types";
 import { calculateDisbursedAmount, weekStart } from "../../src/business-logic";
 import { validateAadhaar, validateIndianPhone, validatePositiveAmount } from "../../src/validation";
@@ -51,6 +54,10 @@ type AddCustomerForm = {
   coordinates: { latitude: number; longitude: number } | null;
   aadharSubmitted: boolean;
   passportPhotoSubmitted: boolean;
+  /** BF (Opening Balance) for the nested account — owner-only field */
+  nestedBF: string;
+  /** Which nested user this BF applies to (empty = all / first) */
+  nestedBFUid: string;
 };
 
 function createEmptyCustomerForm(): AddCustomerForm {
@@ -67,6 +74,8 @@ function createEmptyCustomerForm(): AddCustomerForm {
     coordinates: null,
     aadharSubmitted: false,
     passportPhotoSubmitted: false,
+    nestedBF: "",
+    nestedBFUid: "",
   };
 }
 
@@ -345,22 +354,22 @@ const CustomerItem = React.memo(function CustomerItem({
         {/* Address Row - green if location saved, grey if not */}
         <View style={styles.addressRow}>
           <Pressable
-            disabled={isUpdatingLocation}
+            disabled={isUpdatingLocation || (!hasLocation && !onSaveCurrentLocation)}
             style={[styles.locationIconSquare, {
-              backgroundColor: hasLocation ? "#1A3C34" : "#9CA3AF",
+              backgroundColor: hasLocation ? "#1A3C34" : (onSaveCurrentLocation ? "#9CA3AF" : "#D1D5DB"),
             }]}
             onPress={(e) => {
               markActionPress(e);
               lightImpact();
               if (hasLocation) {
                 onOpenDirections(customer);
-              } else {
+              } else if (onSaveCurrentLocation) {
                 onSaveCurrentLocation(customer);
               }
             }}
             onLongPress={(e) => {
               markActionPress(e);
-              if (!hasLocation) {
+              if (!hasLocation && onSaveCurrentLocation) {
                 onSaveCurrentLocation(customer);
               }
             }}
@@ -425,28 +434,30 @@ const CustomerItem = React.memo(function CustomerItem({
         </Pressable>
 
         {/* Due */}
-        <Pressable
-          accessibilityLabel={`Mark ${customer.name} due`}
-          style={[styles.actionRow, !canPay && styles.actionRowDisabled]}
-          disabled={!canPay}
-          onPress={(e) => {
-            markActionPress(e);
-            lightImpact();
-            onMarkDue(customer);
-          }}
-        >
-          <View style={[styles.actionIconSquare, { backgroundColor: "#DC2626" }]}>
-            <Icon name="document-text-outline" size={15} color="#FFFFFF" />
-          </View>
-        </Pressable>
-        {isFullyPaid && (
+        {onMarkDue && (
+          <Pressable
+            accessibilityLabel={`Mark ${customer.name} due`}
+            style={[styles.actionRow, !canPay && styles.actionRowDisabled]}
+            disabled={!canPay}
+            onPress={(e) => {
+              markActionPress(e);
+              lightImpact();
+              onMarkDue(customer);
+            }}
+          >
+            <View style={[styles.actionIconSquare, { backgroundColor: "#DC2626" }]}>
+              <Icon name="document-text-outline" size={15} color="#FFFFFF" />
+            </View>
+          </Pressable>
+        )}
+        {isFullyPaid && onCloseRenew && (
           <Pressable
             accessibilityLabel={`Close or Renew ${customer.name}`}
             style={[styles.actionRow]}
             onPress={(e) => {
               markActionPress(e);
               lightImpact();
-              if (onCloseRenew && loan) onCloseRenew(customer, loan);
+              onCloseRenew(customer, loan);
             }}
           >
             <View style={[styles.actionIconSquare, { backgroundColor: "#1565C0", width: 42, height: 28 }]}>
@@ -495,7 +506,9 @@ function parseDateInput(value: string) {
 
 export default function CustomerListScreen() {
   const { villageId } = useLocalSearchParams<{ villageId: string }>();
-  const { user, loading: authLoading } = useAuth();
+  const { user, userProfile, loading: authLoading } = useAuth();
+  const isOwner = !userProfile || userProfile.role !== "nested";
+  const effectiveOwnerId = isOwner ? user?.uid : userProfile?.parentUid;
   const { colors } = useTheme();
   const { language } = useLanguage();
   const insets = useSafeAreaInsets();
@@ -546,10 +559,39 @@ export default function CustomerListScreen() {
   const [aadhaarReview, setAadhaarReview] = useState<AadhaarScanResult | null>(null);
   const [scannedData, setScannedData] = useState<AadhaarScanResult | null>(null);
   const [formErrors, setFormErrors] = useState<{ phone?: string; aadhar?: string; principal?: string; numericalId?: string }>({});
+  const [nestedAccounts, setNestedAccounts] = useState<{ nestedUid: string; label: string; nestedEmail: string }[]>([]);
   const cashToHand = useMemo(() => calculateDisbursedAmount(Number(form.principal || 0)), [form.principal]);
 
+  const logDebug = useCallback(async (message: string, extra: any = {}) => {
+    try {
+      const { addDoc, collection } = await import("firebase/firestore");
+      await addDoc(collection(db, "debugLogs"), {
+        timestamp: Date.now(),
+        message,
+        ...extra
+      });
+    } catch (e) {
+      console.error("Failed to write debug log", e);
+    }
+  }, []);
+
   const reload = useCallback(async (preserveScroll = false) => {
-    if (!user || !villageId) {
+    await logDebug("reload start", {
+      userUid: user?.uid || null,
+      userProfileRole: userProfile?.role || null,
+      userProfileParentUid: userProfile?.parentUid || null,
+      isOwner,
+      effectiveOwnerId,
+      villageId,
+      authLoading
+    });
+
+    if (!user || !villageId || !effectiveOwnerId) {
+      await logDebug("reload early exit", {
+        hasUser: !!user,
+        hasVillageId: !!villageId,
+        hasEffectiveOwnerId: !!effectiveOwnerId
+      });
       setIsLoading(false);
       return;
     }
@@ -557,39 +599,117 @@ export default function CustomerListScreen() {
       if (!preserveScroll) {
         setIsLoading(true);
       }
-      const [allCustomers, villageDetails] = await Promise.all([
-        getCustomers(user.uid, villageId, false),
-        getVillageById(villageId),
-      ]);
-      const sortedList = [...allCustomers].sort((a, b) => a.numericalId - b.numericalId);
+      await logDebug("calling getCustomers", { effectiveOwnerId, villageId });
+      let allCustomers = await getCustomers(effectiveOwnerId, villageId, false);
+      await logDebug("calling getVillageById", { villageId });
+      const villageDetails = await getVillageById(villageId);
+      await logDebug("data loaded success", {
+        customersCount: allCustomers.length,
+        villageName: villageDetails?.name || null
+      });
+      
+      if (!isOwner) {
+        // Fetch nested customers registered by this nested user
+        const qNestedCust = firestoreQuery(
+          collection(db, "nestedCustomers"),
+          where("nestedUserId", "==", user.uid),
+          where("villageId", "==", villageId)
+        );
+        const nestedCustSnap = await getDocs(qNestedCust);
+        const nestedCusts = nestedCustSnap.docs.map(doc => {
+          const data = doc.data() as any;
+          return {
+            ...data,
+            isTemp: true,
+            numericalId: data.numericalId || 999999,
+          };
+        });
+        allCustomers = [...allCustomers, ...nestedCusts];
+      }
+
+      const sortedList = [...allCustomers].sort((a, b) => (a.numericalId || 999999) - (b.numericalId || 999999));
       setCustomers(sortedList);
       setVillage(villageDetails);
 
       const customerIds = sortedList.map((customer) => customer.id);
-      const loansByCustomer = await getActiveLoansByCustomerIds(user.uid, customerIds);
-      setActiveLoans(loansByCustomer);
+      const loansByCustomer = await getActiveLoansByCustomerIds(effectiveOwnerId, customerIds);
+
+      // Mock active loans for temporary customers so they can collect payments for them
+      if (!isOwner) {
+        sortedList.forEach((c: any) => {
+          if (c.isTemp && !loansByCustomer[c.id]) {
+            const principal = Number(c.principal || 10000);
+            const interest = principal * 0.20;
+            const totalPayable = principal + interest;
+            loansByCustomer[c.id] = {
+              id: `temp_loan_${c.id}`,
+              customerId: c.id,
+              principalAmount: principal,
+              interestAmount: interest,
+              totalPayable,
+              balanceAmount: totalPayable,
+              userId: effectiveOwnerId,
+              startDate: c.createdAt,
+              status: "ACTIVE",
+              disbursement_mode: c.disbursementMode || "CASH",
+              isTemp: true,
+            } as any;
+          }
+        });
+      }
 
       // Auto-mark dues for completed, unpaid weeks across all active loans
-      try {
-        await checkAndAutoMarkDues(user.uid, Object.values(loansByCustomer));
-      } catch {
-        // Non-critical: ignore auto-due failures silently
+      if (isOwner) {
+        try {
+          await checkAndAutoMarkDues(effectiveOwnerId, Object.values(loansByCustomer));
+        } catch {
+          // Non-critical: ignore auto-due failures silently
+        }
       }
 
       const [statuses, latestPayments] = await Promise.all([
-        getPaymentStatusesForCustomersThisWeek(user.uid, customerIds),
-        getLastRegularPaymentDatesForCustomers(user.uid, customerIds),
+        getPaymentStatusesForCustomersThisWeek(effectiveOwnerId, customerIds),
+        getLastRegularPaymentDatesForCustomers(effectiveOwnerId, customerIds),
       ]);
+
+      // If nested, fetch their pending transactions and adjust local state
+      if (!isOwner && customerIds.length > 0) {
+        const qTxns = firestoreQuery(
+          collection(db, "nestedTransactions"),
+          where("nestedUid", "==", user.uid),
+          where("exported", "==", false)
+        );
+        const txnsSnap = await getDocs(qTxns);
+        const txns = txnsSnap.docs.map(doc => doc.data() as any);
+        
+        txns.forEach((txn) => {
+          const cid = txn.customerId;
+          if (customerIds.includes(cid)) {
+            statuses[cid] = "paid";
+            latestPayments[cid] = txn.date;
+            
+            const loan = loansByCustomer[cid];
+            if (loan) {
+              loan.balanceAmount = Math.max(0, loan.balanceAmount - txn.amount);
+              if (loan.balanceAmount <= 0) {
+                loan.status = "CLOSED";
+              }
+            }
+          }
+        });
+      }
+
+      setActiveLoans(loansByCustomer);
       setPaymentStatuses(statuses);
       setLastPaymentDates(latestPayments);
 
       // Also fetch closed customers for this village
       try {
-        const closedList = await getClosedCustomers(user.uid, villageId);
+        const closedList = await getClosedCustomers(effectiveOwnerId, villageId);
         setClosedCustomers(closedList);
         const closedIds = closedList.map((c) => c.id);
         if (closedIds.length > 0) {
-          const closedLoans = await getActiveLoansByCustomerIds(user.uid, closedIds);
+          const closedLoans = await getActiveLoansByCustomerIds(effectiveOwnerId, closedIds);
           setClosedCustomerLoans(closedLoans);
         }
       } catch {
@@ -602,20 +722,39 @@ export default function CustomerListScreen() {
           flatListRef.current?.scrollToOffset({ offset: scrollOffsetRef.current, animated: false });
         });
       }
-    } catch {
+    } catch (err: any) {
+      await logDebug("reload failed error", {
+        errorName: err?.name || null,
+        errorMessage: err?.message || null,
+        errorStack: err?.stack || null
+      });
       Alert.alert("Load failed", "Could not load customers. Please try again.");
     } finally {
       setIsLoading(false);
     }
-  }, [user, villageId]);
+  }, [user, villageId, effectiveOwnerId, isOwner, logDebug]);
 
 
-  // On initial load
+  // On initial load and dependency updates
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !user || !villageId || !effectiveOwnerId) return;
     reload();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, villageId, user]);
+  }, [authLoading, villageId, user, effectiveOwnerId, reload]);
+
+  // Load nested accounts so owner can assign BF when registering customers
+  useEffect(() => {
+    if (!isOwner || !user?.uid) return;
+    import("firebase/firestore").then(({ getDocs: gd, query: q, collection: col, where: wh }) => {
+      gd(q(col(db, "nestedAccounts"), wh("ownerUid", "==", user.uid))).then((snap) => {
+        setNestedAccounts(
+          snap.docs.map((d) => {
+            const data = d.data() as any;
+            return { nestedUid: data.nestedUid, label: data.label || data.nestedEmail, nestedEmail: data.nestedEmail };
+          })
+        );
+      });
+    });
+  }, [isOwner, user?.uid]);
 
   // On focus (coming back from customer details), preserve scroll position
   useFocusEffect(useCallback(() => {
@@ -704,15 +843,15 @@ export default function CustomerListScreen() {
   const openAddCustomer = useCallback(async () => {
     resetAddCustomerForm();
     setShowAdd(true);
-    if (user && village) {
+    if (user && village && effectiveOwnerId) {
       try {
-        const nextId = await getNextNumericalId(user.uid, village.id);
+        const nextId = await getNextNumericalId(effectiveOwnerId, village.id);
         setForm((f) => ({ ...f, numericalId: String(nextId) }));
       } catch (err) {
         console.error("Error fetching next ID:", err);
       }
     }
-  }, [resetAddCustomerForm, user, village]);
+  }, [resetAddCustomerForm, user, village, effectiveOwnerId]);
 
   const closeAddCustomer = useCallback(() => {
     setShowAdd(false);
@@ -1038,7 +1177,21 @@ export default function CustomerListScreen() {
     const proceed = async () => {
       try {
         setPayingCustomerId(customer.id);
-        await addPayment(loan, suggested, Date.now(), mode);
+        if (!isOwner) {
+          await addNestedTransaction({
+            ownerUid: effectiveOwnerId!,
+            nestedUid: user.uid,
+            nestedEmail: user.email || "",
+            customerId: customer.id,
+            customerName: customer.name,
+            amount: suggested,
+            type: "payment",
+            date: Date.now(),
+            notes: `Quick pay sug: ${suggested}`,
+          });
+        } else {
+          await addPayment(loan, suggested, Date.now(), mode);
+        }
         setPaymentStatuses((current) => ({ ...current, [customer.id]: "paid" }));
         const newBalance = Math.max(0, loan.balanceAmount - suggested);
         setActiveLoans((current) => ({
@@ -1051,7 +1204,7 @@ export default function CustomerListScreen() {
           `Paid Rs.${suggested.toLocaleString("en-IN")} via ${mode === "PHONE" ? "PhonePe" : "Cash"} for ${customer.name}`
         );
         setPayingCustomerId(null);
-        if (newBalance <= 0) {
+        if (newBalance <= 0 && isOwner) {
           promptCloseOrRenew(customer, loan);
         }
       } catch (err: any) {
@@ -1136,24 +1289,41 @@ export default function CustomerListScreen() {
     );
     try {
       setQuickCollectSaving(true);
-      await addPaymentsBatch(entries);
+      if (!isOwner) {
+        const nestedEntries = entries.map(e => ({
+          ownerUid: effectiveOwnerId!,
+          nestedUid: user.uid,
+          nestedEmail: user.email || "",
+          customerId: e.loan.customerId,
+          customerName: quickCollectCustomers.find(c => c.id === e.loan.customerId)?.name || "Unknown",
+          amount: e.amountPaid,
+          type: "payment",
+          date: e.paymentDate,
+          notes: `Batch pay`,
+        }));
+        await addNestedTransactionsBatch(nestedEntries);
+      } else {
+        await addPaymentsBatch(entries);
+      }
       showToast("success", "Payments recorded", `${entries.length} payments recorded`);
       setQuickCollectOpen(false);
       await reload();
       // Prompt for fully paid customers
-      if (fullyPaidIds.size === 1) {
-        const id = [...fullyPaidIds][0];
-        const c = quickCollectCustomers.find((c2) => c2.id === id);
-        if (c) {
-          const loan = activeLoans[c.id];
-          if (loan) promptCloseOrRenew(c, loan);
+      if (isOwner) {
+        if (fullyPaidIds.size === 1) {
+          const id = [...fullyPaidIds][0];
+          const c = quickCollectCustomers.find((c2) => c2.id === id);
+          if (c) {
+            const loan = activeLoans[c.id];
+            if (loan) promptCloseOrRenew(c, loan);
+          }
+        } else if (fullyPaidIds.size > 1) {
+          Alert.alert(
+            'Fully Paid',
+            `${fullyPaidIds.size} customers have fully paid their loans. Use the Close or Renew button on their cards to proceed.`,
+            [{ text: 'OK' }]
+          );
         }
-      } else if (fullyPaidIds.size > 1) {
-        Alert.alert(
-          'Fully Paid',
-          `${fullyPaidIds.size} customers have fully paid their loans. Use the Close or Renew button on their cards to proceed.`,
-          [{ text: 'OK' }]
-        );
       }
     } catch {
       Alert.alert("Quick collect failed", "Could not record these payments. Please try again.");
@@ -1192,7 +1362,21 @@ export default function CustomerListScreen() {
     const proceed = async () => {
       try {
         setPayingCustomerId(manualPaymentCustomer.id);
-        await addPayment(loan, amount, Date.now(), manualPaymentMode);
+        if (!isOwner) {
+          await addNestedTransaction({
+            ownerUid: effectiveOwnerId!,
+            nestedUid: user.uid,
+            nestedEmail: user.email || "",
+            customerId: manualPaymentCustomer.id,
+            customerName: manualPaymentCustomer.name,
+            amount: amount,
+            type: "payment",
+            date: Date.now(),
+            notes: `Manual pay mode: ${manualPaymentMode}`,
+          });
+        } else {
+          await addPayment(loan, amount, Date.now(), manualPaymentMode);
+        }
         setPaymentStatuses((current) => ({ ...current, [manualPaymentCustomer.id]: "paid" }));
         const newBal = Math.max(0, loan.balanceAmount - amount);
         setActiveLoans((current) => ({
@@ -1204,7 +1388,7 @@ export default function CustomerListScreen() {
         }));
         const capturedCustomer = manualPaymentCustomer;
         closeManualPayment();
-        if (newBal <= 0 && capturedCustomer) {
+        if (newBal <= 0 && capturedCustomer && isOwner) {
           promptCloseOrRenew(capturedCustomer, loan);
         }
       } catch {
@@ -1267,7 +1451,21 @@ export default function CustomerListScreen() {
     }
     try {
       setPayingCustomerId(customer.id);
-      await markDue(loan, Date.now());
+      if (!isOwner) {
+        await addNestedTransaction({
+          ownerUid: effectiveOwnerId!,
+          nestedUid: user.uid,
+          nestedEmail: user.email || "",
+          customerId: customer.id,
+          customerName: customer.name,
+          amount: 0,
+          type: "DUE",
+          date: Date.now(),
+          notes: "Marked due (nested)",
+        });
+      } else {
+        await markDue(loan, Date.now());
+      }
       setPaymentStatuses((current) => ({ ...current, [customer.id]: "due" }));
       showToast("success", "Due marked", `${customer.name} has been marked due.`);
     } catch {
@@ -1275,7 +1473,7 @@ export default function CustomerListScreen() {
     } finally {
       setPayingCustomerId(null);
     }
-  }, [activeLoans]);
+  }, [activeLoans, isOwner, user, effectiveOwnerId]);
 
   const renderCustomer = useCallback(
     ({ item }: { item: Customer }) => {
@@ -1322,7 +1520,7 @@ export default function CustomerListScreen() {
           onQuickPay={handleQuickPay}
           onManualPay={openManualPayment}
           onMarkDue={markCustomerDue}
-          onSaveCurrentLocation={saveCurrentLocationForCustomer}
+          onSaveCurrentLocation={isOwner ? saveCurrentLocationForCustomer : undefined}
           onCloseRenew={promptCloseOrRenew}
           status={paymentStatuses[item.id] || 'none'} 
           isNew={isNewThisWeek(item.createdAt)}
@@ -1349,7 +1547,9 @@ export default function CustomerListScreen() {
             </Pressable>
             <View style={styles.headerTextWrap}>
               <Text style={styles.headerTitle}>{village?.name || 'Customers'} <Text style={{ fontSize: 10, opacity: 0.6 }}>v2</Text></Text>
-              <Text style={styles.headerSub}>{filtered.length} customer{filtered.length !== 1 ? 's' : ''}</Text>
+              <Text style={styles.headerSub}>
+                {filtered.length} customer{filtered.length !== 1 ? 's' : ''} | R: {userProfile?.role || 'null'} | M: {(userProfile?.parentUid || 'null').substring(0, 5)}
+              </Text>
             </View>
           </View>
 
@@ -1820,6 +2020,45 @@ export default function CustomerListScreen() {
                   ))}
                 </View>
 
+                {/* BF (Opening Balance) for nested account — owner only */}
+                {isOwner && nestedAccounts.length > 0 && (
+                  <View style={[styles.bfSection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
+                    <View style={styles.bfHeader}>
+                      <Icon name="wallet-outline" size={15} color={colors.primary} />
+                      <Text style={[styles.bfTitle, { color: colors.text }]}>Opening Balance (BF) for Nested Account</Text>
+                    </View>
+                    <Text style={[styles.bfHint, { color: colors.textSecondary }]}>
+                      Set the opening cash balance for the nested user for today. This appears on their dashboard.
+                    </Text>
+                    <TextInput
+                      placeholder="Enter BF amount (optional)"
+                      placeholderTextColor={colors.textMuted}
+                      value={form.nestedBF}
+                      onChangeText={(t) => setForm((f) => ({ ...f, nestedBF: t }))}
+                      style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text, marginTop: 8 }]}
+                      keyboardType="numeric"
+                    />
+                    {nestedAccounts.length > 1 && (
+                      <>
+                        <Text style={[styles.label, { color: colors.text, marginTop: 8 }]}>For which nested account?</Text>
+                        <View style={styles.modeRow}>
+                          {nestedAccounts.map((acc) => (
+                            <Pressable
+                              key={acc.nestedUid}
+                              style={[styles.modeBtn, form.nestedBFUid === acc.nestedUid && styles.modeBtnOn]}
+                              onPress={() => setForm((f) => ({ ...f, nestedBFUid: acc.nestedUid }))}
+                            >
+                              <Text style={[styles.modeText, form.nestedBFUid === acc.nestedUid && styles.modeTextOn]} numberOfLines={1}>
+                                {acc.label}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      </>
+                    )}
+                  </View>
+                )}
+
                 <Text style={[styles.label, { color: colors.text }]}>Submitted Documents</Text>
                 <Pressable
                   style={styles.checkRow}
@@ -1951,9 +2190,9 @@ export default function CustomerListScreen() {
                       try {
                         setIsRegistering(true);
                         const [idTaken, blocked, existingCustomer] = await Promise.all([
-                          isNumericalIdTaken(user.uid, village.id, customId),
-                          normalizedAadhar ? isAadhaarBlocked(normalizedAadhar, user.uid) : Promise.resolve(false),
-                          normalizedAadhar ? getCustomerByAadhar(user.uid, normalizedAadhar) : Promise.resolve(null),
+                          isNumericalIdTaken(effectiveOwnerId, village.id, customId),
+                          normalizedAadhar ? isAadhaarBlocked(normalizedAadhar, effectiveOwnerId) : Promise.resolve(false),
+                          normalizedAadhar ? getCustomerByAadhar(effectiveOwnerId, normalizedAadhar) : Promise.resolve(null),
                         ]);
 
                         if (idTaken) {
@@ -1979,37 +2218,97 @@ export default function CustomerListScreen() {
                           return;
                         }
 
-                        const { customer: createdCustomer, loan: createdLoan } = await addCustomerWithLoan(
-                          user.uid,
-                          village.id,
-                          village.dayOfWeek,
-                          village.shift,
-                          {
+                        if (!isOwner) {
+                          const tempId = `temp_cust_${Date.now()}`;
+                          const nestedCustDoc = {
+                            id: tempId,
                             numericalId: customId,
                             name: form.name,
                             phone: form.phone,
                             aadhar: normalizedAadhar,
+                            coName: form.coName || "",
+                            coId: form.coId ? Number(form.coId) : null,
                             locationDesc: form.locationDesc,
-                            latitude: form.coordinates?.latitude,
-                            longitude: form.coordinates?.longitude,
-                            aadharSubmitted: form.aadharSubmitted,
-                            passportPhotoSubmitted: form.passportPhotoSubmitted,
-                            coName: form.coName || undefined,
-                            coId: form.coId ? Number(form.coId) : undefined,
-                          },
-                          Number(form.principal || 0),
-                          parsedDate,
-                          form.disbursementMode,
-                          village.name
-                        );
+                            latitude: form.coordinates?.latitude || null,
+                            longitude: form.coordinates?.longitude || null,
+                            villageId: village.id,
+                            masterUserId: effectiveOwnerId,
+                            nestedUserId: user.uid,
+                            createdAt: Date.now(),
+                            isActive: true,
+                            isTemp: true,
+                            principal: Number(form.principal || 0),
+                            disbursementMode: form.disbursementMode || "CASH",
+                          };
+                          await setDoc(doc(db, "nestedCustomers", tempId), nestedCustDoc);
 
-                        setCustomers((prev) => [...prev, createdCustomer].sort((a, b) => a.numericalId - b.numericalId));
-                        setActiveLoans((prev) => ({ ...prev, [createdCustomer.id]: createdLoan }));
-                        setPaymentStatuses((prev) => ({ ...prev, [createdCustomer.id]: "none" }));
-                        setLastPaymentDates((prev) => ({ ...prev, [createdCustomer.id]: { lastPaymentDate: 0, paidLastWeek: false } }));
-                        setShowAdd(false);
-                        resetAddCustomerForm();
-                        showToast("success", "Customer registered", `${createdCustomer.name} has been created successfully.`);
+                          const mockLoan = {
+                            id: `temp_loan_${tempId}`,
+                            customerId: tempId,
+                            principalAmount: Number(form.principal || 0),
+                            interestAmount: Number(form.principal || 0) * 0.2,
+                            totalPayable: Number(form.principal || 0) * 1.2,
+                            balanceAmount: Number(form.principal || 0) * 1.2,
+                            userId: effectiveOwnerId,
+                            startDate: nestedCustDoc.createdAt,
+                            status: "ACTIVE",
+                            disbursement_mode: form.disbursementMode || "CASH",
+                            isTemp: true,
+                          } as any;
+
+                          setCustomers((prev) => [...prev, nestedCustDoc as any].sort((a, b) => (a.numericalId || 999999) - (b.numericalId || 999999)));
+                          setActiveLoans((prev) => ({ ...prev, [tempId]: mockLoan }));
+                          setPaymentStatuses((prev) => ({ ...prev, [tempId]: "none" }));
+                          setLastPaymentDates((prev) => ({ ...prev, [tempId]: { lastPaymentDate: 0, paidLastWeek: false } }));
+                          setShowAdd(false);
+                          resetAddCustomerForm();
+                          showToast("success", "Customer registered", `${nestedCustDoc.name} registered (nested).`);
+                        } else {
+                          const { customer: createdCustomer, loan: createdLoan } = await addCustomerWithLoan(
+                            user.uid,
+                            village.id,
+                            village.dayOfWeek,
+                            village.shift,
+                            {
+                              numericalId: customId,
+                              name: form.name,
+                              phone: form.phone,
+                              aadhar: normalizedAadhar,
+                              locationDesc: form.locationDesc,
+                              latitude: form.coordinates?.latitude,
+                              longitude: form.coordinates?.longitude,
+                              aadharSubmitted: form.aadharSubmitted,
+                              passportPhotoSubmitted: form.passportPhotoSubmitted,
+                              coName: form.coName || undefined,
+                              coId: form.coId ? Number(form.coId) : undefined,
+                            },
+                            Number(form.principal || 0),
+                            parsedDate,
+                            form.disbursementMode,
+                            village.name
+                          );
+
+                          setCustomers((prev) => [...prev, createdCustomer].sort((a, b) => a.numericalId - b.numericalId));
+                          setActiveLoans((prev) => ({ ...prev, [createdCustomer.id]: createdLoan }));
+                          setPaymentStatuses((prev) => ({ ...prev, [createdCustomer.id]: "none" }));
+                          setLastPaymentDates((prev) => ({ ...prev, [createdCustomer.id]: { lastPaymentDate: 0, paidLastWeek: false } }));
+
+                          // Save BF for nested account if entered
+                          const bfAmount = Number(form.nestedBF || 0);
+                          if (bfAmount > 0 && nestedAccounts.length > 0) {
+                            const todayDateStr = new Date().toISOString().split("T")[0];
+                            const targetUids = form.nestedBFUid
+                              ? [form.nestedBFUid]
+                              : nestedAccounts.map((a) => a.nestedUid);
+                            await Promise.all(
+                              targetUids.map((nUid) => saveNestedBF(user.uid, nUid, bfAmount, todayDateStr))
+                            );
+                          }
+
+                          setShowAdd(false);
+                          resetAddCustomerForm();
+                          showToast("success", "Customer registered", `${createdCustomer.name} has been created successfully.`);
+                        }
                       } catch (error: any) {
                         console.error("Registration failed:", error);
                         showToast("error", "Registration failed", error?.message || "Could not register customer. Please try again.");
@@ -2497,4 +2796,9 @@ const styles = StyleSheet.create({
   manualPayActions: { flexDirection: "row", gap: 10, marginTop: 8 },
   dueInlineBtn: { borderColor: "#fecaca", backgroundColor: "#fee2e2" },
   dueInlineText: { color: "#C62828", fontWeight: "900", fontSize: 14 },
+  // BF section styles
+  bfSection: { borderWidth: 1, borderRadius: 12, padding: 12, marginTop: 4, marginBottom: 8 },
+  bfHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
+  bfTitle: { fontSize: 13, fontWeight: "700", flex: 1 },
+  bfHint: { fontSize: 12, lineHeight: 17 },
 });

@@ -167,6 +167,13 @@ const dictionary: Record<Language, Record<string, string>> = {
     moreOptions: "Move or Delete Village...",
     deleteVillageConfirm: "Are you sure you want to delete",
     deleteVillageWarning: "WARNING: All customers and their loan/payment records in this village will be permanently deleted!",
+    bulkEntry: "Bulk Entry",
+    selectVillage: "Select Village",
+    selectDate: "Select Date",
+    customerName: "Customer Name",
+    customerId: "Customer ID",
+    amountPaid: "Amount Paid",
+    deselectHint: "Deselected customer will neither be marked paid nor due",
   },
   te: {
     // Common/Tabs
@@ -323,6 +330,13 @@ const dictionary: Record<Language, Record<string, string>> = {
     moreOptions: "గ్రామాన్ని మార్చండి లేదా తొలగించండి...",
     deleteVillageConfirm: "మీరు నిజంగా తొలగించాలనుకుంటున్నారా",
     deleteVillageWarning: "హెచ్చరిక: ఈ గ్రామంలోని కస్టమర్లు మరియు వారి లోన్/పేమెంట్ రికార్డులన్నీ శాశ్వతంగా తొలగించబడతాయి!",
+    bulkEntry: "బల్క్ ఎంట్రీ",
+    selectVillage: "గ్రామాన్ని ఎంచుకోండి",
+    selectDate: "తేదీని ఎంచుకోండి",
+    customerName: "కస్టమర్ పేరు",
+    customerId: "కస్టమర్ ఐడి",
+    amountPaid: "చెల్లించిన మొత్తం",
+    deselectHint: "డిసెలెక్ట్ చేసిన కస్టమర్ పెయిడ్ లేదా డ్యూ గా మార్క్ చేయబడదు",
   },
 };
 

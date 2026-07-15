@@ -21,6 +21,12 @@
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
       "headers": [
         {
+          "source": "/index.html",
+          "headers": [
+            { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" }
+          ]
+        },
+        {
           "source": "/**/*.@(js|css|png|jpg|svg|woff2)",
           "headers": [{ "key": "Cache-Control", "value": "max-age=31536000" }]
         },
@@ -58,17 +64,6 @@
         {
           "source": "**",
           "destination": "/index.html"
-        }
-      ]
-    },
-    {
-      "target": "nested",
-      "public": "nested-account",
-      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-      "headers": [
-        {
-          "source": "/**/*.@(js|css|png|jpg|svg)",
-          "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }]
         }
       ]
     }

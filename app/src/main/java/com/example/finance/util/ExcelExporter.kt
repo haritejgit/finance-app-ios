@@ -253,7 +253,8 @@ class ExcelExporter(private val context: Context, private val repository: Financ
                             weeklyDisbursed[weekIdx] += disbursedAmount
 
                             if (renewalPayment != null) {
-                                val prevBal = renewalPayment.amountPaid
+                                val regularPaymentsSum = weekPayments.filter { it.id != renewalPayment.id && it.paymentType == "REGULAR" }.sumOf { it.amountPaid }
+                                val prevBal = renewalPayment.amountPaid + regularPaymentsSum
                                 weeklyCollected[weekIdx] += prevBal
                                 val prevBalStr = prevBal.toInt().toString()
                                 val newAmtStr = displayedAmount.toInt().toString()

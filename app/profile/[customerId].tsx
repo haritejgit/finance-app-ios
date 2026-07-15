@@ -49,9 +49,15 @@ import {
   getOrDeriveCycleStartDay,
   getPersonalCycleStartTs,
   getPersonalCycleWeekIndex,
-  formatPersonalCycleRange
+  formatPersonalCycleRange,
+  addNestedTransaction,
+  getNestedTransactionsForCustomer,
+  updateNestedTransaction,
+  deleteNestedTransaction
 } from "../../src/repository";
 import { Customer, Loan, Payment, PaymentMode, PaymentType, Village } from "../../src/types";
+import { db } from "../../src/firebase";
+import { doc, getDoc } from "firebase/firestore";
 import { useTheme } from "../../src/theme-context";
 import { colors } from "../../src/theme";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -97,6 +103,8 @@ const PaymentHistory = memo(function PaymentHistory({
   onShare?: (payment: any) => void;
 }) {
   const { colors } = useTheme();
+  const { user, userProfile } = useAuth();
+  const isOwner = !userProfile || userProfile.role !== "nested";
   if (payments.length === 0) {
     return (
       <View style={styles.emptyHistoryContainer}>
@@ -145,14 +153,14 @@ const PaymentHistory = memo(function PaymentHistory({
             <View style={styles.paymentAmountContainer}>
               <Text style={[styles.paymentAmount, { color: colors.text }]}>Rs.{p.amountPaid.toFixed(2)}</Text>
               <View style={[styles.paymentTypeBadge, {
-                backgroundColor: p.paymentType === "DUE" 
+                backgroundColor: p.isPendingSync ? colors.amberGlow || "#FF9800" : (p.paymentType === "DUE" 
                   ? (p.isAutoDue ? '#FF5722' : colors.missedRed) 
-                  : colors.paidGreen,
+                  : colors.paidGreen),
               }]}>
                 <Text style={styles.paymentTypeText}>
-                  {p.paymentType === "DUE" 
+                  {p.isPendingSync ? "Pending sync" : (p.paymentType === "DUE" 
                     ? (p.isAutoDue ? "Auto Due" : "Due") 
-                    : p.paymentType}
+                    : p.paymentType)}
                 </Text>
               </View>
             </View>
@@ -163,14 +171,18 @@ const PaymentHistory = memo(function PaymentHistory({
           {p.paymentMode === "PHONE" && (
             <Text style={[styles.paymentMode, { color: colors.textSecondary }]}>PhonePe Payment</Text>
           )}
-          {p.paymentType === "REGULAR" && onEdit && onDelete && (
+          {(p.paymentType === "REGULAR" || p.isPendingSync) && (
             <View style={styles.paymentActions}>
-              <Pressable style={styles.editPaymentBtn} onPress={() => onEdit(p)}>
-                <Text style={styles.editPaymentBtnText}>Edit</Text>
-              </Pressable>
-              <Pressable style={styles.deletePaymentBtn} onPress={() => onDelete(p)}>
-                <Text style={styles.deletePaymentBtnText}>Delete</Text>
-              </Pressable>
+              {(isOwner || p.isPendingSync || (p.nestedUid && p.nestedUid === user?.uid)) && onEdit && (
+                <Pressable style={styles.editPaymentBtn} onPress={() => onEdit(p)}>
+                  <Text style={styles.editPaymentBtnText}>Edit</Text>
+                </Pressable>
+              )}
+              {(isOwner || p.isPendingSync || (p.nestedUid && p.nestedUid === user?.uid)) && onDelete && (
+                <Pressable style={styles.deletePaymentBtn} onPress={() => onDelete(p)}>
+                  <Text style={styles.deletePaymentBtnText}>Delete</Text>
+                </Pressable>
+              )}
               {onShare && (
                 <Pressable style={[styles.editPaymentBtn, { backgroundColor: colors.paidGreen }]} onPress={() => onShare(p)}>
                   <Text style={styles.editPaymentBtnText}>Share</Text>
@@ -281,7 +293,9 @@ function createEmptyEditForm() {
 export default function ProfileScreen() {
   const { customerId, renew } = useLocalSearchParams<{ customerId: string; renew?: string }>();
   const activeCustomerId = Array.isArray(customerId) ? customerId[0] : customerId;
-  const { user, loading: authLoading } = useAuth();
+  const { user, userProfile, loading: authLoading } = useAuth();
+  const isOwner = !userProfile || userProfile.role !== "nested";
+  const effectiveOwnerId = isOwner ? user?.uid : userProfile?.parentUid;
   const { colors } = useTheme();
   const { language } = useLanguage();
   const loadRequestRef = useRef(0);
@@ -290,6 +304,7 @@ export default function ProfileScreen() {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [loan, setLoan] = useState<Loan | null>(null);
   const [payments, setPayments] = useState<any[]>([]);
+  const [nestedTransactions, setNestedTransactions] = useState<any[]>([]);
   const [payOpen, setPayOpen] = useState(false);
   const [dueOpen, setDueOpen] = useState(false);
   const [renewOpen, setRenewOpen] = useState(false);
@@ -505,14 +520,42 @@ export default function ProfileScreen() {
 
   const [isLoading, setIsLoading] = useState(true);
 
+  const logDebug = useCallback(async (message: string, extra: any = {}) => {
+    try {
+      const { addDoc, collection } = await import("firebase/firestore");
+      await addDoc(collection(db, "debugLogs"), {
+        timestamp: Date.now(),
+        message,
+        profileCustomerId: activeCustomerId,
+        ...extra
+      });
+    } catch (e) {
+      console.error("Failed to write debug log", e);
+    }
+  }, [activeCustomerId]);
+
   const reload = useCallback(async (options?: { showLoading?: boolean; skipAutoDue?: boolean; forceRefresh?: boolean }) => {
     const requestId = loadRequestRef.current + 1;
     loadRequestRef.current = requestId;
-    if (!user || !activeCustomerId) {
+    await logDebug("profile reload start", {
+      userUid: user?.uid || null,
+      userProfileRole: userProfile?.role || null,
+      effectiveOwnerId,
+      activeCustomerId,
+      isOwner
+    });
+
+    if (!user || !activeCustomerId || !effectiveOwnerId) {
+      await logDebug("profile reload early exit", {
+        hasUser: !!user,
+        hasCustomerId: !!activeCustomerId,
+        hasEffectiveOwnerId: !!effectiveOwnerId
+      });
       console.log('Missing user or customerId:', { user: !!user, customerId: activeCustomerId });
       setCustomer(null);
       setLoan(null);
       setPayments([]);
+      setNestedTransactions([]);
       setIsLoading(false);
       return;
     }
@@ -520,20 +563,60 @@ export default function ProfileScreen() {
     const forceRefresh = options?.forceRefresh === true;
     try {
       if (showLoading) setIsLoading(true);
-      const [c, l, p] = await Promise.all([
+      await logDebug("profile loading initial data", { activeCustomerId });
+      let [c, l, p, nt] = await Promise.all([
         getCustomerById(activeCustomerId),
-        getActiveLoan(user.uid, activeCustomerId, forceRefresh),
-        getPaymentsForCustomer(user.uid, activeCustomerId, forceRefresh),
+        getActiveLoan(effectiveOwnerId, activeCustomerId, forceRefresh),
+        getPaymentsForCustomer(effectiveOwnerId, activeCustomerId, forceRefresh),
+        isOwner ? Promise.resolve([]) : getNestedTransactionsForCustomer(user.uid, activeCustomerId),
       ]);
-      if (loadRequestRef.current !== requestId || (c && activeCustomerId !== c.id)) return;
-      if (c && c.userId !== user.uid) {
+      await logDebug("profile initial data loaded", {
+        hasCustomer: !!c,
+        hasLoan: !!l,
+        paymentsCount: p.length,
+        txnsCount: nt.length
+      });
+
+      if (!c && !isOwner) {
+        await logDebug("profile fetching nested customer", { activeCustomerId });
+        const nestedCustSnap = await getDoc(doc(db, "nestedCustomers", activeCustomerId));
+        if (nestedCustSnap.exists()) {
+          const nestedCustData = nestedCustSnap.data();
+          c = {
+            ...nestedCustData,
+            id: activeCustomerId,
+            userId: nestedCustData.masterUserId,
+            isTemp: true,
+            numericalId: nestedCustData.numericalId || 999999,
+          } as any;
+          await logDebug("profile nested customer found", {
+            name: c.name,
+            userId: c.userId
+          });
+        } else {
+          await logDebug("profile nested customer not found");
+        }
+      }
+      if (loadRequestRef.current !== requestId || (c && activeCustomerId !== c.id)) {
+        await logDebug("profile load request mismatch or id change", {
+          currentRef: loadRequestRef.current,
+          requestId,
+          customerId: c?.id || null
+        });
+        return;
+      }
+      if (c && c.userId !== effectiveOwnerId) {
+        await logDebug("profile owner mismatch error", {
+          customerOwnerId: c.userId,
+          effectiveOwnerId
+        });
         throw new Error("Customer does not belong to the active user.");
       }
       let freshPayments = p;
-      if (!options?.skipAutoDue && l) {
+      if (!options?.skipAutoDue && l && isOwner) {
         try {
-          await checkAndAutoMarkDues(user.uid, [l]);
-          freshPayments = await getPaymentsForCustomer(user.uid, activeCustomerId);
+          await checkAndAutoMarkDues(effectiveOwnerId, [l]);
+          freshPayments = await getPaymentsForCustomer(effectiveOwnerId, activeCustomerId);
         } catch {
           // Non-critical: ignore silently
         }
@@ -542,8 +625,14 @@ export default function ProfileScreen() {
       setCustomer(c);
       setLoan(l || null);
       setPayments(freshPayments);
-    } catch (error) {
+      setNestedTransactions(nt);
+    } catch (error: any) {
       if (loadRequestRef.current !== requestId) return;
+      await logDebug("profile reload catch error", {
+        errorName: error?.name || null,
+        errorMessage: error?.message || null,
+        errorStack: error?.stack || null
+      });
       console.error('Error loading customer details:', error);
       if (showLoading) {
         Alert.alert('Error', 'Failed to load customer details. Please try again.');
@@ -551,12 +640,13 @@ export default function ProfileScreen() {
       setCustomer(null);
       setLoan(null);
       setPayments([]);
+      setNestedTransactions([]);
     } finally {
       if (loadRequestRef.current === requestId && showLoading) {
         setIsLoading(false);
       }
     }
-  }, [activeCustomerId, user]);
+  }, [activeCustomerId, user, effectiveOwnerId, isOwner, logDebug]);
 
   useEffect(() => {
     loadRequestRef.current += 1;
@@ -572,6 +662,12 @@ export default function ProfileScreen() {
     setIsLoading(true);
   }, [activeCustomerId]);
   
+  // Load and reload on dependency changes
+  useEffect(() => {
+    if (authLoading || !user || !activeCustomerId || !effectiveOwnerId) return;
+    reload();
+  }, [authLoading, activeCustomerId, user, effectiveOwnerId, reload]);
+
   useFocusEffect(useCallback(() => {
     // Wait for Firebase Auth to resolve before fetching
     if (authLoading) return;
@@ -620,19 +716,105 @@ export default function ProfileScreen() {
     };
   }, [payments]);
 
+  const localLoan = useMemo(() => {
+    if (!loan) {
+      if ((customer as any)?.isTemp) {
+        const principal = Number((customer as any).principal || 10000);
+        const interest = principal * 0.20;
+        const totalPayable = principal + interest;
+        const pendingSum = nestedTransactions
+          .filter((t) => t.type === "payment" || t.type === "regular" || t.type === "CASH" || t.type === "PHONE")
+          .reduce((sum, t) => sum + (t.amount || 0), 0);
+        const balanceAmount = Math.max(0, totalPayable - pendingSum);
+        return {
+          id: `temp_loan_${customer.id}`,
+          customerId: activeCustomerId,
+          principalAmount: principal,
+          interestAmount: interest,
+          totalPayable: totalPayable,
+          balanceAmount: balanceAmount,
+          userId: effectiveOwnerId,
+          startDate: customer.createdAt,
+          status: balanceAmount <= 0 ? "CLOSED" as const : "ACTIVE" as const,
+          disbursement_mode: ((customer as any).disbursementMode || "CASH") as PaymentMode,
+          disbursementMode: ((customer as any).disbursementMode || "CASH") as PaymentMode,
+          isTemp: true,
+        };
+      }
+      return null;
+    }
+    if (isOwner) return loan;
+
+    const activeDisbursement = nestedTransactions.find(t => t.type === "RENEWAL_DISBURSEMENT");
+    if (activeDisbursement) {
+      const principal = activeDisbursement.amount;
+      const interest = principal * 0.20;
+      const totalPayable = principal + interest;
+      const paymentsAfterRenewal = nestedTransactions
+        .filter(t => t.date > activeDisbursement.date && (t.type === "payment" || t.type === "regular" || t.type === "CASH" || t.type === "PHONE"))
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+      const balanceAmount = Math.max(0, totalPayable - paymentsAfterRenewal);
+      return {
+        id: `temp_loan_${activeDisbursement.id}`,
+        customerId: activeCustomerId,
+        principalAmount: principal,
+        interestAmount: interest,
+        totalPayable: totalPayable,
+        balanceAmount: balanceAmount,
+        userId: effectiveOwnerId,
+        startDate: activeDisbursement.date,
+        status: balanceAmount <= 0 ? "CLOSED" as const : "ACTIVE" as const,
+        disbursement_mode: (activeDisbursement.notes.includes("PHONE") ? "PHONE" : "CASH") as PaymentMode,
+        disbursementMode: (activeDisbursement.notes.includes("PHONE") ? "PHONE" : "CASH") as PaymentMode,
+        isTemp: true,
+      };
+    }
+
+    const pendingSum = nestedTransactions
+      .filter((t) => t.type === "payment" || t.type === "regular" || t.type === "CASH" || t.type === "PHONE")
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+    const balanceAmount = Math.max(0, loan.balanceAmount - pendingSum);
+    return {
+      ...loan,
+      balanceAmount,
+      status: balanceAmount <= 0 ? "CLOSED" as const : loan.status,
+    };
+  }, [loan, nestedTransactions, isOwner, customer, activeCustomerId, effectiveOwnerId]);
+
+  const mappedNestedPayments = useMemo(() => {
+    return nestedTransactions.map((nt) => {
+      let pType: "REGULAR" | "DUE" | "RENEWAL_CLOSURE" | "RENEWAL_DISBURSEMENT" = "REGULAR";
+      if (nt.type === "RENEWAL_CLOSURE") pType = "RENEWAL_CLOSURE";
+      else if (nt.type === "RENEWAL_DISBURSEMENT") pType = "RENEWAL_DISBURSEMENT";
+      else if (nt.type === "DUE") pType = "DUE";
+
+      return {
+        id: nt.id,
+        loanId: nt.loanId || loan?.id || "",
+        customerId: nt.customerId,
+        amountPaid: nt.amount,
+        paymentDate: nt.date,
+        paymentMode: nt.type === "PHONE" || nt.notes.includes("PHONE") || nt.notes.toLowerCase().includes("phone") ? "PHONE" as const : "CASH" as const,
+        paymentType: pType,
+        notes: nt.notes || "",
+        isPendingSync: true,
+      };
+    });
+  }, [nestedTransactions, loan?.id]);
+
   const repaymentProgress = useMemo(() => {
-    if (!loan?.totalPayable) return { paid: 0, percent: 0 };
-    const paid = Math.max(0, loan.totalPayable - loan.balanceAmount);
+    if (!localLoan?.totalPayable) return { paid: 0, percent: 0 };
+    const paid = Math.max(0, localLoan.totalPayable - localLoan.balanceAmount);
     return {
       paid,
-      percent: Math.min((paid / loan.totalPayable) * 100, 100),
+      percent: Math.min((paid / localLoan.totalPayable) * 100, 100),
     };
-  }, [loan]);
+  }, [localLoan]);
 
-  const disbursementMode = (loan?.disbursement_mode ?? loan?.disbursementMode ?? "CASH") as PaymentMode;
+  const disbursementMode = (localLoan?.disbursement_mode ?? localLoan?.disbursementMode ?? "CASH") as PaymentMode;
 
   const paymentTimeline = useMemo(() => {
-    if (!loan || !customer) return [] as { index: number; date: number; status: "paid" | "overdue" | "upcoming"; amount: number }[];
+    if (!localLoan || !customer) return [] as { index: number; date: number; status: "paid" | "overdue" | "upcoming"; amount: number }[];
     const oneWeek = 7 * 24 * 60 * 60 * 1000;
 
     const toStartOfDay = (ts: number) => {
@@ -641,14 +823,16 @@ export default function ProfileScreen() {
       return d.getTime();
     };
 
-    const customerCycleStartDay = getOrDeriveCycleStartDay(customer, loan.startDate);
+    const customerCycleStartDay = getOrDeriveCycleStartDay(customer, localLoan.startDate);
     const paidByWeek = new Map<number, number>();
     const explicitDueWeeks = new Set<number>();
 
-    payments
-      .filter((p: any) => p.loanId === loan.id)
+    const combinedBasePayments = [...payments, ...mappedNestedPayments];
+
+    combinedBasePayments
+      .filter((p: any) => p.loanId === localLoan.id)
       .forEach((p: any) => {
-        const weekIndex = getPersonalCycleWeekIndex(p.paymentDate, loan.startDate, customerCycleStartDay);
+        const weekIndex = getPersonalCycleWeekIndex(p.paymentDate, localLoan.startDate, customerCycleStartDay);
 
         if (p.paymentType === "DUE" || p.type === "DUE") {
           explicitDueWeeks.add(weekIndex);
@@ -658,7 +842,7 @@ export default function ProfileScreen() {
       });
 
     const now = Date.now();
-    const loanStartCycleStart = getPersonalCycleStartTs(loan.startDate + 7 * 24 * 60 * 60 * 1000, customerCycleStartDay);
+    const loanStartCycleStart = getPersonalCycleStartTs(localLoan.startDate + 7 * 24 * 60 * 60 * 1000, customerCycleStartDay);
     const completedWeeks = Math.max(0, Math.floor((now - loanStartCycleStart) / oneWeek));
     const maxPaidWeekIndex = paidByWeek.size > 0 ? Math.max(...paidByWeek.keys()) : 0;
     const totalWeeks = Math.max(12, completedWeeks + 1, maxPaidWeekIndex + 1);
@@ -677,32 +861,33 @@ export default function ProfileScreen() {
       }
       return { index, date, amount, status };
     });
-  }, [loan, payments, customer]);
+  }, [localLoan, payments, mappedNestedPayments, customer]);
 
   const displayedPayments = useMemo(() => {
-    if (!loan || !customer) return payments;
+    const combinedBasePayments = [...payments, ...mappedNestedPayments];
+    if (!localLoan || !customer) return combinedBasePayments;
     const oneWeek = 7 * 24 * 60 * 60 * 1000;
     const now = Date.now();
 
-    const customerCycleStartDay = getOrDeriveCycleStartDay(customer, loan.startDate);
+    const customerCycleStartDay = getOrDeriveCycleStartDay(customer, localLoan.startDate);
     const paidByWeek = new Map<number, number>();
     
-    payments
-      .filter((p: any) => p.loanId === loan.id && (p.paymentType === "REGULAR" || p.type === "REGULAR" || p.paymentType === "CASH" || p.paymentType === "PHONE"))
+    combinedBasePayments
+      .filter((p: any) => p.loanId === localLoan.id && (p.paymentType === "REGULAR" || p.type === "REGULAR" || p.paymentType === "CASH" || p.paymentType === "PHONE"))
       .forEach((p: any) => {
-        const weekIndex = getPersonalCycleWeekIndex(p.paymentDate, loan.startDate, customerCycleStartDay);
+        const weekIndex = getPersonalCycleWeekIndex(p.paymentDate, localLoan.startDate, customerCycleStartDay);
         paidByWeek.set(weekIndex, (paidByWeek.get(weekIndex) ?? 0) + Number(p.amountPaid || 0));
       });
       
     const explicitDueWeekIndices = new Set<number>();
-    payments
-      .filter((p: any) => p.loanId === loan.id && (p.paymentType === "DUE" || p.type === "DUE"))
+    combinedBasePayments
+      .filter((p: any) => p.loanId === localLoan.id && (p.paymentType === "DUE" || p.type === "DUE"))
       .forEach((p: any) => {
-        const weekIndex = getPersonalCycleWeekIndex(p.paymentDate, loan.startDate, customerCycleStartDay);
+        const weekIndex = getPersonalCycleWeekIndex(p.paymentDate, localLoan.startDate, customerCycleStartDay);
         explicitDueWeekIndices.add(weekIndex);
       });
 
-    const loanStartCycleStart = getPersonalCycleStartTs(loan.startDate + 7 * 24 * 60 * 60 * 1000, customerCycleStartDay);
+    const loanStartCycleStart = getPersonalCycleStartTs(localLoan.startDate + 7 * 24 * 60 * 60 * 1000, customerCycleStartDay);
     const completedWeeks = Math.max(0, Math.floor((now - loanStartCycleStart) / oneWeek));
     const injectedDues: any[] = [];
     
@@ -715,31 +900,31 @@ export default function ProfileScreen() {
       if (isAutoOverdue && !hasExplicitDue) {
         injectedDues.push({
           id: `auto-due-${i}`,
-          loanId: loan.id,
-          customerId: loan.customerId,
+          loanId: localLoan.id,
+          customerId: localLoan.customerId,
           amountPaid: 0,
           paymentDate: weekStartDate,
           weekNumber: i + 1,
           paymentType: "DUE",
           paymentMode: "CASH",
           type: "DUE",
-          userId: loan.userId,
+          userId: localLoan.userId,
           isAutoInjected: true,
           isAutoDue: true,
         });
       }
     }
     
-    const filteredPayments = payments.filter((p: any) => {
+    const filteredPayments = combinedBasePayments.filter((p: any) => {
       if (p.paymentType !== "DUE" && p.type !== "DUE") return true;
-      if (p.loanId !== loan.id) return true;
-      const wIdx = getPersonalCycleWeekIndex(p.paymentDate, loan.startDate, customerCycleStartDay);
+      if (p.loanId !== localLoan.id) return true;
+      const wIdx = getPersonalCycleWeekIndex(p.paymentDate, localLoan.startDate, customerCycleStartDay);
       return (paidByWeek.get(wIdx) ?? 0) === 0;
     });
 
     const combined = [...filteredPayments, ...injectedDues];
     return combined.sort((a, b) => b.paymentDate - a.paymentDate);
-  }, [loan, payments, customer]);
+  }, [localLoan, payments, mappedNestedPayments, customer]);
 
   const sendWhatsAppReminder = useCallback(() => {
     if (!customer) return;
@@ -749,7 +934,7 @@ export default function ProfileScreen() {
       return;
     }
     const normalized = digits.length === 10 ? `91${digits}` : digits;
-    const weeklyAmount = getSuggestedPaymentAmount(loan ?? undefined);
+    const weeklyAmount = getSuggestedPaymentAmount(localLoan as Loan ?? undefined);
     
     const totalPaid = payments
       .filter((p) => p.paymentType === "REGULAR")
@@ -757,7 +942,7 @@ export default function ProfileScreen() {
       
     const reminderMsg = `Hi ${customer.name}, this is a payment reminder. Please pay this week's amount Rs.${Math.round(weeklyAmount).toLocaleString("en-IN")} ASAP.`;
     
-    const disbursed = loan ? loan.principalAmount - Math.floor(loan.principalAmount / 1000) * 20 : 0;
+    const disbursed = localLoan ? localLoan.principalAmount - Math.floor(localLoan.principalAmount / 1000) * 20 : 0;
     const statementMsg = `*Karthikeya Finance - Account Statement* 📖\n` +
       `------------------------------------\n` +
       `*Customer:* ${customer.name}\n` +
@@ -851,8 +1036,9 @@ export default function ProfileScreen() {
       setPaymentDateError("Enter a valid payment amount");
       return;
     }
-    if (parsedAmount > loan.balanceAmount) {
-      setPaymentDateError(`Amount cannot exceed outstanding balance of Rs.${Math.round(loan.balanceAmount)}`);
+    const activeLoan = localLoan || loan;
+    if (activeLoan && parsedAmount > activeLoan.balanceAmount) {
+      setPaymentDateError(`Amount cannot exceed outstanding balance of Rs.${Math.round(activeLoan.balanceAmount)}`);
       return;
     }
     setPaymentDateError("");
@@ -862,31 +1048,53 @@ export default function ProfileScreen() {
       try {
         paymentSavingRef.current = true;
         setIsPaymentSaving(true);
-        await addPayment(loan, parsedAmount, finalDate, mode);
+        if (!isOwner) {
+          await addNestedTransaction({
+            ownerUid: effectiveOwnerId!,
+            nestedUid: user.uid,
+            nestedEmail: user.email || "",
+            customerId: activeCustomerId,
+            customerName: customer?.name || "Customer",
+            amount: parsedAmount,
+            type: "payment",
+            date: finalDate,
+            notes: `Regular payment via ${mode}`,
+          });
+        } else {
+          await addPayment(loan, parsedAmount, finalDate, mode);
+        }
         setPayOpen(false);
         setAmount("");
-        const newBal = loan.balanceAmount - parsedAmount;
+        const activeLoanObj = localLoan || loan;
+        const newBal = activeLoanObj ? activeLoanObj.balanceAmount - parsedAmount : 0;
         if (newBal <= 0) {
           if (Platform.OS === "web") {
-            const choice = window.confirm(
-              `${customer?.name || "Customer"} has fully paid their loan.\n\nClick OK to go to Renew\nClick Cancel to Close account`
-            );
-            if (!choice) {
-              await closeCustomer(activeCustomerId, user.uid);
+            if (isOwner) {
+              const choice = window.confirm(
+                `${customer?.name || "Customer"} has fully paid their loan.\n\nClick OK to go to Renew\nClick Cancel to Close account`
+              );
+              if (!choice) {
+                await closeCustomer(activeCustomerId, user.uid);
+              }
+            } else {
+              Alert.alert("Loan Fully Paid", `${customer?.name || "Customer"} has fully paid their loan.`);
             }
           } else {
             const action = await new Promise((resolve) => {
+              const buttons = [
+                { text: "Continue (Renew later)", onPress: () => resolve("keep") },
+                { text: "Cancel", style: "cancel" as any, onPress: () => resolve("cancel") },
+              ];
+              if (isOwner) {
+                buttons.unshift({ text: "Close Account", style: "destructive" as any, onPress: () => resolve("close") });
+              }
               Alert.alert(
                 "Loan Fully Paid",
                 `${customer?.name || "Customer"} fully paid. What now?`,
-                [
-                  { text: "Close Account", style: "destructive", onPress: () => resolve("close") },
-                  { text: "Continue (Renew later)", onPress: () => resolve("keep") },
-                  { text: "Cancel", style: "cancel", onPress: () => resolve("cancel") },
-                ]
+                buttons
               );
             });
-            if (action === "close") {
+            if (action === "close" && isOwner) {
               await closeCustomer(activeCustomerId, user.uid);
             }
           }
@@ -990,28 +1198,46 @@ export default function ProfileScreen() {
 
     try {
       setIsSavingPaymentEdit(true);
-      await updatePayment(editingPayment, parsedAmount, finalDate, editPaymentMode);
-      setPayments((prev) =>
-        prev
-          .map((payment) =>
-            payment.id === editingPayment.id
-              ? { ...payment, amountPaid: parsedAmount, paymentDate: finalDate, paymentMode: editPaymentMode, type: editPaymentMode }
-              : payment
+      if (editingPayment.isPendingSync) {
+        await updateNestedTransaction(editingPayment.id, parsedAmount, editPaymentMode);
+        setNestedTransactions((prev) =>
+          prev.map((t) =>
+            t.id === editingPayment.id
+              ? { ...t, amount: parsedAmount, date: finalDate, notes: editPaymentMode }
+              : t
           )
-          .sort((a, b) => toMillis(b.paymentDate) - toMillis(a.paymentDate))
-      );
-      if (loan) {
-        const newBalance = Math.max(0, loan.balanceAmount + balanceDiff);
-        setLoan({
-          ...loan,
-          balanceAmount: newBalance,
-          status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
-        });
+        );
+      } else {
+        await updatePayment(editingPayment, parsedAmount, finalDate, editPaymentMode);
+        setPayments((prev) =>
+          prev
+            .map((payment) =>
+              payment.id === editingPayment.id
+                ? { ...payment, amountPaid: parsedAmount, paymentDate: finalDate, paymentMode: editPaymentMode, type: editPaymentMode }
+                : payment
+            )
+            .sort((a, b) => toMillis(b.paymentDate) - toMillis(a.paymentDate))
+        );
+        if (loan) {
+          const newBalance = Math.max(0, loan.balanceAmount + balanceDiff);
+          setLoan({
+            ...loan,
+            balanceAmount: newBalance,
+            status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+          });
+        }
       }
       closeEditPaymentModal();
       showToast("success", "Payment updated", "Payment changes were saved.");
     } catch (error: any) {
       console.error("Payment update failed:", error);
+      await logDebug("confirmEditPayment failed", {
+        errorName: error?.name || null,
+        errorMessage: error?.message || null,
+        errorStack: error?.stack || null,
+        paymentId: editingPayment.id,
+        isPendingSync: !!editingPayment.isPendingSync
+      });
       setEditPaymentError(error?.message || "Payment update failed. Please try again.");
     } finally {
       setIsSavingPaymentEdit(false);
@@ -1115,24 +1341,36 @@ export default function ProfileScreen() {
     const paymentToDelete = deletingPayment;
     const isDue = paymentToDelete.paymentType === "DUE" || paymentToDelete.type === "DUE";
     try {
-      if (isDue) {
-        await deleteDuePayment(paymentToDelete);
+      if (paymentToDelete.isPendingSync) {
+        await deleteNestedTransaction(paymentToDelete.id);
+        setNestedTransactions((prev) => prev.filter((t) => t.id !== paymentToDelete.id));
       } else {
-        await deletePayment(paymentToDelete);
-      }
-      setPayments((prev) => prev.filter((payment) => payment.id !== paymentToDelete.id));
-      if (loan && !isDue && money(paymentToDelete.amountPaid) > 0) {
-        const newBalance = loan.balanceAmount + money(paymentToDelete.amountPaid);
-        setLoan({
-          ...loan,
-          balanceAmount: newBalance,
-          status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
-        });
+        if (isDue) {
+          await deleteDuePayment(paymentToDelete);
+        } else {
+          await deletePayment(paymentToDelete);
+        }
+        setPayments((prev) => prev.filter((payment) => payment.id !== paymentToDelete.id));
+        if (loan && !isDue && money(paymentToDelete.amountPaid) > 0) {
+          const newBalance = loan.balanceAmount + money(paymentToDelete.amountPaid);
+          setLoan({
+            ...loan,
+            balanceAmount: newBalance,
+            status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+          });
+        }
       }
       closeDeletePaymentConfirm();
       showToast("success", "Payment removed", "The payment entry was deleted.");
     } catch (error: any) {
       console.error("Delete payment failed:", error);
+      await logDebug("confirmDeletePayment failed", {
+        errorName: error?.name || null,
+        errorMessage: error?.message || null,
+        errorStack: error?.stack || null,
+        paymentId: paymentToDelete.id,
+        isPendingSync: !!paymentToDelete.isPendingSync
+      });
       Alert.alert("Delete failed", error?.message || "Could not delete the payment.");
     }
   };
@@ -1221,34 +1459,32 @@ export default function ProfileScreen() {
               </View>
               <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <Text style={[styles.statLabel, { color: colors.textSecondary }]}>CURRENT BALANCE</Text>
-                <Text style={[styles.balanceValue, { color: colors.primary }]}>Rs.{loan?.balanceAmount?.toFixed(2) ?? "0.00"}</Text>
+                <Text style={[styles.balanceValue, { color: colors.primary }]}>Rs.{localLoan?.balanceAmount?.toFixed(2) ?? "0.00"}</Text>
               </View>
             </View>
 
-            {loan ? (
-              <View style={[styles.repaymentCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <View style={styles.repaymentHeader}>
-                  <Text style={[styles.repaymentLabel, { color: colors.textSecondary }]}>
-                    Rs.{Math.round(repaymentProgress.paid).toLocaleString("en-IN")} paid of Rs.{Math.round(loan.totalPayable).toLocaleString("en-IN")}
-                  </Text>
-                  <Text style={styles.repaymentPercent}>{repaymentProgress.percent.toFixed(0)}%</Text>
-                </View>
-                <View style={styles.repaymentTrack}>
-                  <View
-                    style={[
-                      styles.repaymentFill,
-                      {
-                        width: `${repaymentProgress.percent}%`,
-                        backgroundColor: repaymentProgress.percent >= 100 ? "#00D4AA" : repaymentProgress.percent > 50 ? "#6C63FF" : "#FFB347",
-                      },
-                    ]}
-                  />
-                </View>
-              </View>
-            ) : null}
-
-            {loan ? (
+            {localLoan ? (
               <>
+                <View style={[styles.repaymentCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <View style={styles.repaymentHeader}>
+                    <Text style={[styles.repaymentLabel, { color: colors.textSecondary }]}>
+                      Rs.{Math.round(repaymentProgress.paid).toLocaleString("en-IN")} paid of Rs.{Math.round(localLoan.totalPayable).toLocaleString("en-IN")}
+                    </Text>
+                    <Text style={styles.repaymentPercent}>{repaymentProgress.percent.toFixed(0)}%</Text>
+                  </View>
+                  <View style={styles.repaymentTrack}>
+                    <View
+                      style={[
+                        styles.repaymentFill,
+                        {
+                          width: `${repaymentProgress.percent}%`,
+                          backgroundColor: repaymentProgress.percent >= 100 ? "#00D4AA" : repaymentProgress.percent > 50 ? "#6C63FF" : "#FFB347",
+                        },
+                      ]}
+                    />
+                  </View>
+                </View>
+
                 <View style={[styles.disbursementRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   <Text style={[styles.disbursementLabel, { color: colors.textSecondary }]}>Disbursed via:</Text>
                   <Text
@@ -1264,7 +1500,7 @@ export default function ProfileScreen() {
                 <View style={[styles.disbursementRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   <Text style={[styles.disbursementLabel, { color: colors.textSecondary }]}>Loan Taken Date:</Text>
                   <Text style={[styles.disbursementLabel, { color: colors.text, fontWeight: "700" }]}>
-                    {new Date(loan.startDate).toLocaleDateString("en-IN", {
+                    {new Date(localLoan.startDate).toLocaleDateString("en-IN", {
                       day: "numeric",
                       month: "short",
                       year: "numeric",
@@ -1274,7 +1510,7 @@ export default function ProfileScreen() {
               </>
             ) : null}
 
-            {loan ? (
+            {localLoan ? (
               <View style={[styles.timelineCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <Text style={[styles.timelineTitle, { color: colors.text }]}>Payment Timeline</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.timelineRow}>
@@ -1333,21 +1569,21 @@ export default function ProfileScreen() {
             )}
             <View style={styles.actionGrid}>
               <Pressable
-                style={[styles.actionBtn, noTextSelection, { backgroundColor: colors.paidGreen }, !loan || (loan.balanceAmount <= 0) && styles.actionBtnDisabled]}
+                style={[styles.actionBtn, noTextSelection, { backgroundColor: colors.paidGreen }, !localLoan || (localLoan.balanceAmount <= 0) && styles.actionBtnDisabled]}
                 onPress={() => {
-                  if (loan && loan.balanceAmount > 0) {
+                  if (localLoan && localLoan.balanceAmount > 0) {
                     setPaymentDateInput(formatDateInput(Date.now()));
                     setPaymentDateError("");
-                    setAmount(loan ? getSuggestedPaymentAmount(loan).toString() : "");
+                    setAmount(localLoan ? getSuggestedPaymentAmount(localLoan as Loan).toString() : "");
                     setPayOpen(true);
                   }
                 }}
-                disabled={!loan || loan.balanceAmount <= 0}
+                disabled={!localLoan || localLoan.balanceAmount <= 0}
               >
                 <Icon name="cash" size={20} color={colors.white} style={{marginBottom: 4}} />
                 <Text selectable={false} style={styles.actionLabel}>Pay</Text>
               </Pressable>
-              {loan && loan.balanceAmount <= 0 && (
+              {localLoan && localLoan.balanceAmount <= 0 && (
                 <Pressable
                   style={[styles.actionBtn, noTextSelection, { backgroundColor: colors.missedRed }]}
                   onPress={() => {
@@ -1355,9 +1591,9 @@ export default function ProfileScreen() {
                       "Loan Fully Paid",
                       `${customer?.name || "Customer"} has no outstanding balance. What would you like to do?`,
                       [
-                        {
+                        ...(isOwner ? [{
                           text: "Close Account",
-                          style: "destructive",
+                          style: "destructive" as const,
                           onPress: async () => {
                             try {
                               await closeCustomer(activeCustomerId, user.uid);
@@ -1367,12 +1603,12 @@ export default function ProfileScreen() {
                               showToast("error", "Failed", "Could not close customer.");
                             }
                           },
-                        },
+                        }] : []),
                         {
                           text: "Renew Loan",
                           onPress: () => setRenewOpen(true),
                         },
-                        { text: "Cancel", style: "cancel" },
+                        { text: "Cancel", style: "cancel" as const },
                       ]
                     );
                   }}
@@ -1393,15 +1629,15 @@ export default function ProfileScreen() {
                 <Text selectable={false} style={styles.actionLabel}>Due</Text>
               </Pressable>
               <Pressable
-                style={[styles.actionBtn, noTextSelection, { backgroundColor: colors.amber }, !loan && styles.actionBtnDisabled]}
+                style={[styles.actionBtn, noTextSelection, { backgroundColor: colors.amber }, !localLoan && styles.actionBtnDisabled]}
                 onPress={() => {
-                  if (!loan) {
+                  if (!localLoan) {
                     showToast("info", "No active loan", "This customer does not have an active loan to renew.");
                     return;
                   }
                   setRenewOpen(true);
                 }}
-                disabled={!loan}
+                disabled={!localLoan}
               >
                 <Icon name="refresh" size={20} color={colors.white} style={{marginBottom: 4}} />
                 <Text selectable={false} style={styles.actionLabel}>Renew</Text>
@@ -1409,10 +1645,12 @@ export default function ProfileScreen() {
             </View>
             
             <View style={[styles.iconBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Pressable style={[styles.iconBtn, noTextSelection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={openEditModal}>
-                <Icon name="person" size={21} color={colors.blue2} />
-                <Text selectable={false} style={[styles.iconBtnLabel, { color: colors.primary }]}>Edit</Text>
-              </Pressable>
+              {isOwner && (
+                <Pressable style={[styles.iconBtn, noTextSelection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={openEditModal}>
+                  <Icon name="person" size={21} color={colors.blue2} />
+                  <Text selectable={false} style={[styles.iconBtnLabel, { color: colors.primary }]}>Edit</Text>
+                </Pressable>
+              )}
               <Pressable style={[styles.iconBtn, noTextSelection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={sendWhatsAppReminder}>
                 <Icon name="logo-whatsapp" size={21} color={colors.paidGreen} />
                 <Text selectable={false} style={[styles.iconBtnLabel, { color: colors.primary }]}>Remind</Text>
@@ -1433,10 +1671,12 @@ export default function ProfileScreen() {
                 <Icon name="arrow-forward-circle-outline" size={21} color={colors.amber} />
                 <Text selectable={false} style={[styles.iconBtnLabel, { color: colors.primary }]}>Move</Text>
               </Pressable>
-              <Pressable style={[styles.iconBtn, noTextSelection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={() => setDeleteCustomerConfirmOpen(true)}>
-                <Icon name="trash" size={21} color={colors.missedRed} />
-                <Text selectable={false} style={[styles.iconBtnLabel, styles.iconBtnLabelDanger]}>Delete</Text>
-              </Pressable>
+              {(!isOwner && !(customer as any).isTemp) ? null : (
+                <Pressable style={[styles.iconBtn, noTextSelection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={() => setDeleteCustomerConfirmOpen(true)}>
+                  <Icon name="trash" size={21} color={colors.missedRed} />
+                  <Text selectable={false} style={[styles.iconBtnLabel, styles.iconBtnLabelDanger]}>Delete</Text>
+                </Pressable>
+              )}
             </View>
             <View style={[styles.customerAnalyticsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.customerAnalyticsHeader}>
@@ -1467,8 +1707,20 @@ export default function ProfileScreen() {
             <PaymentHistory 
               payments={displayedPayments} 
               customer={customer}
-              onEdit={openEditPaymentModal}
-              onDelete={openDeletePaymentConfirm}
+              onEdit={isOwner ? openEditPaymentModal : (payment) => {
+                if (payment.isPendingSync || (payment.nestedUid && payment.nestedUid === user?.uid)) {
+                  openEditPaymentModal(payment);
+                } else {
+                  Alert.alert("Permission Denied", "You can only edit payments that you entered.");
+                }
+              }}
+              onDelete={isOwner ? openDeletePaymentConfirm : (payment) => {
+                if (payment.isPendingSync || (payment.nestedUid && payment.nestedUid === user?.uid)) {
+                  openDeletePaymentConfirm(payment);
+                } else {
+                  Alert.alert("Permission Denied", "You can only delete payments that you entered.");
+                }
+              }}
               onShare={sharePaymentReceipt}
             />
           </View>
@@ -1754,18 +2006,19 @@ export default function ProfileScreen() {
               style={[styles.primary, isRenewing && styles.primaryDisabled]}
               disabled={isRenewing}
               onPress={async () => {
-                if (!loan || isRenewing) return;
+                const activeLoanObj = localLoan || loan;
+                if (!activeLoanObj || isRenewing) return;
                 const newPrincipal = Number(renewAmount);
                 if (isNaN(newPrincipal) || newPrincipal <= 0) {
                   showToast("error", "Invalid amount", "Please enter a valid principal amount.");
                   return;
                 }
-                const { deduction, disbursed, netToGive } = buildRenewalSummary(newPrincipal, loan.balanceAmount);
+                const { deduction, disbursed, netToGive } = buildRenewalSummary(newPrincipal, activeLoanObj.balanceAmount);
                 const msg =
                   `Please confirm the renewal details:\n\n` +
                   `New Loan: Rs.${newPrincipal.toLocaleString("en-IN")}\n` +
                   `Actual Disbursed: Rs.${disbursed.toLocaleString("en-IN")} (after Rs.${deduction} deduction)\n` +
-                  `Less Old Balance: -Rs.${Math.round(loan.balanceAmount).toLocaleString("en-IN")}\n\n` +
+                  `Less Old Balance: -Rs.${Math.round(activeLoanObj.balanceAmount).toLocaleString("en-IN")}\n\n` +
                   `Net Amount to ${netToGive >= 0 ? "GIVE" : "COLLECT"}: Rs.${Math.abs(netToGive).toLocaleString("en-IN")}/-\n\n` +
                   `Do you want to confirm renewal?`;
 
@@ -1774,12 +2027,48 @@ export default function ProfileScreen() {
 
                 try {
                   setIsRenewing(true);
-                  await renewLoan(loan, newPrincipal, Date.now(), renewMode);
-                  setRenewOpen(false);
-                  setRenewAmount("");
-                  setRenewMode("CASH");
-                  await reload({ showLoading: false, skipAutoDue: true, forceRefresh: true });
-                  showToast("success", "Loan renewed", "The loan was renewed successfully.");
+                  if (!isOwner) {
+                    // 1. Add RENEWAL_CLOSURE to nestedTransactions (if balance > 0)
+                    if (activeLoanObj.balanceAmount > 0) {
+                      await addNestedTransaction({
+                        ownerUid: effectiveOwnerId!,
+                        nestedUid: user.uid,
+                        nestedEmail: user.email || "",
+                        customerId: activeCustomerId,
+                        customerName: customer?.name || "",
+                        amount: activeLoanObj.balanceAmount,
+                        type: "RENEWAL_CLOSURE",
+                        date: Date.now(),
+                        notes: "Loan renewed - old balance cleared (closure)",
+                      });
+                    }
+                    
+                    // 2. Add RENEWAL_DISBURSEMENT to nestedTransactions
+                    await addNestedTransaction({
+                      ownerUid: effectiveOwnerId!,
+                      nestedUid: user.uid,
+                      nestedEmail: user.email || "",
+                      customerId: activeCustomerId,
+                      customerName: customer?.name || "",
+                      amount: newPrincipal,
+                      type: "RENEWAL_DISBURSEMENT",
+                      date: Date.now() + 1,
+                      notes: `New loan disbursed via renewal (disbursement) | Mode: ${renewMode}`,
+                    });
+                    
+                    setRenewOpen(false);
+                    setRenewAmount("");
+                    setRenewMode("CASH");
+                    await reload({ showLoading: false, skipAutoDue: true, forceRefresh: true });
+                    showToast("success", "Loan renewed", "Renewal recorded successfully.");
+                  } else {
+                    await renewLoan(activeLoanObj as Loan, newPrincipal, Date.now(), renewMode);
+                    setRenewOpen(false);
+                    setRenewAmount("");
+                    setRenewMode("CASH");
+                    await reload({ showLoading: false, skipAutoDue: true, forceRefresh: true });
+                    showToast("success", "Loan renewed", "The loan was renewed successfully.");
+                  }
                 } catch (error: any) {
                   console.error("Renewal failed:", error);
                   showToast("error", "Renewal failed", error?.message || "Could not renew the loan. Please try again.");
@@ -2182,7 +2471,12 @@ export default function ProfileScreen() {
                   if (!customer || !user) return;
                   setIsDeletingCustomer(true);
                   try {
-                    await deleteCustomer(user.uid, customer.id);
+                    if ((customer as any).isTemp) {
+                      const { deleteDoc, doc: docRef } = await import("firebase/firestore");
+                      await deleteDoc(docRef(db, "nestedCustomers", customer.id));
+                    } else {
+                      await deleteCustomer(user.uid, customer.id);
+                    }
                     setDeleteCustomerConfirmOpen(false);
                     router.back();
                   } catch {

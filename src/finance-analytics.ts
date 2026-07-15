@@ -1,10 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { collection, doc, getDocs, onSnapshot, query, where, type Unsubscribe } from "firebase/firestore";
+import { collection, doc, getDocs, onSnapshot, query, where, getDoc, type Unsubscribe } from "firebase/firestore";
 import { db } from "./firebase";
 import { Customer, Loan, Payment, Village } from "./types";
-import { DAY_MS as DAY, endOfMonth, getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, money, startOfDay, startOfMonth, toMillis, weekStart } from "./business-logic";
+import { DAY_MS as DAY, calculateDisbursedAmount, endOfMonth, getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, money, startOfDay, startOfMonth, toMillis, weekStart } from "./business-logic";
 import { filterCustomersWithVillage } from "./utils";
-import type { Investment, Expense } from "./repository";
+import type { Investment, Expense, NestedExpense } from "./repository";
 import { calculateWalletBalances } from "./wallet-balances";
 
 export type CustomerState = "paid" | "pending" | "overdue" | "closed";
@@ -137,48 +137,209 @@ function getMonthRange(offset: number): { start: number; end: number; label: str
   return { start, end, label, month: targetDate.getMonth(), year: targetDate.getFullYear() };
 }
 
-export async function getDashboardAnalytics(userId: string): Promise<DashboardAnalytics> {
-  const cacheKey = `${DASHBOARD_CACHE_PREFIX}${userId}:${startOfDay(Date.now())}`;
+export async function getDashboardAnalytics(userId: string, nestedUserId?: string): Promise<DashboardAnalytics> {
+  // For nested users, never use cache — their collectionToday changes frequently
+  const cacheKey = `${DASHBOARD_CACHE_PREFIX}${userId}:${nestedUserId || ""}:${startOfDay(Date.now())}`;
   let cached: DashboardAnalytics | null = null;
-  try {
-    const cachedValue = await AsyncStorage.getItem(cacheKey);
-    cached = cachedValue ? (JSON.parse(cachedValue) as DashboardAnalytics) : null;
-  } catch {
-    cached = null;
+  if (!nestedUserId) {
+    try {
+      const cachedValue = await AsyncStorage.getItem(cacheKey);
+      cached = cachedValue ? (JSON.parse(cachedValue) as DashboardAnalytics) : null;
+    } catch {
+      cached = null;
+    }
   }
 
-  let villages: Village[];
-  let customersRaw: Customer[];
-  let loansRaw: Loan[];
-  let paymentsRaw: Payment[];
-  let investmentsRaw: Investment[];
-  let expensesRaw: Expense[];
+  let villages: Village[] = [];
+  let customersRaw: Customer[] = [];
+  let loansRaw: Loan[] = [];
+  let paymentsRaw: Payment[] = [];
+  let investmentsRaw: Investment[] = [];
+  let expensesRaw: Expense[] = [];
   let bfAmount = 0;
   let userProfile: any = {};
+  let nestedTxns: any[] = [];
+  let nestedCusts: any[] = [];
 
   try {
-    [villages, customersRaw, loansRaw, paymentsRaw, investmentsRaw, expensesRaw] = await Promise.all([
-      getUserCollection<Village>(userId, "villages"),
-      getUserCollection<Customer>(userId, "customers"),
-      getUserCollection<Loan>(userId, "loans"),
-      getUserCollection<Payment>(userId, "payments"),
-      getUserCollection<Investment>(userId, "investments"),
-      getUserCollection<Expense>(userId, "expenses"),
-    ]);
-    // Get balancing fund
-    const { getDoc, doc: docRef } = await import("firebase/firestore");
-    const [bfSnap, userSnap] = await Promise.all([
-      getDoc(docRef(db, "balancingFund", userId)),
-      getDoc(docRef(db, "users", userId)),
-    ]);
-    if (bfSnap.exists()) {
-      bfAmount = Number(bfSnap.data().amount || 0);
+    if (nestedUserId) {
+      // For nested user, skip restricted owner collections to prevent Permission Denied errors
+      const [vSnap, cSnap, lSnap, pSnap, userSnap] = await Promise.all([
+        getUserCollection<Village>(userId, "villages"),
+        getUserCollection<Customer>(userId, "customers"),
+        getUserCollection<Loan>(userId, "loans"),
+        getUserCollection<Payment>(userId, "payments"),
+        getDoc(doc(db, "users", userId)),
+      ]);
+      villages = vSnap;
+      customersRaw = cSnap;
+      loansRaw = lSnap;
+      paymentsRaw = pSnap;
+      userProfile = userSnap.exists() ? userSnap.data() : {};
+    } else {
+      // Owner user gets standard complete load
+      const [vSnap, cSnap, lSnap, pSnap, iSnap, eSnap, bfSnap, userSnap] = await Promise.all([
+        getUserCollection<Village>(userId, "villages"),
+        getUserCollection<Customer>(userId, "customers"),
+        getUserCollection<Loan>(userId, "loans"),
+        getUserCollection<Payment>(userId, "payments"),
+        getUserCollection<Investment>(userId, "investments"),
+        getUserCollection<Expense>(userId, "expenses"),
+        getDoc(doc(db, "balancingFund", userId)),
+        getDoc(doc(db, "users", userId)),
+      ]);
+      villages = vSnap;
+      customersRaw = cSnap;
+      loansRaw = lSnap;
+      paymentsRaw = pSnap;
+      investmentsRaw = iSnap;
+      expensesRaw = eSnap;
+      if (bfSnap.exists()) {
+        bfAmount = Number(bfSnap.data().amount || 0);
+      }
+      userProfile = userSnap.exists() ? userSnap.data() : {};
     }
-    // PRIVATE — never export
-    userProfile = userSnap.exists() ? userSnap.data() : {};
-  } catch (error) {
+  } catch (error: any) {
+    console.error("Dashboard analytics build failed:", error);
+    // Write warning to debug logs
+    const { addDoc, collection: col } = await import("firebase/firestore");
+    await addDoc(col(db, "debugLogs"), {
+      timestamp: Date.now(),
+      message: "getDashboardAnalytics core load failed",
+      errorMessage: error?.message || null,
+      errorStack: error?.stack || null,
+      userId,
+      nestedUserId
+    }).catch(() => {});
+
     if (cached) return cached;
     throw error;
+  }
+
+  // Fetch nested data separately so errors here don't fall back to stale cache
+  let nestedBfAmount = 0;
+  let nestedExpenses: NestedExpense[] = [];
+  if (nestedUserId) {
+    const todayDateStr = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    const nestedBfDocId = `${userId}_nested_${nestedUserId}_${todayDateStr}`;
+
+    try {
+      const ntSnap = await getDocs(query(collection(db, "nestedTransactions"), where("nestedUid", "==", nestedUserId)));
+      nestedTxns = ntSnap.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+    } catch (err: any) {
+      console.error("[Analytics] Failed to fetch nestedTransactions:", err);
+      const { addDoc, collection: col } = await import("firebase/firestore");
+      await addDoc(col(db, "debugLogs"), {
+        timestamp: Date.now(),
+        message: "Failed to fetch nestedTransactions in getDashboardAnalytics",
+        errorMessage: err?.message || null,
+        nestedUserId
+      }).catch(() => {});
+    }
+
+    try {
+      const ncSnap = await getDocs(query(collection(db, "nestedCustomers"), where("nestedUserId", "==", nestedUserId)));
+      nestedCusts = ncSnap.docs.map(doc => ({ id: doc.id, ...doc.data() as any, isTemp: true }));
+    } catch (err: any) {
+      console.error("[Analytics] Failed to fetch nestedCustomers:", err);
+      const { addDoc, collection: col } = await import("firebase/firestore");
+      await addDoc(col(db, "debugLogs"), {
+        timestamp: Date.now(),
+        message: "Failed to fetch nestedCustomers in getDashboardAnalytics",
+        errorMessage: err?.message || null,
+        nestedUserId
+      }).catch(() => {});
+    }
+
+    try {
+      const nestedBfSnap = await getDoc(doc(db, "balancingFund", nestedBfDocId));
+      if (nestedBfSnap.exists()) {
+        nestedBfAmount = Number(nestedBfSnap.data().amount || 0);
+      } else {
+        const nestedAccSnap = await getDoc(doc(db, "nestedAccounts", nestedUserId));
+        if (nestedAccSnap.exists()) {
+          nestedBfAmount = Number(nestedAccSnap.data().balancingFund || 0);
+        }
+      }
+    } catch (err: any) {
+      console.error("[Analytics] Failed to fetch nested balancingFund:", err);
+      const { addDoc, collection: col } = await import("firebase/firestore");
+      await addDoc(col(db, "debugLogs"), {
+        timestamp: Date.now(),
+        message: "Failed to fetch nested balancingFund in getDashboardAnalytics",
+        errorMessage: err?.message || null,
+        nestedBfDocId
+      }).catch(() => {});
+    }
+
+    try {
+      const nestedExpSnap = await getDocs(query(collection(db, "nestedExpenses"), where("nestedUid", "==", nestedUserId)));
+      nestedExpenses = nestedExpSnap.docs.map(d => d.data() as NestedExpense);
+    } catch (err: any) {
+      console.error("[Analytics] Failed to fetch nestedExpenses:", err);
+      const { addDoc, collection: col } = await import("firebase/firestore");
+      await addDoc(col(db, "debugLogs"), {
+        timestamp: Date.now(),
+        message: "Failed to fetch nestedExpenses in getDashboardAnalytics",
+        errorMessage: err?.message || null,
+        nestedUserId
+      }).catch(() => {});
+    }
+  }
+
+  if (nestedUserId && nestedCusts.length > 0) {
+    const nestedCustsFormatted = nestedCusts.map(c => ({
+      ...c,
+      userId: c.masterUserId,
+    }));
+    customersRaw = [...customersRaw, ...nestedCustsFormatted];
+    
+    nestedCustsFormatted.forEach(c => {
+      const principal = Number(c.principal || 10000);
+      const interest = principal * 0.2;
+      const totalPayable = principal + interest;
+      loansRaw.push({
+        id: `temp_loan_${c.id}`,
+        customerId: c.id,
+        principalAmount: principal,
+        interestAmount: interest,
+        totalPayable,
+        balanceAmount: totalPayable,
+        userId: userId,
+        startDate: c.createdAt,
+        status: "ACTIVE",
+        disbursement_mode: c.disbursementMode || "CASH",
+        isTemp: true,
+      } as any);
+    });
+  }
+
+  if (nestedUserId && nestedTxns.length > 0) {
+    const mappedNestedPayments = nestedTxns.map((nt) => {
+      const ntNotes = nt.notes || "";
+      const ntType = nt.type || "payment";
+      let pType: "REGULAR" | "DUE" | "RENEWAL_CLOSURE" | "RENEWAL_DISBURSEMENT" = "REGULAR";
+      if (ntType === "RENEWAL_CLOSURE") pType = "RENEWAL_CLOSURE";
+      else if (ntType === "RENEWAL_DISBURSEMENT") pType = "RENEWAL_DISBURSEMENT";
+      else if (ntType === "DUE") pType = "DUE";
+      // "payment", "CASH", "PHONE" all map to REGULAR
+
+      const isPhone = ntType === "PHONE" || ntNotes.toUpperCase().includes("PHONE");
+
+      return {
+        id: nt.id,
+        loanId: nt.loanId || "",
+        customerId: nt.customerId,
+        amountPaid: nt.amount,
+        paymentDate: nt.date,
+        paymentMode: isPhone ? "PHONE" as const : "CASH" as const,
+        paymentType: pType,
+        type: pType === "DUE" ? "DUE" : (isPhone ? "PHONE" : "CASH"),
+        notes: ntNotes,
+        userId: userId,
+      } as any;
+    });
+    paymentsRaw = [...paymentsRaw, ...mappedNestedPayments];
   }
 
   const villageById = new Map(villages.map((village) => [village.id, village]));
@@ -644,7 +805,7 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
       cashWalletBalance,
       phonePeWalletBalance,
       totalWalletFunds: cashWalletBalance + phonePeWalletBalance,
-      repaidThisMonth: monthlyRevenue,
+      repaidThisMonth: money(monthlyRevenue),
       activeLentOut: pendingAmount,
       outstandingDues: dueAlerts.reduce((sum, alert) => sum + alert.dueAmount, 0),
     },
@@ -665,6 +826,123 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
     aiInsights,
     routeProgresses,
   };
+
+  if (nestedUserId) {
+    // 1. Calculate collections from nestedTxns (including renewals, excluding dues)
+    const nestedRegularTxns = nestedTxns.filter(t => t.type === "payment" || t.type === "regular" || t.type === "CASH" || t.type === "PHONE" || t.type === "RENEWAL_CLOSURE");
+    const totalColl = nestedRegularTxns.reduce((sum, t) => sum + (t.amount || 0), 0);
+    
+    const monthlyRev = nestedRegularTxns
+      .filter(t => t.date >= monthStart && t.date <= monthEnd)
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+      
+    const collToday = nestedRegularTxns
+      .filter(t => t.date >= todayStart && t.date <= todayEnd)
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+    // 2. Calculate disbursements (nestedCustomers registrations + renewals)
+    const nestedRenewalDisbursements = nestedTxns.filter(t => t.type === "RENEWAL_DISBURSEMENT");
+    
+    const totalDisb = nestedCusts.reduce((sum, c) => sum + calculateDisbursedAmount(Number(c.principal || 0)), 0)
+      + nestedRenewalDisbursements.reduce((sum, t) => sum + calculateDisbursedAmount(t.amount || 0), 0);
+
+    const disbThisMonth = nestedCusts
+      .filter(c => c.createdAt >= monthStart && c.createdAt <= monthEnd)
+      .reduce((sum, c) => sum + calculateDisbursedAmount(Number(c.principal || 0)), 0)
+      + nestedRenewalDisbursements
+      .filter(t => t.date >= monthStart && t.date <= monthEnd)
+      .reduce((sum, t) => sum + calculateDisbursedAmount(t.amount || 0), 0);
+
+    const disbToday = nestedCusts
+      .filter(c => c.createdAt >= todayStart && c.createdAt <= todayEnd)
+      .reduce((sum, c) => sum + calculateDisbursedAmount(Number(c.principal || 0)), 0)
+      + nestedRenewalDisbursements
+      .filter(t => t.date >= todayStart && t.date <= todayEnd)
+      .reduce((sum, t) => sum + calculateDisbursedAmount(t.amount || 0), 0);
+
+    // 3. Calculate wallet balances
+    let cashColl = 0;
+    let phonePeColl = 0;
+    nestedRegularTxns.forEach(t => {
+      const tNotes = t.notes || "";
+      const isPhone = tNotes.toUpperCase().includes("PHONE") || t.type === "PHONE";
+      if (isPhone) phonePeColl += (t.amount || 0);
+      else cashColl += (t.amount || 0);
+    });
+
+    let disburseCash = 0;
+    let disbursePhone = 0;
+    nestedCusts.forEach(c => {
+      const isPhone = c.disbursementMode === "PHONE";
+      const actualDisb = calculateDisbursedAmount(Number(c.principal || 0));
+      if (isPhone) disbursePhone += actualDisb;
+      else disburseCash += actualDisb;
+    });
+    nestedRenewalDisbursements.forEach(t => {
+      const tNotes = t.notes || "";
+      const isPhone = tNotes.toUpperCase().includes("PHONE") || t.type === "PHONE";
+      const actualDisb = calculateDisbursedAmount(t.amount || 0);
+      if (isPhone) disbursePhone += actualDisb;
+      else disburseCash += actualDisb;
+    });
+
+    const cashWalletBal = cashColl - disburseCash;
+    const phonePeWalletBal = phonePeColl - disbursePhone;
+
+    // 4. Calculate expenses for nested user
+    const nestedExpensesToday = nestedExpenses
+      .filter(e => e.date >= todayStart && e.date <= todayEnd)
+      .reduce((sum, e) => sum + e.amount, 0);
+    const nestedExpensesThisMonth = nestedExpenses
+      .filter(e => e.date >= monthStart && e.date <= monthEnd)
+      .reduce((sum, e) => sum + e.amount, 0);
+    const nestedExpensesTotal = nestedExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+    // 5. Net cash = BF + collectionToday - disbToday - expensesToday
+    const nestedNetCash = nestedBfAmount + collToday - disbToday - nestedExpensesToday;
+
+    dashboardAnalytics.totals = {
+      totalCollection: totalColl,
+      totalDistributed: totalDisb,
+      pendingAmount: pendingAmount, // remains the master's pending amount to show how much is left to collect
+      monthlyRevenue: monthlyRev,
+      previousMonthlyRevenue: 0,
+      customerCount: customers.length,
+      activeLoanCount: activeLoans.length,
+      distributedThisMonth: disbThisMonth,
+      distributedToday: disbToday,
+      collectionToday: collToday,
+      dueMarksThisMonth: nestedTxns.filter(t => t.type === "DUE" && t.date >= monthStart && t.date <= monthEnd).length,
+      totalInvestments: 0,
+      totalExpenses: nestedExpensesTotal,
+      monthlyInvestments: 0,
+      monthlyExpenses: nestedExpensesThisMonth,
+      previousMonthlyExpenses: 0,
+      netCashPosition: nestedNetCash,
+      balancingFund: nestedBfAmount,
+      cashWalletBalance: cashWalletBal,
+      phonePeWalletBalance: phonePeWalletBal,
+      totalWalletFunds: cashWalletBal + phonePeWalletBal,
+      repaidThisMonth: monthlyRev,
+      activeLentOut: pendingAmount,
+      outstandingDues: dueAlerts.reduce((sum, alert) => sum + alert.dueAmount, 0),
+    };
+
+    dashboardAnalytics.recentTransactions = nestedTxns
+      .sort((a, b) => b.date - a.date)
+      .slice(0, 8)
+      .map(t => ({
+        id: t.id,
+        customerId: t.customerId,
+        customerName: t.customerName || "Customer",
+        villageName: "", 
+        amountPaid: t.amount,
+        paymentDate: t.date,
+        paymentMode: ((t.notes || "").toUpperCase().includes("PHONE") || t.type === "PHONE") ? "PHONE" : "CASH",
+        paymentType: t.type === "DUE" ? "DUE" : (t.type === "RENEWAL_CLOSURE" ? "RENEWAL_CLOSURE" : (t.type === "RENEWAL_DISBURSEMENT" ? "RENEWAL_DISBURSEMENT" : "REGULAR")),
+      }));
+  }
+
   try {
     await AsyncStorage.setItem(cacheKey, JSON.stringify(dashboardAnalytics));
   } catch {
@@ -676,7 +954,8 @@ export async function getDashboardAnalytics(userId: string): Promise<DashboardAn
 export function subscribeDashboardAnalytics(
   userId: string,
   onData: (analytics: DashboardAnalytics) => void,
-  onError?: (error: unknown) => void
+  onError?: (error: unknown) => void,
+  nestedUserId?: string
 ): Unsubscribe {
   let cancelled = false;
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -684,7 +963,7 @@ export function subscribeDashboardAnalytics(
   const refresh = () => {
     if (refreshTimer) clearTimeout(refreshTimer);
     refreshTimer = setTimeout(() => {
-      getDashboardAnalytics(userId)
+      getDashboardAnalytics(userId, nestedUserId)
         .then((analytics) => {
           if (!cancelled) onData(analytics);
         })
@@ -694,8 +973,44 @@ export function subscribeDashboardAnalytics(
     }, 120);
   };
 
-  const watch = (name: string) =>
-    onSnapshot(query(collection(db, name), where("userId", "==", userId)), refresh, (error) => onError?.(error));
+  const watch = (name: string) => {
+    // If nested user, standard expenses/investments/balancingFund should fail gracefully without calling onError
+    const isCritical = name === "villages" || name === "customers" || name === "loans" || name === "payments";
+    return onSnapshot(
+      query(collection(db, name), where("userId", "==", userId)),
+      refresh,
+      async (error) => {
+        console.warn(`[Analytics] Watch failed for ${name}:`, error);
+        if (nestedUserId) {
+          const { addDoc, collection: col } = await import("firebase/firestore");
+          await addDoc(col(db, "debugLogs"), {
+            timestamp: Date.now(),
+            message: `Watch failed for ${name}`,
+            errorMessage: error?.message || null,
+            nestedUserId
+          }).catch(() => {});
+        }
+        if (isCritical || !nestedUserId) {
+          onError?.(error);
+        }
+      }
+    );
+  };
+
+  const watchNested = (name: string, field: string, val: string) =>
+    onSnapshot(query(collection(db, name), where(field, "==", val)), refresh, async (error) => {
+      console.error(`[Analytics] Nested watch failed for ${name}:`, error);
+      if (nestedUserId) {
+        const { addDoc, collection: col } = await import("firebase/firestore");
+        await addDoc(col(db, "debugLogs"), {
+          timestamp: Date.now(),
+          message: `Nested watch failed for ${name}`,
+          errorMessage: error?.message || null,
+          nestedUserId
+        }).catch(() => {});
+      }
+      onError?.(error);
+    });
 
   const unsubs = [
     watch("villages"),
@@ -706,6 +1021,30 @@ export function subscribeDashboardAnalytics(
     watch("expenses"),
     onSnapshot(doc(db, "users", userId), refresh, (error) => onError?.(error)),
   ];
+
+  if (nestedUserId) {
+    unsubs.push(
+      watchNested("nestedTransactions", "nestedUid", nestedUserId),
+      watchNested("nestedCustomers", "nestedUserId", nestedUserId),
+      watchNested("nestedExpenses", "nestedUid", nestedUserId),
+      onSnapshot(
+        query(collection(db, "balancingFund"), where("userId", "==", userId)),
+        refresh,
+        async (error) => {
+          console.warn("[Analytics] Watch balancingFund failed:", error);
+          const { addDoc, collection: col } = await import("firebase/firestore");
+          await addDoc(col(db, "debugLogs"), {
+            timestamp: Date.now(),
+            message: "Watch balancingFund failed",
+            errorMessage: error?.message || null,
+            nestedUserId
+          }).catch(() => {});
+          // balancingFund watch failure is non-critical for nested user
+        }
+      )
+    );
+  }
+
   refresh();
 
   return () => {

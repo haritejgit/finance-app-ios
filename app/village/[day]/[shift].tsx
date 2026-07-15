@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Dimensions, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useAuth } from "../../../src/auth-context";
 import { AnimatedListItem } from "../../../src/components/AnimatedListItem";
@@ -40,10 +40,12 @@ export default function VillageListScreen() {
   const params = useLocalSearchParams<{ day: string; shift: string }>();
   const day = typeof params.day === 'string' ? params.day : Array.isArray(params.day) ? params.day[0] : "Monday";
   const shift = typeof params.shift === 'string' ? params.shift : Array.isArray(params.shift) ? params.shift[0] : "Morning";
-  const { user, loading: authLoading } = useAuth();
+  const { user, userProfile, loading: authLoading } = useAuth();
   const { colors } = useTheme();
   const { t } = useLanguage();
   const insets = useSafeAreaInsets();
+  const isOwner = !userProfile || userProfile.role !== "nested";
+  const effectiveOwnerId = isOwner ? user?.uid : userProfile?.parentUid;
   const [villages, setVillages] = useState<Village[]>([]);
   const [newVillageName, setNewVillageName] = useState("");
   const [addModalVisible, setAddModalVisible] = useState(false);
@@ -64,19 +66,25 @@ export default function VillageListScreen() {
   const [renameSaving, setRenameSaving] = useState(false);
 
   const reload = useCallback(async (options?: { fresh?: boolean }) => {
-    if (!user) {
+    if (!user || !effectiveOwnerId) {
       setLoading(false);
       return;
     }
     try {
       setLoading(true);
-      setVillages(await getVillages(user.uid, options?.fresh ? false : true));
+      setVillages(await getVillages(effectiveOwnerId, options?.fresh ? false : true));
     } catch (error) {
       console.error("Failed to load villages:", error);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, effectiveOwnerId]);
+
+  // Load and reload on dependency changes
+  useEffect(() => {
+    if (authLoading || !user || !effectiveOwnerId) return;
+    reload({ fresh: true });
+  }, [authLoading, user, effectiveOwnerId, reload]);
 
   useFocusEffect(useCallback(() => {
     // Wait for Firebase Auth to resolve before fetching
@@ -241,7 +249,7 @@ export default function VillageListScreen() {
                   <AnimatedListItem index={index}>
                   <Pressable
                     onPress={() => router.push(`/customer/${item.id}`)}
-                    onLongPress={() => openRenameModal(item)}
+                    onLongPress={isOwner ? () => openRenameModal(item) : undefined}
                     delayLongPress={450}
                     style={[styles.villageCard, { backgroundColor: colors.card }]}
                   >
@@ -273,7 +281,7 @@ export default function VillageListScreen() {
         </View>
       </SafeAreaView>
 
-      {!loading && (
+      {!loading && isOwner && (
         <Pressable
           style={[styles.fab, { right: 20, bottom: Math.max(insets.bottom + 18, 28), backgroundColor: colors.coral }]}
           onPress={() => setAddModalVisible(true)}

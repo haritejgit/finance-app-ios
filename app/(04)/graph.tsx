@@ -366,7 +366,14 @@ function CashPositionCard({
 // ——— Main Screen ———
 
 export default function GraphScreen() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, userProfile, loading: authLoading } = useAuth();
+
+  useEffect(() => {
+    if (!authLoading && userProfile && userProfile.role === "nested") {
+      router.replace("/shift-selection");
+    }
+  }, [userProfile, authLoading]);
+
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [weeklyChartData, setWeeklyChartData] = useState<WeeklyChartPoint[]>([]);
   const [loading, setLoading] = useState(true);

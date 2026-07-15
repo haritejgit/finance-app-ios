@@ -27,10 +27,27 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/nestedAccounts/$(request.auth.uid)).data.masterUserId == masterUserId;
     }
 
+    function isNestedUserOf(ownerUid) {
+      return isSignedIn() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid))
+         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'nested'
+         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.parentUid == ownerUid
+         && (!get(/databases/$(database)/documents/users/$(request.auth.uid)).data.keys().hasAny(['active']) ||
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active != false))
+        ||
+        (exists(/databases/$(database)/documents/nestedAccounts/$(request.auth.uid))
+         && (get(/databases/$(database)/documents/nestedAccounts/$(request.auth.uid)).data.ownerUid == ownerUid
+             || get(/databases/$(database)/documents/nestedAccounts/$(request.auth.uid)).data.masterUserId == ownerUid)
+         && (!get(/databases/$(database)/documents/nestedAccounts/$(request.auth.uid)).data.keys().hasAny(['active']) ||
+             get(/databases/$(database)/documents/nestedAccounts/$(request.auth.uid)).data.active != false))
+      );
+    }
+
     function canReadDoc() {
       return isSignedIn() && (
-        resource.data.userId == request.auth.uid
-        || (isCollector() && isNestedReader(resource.data.userId))
+        resource == null
+        || resource.data.userId == request.auth.uid
+        || isNestedUserOf(resource.data.userId)
       );
     }
 
@@ -138,7 +155,11 @@ service cloud.firestore {
         validNonNegative('phonePeOpeningBalance') &&
         (!request.resource.data.keys().hasAny(['walletOpeningDate']) ||
           request.resource.data.walletOpeningDate is number ||
-          request.resource.data.walletOpeningDate is timestamp);
+          request.resource.data.walletOpeningDate is timestamp) &&
+        validString('role', 40) &&
+        validString('parentUid', 80) &&
+        validOptionalBoolean('active') &&
+        validNonNegative('createdAt');
     }
 
     function validMoneyEntryFields() {
@@ -185,9 +206,10 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read: if isSignedIn() && (request.auth.uid == uid || (isNestedReader(uid) && !isCollector()));
-      allow create, update: if isSignedIn() && request.auth.uid == uid && validUserProfileFields();
-      allow delete: if false;
+      allow read: if isSignedIn() && (request.auth.uid == uid || isNestedUserOf(uid) || (resource.data.role == 'nested' && resource.data.parentUid == request.auth.uid));
+      allow create: if isSignedIn() && (request.auth.uid == uid || (request.resource.data.role == 'nested' && request.resource.data.parentUid == request.auth.uid)) && validUserProfileFields();
+      allow update: if isSignedIn() && (request.auth.uid == uid || (resource.data.role == 'nested' && resource.data.parentUid == request.auth.uid)) && validUserProfileFields();
+      allow delete: if isSignedIn() && (request.auth.uid == uid || (resource.data.role == 'nested' && resource.data.parentUid == request.auth.uid));
     }
 
     match /villages/{docId} {
@@ -207,15 +229,15 @@ service cloud.firestore {
     match /loans/{docId} {
       allow read: if canReadDoc();
       allow create: if createsOwnDoc() && validLoanAmounts();
-      allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validLoanAmounts();
+      allow update: if (ownsExistingDoc() || isNestedUserOf(resource.data.userId)) && keepsOwnerImmutable() && validLoanAmounts();
       allow delete: if ownsExistingDoc();
     }
 
     match /payments/{docId} {
       allow read: if canReadDoc();
-      allow create: if createsOwnDoc() && validPaymentAmount();
-      allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validPaymentAmount();
-      allow delete: if ownsExistingDoc();
+      allow create: if (createsOwnDoc() || (isSignedIn() && request.resource.data.nestedUid == request.auth.uid)) && validPaymentAmount();
+      allow update: if (ownsExistingDoc() || (isSignedIn() && resource.data.nestedUid == request.auth.uid && request.resource.data.nestedUid == resource.data.nestedUid)) && keepsOwnerImmutable() && validPaymentAmount();
+      allow delete: if ownsExistingDoc() || (isSignedIn() && resource.data.nestedUid == request.auth.uid);
     }
 
     match /blockedAadhaar/{docId} {
@@ -226,39 +248,61 @@ service cloud.firestore {
     }
 
     match /balancingFund/{docId} {
-      allow read: if canReadDoc() && !isCollector();
-      allow create: if createsOwnDoc() && validNonNegative('amount') && validString('dateStr', 20);
-      allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validNonNegative('amount') && validString('dateStr', 20);
-      allow delete: if ownsExistingDoc();
+      allow read: if isSignedIn() && (
+        // Standard BF doc (userId == auth)
+        (resource != null && resource.data.userId == request.auth.uid)
+        // Nested BF doc (ownerUid == auth or nestedUid == auth)
+        || (resource != null && resource.data.keys().hasAny(['isNestedBF'])
+            && (resource.data.ownerUid == request.auth.uid || resource.data.nestedUid == request.auth.uid))
+        || resource == null
+      );
+      allow create: if isSignedIn() && (
+        (request.resource.data.userId == request.auth.uid)
+        || (request.resource.data.keys().hasAny(['isNestedBF']) && request.resource.data.ownerUid == request.auth.uid)
+      ) && validNonNegative('amount') && validString('dateStr', 20);
+      allow update: if isSignedIn() && (
+        (resource.data.userId == request.auth.uid)
+        || (resource.data.keys().hasAny(['isNestedBF']) && resource.data.ownerUid == request.auth.uid)
+      ) && validNonNegative('amount') && validString('dateStr', 20);
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
 
     match /investments/{docId} {
-      allow read: if canReadDoc() && !isCollector();
+      allow read: if canReadDoc();
       allow create: if createsOwnDoc() && validMoneyEntryFields();
       allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validMoneyEntryFields();
       allow delete: if ownsExistingDoc();
     }
 
     match /expenses/{docId} {
-      allow read: if canReadDoc() && !isCollector();
+      allow read: if canReadDoc();
       allow create: if createsOwnDoc() && validExpenseFields();
       allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validExpenseFields();
       allow delete: if ownsExistingDoc();
     }
 
-    // Nested Accounts: master creates the pending doc; nested user claims it on login
+    // Nested Accounts: master creates/manages the doc
     match /nestedAccounts/{docId} {
       allow read: if isSignedIn() && (
         request.auth.uid == docId
-        || resource.data.masterUserId == request.auth.uid       // master
-        || resource.data.nestedUserEmail == request.auth.token.email  // nested user looking up their invite
+        || resource.data.ownerUid == request.auth.uid
       );
-      allow create: if isSignedIn() && (
-        request.resource.data.masterUserId == request.auth.uid  // master creates a pending
-        || request.resource.data.nestedUserId == request.auth.uid  // nested user claims their doc
+      allow create, update: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // Nested Transactions: nested user enters payments, owner reconciles them
+    match /nestedTransactions/{docId} {
+      allow create: if isSignedIn()
+        && request.resource.data.nestedUid == request.auth.uid;
+      allow read: if isSignedIn() && (
+        resource.data.ownerUid == request.auth.uid
+        || resource.data.nestedUid == request.auth.uid
       );
-      allow update: if isSignedIn() && (resource.data.masterUserId == request.auth.uid || resource.data.nestedUserId == request.auth.uid);
-      allow delete: if isSignedIn() && (resource.data.masterUserId == request.auth.uid || resource.data.nestedUserId == request.auth.uid);
+      allow update, delete: if isSignedIn() && (
+        resource.data.ownerUid == request.auth.uid
+        || (resource.data.nestedUid == request.auth.uid && resource.data.exported == false)
+      );
     }
 
     // Nested Payments: nested user records payments; master reads them
@@ -279,14 +323,16 @@ service cloud.firestore {
     match /nestedCustomers/{docId} {
       allow read: if isSignedIn() && (
         resource.data.masterUserId == request.auth.uid 
-        || (resource.data.nestedUserId == request.auth.uid && isCollector())
+        || resource.data.nestedUserId == request.auth.uid
       );
       allow create: if isSignedIn() 
         && request.resource.data.nestedUserId == request.auth.uid 
-        && isCollector()
-        && isNestedReader(request.resource.data.masterUserId);
+        && isNestedUserOf(request.resource.data.masterUserId);
       allow update: if false;
-      allow delete: if false;
+      allow delete: if isSignedIn() && (
+        resource.data.masterUserId == request.auth.uid 
+        || resource.data.nestedUserId == request.auth.uid
+      );
     }
 
     // Nested OTP: nested user requests OTP; master reads/updates by email
@@ -303,11 +349,28 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Nested Expenses: nested user records their own expenses; owner can read
+    match /nestedExpenses/{docId} {
+      allow create: if isSignedIn()
+        && request.resource.data.nestedUid == request.auth.uid;
+      allow read: if isSignedIn() && (
+        resource.data.ownerUid == request.auth.uid
+        || resource.data.nestedUid == request.auth.uid
+      );
+      allow update: if isSignedIn() && resource.data.nestedUid == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.nestedUid == request.auth.uid;
+    }
+
     match /aiSuggestions/{docId} {
       allow read: if ownsExistingDoc() && request.auth.uid == docId;
       allow create: if createsOwnDoc() && request.auth.uid == docId && validAiSuggestionsFields();
       allow update: if ownsExistingDoc() && keepsOwnerImmutable() && request.auth.uid == docId && validAiSuggestionsFields();
       allow delete: if ownsExistingDoc() && request.auth.uid == docId;
+    }
+
+    match /debugLogs/{docId} {
+      allow create: if true;
+      allow read: if true;
     }
 
     match /{document=**} {
