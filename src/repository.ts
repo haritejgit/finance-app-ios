@@ -995,7 +995,7 @@ export async function reconcileLoanBalance(loanId: string): Promise<number> {
     return 0;
   }
   
-  const q = query(coll.payments, where("loanId", "==", loanId));
+  const q = query(coll.payments, where("userId", "==", loan.userId), where("loanId", "==", loanId));
   let paymentsSnap;
   try {
     paymentsSnap = await getDocsFromServer(q);
@@ -1147,15 +1147,35 @@ export async function addBulkPaymentsAndDues(
   const batch = writeBatch(db);
   const userId = auth.currentUser?.uid || entries[0].loan.userId;
 
+  // Fetch customers in chunks of 30 to get their cycleStartDay
+  const customerIds = Array.from(new Set(entries.map((e) => e.loan.customerId)));
+  const customersMap = new Map<string, Customer>();
+  const chunks: string[][] = [];
+  for (let i = 0; i < customerIds.length; i += 30) {
+    chunks.push(customerIds.slice(i, i + 30));
+  }
+  for (const chunk of chunks) {
+    const snap = await getDocs(query(coll.customers, where("userId", "==", userId), where("__name__", "in", chunk)));
+    snap.docs.forEach((d) => {
+      customersMap.set(d.id, d.data() as Customer);
+    });
+  }
+
   for (const { loan, amountPaid, isDue } of entries) {
     if (isDue) {
+      const customer = customersMap.get(loan.customerId);
+      const cycleStartDay = customer ? getOrDeriveCycleStartDay(customer, loan.startDate) : new Date(loan.startDate).getDay();
+      const weekIndex = getPersonalCycleWeekIndex(paymentDate, loan.startDate, cycleStartDay);
+      const weekNumber = weekIndex + 1;
+      const dueId = `due_${loan.id}_w${weekNumber}`;
+
       const payment: Payment = {
-        id: id(),
+        id: dueId,
         loanId: loan.id,
         customerId: loan.customerId,
         amountPaid: 0,
         paymentDate,
-        weekNumber: loanWeekNumber(loan.startDate, paymentDate),
+        weekNumber,
         paymentType: "DUE",
         paymentMode: "CASH",
         type: "DUE",
@@ -1329,13 +1349,20 @@ export async function deleteDuePayment(payment: Payment) {
 }
 
 export async function markDue(loan: Loan, paymentDate: number) {
+  const customerSnap = await getDoc(doc(db, "customers", loan.customerId));
+  const customer = customerSnap.exists() ? (customerSnap.data() as Customer) : null;
+  const cycleStartDay = customer ? getOrDeriveCycleStartDay(customer, loan.startDate) : new Date(loan.startDate).getDay();
+  const weekIndex = getPersonalCycleWeekIndex(paymentDate, loan.startDate, cycleStartDay);
+  const weekNumber = weekIndex + 1;
+  const dueId = `due_${loan.id}_w${weekNumber}`;
+
   const payment: Payment = {
-    id: id(),
+    id: dueId,
     loanId: loan.id,
     customerId: loan.customerId,
     amountPaid: 0,
     paymentDate,
-    weekNumber: loanWeekNumber(loan.startDate, paymentDate),
+    weekNumber,
     paymentType: "DUE",
     paymentMode: "CASH",
     type: "DUE",
@@ -1392,13 +1419,14 @@ export async function renewLoan(loan: Loan, newPrincipal: number, date: number, 
 }
 
 export function getPersonalCycleStartTs(dateMs: number, cycleStartDay: number): number {
-  const d = new Date(toMillis(dateMs));
-  d.setHours(0, 0, 0, 0);
-  const currentDay = d.getDay(); // 0 (Sun) - 6 (Sat)
+  const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+  const d = new Date(toMillis(dateMs) + IST_OFFSET);
+  d.setUTCHours(0, 0, 0, 0);
+  const currentDay = d.getUTCDay(); // 0 (Sun) - 6 (Sat)
   let diff = currentDay - cycleStartDay;
   if (diff < 0) diff += 7;
-  d.setDate(d.getDate() - diff);
-  return d.getTime();
+  d.setUTCDate(d.getUTCDate() - diff);
+  return d.getTime() - IST_OFFSET;
 }
 
 export function getOrDeriveCycleStartDay(customer: Customer, loanStartDate?: number): number {
@@ -1585,7 +1613,7 @@ export async function runRetroactiveCleanup(userId: string) {
         updateCount++;
       }
 
-      const pSnap = await getDocs(query(coll.payments, where("customerId", "==", customer.id)));
+      const pSnap = await getDocs(query(coll.payments, where("userId", "==", userId), where("customerId", "==", customer.id)));
       const payments = pSnap.docs.map(d => ({ data: d.data() as Payment, ref: d.ref }));
 
       const dues = payments.filter(p => p.data.paymentType === "DUE" || (p.data as any).type === "DUE");
@@ -2150,7 +2178,20 @@ export async function reopenCustomer(customerId: string, userId: string) {
 }
 
 export async function updateCustomer(customer: Customer) {
-  const sanitized = sanitizeCustomerInput(customer);
+  let updatedHistory = customer.villageHistory || [];
+  if (updatedHistory.length > 0) {
+    updatedHistory = updatedHistory.map((seg) => {
+      if (seg.toWeek === null && seg.villageId === customer.villageId) {
+        return { ...seg, numericalId: customer.numericalId };
+      }
+      return seg;
+    });
+  }
+  const customerWithHistory = {
+    ...customer,
+    villageHistory: updatedHistory,
+  };
+  const sanitized = sanitizeCustomerInput(customerWithHistory);
   if ((sanitized as any).locationCustomerId && (sanitized as any).locationCustomerId !== customer.id) {
     console.warn("Skipping mismatched customer location save", {
       customerId: customer.id,
@@ -2172,7 +2213,20 @@ export async function updateCustomerAndLoan(
   loan?: Loan | null,
   loanUpdates?: { principalAmount: number; startDate: number; disbursementMode?: PaymentMode }
 ) {
-  const sanitized = sanitizeCustomerInput(customer);
+  let updatedHistory = customer.villageHistory || [];
+  if (updatedHistory.length > 0) {
+    updatedHistory = updatedHistory.map((seg) => {
+      if (seg.toWeek === null && seg.villageId === customer.villageId) {
+        return { ...seg, numericalId: customer.numericalId };
+      }
+      return seg;
+    });
+  }
+  const customerWithHistory = {
+    ...customer,
+    villageHistory: updatedHistory,
+  };
+  const sanitized = sanitizeCustomerInput(customerWithHistory);
   if ((sanitized as any).locationCustomerId && (sanitized as any).locationCustomerId !== customer.id) {
     sanitized.latitude = undefined;
     sanitized.longitude = undefined;

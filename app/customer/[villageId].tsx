@@ -351,8 +351,46 @@ const CustomerItem = React.memo(function CustomerItem({
 
         <View style={styles.phoneIconRow}>
           {customer.phone ? (
-            <View style={styles.callLink}>
-              <Text style={styles.cardPhone}>{customer.phone}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <Pressable
+                onPress={(e) => {
+                  e.stopPropagation();
+                  lightImpact();
+                  Linking.openURL(`tel:${customer.phone}`).catch(() => undefined);
+                }}
+                style={styles.callLink}
+              >
+                <Icon name="call" size={12} color="#1565C0" />
+                <Text style={styles.cardPhone}>{customer.phone}</Text>
+              </Pressable>
+              
+              {loan && loan.balanceAmount > 0 && (
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    lightImpact();
+                    const digits = customer.phone.replace(/\D/g, "");
+                    const normalized = digits.length === 10 ? `91${digits}` : digits;
+                    const amount = getSuggestedPaymentAmount(loan);
+                    const msg = `Hi ${customer.name}, this is a payment reminder from Karthikeya Finance. Please pay this week's due of Rs.${Math.round(amount).toLocaleString("en-IN")} ASAP. Thank you!`;
+                    Linking.openURL(`https://wa.me/${normalized}?text=${encodeURIComponent(msg)}`).catch(() => {
+                      RNAlert.alert("WhatsApp unavailable", "Could not open WhatsApp.");
+                    });
+                  }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 3,
+                    backgroundColor: "#E1F5EE",
+                    paddingHorizontal: 6,
+                    paddingVertical: 2,
+                    borderRadius: 4,
+                  }}
+                >
+                  <Icon name="logo-whatsapp" size={10} color="#0F6E56" />
+                  <Text style={{ color: "#0F6E56", fontSize: 10, fontWeight: "700" }}>Remind</Text>
+                </Pressable>
+              )}
             </View>
           ) : (
             <Text style={styles.cardPhone}>—</Text>

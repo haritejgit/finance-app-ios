@@ -561,6 +561,7 @@ export default function ProfileScreen() {
   };
 
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const logDebug = useCallback(async (message: string, extra: any = {}) => {
     try {
@@ -605,6 +606,7 @@ export default function ProfileScreen() {
     const forceRefresh = options?.forceRefresh === true;
     try {
       if (showLoading) setIsLoading(true);
+      setLoadError(null);
       await logDebug("profile loading initial data", { activeCustomerId });
       let [c, l, p, nt] = await Promise.all([
         getCustomerById(activeCustomerId),
@@ -676,9 +678,7 @@ export default function ProfileScreen() {
         errorStack: error?.stack || null
       });
       console.error('Error loading customer details:', error);
-      if (showLoading) {
-        Alert.alert('Error', 'Failed to load customer details. Please try again.');
-      }
+      setLoadError(error?.message || String(error));
       setCustomer(null);
       setLoan(null);
       setPayments([]);
@@ -701,6 +701,7 @@ export default function ProfileScreen() {
     setEditCoordinateError("");
     setEditLocationStatus("");
     setIsUpdatingLocation(false);
+    setLoadError(null);
     setIsLoading(true);
   }, [activeCustomerId]);
   
@@ -1446,11 +1447,24 @@ export default function ProfileScreen() {
             <Text style={styles.loadingText}>Loading customer details...</Text>
           </View>
         )}
-        {!isLoading && !customer && (
+        {!isLoading && loadError && (
+          <View style={styles.errorContainer}>
+            <Icon name="alert-circle" size={32} color={colors.missedRed} style={{marginBottom: 8}} />
+            <Text style={styles.errorTitle}>Failed to Load Details</Text>
+            <Text style={styles.errorMessage}>{loadError}</Text>
+            <Pressable style={styles.backBtn} onPress={() => reload({ showLoading: true })}>
+              <Text style={styles.backBtnText}>↻ Retry</Text>
+            </Pressable>
+            <Pressable style={[styles.backBtn, { marginTop: 8 }]} onPress={() => router.back()}>
+              <Text style={styles.backBtnText}>← Go Back</Text>
+            </Pressable>
+          </View>
+        )}
+        {!isLoading && !loadError && !customer && (
           <View style={styles.errorContainer}>
             <Icon name="warning" size={32} color={colors.missedRed} style={{marginBottom: 8}} />
             <Text style={styles.errorTitle}>No Customer Found</Text>
-            <Text style={styles.errorMessage}>Unable to load customer details. Please try again.</Text>
+            <Text style={styles.errorMessage}>Unable to find this customer in records.</Text>
             <Pressable style={styles.backBtn} onPress={() => router.back()}>
               <Text style={styles.backBtnText}>← Go Back</Text>
             </Pressable>
