@@ -101,6 +101,10 @@ const iconPaths: Record<string, SvgNode[]> = {
   'wallet': [stroke('M3 7h18v14H3z'), stroke('M3 7l3-4h12l3 4'), stroke('M16 14h4')],
   'wallet-outline': [stroke('M3 7h18v14H3z'), stroke('M3 7l3-4h12l3 4'), stroke('M16 14h4')],
   'logo-whatsapp': [stroke('M20 11.5a8 8 0 0 1-11.8 7L4 20l1.5-4A8 8 0 1 1 20 11.5z'), stroke('M9 8c.3 3 2.7 5.2 6 6l1-1.4-2-.9-.8.8c-1.2-.6-2.1-1.5-2.7-2.7l.8-.8-.9-2L9 8z')],
+  'qr-code': [
+    stroke('M3 3h6v6H3zm0 12h6v6H3zm12-12h6v6h-6zm0 12h3M18 15h3m-3 3h3m-3 3h3M15 18h.01M15 21h.01'),
+    stroke('M5 5h2v2H5zm0 12h2v2H5zm12-12h2v2h-2z')
+  ],
   'warning': [stroke('M12 3 2 21h20L12 3z'), stroke('M12 9v5'), stroke('M12 18h.01')],
 };
 

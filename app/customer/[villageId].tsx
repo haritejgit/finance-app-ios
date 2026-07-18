@@ -3,6 +3,9 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Clipboard from "@react-native-clipboard/clipboard";
+import { Image } from "expo-image";
 
 import {
   ActivityIndicator,
@@ -235,6 +238,7 @@ const CustomerItem = React.memo(function CustomerItem({
   onMarkDue,
   onSaveCurrentLocation,
   onCloseRenew,
+  onShowQr,
   status,
   isNew,
   loan,
@@ -251,6 +255,7 @@ const CustomerItem = React.memo(function CustomerItem({
   onMarkDue: (customer: Customer) => void;
   onSaveCurrentLocation: (customer: Customer) => void;
   onCloseRenew?: (customer: Customer, loan: Loan) => void;
+  onShowQr?: (customer: Customer, loan: Loan) => void;
   status: PaymentStatus;
   isNew?: boolean;
   loan?: Loan;
@@ -369,26 +374,20 @@ const CustomerItem = React.memo(function CustomerItem({
                   onPress={(e) => {
                     e.stopPropagation();
                     lightImpact();
-                    const digits = customer.phone.replace(/\D/g, "");
-                    const normalized = digits.length === 10 ? `91${digits}` : digits;
-                    const amount = getSuggestedPaymentAmount(loan);
-                    const msg = `Hi ${customer.name}, this is a payment reminder from Karthikeya Finance. Please pay this week's due of Rs.${Math.round(amount).toLocaleString("en-IN")} ASAP. Thank you!`;
-                    Linking.openURL(`https://wa.me/${normalized}?text=${encodeURIComponent(msg)}`).catch(() => {
-                      RNAlert.alert("WhatsApp unavailable", "Could not open WhatsApp.");
-                    });
+                    onShowQr && onShowQr(customer, loan);
                   }}
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
                     gap: 3,
-                    backgroundColor: "#E1F5EE",
+                    backgroundColor: "#F3E8FF",
                     paddingHorizontal: 6,
                     paddingVertical: 2,
                     borderRadius: 4,
                   }}
                 >
-                  <Icon name="logo-whatsapp" size={10} color="#0F6E56" />
-                  <Text style={{ color: "#0F6E56", fontSize: 10, fontWeight: "700" }}>Remind</Text>
+                  <Icon name="qr-code" size={10} color="#6B21A8" />
+                  <Text style={{ color: "#6B21A8", fontSize: 10, fontWeight: "700" }}>UPI QR</Text>
                 </Pressable>
               )}
             </View>
@@ -600,6 +599,8 @@ export default function CustomerListScreen() {
   const [statusFilter, setStatusFilter] = useState<CustomerFilter>("all");
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [selectedQrCustomer, setSelectedQrCustomer] = useState<{ customer: Customer; loan: Loan } | null>(null);
+  const [agentUpiId, setAgentUpiId] = useState("karthikeyafinance@ybl");
   const [village, setVillage] = useState<Village | null>(null);
   const [form, setForm] = useState<AddCustomerForm>(createEmptyCustomerForm);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
@@ -641,6 +642,12 @@ export default function CustomerListScreen() {
   const cashToHand = useMemo(() => calculateDisbursedAmount(Number(form.principal || 0)), [form.principal]);
 
   const logDebug = useCallback(async (message: string, extra: any = {}) => {
+    console.log(`[DEBUG] ${message}`, extra);
+    const isError = message.toLowerCase().includes("fail") || 
+                    message.toLowerCase().includes("error") || 
+                    extra?.error || 
+                    extra?.isError;
+    if (!isError) return;
     try {
       const { addDoc, collection } = await import("firebase/firestore");
       await addDoc(collection(db, "debugLogs"), {
@@ -678,7 +685,7 @@ export default function CustomerListScreen() {
         setIsLoading(true);
       }
       await logDebug("calling getCustomers", { effectiveOwnerId, villageId });
-      let allCustomers = await getCustomers(effectiveOwnerId, villageId, false);
+      let allCustomers = await getCustomers(effectiveOwnerId, villageId, !forceRefresh);
       await logDebug("calling getVillageById", { villageId });
       const villageDetails = await getVillageById(villageId);
       await logDebug("data loaded success", {
@@ -813,10 +820,22 @@ export default function CustomerListScreen() {
   }, [user, villageId, effectiveOwnerId, isOwner, logDebug]);
 
 
+  // On initial load, load the recipient UPI ID from AsyncStorage
+  useEffect(() => {
+    AsyncStorage.getItem("agent_upi_id").then((id) => {
+      if (id) setAgentUpiId(id);
+    });
+  }, []);
+
+  const saveUpiId = async (id: string) => {
+    setAgentUpiId(id);
+    await AsyncStorage.setItem("agent_upi_id", id);
+  };
+
   // On initial load and dependency updates
   useEffect(() => {
     if (authLoading || !user || !villageId || !effectiveOwnerId) return;
-    reload(false, true);
+    reload(false, false);
   }, [authLoading, villageId, user, effectiveOwnerId, reload]);
 
   // Load nested accounts so owner can assign BF when registering customers
@@ -838,7 +857,7 @@ export default function CustomerListScreen() {
   useFocusEffect(useCallback(() => {
     if (authLoading || !user || !villageId) return;
     // Reload data but restore scroll position
-    reload(true, true);
+    reload(true, false);
   }, [authLoading, reload, user, villageId]));
 
   useEffect(() => {
@@ -1600,6 +1619,7 @@ export default function CustomerListScreen() {
           onMarkDue={markCustomerDue}
           onSaveCurrentLocation={isOwner ? saveCurrentLocationForCustomer : undefined}
           onCloseRenew={promptCloseOrRenew}
+          onShowQr={(c, l) => setSelectedQrCustomer({ customer: c, loan: l })}
           status={paymentStatuses[item.id] || 'none'} 
           isNew={isNewThisWeek(item.createdAt)}
           loan={activeLoans[item.id]}
@@ -2098,44 +2118,7 @@ export default function CustomerListScreen() {
                   ))}
                 </View>
 
-                {/* BF (Opening Balance) for nested account — owner only */}
-                {isOwner && nestedAccounts.length > 0 && (
-                  <View style={[styles.bfSection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
-                    <View style={styles.bfHeader}>
-                      <Icon name="wallet-outline" size={15} color={colors.primary} />
-                      <Text style={[styles.bfTitle, { color: colors.text }]}>Opening Balance (BF) for Nested Account</Text>
-                    </View>
-                    <Text style={[styles.bfHint, { color: colors.textSecondary }]}>
-                      Set the opening cash balance for the nested user for today. This appears on their dashboard.
-                    </Text>
-                    <TextInput
-                      placeholder="Enter BF amount (optional)"
-                      placeholderTextColor={colors.textMuted}
-                      value={form.nestedBF}
-                      onChangeText={(t) => setForm((f) => ({ ...f, nestedBF: t }))}
-                      style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text, marginTop: 8 }]}
-                      keyboardType="numeric"
-                    />
-                    {nestedAccounts.length > 1 && (
-                      <>
-                        <Text style={[styles.label, { color: colors.text, marginTop: 8 }]}>For which nested account?</Text>
-                        <View style={styles.modeRow}>
-                          {nestedAccounts.map((acc) => (
-                            <Pressable
-                              key={acc.nestedUid}
-                              style={[styles.modeBtn, form.nestedBFUid === acc.nestedUid && styles.modeBtnOn]}
-                              onPress={() => setForm((f) => ({ ...f, nestedBFUid: acc.nestedUid }))}
-                            >
-                              <Text style={[styles.modeText, form.nestedBFUid === acc.nestedUid && styles.modeTextOn]} numberOfLines={1}>
-                                {acc.label}
-                              </Text>
-                            </Pressable>
-                          ))}
-                        </View>
-                      </>
-                    )}
-                  </View>
-                )}
+
 
                 <Text style={[styles.label, { color: colors.text }]}>Submitted Documents</Text>
                 <Pressable
@@ -2371,17 +2354,7 @@ export default function CustomerListScreen() {
                           setPaymentStatuses((prev) => ({ ...prev, [createdCustomer.id]: "none" }));
                           setLastPaymentDates((prev) => ({ ...prev, [createdCustomer.id]: { lastPaymentDate: 0, paidLastWeek: false } }));
 
-                          // Save BF for nested account if entered
-                          const bfAmount = Number(form.nestedBF || 0);
-                          if (bfAmount > 0 && nestedAccounts.length > 0) {
-                            const todayDateStr = new Date().toISOString().split("T")[0];
-                            const targetUids = form.nestedBFUid
-                              ? [form.nestedBFUid]
-                              : nestedAccounts.map((a) => a.nestedUid);
-                            await Promise.all(
-                              targetUids.map((nUid) => saveNestedBF(user.uid, nUid, bfAmount, todayDateStr))
-                            );
-                          }
+
 
                           setShowAdd(false);
                           resetAddCustomerForm();
@@ -2447,6 +2420,110 @@ export default function CustomerListScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* Surprise UPI Payment QR Code Modal */}
+      <Modal
+        visible={selectedQrCustomer !== null}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setSelectedQrCustomer(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.qrModalContent, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.qrModalHeader}>
+              <Text style={[styles.qrModalTitle, { color: colors.text }]}>Collect Payment via UPI QR</Text>
+              <Pressable style={styles.qrCloseBtn} onPress={() => setSelectedQrCustomer(null)}>
+                <Icon name="close" size={24} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+
+            {selectedQrCustomer && (
+              <ScrollView contentContainerStyle={styles.qrModalScroll}>
+                <Text style={[styles.qrCustName, { color: colors.text }]}>
+                  {selectedQrCustomer.customer.name}
+                </Text>
+                
+                {/* Suggested Due Amount */}
+                <View style={styles.qrAmountContainer}>
+                  <Text style={styles.qrAmountLabel}>Suggested Week Payment</Text>
+                  <Text style={[styles.qrAmountValue, { color: colors.paidGreen }]}>
+                    Rs. {Math.round(getSuggestedPaymentAmount(selectedQrCustomer.loan)).toLocaleString("en-IN")}
+                  </Text>
+                </View>
+
+                {/* QR Code Image */}
+                <View style={styles.qrImageContainer}>
+                  <Image
+                    source={{
+                      uri: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(
+                        `upi://pay?pa=${agentUpiId.trim()}&pn=KarthikeyaFinance&am=${Math.round(
+                          getSuggestedPaymentAmount(selectedQrCustomer.loan)
+                        )}&cu=INR&tn=${encodeURIComponent(`Finance Payment - ${selectedQrCustomer.customer.name}`)}`
+                      )}`,
+                    }}
+                    style={styles.qrImage}
+                    contentFit="contain"
+                  />
+                </View>
+
+                {/* UPI ID Settings Input */}
+                <View style={styles.upiInputSection}>
+                  <Text style={[styles.upiInputLabel, { color: colors.textSecondary }]}>
+                    Recipient UPI ID (to receive payment):
+                  </Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text, marginTop: 8 }]}
+                    value={agentUpiId}
+                    onChangeText={saveUpiId}
+                    placeholder="Enter UPI ID (e.g. name@paytm)"
+                    placeholderTextColor={colors.textMuted}
+                    autoCapitalize="none"
+                  />
+                </View>
+
+                {/* UPI Link Display & Copy */}
+                <Pressable
+                  style={styles.copyLinkBtn}
+                  onPress={async () => {
+                    const link = `upi://pay?pa=${agentUpiId.trim()}&pn=KarthikeyaFinance&am=${Math.round(
+                      getSuggestedPaymentAmount(selectedQrCustomer.loan)
+                    )}&cu=INR&tn=Payment`;
+                    await Clipboard.setString(link);
+                    showToast("success", "UPI Link Copied", "UPI Payment URL copied to clipboard.");
+                  }}
+                >
+                  <Icon name="copy-outline" size={14} color={colors.primary} />
+                  <Text style={[styles.copyLinkText, { color: colors.primary }]}>Copy UPI URI Link</Text>
+                </Pressable>
+
+                {/* Log / Mark Paid Buttons directly inside modal */}
+                <View style={styles.qrPayButtonsRow}>
+                  <Pressable
+                    style={[styles.qrPayBtn, { backgroundColor: "#0ABFBC" }]}
+                    onPress={() => {
+                      const cust = selectedQrCustomer.customer;
+                      setSelectedQrCustomer(null);
+                      setTimeout(() => handleQuickPay(cust, "CASH"), 300);
+                    }}
+                  >
+                    <Text style={styles.qrPayBtnText}>Paid Cash</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[styles.qrPayBtn, { backgroundColor: "#5F259F" }]}
+                    onPress={() => {
+                      const cust = selectedQrCustomer.customer;
+                      setSelectedQrCustomer(null);
+                      setTimeout(() => handleQuickPay(cust, "PHONE"), 300);
+                    }}
+                  >
+                    <Text style={styles.qrPayBtnText}>Paid PhonePe</Text>
+                  </Pressable>
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
     </LinearGradient>
     </AnimatedScreen>
@@ -2879,4 +2956,25 @@ const styles = StyleSheet.create({
   bfHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
   bfTitle: { fontSize: 13, fontWeight: "700", flex: 1 },
   bfHint: { fontSize: 12, lineHeight: 17 },
+  
+  // QR Modal Styles
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center" },
+  qrModalContent: { width: "90%", maxWidth: 400, borderRadius: 20, borderWidth: 1, padding: 18, alignSelf: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 6 },
+  qrModalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  qrModalTitle: { fontSize: 18, fontWeight: "900" },
+  qrCloseBtn: { padding: 4 },
+  qrModalScroll: { alignItems: "center", paddingBottom: 10 },
+  qrCustName: { fontSize: 16, fontWeight: "700", marginBottom: 14, textAlign: "center" },
+  qrAmountContainer: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: "rgba(46,125,50,0.08)", alignItems: "center", marginBottom: 16 },
+  qrAmountLabel: { fontSize: 11, color: colors.textSecondary, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5 },
+  qrAmountValue: { fontSize: 24, fontWeight: "900", marginTop: 2 },
+  qrImageContainer: { width: 220, height: 220, padding: 10, backgroundColor: colors.white, borderRadius: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 3, alignItems: "center", justifyContent: "center", marginBottom: 16 },
+  qrImage: { width: 200, height: 200 },
+  upiInputSection: { width: "100%", marginBottom: 14 },
+  upiInputLabel: { fontSize: 12, fontWeight: "700", marginBottom: 6 },
+  copyLinkBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20, backgroundColor: "rgba(21,101,192,0.08)", marginBottom: 18 },
+  copyLinkText: { fontSize: 12, fontWeight: "800" },
+  qrPayButtonsRow: { flexDirection: "row", gap: 10, width: "100%", marginTop: 8 },
+  qrPayBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  qrPayBtnText: { color: colors.white, fontSize: 14, fontWeight: "900" },
 });

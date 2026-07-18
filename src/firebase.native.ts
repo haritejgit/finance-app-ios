@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getApp, getApps, initializeApp } from "firebase/app";
 // @ts-expect-error - getReactNativePersistence is only resolved/exported in React Native entry points
 import { getAuth, getReactNativePersistence, initializeAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache } from "firebase/firestore";
 import { firebaseConfig } from "./firebase-config";
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
@@ -18,4 +18,7 @@ function initNativeAuth() {
 }
 
 export const auth = initNativeAuth();
-export const db = getFirestore(app);
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache(),
+});
+

@@ -1513,18 +1513,17 @@ interface Payment {
               };
 
               if (loanStartingThisWeek) {
-                const renewalPayment = weekPayments.find((payment) => payment.paymentType === 'RENEWAL_CLOSURE');
                 const principalAmount = getLoanPrincipalAmount(loanStartingThisWeek as any);
                 const displayedAmount = loanStartingThisWeek.totalPayable || (principalAmount * 1.2);
                 weeklyDisbursed[weekIdx] += getLoanDistributedAmount(loanStartingThisWeek as any);
 
-                if (renewalPayment) {
-                  const otherPaymentsSum = weekPayments
-                    .filter((payment) => payment.id !== renewalPayment.id && isRealCollectionPayment(payment))
-                    .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
-                  const previousBalance = money(renewalPayment.amountPaid) + otherPaymentsSum;
-                  weeklyCollected[weekIdx] += previousBalance;
-                  row.push(withCarryForward(`${Math.trunc(previousBalance)}\n${Math.trunc(displayedAmount)}`));
+                const totalPaidThisWeek = weekPayments
+                  .filter((payment) => isRealCollectionPayment(payment))
+                  .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
+
+                if (totalPaidThisWeek > 0) {
+                  weeklyCollected[weekIdx] += totalPaidThisWeek;
+                  row.push(withCarryForward(`${Math.trunc(totalPaidThisWeek)}\n${Math.trunc(displayedAmount)}`));
                   setStyle(rowIndex, colIndex, orangeStyle);
                 } else {
                   row.push(withCarryForward(Math.trunc(displayedAmount)));
