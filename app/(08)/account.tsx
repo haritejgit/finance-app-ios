@@ -1221,22 +1221,26 @@ export default function AccountScreen() {
         });
       });
 
-    // Filter Loans (disbursed loans)
+    // Filter Loans (disbursed loans & renewals)
     rangeLoans.forEach((l) => {
       const ts = loanMillis(l);
       const cust = customerMap.get(l.customerId ?? "");
-        const desc = cust
-          ? `${cust.name} (${cust.numericalId})`
-          : (isTe ? "పంచిన డబ్బులు" : "Loan");
-        list.push({
-          id: l.id,
-          date: ts,
-          type: "LOAN",
-          amount: l.amount,
-          desc,
-          mode: (l.disbursement_mode ?? l.disbursementMode) === "PHONE" ? "PhonePe" : "Cash",
-        });
+      const custLabel = cust ? `${cust.name} (#${cust.numericalId})` : (isTe ? "ఖాతాదారు" : "Customer");
+      const lAny = l as any;
+      const isRenewal = l.status === "RENEWED" || (lAny.notes && lAny.notes.includes("renew"));
+      const principal = Number(l.principalAmount ?? l.amount ?? 0);
+
+      list.push({
+        id: `loan_${l.id}`,
+        date: ts,
+        type: "LOAN",
+        amount: principal,
+        desc: isRenewal
+          ? (isTe ? `🔄 నవీకరణ (మళ్లీ ఇచ్చిన అప్పు) - ${custLabel}` : `🔄 Loan Renewed - ${custLabel}`)
+          : (isTe ? `🆕 కొత్త అప్పు - ${custLabel}` : `🆕 New Loan Given - ${custLabel}`),
+        mode: (l.disbursement_mode ?? l.disbursementMode ?? lAny.paymentMode) === "PHONE" ? "PhonePe" : "Cash",
       });
+    });
 
     // Filter Expenses
     rangeExps.forEach((e) => {

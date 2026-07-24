@@ -503,7 +503,7 @@ const CustomerItem = React.memo(function CustomerItem({
       {/* Right vertical line divider */}
       <View style={styles.divider} />
 
-      {/* Column 3: Right Actions — Single Pay Button */}
+      {/* Column 3: Right Actions — Pay Button + Dedicated DUE Button */}
       <View style={styles.rightCol}>
         {isFullyPaid && onCloseRenew ? (
           <Pressable
@@ -520,16 +520,33 @@ const CustomerItem = React.memo(function CustomerItem({
             </View>
           </Pressable>
         ) : (
-          <Pressable
-            accessibilityLabel={`Pay for ${customer.name}`}
-            style={[styles.singlePayBtn, !canPay && styles.actionRowDisabled]}
-            disabled={!canPay}
-            onPress={handlePayPress}
-            onLongPress={handlePayLongPress}
-            delayLongPress={400}
-          >
-            <Text style={styles.singlePayBtnText}>Pay</Text>
-          </Pressable>
+          <View style={styles.rightActionsCol}>
+            <Pressable
+              accessibilityLabel={`Pay for ${customer.name}`}
+              style={[styles.singlePayBtn, !canPay && styles.actionRowDisabled]}
+              disabled={!canPay}
+              onPress={handlePayPress}
+              onLongPress={handlePayLongPress}
+              delayLongPress={400}
+            >
+              <Text style={styles.singlePayBtnText}>Pay</Text>
+            </Pressable>
+
+            {onMarkDue && (
+              <Pressable
+                accessibilityLabel={`Mark ${customer.name} due`}
+                style={[styles.dueSquareBtn, !canPay && styles.actionRowDisabled]}
+                disabled={!canPay}
+                onPress={(e) => {
+                  markActionPress(e);
+                  lightImpact();
+                  onMarkDue(customer);
+                }}
+              >
+                <Text style={styles.dueSquareBtnText}>DUE</Text>
+              </Pressable>
+            )}
+          </View>
         )}
       </View>
     </Pressable>
@@ -2429,11 +2446,11 @@ export default function CustomerListScreen() {
         onRequestClose={() => setSelectedQrCustomer(null)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.qrModalContent, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.qrModalContent, { backgroundColor: "#1E293B", borderColor: "#334155" }]}>
             <View style={styles.qrModalHeader}>
-              <Text style={[styles.qrModalTitle, { color: colors.text }]}>Collect Payment via UPI QR</Text>
+              <Text style={[styles.qrModalTitle, { color: "#FFFFFF" }]}>Collect Payment via UPI QR</Text>
               <Pressable style={styles.qrCloseBtn} onPress={() => setSelectedQrCustomer(null)}>
-                <Icon name="close" size={24} color={colors.textSecondary} />
+                <Icon name="close" size={24} color="#94A3B8" />
               </Pressable>
             </View>
 
@@ -2443,19 +2460,20 @@ export default function CustomerListScreen() {
 
               return (
                 <ScrollView contentContainerStyle={styles.qrModalScroll}>
-                  <Text style={[styles.qrCustName, { color: colors.text }]}>
+                  <Text style={[styles.qrCustName, { color: "#38BDF8" }]}>
                     {selectedQrCustomer.customer.name}
                   </Text>
                   
                   {/* Editable Payment Amount */}
-                  <View style={styles.qrAmountContainer}>
-                    <Text style={styles.qrAmountLabel}>Payment Amount (Editable)</Text>
+                  <View style={[styles.qrAmountContainer, { backgroundColor: "rgba(16,185,129,0.12)", borderColor: "rgba(16,185,129,0.3)", borderWidth: 1 }]}>
+                    <Text style={[styles.qrAmountLabel, { color: "#94A3B8" }]}>Payment Amount (Editable)</Text>
                     <TextInput
-                      style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.primary, color: colors.paidGreen, fontSize: 20, fontWeight: "900", textAlign: "center", marginTop: 4, width: 180 }]}
+                      style={[styles.input, { backgroundColor: "#0F172A", borderColor: "#22C55E", color: "#4ADE80", fontSize: 22, fontWeight: "900", textAlign: "center", marginTop: 6, width: 180, borderRadius: 10 }]}
                       value={qrCustomAmount}
                       onChangeText={setQrCustomAmount}
                       keyboardType="numeric"
                       placeholder="Amount"
+                      placeholderTextColor="#64748B"
                     />
                   </View>
 
@@ -2474,15 +2492,15 @@ export default function CustomerListScreen() {
 
                   {/* UPI ID Settings Input */}
                   <View style={styles.upiInputSection}>
-                    <Text style={[styles.upiInputLabel, { color: colors.textSecondary }]}>
+                    <Text style={[styles.upiInputLabel, { color: "#CBD5E1" }]}>
                       Recipient UPI ID (to receive payment):
                     </Text>
                     <TextInput
-                      style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text, marginTop: 8 }]}
+                      style={[styles.input, { backgroundColor: "#0F172A", borderColor: "#475569", color: "#FFFFFF", marginTop: 6 }]}
                       value={agentUpiId}
                       onChangeText={saveUpiId}
                       placeholder="Enter UPI ID (e.g. name@paytm)"
-                      placeholderTextColor={colors.textMuted}
+                      placeholderTextColor="#64748B"
                       autoCapitalize="none"
                     />
                   </View>
@@ -2788,15 +2806,32 @@ const styles = StyleSheet.create({
   actionRowDisabled: {
     opacity: 0.38,
   },
+  rightActionsCol: {
+    gap: 4,
+    alignItems: "center",
+  },
+  dueSquareBtn: {
+    backgroundColor: "#DC2626",
+    borderRadius: 8,
+    width: 48,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dueSquareBtnText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "900",
+  },
   singlePayBtn: {
     backgroundColor: "#0ABFBC",
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     alignItems: "center",
     justifyContent: "center",
     width: 48,
-    height: 38,
+    height: 32,
     shadowColor: "#0ABFBC",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,

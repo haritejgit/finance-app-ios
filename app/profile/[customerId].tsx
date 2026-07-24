@@ -144,14 +144,13 @@ const PaymentHistory = memo(function PaymentHistory({
   const { colors } = useTheme();
   const { user, userProfile } = useAuth();
   const isOwner = !userProfile || userProfile.role !== "nested";
-  const [selectedActionPayment, setSelectedActionPayment] = useState<any | null>(null);
 
   if (payments.length === 0) {
     return (
       <View style={styles.emptyHistoryContainer}>
-        <Icon name="document-text-outline" size={44} color={colors.textMuted} />
-        <Text style={[styles.emptyHistoryTitle, { color: colors.text }]}>No Transactions</Text>
-        <Text style={[styles.emptyHistorySubtitle, { color: colors.textSecondary }]}>Payment history will appear here</Text>
+        <Icon name="document-text-outline" size={44} color="#94A3B8" />
+        <Text style={[styles.emptyHistoryTitle, { color: "#FFFFFF" }]}>No Transactions Found</Text>
+        <Text style={[styles.emptyHistorySubtitle, { color: "#94A3B8" }]}>Payment records will appear here</Text>
       </View>
     );
   }
@@ -161,139 +160,82 @@ const PaymentHistory = memo(function PaymentHistory({
   return (
     <View style={styles.timelineContainer}>
       {payments.map((p, index) => {
-        const isLast = index === payments.length - 1;
         const isDue = p.paymentType === "DUE" || p.type === "DUE";
+        const isRenewal = p.paymentType === "RENEWAL_CLOSURE";
         const canManage = isOwner || p.isPendingSync || (p.nestedUid && p.nestedUid === user?.uid);
 
         return (
           <AnimatedListItem key={p.id || `pmt_${index}`} index={index}>
-            <Pressable
-              style={styles.timelineItemRow}
-              onLongPress={() => {
-                if (canManage || onShare) {
-                  setSelectedActionPayment(p);
-                }
-              }}
-              delayLongPress={350}
-            >
-              {/* Left Column: Date & Time */}
-              <View style={styles.timelineDateCol}>
-                {isDue ? (
-                  <Text style={[styles.timelineDateMain, { color: colors.text }]}>
-                    {formatPersonalCycleRange(getPersonalCycleStartTs(p.paymentDate, cycleStartDay))}
-                  </Text>
-                ) : (
-                  <>
-                    <Text style={[styles.timelineDateMain, { color: colors.text }]}>
-                      {new Date(p.paymentDate).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                      })}
+            <View style={styles.vibrantTimelineCard}>
+              <View style={styles.vibrantCardHeader}>
+                {/* Left: Status Icon & Details */}
+                <View style={styles.vibrantHeaderLeft}>
+                  <View style={[styles.vibrantIconBadge, { backgroundColor: isDue ? "#EF4444" : isRenewal ? "#3B82F6" : "#10B981" }]}>
+                    <Icon name={isDue ? "close" : isRenewal ? "refresh" : "checkmark"} size={13} color="#FFFFFF" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.vibrantCardTitle}>
+                      {isDue 
+                        ? (p.isAutoDue ? "Auto Due Marked" : "Due Marked")
+                        : isRenewal 
+                        ? "Loan Renewal Closure"
+                        : p.paymentMode === "PHONE" ? "📱 PhonePe Payment" : "💵 Cash Payment"}
                     </Text>
-                    <Text style={[styles.timelineDateSub, { color: colors.textSecondary }]}>
-                      {new Date(p.paymentDate).getFullYear()} • {new Date(p.paymentDate).toLocaleTimeString('en-IN', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: true,
-                      })}
+                    <Text style={styles.vibrantCardSubtext}>
+                      {isDue ? formatPersonalCycleRange(getPersonalCycleStartTs(p.paymentDate, cycleStartDay)) : (
+                        <>
+                          {new Date(p.paymentDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          {" • "}
+                          {new Date(p.paymentDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                        </>
+                      )}
                     </Text>
-                  </>
-                )}
-              </View>
-
-              {/* Center Column: Checkmark Bullet & Vertical Connecting Line */}
-              <View style={styles.timelineBulletCol}>
-                <View style={[styles.timelineBullet, { backgroundColor: isDue ? "#EF4444" : "#10B981" }]}>
-                  <Icon name={isDue ? "close" : "checkmark"} size={11} color="#FFFFFF" />
+                  </View>
                 </View>
-                {!isLast && <View style={[styles.timelineLine, { backgroundColor: colors.border }]} />}
+
+                {/* Right: Large Bold Amount Pill */}
+                <View style={{ alignItems: "flex-end" }}>
+                  {isDue ? (
+                    <View style={styles.vibrantDuePill}>
+                      <Text style={styles.vibrantDueText}>DUE</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.vibrantAmountPill}>
+                      <Text style={styles.vibrantAmountText}>
+                        +₹{Math.round(p.amountPaid || 0).toLocaleString("en-IN")}
+                      </Text>
+                    </View>
+                  )}
+                </View>
               </View>
 
-              {/* Right Column: Amount & Payment Tag */}
-              <View style={styles.timelineContentCol}>
-                <Text style={[styles.timelineAmount, { color: isDue ? colors.missedRed : colors.paidGreen }]}>
-                  {isDue ? (p.isAutoDue ? "Auto Due" : "Due") : `+₹${Math.round(p.amountPaid).toLocaleString("en-IN")}`}
-                </Text>
-                <View style={styles.timelineSubRow}>
-                  {p.paymentMode && !isDue && (
-                    <Text style={[styles.timelineModeTag, { color: colors.textSecondary }]}>
-                      {p.paymentMode === "PHONE" ? "PhonePe" : "Cash"}
-                    </Text>
+              {/* Action Buttons Row */}
+              {(canManage || onShare) && (
+                <View style={styles.vibrantActionRow}>
+                  {onEdit && canManage && (
+                    <Pressable style={styles.vibrantActionBtn} onPress={() => onEdit(p)}>
+                      <Icon name="create-outline" size={13} color="#60A5FA" />
+                      <Text style={[styles.vibrantActionText, { color: "#60A5FA" }]}>Edit</Text>
+                    </Pressable>
                   )}
-                  {canManage && (
-                    <Pressable
-                      style={styles.timelineMoreBtn}
-                      onPress={() => setSelectedActionPayment(p)}
-                      hitSlop={8}
-                    >
-                      <Icon name="ellipsis-vertical" size={14} color={colors.textSecondary} />
+                  {onDelete && canManage && (
+                    <Pressable style={styles.vibrantActionBtn} onPress={() => onDelete(p)}>
+                      <Icon name="trash-outline" size={13} color="#F87171" />
+                      <Text style={[styles.vibrantActionText, { color: "#F87171" }]}>Delete</Text>
+                    </Pressable>
+                  )}
+                  {onShare && (
+                    <Pressable style={[styles.vibrantActionBtn, { backgroundColor: "rgba(16,185,129,0.15)" }]} onPress={() => onShare(p)}>
+                      <Icon name="share-social-outline" size={13} color="#34D399" />
+                      <Text style={[styles.vibrantActionText, { color: "#34D399" }]}>Share</Text>
                     </Pressable>
                   )}
                 </View>
-              </View>
-            </Pressable>
+              )}
+            </View>
           </AnimatedListItem>
         );
       })}
-
-      {/* Payment Options Action Modal */}
-      <Modal visible={selectedActionPayment !== null} transparent animationType="fade" onRequestClose={() => setSelectedActionPayment(null)}>
-        <View style={styles.actionSheetOverlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedActionPayment(null)} />
-          <View style={[styles.actionSheetContent, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.actionSheetTitle, { color: colors.text }]}>Payment Options</Text>
-            <Text style={[styles.actionSheetSubtitle, { color: colors.textSecondary }]}>
-              {selectedActionPayment?.paymentType === "DUE" ? "Due Entry" : `Rs. ${Math.round(selectedActionPayment?.amountPaid || 0).toLocaleString("en-IN")}`}
-            </Text>
-
-            {onEdit && (isOwner || selectedActionPayment?.isPendingSync || selectedActionPayment?.nestedUid === user?.uid) && (
-              <Pressable
-                style={styles.actionSheetBtn}
-                onPress={() => {
-                  const target = selectedActionPayment;
-                  setSelectedActionPayment(null);
-                  if (target) onEdit(target);
-                }}
-              >
-                <Icon name="create-outline" size={18} color={colors.primary} />
-                <Text style={[styles.actionSheetBtnText, { color: colors.text }]}>Edit Payment</Text>
-              </Pressable>
-            )}
-
-            {onDelete && (isOwner || selectedActionPayment?.isPendingSync || selectedActionPayment?.nestedUid === user?.uid) && (
-              <Pressable
-                style={styles.actionSheetBtn}
-                onPress={() => {
-                  const target = selectedActionPayment;
-                  setSelectedActionPayment(null);
-                  if (target) onDelete(target);
-                }}
-              >
-                <Icon name="trash-outline" size={18} color={colors.missedRed} />
-                <Text style={[styles.actionSheetBtnText, { color: colors.missedRed }]}>Delete Payment</Text>
-              </Pressable>
-            )}
-
-            {onShare && (
-              <Pressable
-                style={styles.actionSheetBtn}
-                onPress={() => {
-                  const target = selectedActionPayment;
-                  setSelectedActionPayment(null);
-                  if (target) onShare(target);
-                }}
-              >
-                <Icon name="share-social-outline" size={18} color={colors.paidGreen} />
-                <Text style={[styles.actionSheetBtnText, { color: colors.paidGreen }]}>Share Receipt</Text>
-              </Pressable>
-            )}
-
-            <Pressable style={styles.actionSheetCancelBtn} onPress={() => setSelectedActionPayment(null)}>
-              <Text style={styles.actionSheetCancelText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 });
@@ -1057,18 +999,36 @@ export default function ProfileScreen() {
   }, [localLoan, payments, mappedNestedPayments, customer]);
 
   const { currentLoanPayments, previousLoanPayments } = useMemo(() => {
+    const combinedBasePayments = [...payments, ...mappedNestedPayments];
     if (!localLoan) return { currentLoanPayments: displayedPayments, previousLoanPayments: [] };
     const current: any[] = [];
     const previous: any[] = [];
+
     displayedPayments.forEach((p: any) => {
-      if (!p.loanId || p.loanId === localLoan.id) {
-        current.push(p);
-      } else {
+      const isBeforeLoanStart = p.paymentDate && p.paymentDate < (localLoan.startDate - 24 * 60 * 60 * 1000);
+      const isExplicitPriorLoan = p.loanId && p.loanId !== localLoan.id;
+      if (isExplicitPriorLoan || isBeforeLoanStart) {
         previous.push(p);
+      } else {
+        current.push(p);
       }
     });
-    return { currentLoanPayments: current, previousLoanPayments: previous };
-  }, [displayedPayments, localLoan]);
+
+    combinedBasePayments.forEach((p: any) => {
+      const isBeforeLoanStart = p.paymentDate && p.paymentDate < (localLoan.startDate - 24 * 60 * 60 * 1000);
+      const isExplicitPriorLoan = p.loanId && p.loanId !== localLoan.id;
+      if (isExplicitPriorLoan || isBeforeLoanStart) {
+        if (!previous.some((existing) => existing.id === p.id)) {
+          previous.push(p);
+        }
+      }
+    });
+
+    return { 
+      currentLoanPayments: current.sort((a, b) => b.paymentDate - a.paymentDate), 
+      previousLoanPayments: previous.sort((a, b) => b.paymentDate - a.paymentDate) 
+    };
+  }, [displayedPayments, localLoan, payments, mappedNestedPayments]);
 
   const sendWhatsAppReminder = useCallback(() => {
     if (!customer) return;
@@ -1915,13 +1875,15 @@ export default function ProfileScreen() {
                   onPress={() => setShowPreviousHistory((prev) => !prev)}
                 >
                   <Text style={styles.showPrevHistoryText}>
-                    {showPreviousHistory ? "Hide Previous Loan History" : "Show Previous Loan History"}
+                    {showPreviousHistory 
+                      ? "▲ Hide Previous Loan History" 
+                      : `📜 View Previous Loan History (${previousLoanPayments.length} entries)`}
                   </Text>
                 </Pressable>
 
                 {showPreviousHistory && (
                   <>
-                    <Text style={styles.prevHistoryTitle}>Previous Loan History</Text>
+                    <Text style={styles.prevHistoryTitle}>📜 Previous Loan History</Text>
                     <PaymentHistory 
                       payments={previousLoanPayments} 
                       customer={customer}
@@ -2884,11 +2846,11 @@ export default function ProfileScreen() {
         onRequestClose={() => setSelectedQrCustomer(null)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.qrModalContent, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.qrModalContent, { backgroundColor: "#1E293B", borderColor: "#334155" }]}>
             <View style={styles.qrModalHeader}>
-              <Text style={[styles.qrModalTitle, { color: colors.text }]}>Collect Payment via UPI QR</Text>
+              <Text style={[styles.qrModalTitle, { color: "#FFFFFF" }]}>Collect Payment via UPI QR</Text>
               <Pressable style={styles.qrCloseBtn} onPress={() => setSelectedQrCustomer(null)}>
-                <Icon name="close" size={24} color={colors.textSecondary} />
+                <Icon name="close" size={24} color="#94A3B8" />
               </Pressable>
             </View>
 
@@ -2898,19 +2860,20 @@ export default function ProfileScreen() {
 
               return (
                 <ScrollView contentContainerStyle={styles.qrModalScroll}>
-                  <Text style={[styles.qrCustName, { color: colors.text }]}>
+                  <Text style={[styles.qrCustName, { color: "#38BDF8" }]}>
                     {selectedQrCustomer.customer.name}
                   </Text>
                   
                   {/* Editable Payment Amount */}
-                  <View style={styles.qrAmountContainer}>
-                    <Text style={styles.qrAmountLabel}>Payment Amount (Editable)</Text>
+                  <View style={[styles.qrAmountContainer, { backgroundColor: "rgba(16,185,129,0.12)", borderColor: "rgba(16,185,129,0.3)", borderWidth: 1 }]}>
+                    <Text style={[styles.qrAmountLabel, { color: "#94A3B8" }]}>Payment Amount (Editable)</Text>
                     <TextInput
-                      style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.primary, color: colors.paidGreen, fontSize: 20, fontWeight: "900", textAlign: "center", marginTop: 4, width: 180 }]}
+                      style={[styles.input, { backgroundColor: "#0F172A", borderColor: "#22C55E", color: "#4ADE80", fontSize: 22, fontWeight: "900", textAlign: "center", marginTop: 6, width: 180, borderRadius: 10 }]}
                       value={qrCustomAmount}
                       onChangeText={setQrCustomAmount}
                       keyboardType="numeric"
                       placeholder="Amount"
+                      placeholderTextColor="#64748B"
                     />
                   </View>
 
@@ -2929,15 +2892,15 @@ export default function ProfileScreen() {
 
                   {/* UPI ID Settings Input */}
                   <View style={styles.upiInputSection}>
-                    <Text style={[styles.upiInputLabel, { color: colors.textSecondary }]}>
+                    <Text style={[styles.upiInputLabel, { color: "#CBD5E1" }]}>
                       Recipient UPI ID (to receive payment):
                     </Text>
                     <TextInput
-                      style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text, marginTop: 8 }]}
+                      style={[styles.input, { backgroundColor: "#0F172A", borderColor: "#475569", color: "#FFFFFF", marginTop: 6 }]}
                       value={agentUpiId}
                       onChangeText={saveUpiId}
                       placeholder="Enter UPI ID (e.g. name@paytm)"
-                      placeholderTextColor={colors.textMuted}
+                      placeholderTextColor="#64748B"
                       autoCapitalize="none"
                     />
                   </View>
@@ -3187,35 +3150,26 @@ const styles = StyleSheet.create({
   modeTextActive: { color: colors.white },
   disbursementRow: { borderRadius: 16, borderWidth: 1, padding: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", shadowColor: "#0f172a", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
 
-  // Redesigned Timeline Styles
-  timelineContainer: { marginTop: 12, marginBottom: 16 },
-  timelineItemRow: { flexDirection: "row", alignItems: "center", minHeight: 48, marginVertical: 2, paddingVertical: 4 },
-  timelineDateCol: { width: 85, paddingRight: 8, alignItems: "flex-end" },
-  timelineDateMain: { fontSize: 13, fontWeight: "700" },
-  timelineDateSub: { fontSize: 10, marginTop: 1 },
-  timelineBulletCol: { width: 28, alignItems: "center", height: "100%", justifyContent: "flex-start" },
-  timelineBullet: { width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", zIndex: 2 },
-  timelineLine: { width: 2, flex: 1, marginTop: 2, marginBottom: -4, borderRadius: 1 },
-  timelineContentCol: { flex: 1, paddingLeft: 10, justifyContent: "center" },
-  timelineAmount: { fontSize: 16, fontWeight: "800" },
-  timelineSubRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 2 },
-  timelineModeTag: { fontSize: 11, fontWeight: "600" },
-  timelineMoreBtn: { padding: 4 },
-  
-  // Action sheet styles
-  actionSheetOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
-  actionSheetContent: { padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, gap: 10 },
-  actionSheetTitle: { fontSize: 18, fontWeight: "800" },
-  actionSheetSubtitle: { fontSize: 13, marginBottom: 8 },
-  actionSheetBtn: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, backgroundColor: "rgba(0,0,0,0.03)" },
-  actionSheetBtnText: { fontSize: 15, fontWeight: "700" },
-  actionSheetCancelBtn: { marginTop: 8, paddingVertical: 14, alignItems: "center", borderRadius: 12, backgroundColor: "rgba(0,0,0,0.06)" },
-  actionSheetCancelText: { fontSize: 15, fontWeight: "700", color: "#64748B" },
+  // Vibrant Card Timeline Styles
+  timelineContainer: { marginTop: 12, marginBottom: 16, gap: 10 },
+  vibrantTimelineCard: { backgroundColor: "#1E293B", borderRadius: 14, borderWidth: 1, borderColor: "#334155", padding: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 3 },
+  vibrantCardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  vibrantHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, paddingRight: 8 },
+  vibrantIconBadge: { width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  vibrantCardTitle: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
+  vibrantCardSubtext: { color: "#94A3B8", fontSize: 11, marginTop: 2 },
+  vibrantAmountPill: { backgroundColor: "rgba(16,185,129,0.18)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "rgba(16,185,129,0.3)" },
+  vibrantAmountText: { color: "#34D399", fontSize: 16, fontWeight: "900" },
+  vibrantDuePill: { backgroundColor: "rgba(239,68,68,0.18)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "rgba(239,68,68,0.3)" },
+  vibrantDueText: { color: "#F87171", fontSize: 13, fontWeight: "900" },
+  vibrantActionRow: { flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: "#334155" },
+  vibrantActionBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.06)" },
+  vibrantActionText: { fontSize: 12, fontWeight: "700" },
   
   // Previous loan history button
-  showPrevHistoryBtn: { marginVertical: 16, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 999, borderWidth: 1.5, borderColor: colors.primary, alignItems: "center", alignSelf: "center" },
-  showPrevHistoryText: { fontSize: 13, fontWeight: "700", color: colors.primary },
-  prevHistoryTitle: { fontSize: 16, fontWeight: "800", marginVertical: 12, color: colors.white },
+  showPrevHistoryBtn: { marginVertical: 18, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 999, backgroundColor: "#1E293B", borderWidth: 2, borderColor: "#3B82F6", alignItems: "center", alignSelf: "center", shadowColor: "#3B82F6", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
+  showPrevHistoryText: { fontSize: 14, fontWeight: "800", color: "#60A5FA" },
+  prevHistoryTitle: { fontSize: 17, fontWeight: "900", marginVertical: 14, color: "#60A5FA", letterSpacing: 0.5 },
   disbursementLabel: { fontSize: 13, fontWeight: "800" },
   disbursementBadge: { overflow: "hidden", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, color: colors.white, fontSize: 12, fontWeight: "900" },
   locationUpdateSection: { backgroundColor: "#f8f9fa", borderRadius: 12, padding: 16, marginVertical: 8, borderWidth: 1, borderColor: "#e0e0e0" },
