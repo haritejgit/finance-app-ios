@@ -1372,7 +1372,7 @@ export async function markDue(loan: Loan, paymentDate: number) {
   invalidateUserDataCache(loan.userId);
 }
 
-export async function renewLoan(loan: Loan, newPrincipal: number, date: number, paymentMode: PaymentMode = "CASH") {
+export async function renewLoan(loan: Loan, newPrincipal: number, date: number, paymentMode: PaymentMode = "CASH"): Promise<Loan> {
   assertPositiveAmount(newPrincipal, "Renewal amount");
   const userId = auth.currentUser?.uid || loan.userId;
   const closureMode = normalizeMode(paymentMode);
@@ -1416,6 +1416,7 @@ export async function renewLoan(loan: Loan, newPrincipal: number, date: number, 
   batch.set(doc(db, "loans", newLoan.id), stripUndefined(newLoan));
   await batch.commit();
   invalidateUserDataCache(userId);
+  return newLoan;
 }
 
 export function getPersonalCycleStartTs(dateMs: number, cycleStartDay: number): number {

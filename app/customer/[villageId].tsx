@@ -92,10 +92,6 @@ type AddCustomerForm = {
   coordinates: { latitude: number; longitude: number } | null;
   aadharSubmitted: boolean;
   passportPhotoSubmitted: boolean;
-  /** BF (Opening Balance) for the nested account — owner-only field */
-  nestedBF: string;
-  /** Which nested user this BF applies to (empty = all / first) */
-  nestedBFUid: string;
 };
 
 function createEmptyCustomerForm(): AddCustomerForm {
@@ -112,8 +108,6 @@ function createEmptyCustomerForm(): AddCustomerForm {
     coordinates: null,
     aadharSubmitted: false,
     passportPhotoSubmitted: false,
-    nestedBF: "",
-    nestedBFUid: "",
   };
 }
 
@@ -133,7 +127,7 @@ function isNewThisWeek(timestamp: number): boolean {
 
 // Get customer payment status for today
 type PaymentStatus = 'paid' | 'due' | 'none';
-type CustomerFilter = "all" | "pending" | "paid" | "due" | "new" | "docs" | "closed";
+type CustomerFilter = "all" | "pending" | "paid" | "due" | "new" | "renewed_today" | "renewed_week" | "docs" | "closed";
 type AadhaarScanResult = {
   name?: string | null;
   aadhaar?: string | null;
@@ -147,6 +141,8 @@ const CUSTOMER_FILTERS: { key: CustomerFilter; label: string }[] = [
   { key: "paid", label: "Paid" },
   { key: "due", label: "Due" },
   { key: "new", label: "New" },
+  { key: "renewed_today", label: "Renewed Today" },
+  { key: "renewed_week", label: "Renewed This Week" },
   { key: "docs", label: "Docs" },
   { key: "closed", label: "Closed" },
 ];
@@ -316,6 +312,47 @@ const CustomerItem = React.memo(function CustomerItem({
     onPress(customer.id);
   }, [customer.id, onPress]);
 
+  const tapTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const tapCountRef = useRef<number>(0);
+
+  const handlePayPress = useCallback((e?: { stopPropagation?: () => void }) => {
+    markActionPress(e);
+    tapCountRef.current += 1;
+
+    if (tapTimerRef.current) {
+      clearTimeout(tapTimerRef.current);
+    }
+
+    tapTimerRef.current = setTimeout(() => {
+      const count = tapCountRef.current;
+      tapCountRef.current = 0;
+      tapTimerRef.current = null;
+
+      if (count === 2) {
+        lightImpact();
+        showToast("info", "Cash Pay Selected", `Recording Cash pay for ${customer.name}`);
+        onQuickPay(customer, "CASH");
+      } else if (count >= 3) {
+        lightImpact();
+        showToast("info", "PhonePe Selected", `Recording PhonePe pay for ${customer.name}`);
+        onQuickPay(customer, "PHONE");
+      } else if (count === 1) {
+        showToast("info", "Pay Button", "Double-tap for Cash pay • Triple-tap for PhonePe • Hold for Options");
+      }
+    }, 300);
+  }, [customer, markActionPress, onQuickPay]);
+
+  const handlePayLongPress = useCallback((e?: { stopPropagation?: () => void }) => {
+    if (tapTimerRef.current) {
+      clearTimeout(tapTimerRef.current);
+      tapTimerRef.current = null;
+    }
+    tapCountRef.current = 0;
+    markActionPress(e);
+    lightImpact();
+    onManualPay(customer, "CASH");
+  }, [customer, markActionPress, onManualPay]);
+
   return (
     <Pressable
       style={[
@@ -466,80 +503,32 @@ const CustomerItem = React.memo(function CustomerItem({
       {/* Right vertical line divider */}
       <View style={styles.divider} />
 
-      {/* Column 3: Right Actions — icons only */}
+      {/* Column 3: Right Actions — Single Pay Button */}
       <View style={styles.rightCol}>
-        {/* Cash */}
-        <Pressable
-          accessibilityLabel={`Cash payment for ${customer.name}`}
-          style={[styles.actionRow, !canPay && styles.actionRowDisabled]}
-          disabled={!canPay}
-          onPress={(e) => {
-            markActionPress(e);
-            lightImpact();
-            onQuickPay(customer, "CASH");
-          }}
-          onLongPress={(e) => {
-            markActionPress(e);
-            lightImpact();
-            onManualPay(customer, "CASH");
-          }}
-        >
-          <View style={[styles.actionIconSquare, { backgroundColor: "#0ABFBC" }]}>
-            <Text style={styles.rupeeChar}>₹</Text>
-          </View>
-        </Pressable>
-
-        {/* PhonePe */}
-        <Pressable
-          accessibilityLabel={`PhonePe payment for ${customer.name}`}
-          style={[styles.actionRow, !canPay && styles.actionRowDisabled]}
-          disabled={!canPay}
-          onPress={(e) => {
-            markActionPress(e);
-            lightImpact();
-            onQuickPay(customer, "PHONE");
-          }}
-          onLongPress={(e) => {
-            markActionPress(e);
-            lightImpact();
-            onManualPay(customer, "PHONE");
-          }}
-        >
-          <View style={[styles.actionIconSquare, { backgroundColor: "#5F259F" }]}>
-            <Text style={styles.phonepeLogoChar}>पे</Text>
-          </View>
-        </Pressable>
-
-        {/* Due */}
-        {onMarkDue && (
-          <Pressable
-            accessibilityLabel={`Mark ${customer.name} due`}
-            style={[styles.actionRow, !canPay && styles.actionRowDisabled]}
-            disabled={!canPay}
-            onPress={(e) => {
-              markActionPress(e);
-              lightImpact();
-              onMarkDue(customer);
-            }}
-          >
-            <View style={[styles.actionIconSquare, { backgroundColor: "#DC2626" }]}>
-              <Icon name="document-text-outline" size={15} color="#FFFFFF" />
-            </View>
-          </Pressable>
-        )}
-        {isFullyPaid && onCloseRenew && (
+        {isFullyPaid && onCloseRenew ? (
           <Pressable
             accessibilityLabel={`Close or Renew ${customer.name}`}
             style={[styles.actionRow]}
             onPress={(e) => {
               markActionPress(e);
               lightImpact();
-              onCloseRenew(customer, loan);
+              onCloseRenew(customer, loan!);
             }}
           >
-            <View style={[styles.actionIconSquare, { backgroundColor: "#1565C0", width: 42, height: 28 }]}>
-              <Icon name="refresh" size={14} color="#FFFFFF" />
+            <View style={[styles.singlePayBtn, { backgroundColor: "#1565C0" }]}>
+              <Text style={styles.singlePayBtnText}>Renew</Text>
             </View>
+          </Pressable>
+        ) : (
+          <Pressable
+            accessibilityLabel={`Pay for ${customer.name}`}
+            style={[styles.singlePayBtn, !canPay && styles.actionRowDisabled]}
+            disabled={!canPay}
+            onPress={handlePayPress}
+            onLongPress={handlePayLongPress}
+            delayLongPress={400}
+          >
+            <Text style={styles.singlePayBtnText}>Pay</Text>
           </Pressable>
         )}
       </View>
@@ -600,6 +589,7 @@ export default function CustomerListScreen() {
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [selectedQrCustomer, setSelectedQrCustomer] = useState<{ customer: Customer; loan: Loan } | null>(null);
+  const [qrCustomAmount, setQrCustomAmount] = useState<string>("");
   const [agentUpiId, setAgentUpiId] = useState("karthikeyafinance@ybl");
   const [village, setVillage] = useState<Village | null>(null);
   const [form, setForm] = useState<AddCustomerForm>(createEmptyCustomerForm);
@@ -1119,6 +1109,14 @@ export default function CustomerListScreen() {
           return !isNewThisWeek(customer.createdAt) && status !== "paid" && status !== "due";
         }
         if (statusFilter === "new") return isNewThisWeek(customer.createdAt);
+        if (statusFilter === "renewed_today") {
+          const l = activeLoans[customer.id];
+          return !!l && isToday(l.startDate);
+        }
+        if (statusFilter === "renewed_week") {
+          const l = activeLoans[customer.id];
+          return !!l && isNewThisWeek(l.startDate);
+        }
         if (statusFilter === "docs") return customer.aadharSubmitted !== true || customer.passportPhotoSubmitted !== true;
         return true;
       });
@@ -1619,7 +1617,10 @@ export default function CustomerListScreen() {
           onMarkDue={markCustomerDue}
           onSaveCurrentLocation={isOwner ? saveCurrentLocationForCustomer : undefined}
           onCloseRenew={promptCloseOrRenew}
-          onShowQr={(c, l) => setSelectedQrCustomer({ customer: c, loan: l })}
+          onShowQr={(c, l) => {
+            setSelectedQrCustomer({ customer: c, loan: l });
+            setQrCustomAmount(Math.round(getSuggestedPaymentAmount(l)).toString());
+          }}
           status={paymentStatuses[item.id] || 'none'} 
           isNew={isNewThisWeek(item.createdAt)}
           loan={activeLoans[item.id]}
@@ -2436,91 +2437,108 @@ export default function CustomerListScreen() {
               </Pressable>
             </View>
 
-            {selectedQrCustomer && (
-              <ScrollView contentContainerStyle={styles.qrModalScroll}>
-                <Text style={[styles.qrCustName, { color: colors.text }]}>
-                  {selectedQrCustomer.customer.name}
-                </Text>
-                
-                {/* Suggested Due Amount */}
-                <View style={styles.qrAmountContainer}>
-                  <Text style={styles.qrAmountLabel}>Suggested Week Payment</Text>
-                  <Text style={[styles.qrAmountValue, { color: colors.paidGreen }]}>
-                    Rs. {Math.round(getSuggestedPaymentAmount(selectedQrCustomer.loan)).toLocaleString("en-IN")}
+            {selectedQrCustomer && (() => {
+              const suggestedVal = Math.round(getSuggestedPaymentAmount(selectedQrCustomer.loan));
+              const activeQrAmount = Number(qrCustomAmount) > 0 ? Number(qrCustomAmount) : suggestedVal;
+
+              return (
+                <ScrollView contentContainerStyle={styles.qrModalScroll}>
+                  <Text style={[styles.qrCustName, { color: colors.text }]}>
+                    {selectedQrCustomer.customer.name}
                   </Text>
-                </View>
+                  
+                  {/* Editable Payment Amount */}
+                  <View style={styles.qrAmountContainer}>
+                    <Text style={styles.qrAmountLabel}>Payment Amount (Editable)</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.primary, color: colors.paidGreen, fontSize: 20, fontWeight: "900", textAlign: "center", marginTop: 4, width: 180 }]}
+                      value={qrCustomAmount}
+                      onChangeText={setQrCustomAmount}
+                      keyboardType="numeric"
+                      placeholder="Amount"
+                    />
+                  </View>
 
-                {/* QR Code Image */}
-                <View style={styles.qrImageContainer}>
-                  <Image
-                    source={{
-                      uri: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(
-                        `upi://pay?pa=${agentUpiId.trim()}&pn=KarthikeyaFinance&am=${Math.round(
-                          getSuggestedPaymentAmount(selectedQrCustomer.loan)
-                        )}&cu=INR&tn=${encodeURIComponent(`Finance Payment - ${selectedQrCustomer.customer.name}`)}`
-                      )}`,
-                    }}
-                    style={styles.qrImage}
-                    contentFit="contain"
-                  />
-                </View>
+                  {/* QR Code Image */}
+                  <View style={styles.qrImageContainer}>
+                    <Image
+                      source={{
+                        uri: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(
+                          `upi://pay?pa=${agentUpiId.trim()}&pn=KarthikeyaFinance&am=${activeQrAmount}&cu=INR&tn=${encodeURIComponent(`Finance Payment - ${selectedQrCustomer.customer.name}`)}`
+                        )}`,
+                      }}
+                      style={styles.qrImage}
+                      contentFit="contain"
+                    />
+                  </View>
 
-                {/* UPI ID Settings Input */}
-                <View style={styles.upiInputSection}>
-                  <Text style={[styles.upiInputLabel, { color: colors.textSecondary }]}>
-                    Recipient UPI ID (to receive payment):
-                  </Text>
-                  <TextInput
-                    style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text, marginTop: 8 }]}
-                    value={agentUpiId}
-                    onChangeText={saveUpiId}
-                    placeholder="Enter UPI ID (e.g. name@paytm)"
-                    placeholderTextColor={colors.textMuted}
-                    autoCapitalize="none"
-                  />
-                </View>
+                  {/* UPI ID Settings Input */}
+                  <View style={styles.upiInputSection}>
+                    <Text style={[styles.upiInputLabel, { color: colors.textSecondary }]}>
+                      Recipient UPI ID (to receive payment):
+                    </Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text, marginTop: 8 }]}
+                      value={agentUpiId}
+                      onChangeText={saveUpiId}
+                      placeholder="Enter UPI ID (e.g. name@paytm)"
+                      placeholderTextColor={colors.textMuted}
+                      autoCapitalize="none"
+                    />
+                  </View>
 
-                {/* UPI Link Display & Copy */}
-                <Pressable
-                  style={styles.copyLinkBtn}
-                  onPress={async () => {
-                    const link = `upi://pay?pa=${agentUpiId.trim()}&pn=KarthikeyaFinance&am=${Math.round(
-                      getSuggestedPaymentAmount(selectedQrCustomer.loan)
-                    )}&cu=INR&tn=Payment`;
-                    await Clipboard.setString(link);
-                    showToast("success", "UPI Link Copied", "UPI Payment URL copied to clipboard.");
-                  }}
-                >
-                  <Icon name="copy-outline" size={14} color={colors.primary} />
-                  <Text style={[styles.copyLinkText, { color: colors.primary }]}>Copy UPI URI Link</Text>
-                </Pressable>
-
-                {/* Log / Mark Paid Buttons directly inside modal */}
-                <View style={styles.qrPayButtonsRow}>
+                  {/* UPI Link Display & Copy */}
                   <Pressable
-                    style={[styles.qrPayBtn, { backgroundColor: "#0ABFBC" }]}
-                    onPress={() => {
-                      const cust = selectedQrCustomer.customer;
-                      setSelectedQrCustomer(null);
-                      setTimeout(() => handleQuickPay(cust, "CASH"), 300);
+                    style={styles.copyLinkBtn}
+                    onPress={async () => {
+                      const link = `upi://pay?pa=${agentUpiId.trim()}&pn=KarthikeyaFinance&am=${activeQrAmount}&cu=INR&tn=Payment`;
+                      await Clipboard.setString(link);
+                      showToast("success", "UPI Link Copied", "UPI Payment URL copied to clipboard.");
                     }}
                   >
-                    <Text style={styles.qrPayBtnText}>Paid Cash</Text>
+                    <Icon name="copy-outline" size={14} color={colors.primary} />
+                    <Text style={[styles.copyLinkText, { color: colors.primary }]}>Copy UPI URI Link</Text>
                   </Pressable>
 
-                  <Pressable
-                    style={[styles.qrPayBtn, { backgroundColor: "#5F259F" }]}
-                    onPress={() => {
-                      const cust = selectedQrCustomer.customer;
-                      setSelectedQrCustomer(null);
-                      setTimeout(() => handleQuickPay(cust, "PHONE"), 300);
-                    }}
-                  >
-                    <Text style={styles.qrPayBtnText}>Paid PhonePe</Text>
-                  </Pressable>
-                </View>
-              </ScrollView>
-            )}
+                  {/* Log / Mark Paid Buttons directly inside modal */}
+                  <View style={styles.qrPayButtonsRow}>
+                    <Pressable
+                      style={[styles.qrPayBtn, { backgroundColor: "#0ABFBC" }]}
+                      onPress={async () => {
+                        const targetLoan = selectedQrCustomer.loan;
+                        setSelectedQrCustomer(null);
+                        try {
+                          await addPayment(targetLoan, activeQrAmount, Date.now(), "CASH");
+                          showToast("success", "Payment Recorded", `Rs. ${activeQrAmount} Cash payment saved.`);
+                          reload();
+                        } catch (err: any) {
+                          showToast("error", "Payment Failed", err?.message || "Could not save payment.");
+                        }
+                      }}
+                    >
+                      <Text style={styles.qrPayBtnText}>Paid Cash (Rs.{activeQrAmount})</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={[styles.qrPayBtn, { backgroundColor: "#5F259F" }]}
+                      onPress={async () => {
+                        const targetLoan = selectedQrCustomer.loan;
+                        setSelectedQrCustomer(null);
+                        try {
+                          await addPayment(targetLoan, activeQrAmount, Date.now(), "PHONE");
+                          showToast("success", "Payment Recorded", `Rs. ${activeQrAmount} PhonePe payment saved.`);
+                          reload();
+                        } catch (err: any) {
+                          showToast("error", "Payment Failed", err?.message || "Could not save payment.");
+                        }
+                      }}
+                    >
+                      <Text style={styles.qrPayBtnText}>Paid PhonePe (Rs.{activeQrAmount})</Text>
+                    </Pressable>
+                  </View>
+                </ScrollView>
+              );
+            })()}
           </View>
         </View>
       </Modal>
@@ -2769,6 +2787,26 @@ const styles = StyleSheet.create({
   },
   actionRowDisabled: {
     opacity: 0.38,
+  },
+  singlePayBtn: {
+    backgroundColor: "#0ABFBC",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    width: 48,
+    height: 38,
+    shadowColor: "#0ABFBC",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  singlePayBtnText: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+    fontSize: 12,
   },
   actionIconSquare: {
     width: 42,
