@@ -1595,12 +1595,16 @@ export default function AccountScreen() {
       if (res.success) {
         if (res.copied) {
           Alert.alert(t("success"), exportLanguage === "te" ? "నివేదిక క్లిప్‌బోర్డ్‌కు నకలు చేయబడింది!" : "Plain text report copied to clipboard!");
+        } else if (Platform.OS === "web" && exportFormat === "jpg") {
+          Alert.alert(t("success"), res.message ?? "JPG is ready in the opened export tab.");
+        } else if (Platform.OS === "web" && exportFormat === "pdf") {
+          Alert.alert(t("success"), "Print dialog opened. Choose Save as PDF to export.");
         } else {
           Alert.alert(t("success"), exportLanguage === "te" ? "నివేదిక విజయవంతంగా రూపొందించబడింది!" : "Report generated successfully!");
         }
       } else {
         if (win) win.close();
-        Alert.alert(t("error"), "Export failed. Please check your settings.");
+        Alert.alert(t("error"), res.message ?? "Export failed. Please check your settings.");
       }
     } catch (error) {
       console.error("Error during export statement generation:", error);

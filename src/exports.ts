@@ -538,6 +538,48 @@ export function translateTelugu(text: string): string {
   return transliterateEnglishToTelugu(cleaned);
 }
 
+type AccountStatementExportResult = {
+  success: boolean;
+  platform: string;
+  copied?: boolean;
+  message?: string;
+};
+
+function waitForAccountStatementExport(win: any, timeoutMs = 45000): Promise<{ success: boolean; message?: string }> {
+  if (Platform.OS !== "web" || typeof window === "undefined") {
+    return Promise.resolve({ success: true });
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      settled = true;
+      window.removeEventListener("message", handleMessage);
+      window.clearTimeout(timeoutId);
+    };
+    const finish = (success: boolean, message?: string) => {
+      if (settled) return;
+      cleanup();
+      resolve({ success, message });
+    };
+    const handleMessage = (event: MessageEvent) => {
+      if (win && event.source && event.source !== win) return;
+      const data = event.data;
+      if (!data || data.type !== "account-statement-export") return;
+      if (data.status === "ready") {
+        finish(true, data.message || "JPG is ready in the export tab.");
+      } else if (data.status === "error") {
+        finish(false, data.message || "Unable to create JPG export.");
+      }
+    };
+    const timeoutId = window.setTimeout(() => {
+      finish(false, "Timed out while creating the JPG export.");
+    }, timeoutMs);
+
+    window.addEventListener("message", handleMessage);
+  });
+}
+
 export async function openAccountStatementPrint(
   periodStartStr: string,
   periodEndStr: string,
@@ -549,7 +591,7 @@ export async function openAccountStatementPrint(
   format: "pdf" | "jpg",
   userEmail?: string,
   existingWindow?: any
-): Promise<{ success: boolean; platform: string; copied?: boolean }> {
+): Promise<AccountStatementExportResult> {
   if (Platform.OS !== "web") {
     const plainText = generatePlainTextStatement(periodStartStr, periodEndStr, bf, transactions, totals, language, villageName);
     await Clipboard.setString(plainText);
@@ -634,6 +676,8 @@ export async function openAccountStatementPrint(
   if (!win) return { success: false, platform: "web" };
   
   const isTe = language === "te";
+  const jpgFilename = `finance_statement_${periodStartStr.replace(/\//g, "")}_${periodEndStr.replace(/\//g, "")}.jpg`;
+  const jpgExportResult = format === "jpg" ? waitForAccountStatementExport(win) : null;
   
   try {
     if (win.document && typeof win.document.open === "function") {
@@ -695,6 +739,78 @@ export async function openAccountStatementPrint(
             font-family: system-ui, sans-serif;
             text-align: center;
             padding: 20px;
+            box-sizing: border-box;
+            overflow: auto;
+          }
+          .status-overlay.ready {
+            background: rgba(248, 250, 252, 0.98);
+            color: #0f172a;
+            justify-content: flex-start;
+          }
+          .ready-panel {
+            width: 100%;
+            max-width: 420px;
+            margin: 18px auto;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 14px;
+            padding: 18px;
+            box-sizing: border-box;
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+          }
+          .ready-title {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 800;
+            color: #0f172a;
+          }
+          .ready-copy {
+            margin: 8px 0 0;
+            font-size: 13px;
+            line-height: 1.45;
+            color: #475569;
+          }
+          .download-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 14px;
+          }
+          .download-button,
+          .open-image-button {
+            flex: 1;
+            border-radius: 12px;
+            padding: 12px 14px;
+            font-size: 13px;
+            font-weight: 800;
+            text-decoration: none;
+            text-align: center;
+            box-sizing: border-box;
+          }
+          .download-button {
+            background: #0f766e;
+            color: #ffffff;
+          }
+          .open-image-button {
+            background: #e2e8f0;
+            color: #0f172a;
+          }
+          .export-preview {
+            width: 100%;
+            max-width: 400px;
+            border: 1px solid #cbd5e1;
+            border-radius: 14px;
+            background: #ffffff;
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+          }
+          .error-panel {
+            width: 100%;
+            max-width: 420px;
+            background: #ffffff;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+            border-radius: 14px;
+            padding: 18px;
+            box-sizing: border-box;
           }
           .spinner {
             border: 4px solid rgba(255,255,255,0.1);
@@ -714,6 +830,7 @@ export async function openAccountStatementPrint(
             #statement-card { padding: 26px 18px; }
             .ledger-table { font-size: 13px; gap: 6px; }
             .ledger-row { grid-template-columns: minmax(0, 1fr) 16px minmax(92px, max-content); column-gap: 8px; }
+            .download-actions { flex-direction: column; }
           }
           @media print {
             body { background: #fff; padding: 0; }
@@ -751,6 +868,48 @@ export async function openAccountStatementPrint(
         <script>
           setTimeout(function() {
             if ("${format}" === 'jpg') {
+              var filename = ${JSON.stringify(jpgFilename)};
+              var objectUrl = null;
+              function notify(status, message) {
+                if (window.opener) {
+                  window.opener.postMessage({
+                    type: 'account-statement-export',
+                    status: status,
+                    message: message
+                  }, '*');
+                }
+              }
+              function showError(message) {
+                var overlay = document.getElementById('status-overlay');
+                if (overlay) {
+                  overlay.innerHTML = '<div class="error-panel"><strong>Export failed</strong><p class="ready-copy">' + message + '</p></div>';
+                }
+                notify('error', message);
+              }
+              function showReady(url) {
+                var overlay = document.getElementById('status-overlay');
+                if (!overlay) return;
+                overlay.className = 'status-overlay ready';
+                overlay.innerHTML = [
+                  '<div class="ready-panel">',
+                  '<p class="ready-title">JPG export is ready</p>',
+                  '<p class="ready-copy">If the file did not download automatically, use the Download JPG button below.</p>',
+                  '<div class="download-actions">',
+                  '<a class="download-button" id="download-link" download="' + filename + '" href="' + url + '">Download JPG</a>',
+                  '<a class="open-image-button" target="_blank" rel="noopener" href="' + url + '">Open Image</a>',
+                  '</div>',
+                  '</div>',
+                  '<img class="export-preview" alt="Account statement preview" src="' + url + '">'
+                ].join('');
+                notify('ready', 'JPG is ready in the export tab.');
+                setTimeout(function() {
+                  var link = document.getElementById('download-link');
+                  if (link) link.click();
+                }, 100);
+              }
+              window.addEventListener('beforeunload', function() {
+                if (objectUrl) URL.revokeObjectURL(objectUrl);
+              });
               var script = document.createElement('script');
               script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
               script.onload = function() {
@@ -761,24 +920,25 @@ export async function openAccountStatementPrint(
                   allowTaint: true,
                   backgroundColor: '#ffffff'
                 }).then(function(canvas) {
-                  var link = document.createElement('a');
-                  link.download = 'finance_statement_${periodStartStr.replace(/\//g, "")}_${periodEndStr.replace(/\//g, "")}.jpg';
-                  link.href = canvas.toDataURL('image/jpeg', 0.95);
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                  
-                  var statusMsg = document.getElementById('status-msg');
-                  statusMsg.innerHTML = '<span style="font-size: 40px; color: #0d9488;">✓</span><br><strong>Export Complete!</strong><br><span style="font-size: 13px; color: #94a3b8; margin-top: 8px;">You can now close this tab.</span>';
-                  var spinner = document.getElementById('status-spinner');
-                  if (spinner) spinner.style.display = 'none';
+                  if (canvas.toBlob) {
+                    canvas.toBlob(function(blob) {
+                      if (!blob) {
+                        showReady(canvas.toDataURL('image/jpeg', 0.95));
+                        return;
+                      }
+                      objectUrl = URL.createObjectURL(blob);
+                      showReady(objectUrl);
+                    }, 'image/jpeg', 0.95);
+                    return;
+                  }
+                  showReady(canvas.toDataURL('image/jpeg', 0.95));
                 }).catch(function(err) {
                   console.error(err);
-                  alert('Failed to generate image: ' + err.message);
+                  showError('Failed to generate image: ' + (err && err.message ? err.message : 'Unknown error'));
                 });
               };
               script.onerror = function() {
-                alert('Failed to load html2canvas library. Please check your internet connection.');
+                showError('Failed to load image export library. Please check your internet connection and try again.');
               };
               document.head.appendChild(script);
             } else {
@@ -790,6 +950,10 @@ export async function openAccountStatementPrint(
     </html>
   `);
   win.document.close();
+  if (jpgExportResult) {
+    const exportResult = await jpgExportResult;
+    return { success: exportResult.success, platform: "web", message: exportResult.message };
+  }
   return { success: true, platform: "web" };
 }
 
