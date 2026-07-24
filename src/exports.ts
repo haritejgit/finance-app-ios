@@ -551,9 +551,72 @@ export async function openAccountStatementPrint(
   existingWindow?: any
 ): Promise<{ success: boolean; platform: string; copied?: boolean }> {
   if (Platform.OS !== "web") {
-    // Mobile fallback: copy to clipboard
     const plainText = generatePlainTextStatement(periodStartStr, periodEndStr, bf, transactions, totals, language, villageName);
     await Clipboard.setString(plainText);
+
+    try {
+      const FileSystem = await import("expo-file-system/legacy");
+      const Sharing = await import("expo-sharing");
+      const statementData = buildStatementData({
+        startDate: periodStartStr,
+        endDate: periodEndStr,
+        bf,
+        transactions,
+        totals,
+        village: villageName,
+        email: userEmail,
+      });
+      const ledgerHtml = renderLedgerHtml(statementData, language);
+      const isTe = language === "te";
+      const fullHtml = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACCOUNT STATEMENT</title>
+    <style>
+      body { margin: 0; padding: 20px; font-family: system-ui, -apple-system, sans-serif; background: #ffffff; color: #0f172a; }
+      #statement-card { background: #fff; width: 100%; max-width: 480px; margin: 0 auto; border: 1px solid #cbd5e1; border-radius: 16px; padding: 24px 18px; box-sizing: border-box; }
+      .header { text-align: center; margin-bottom: 18px; border-bottom: 2px dashed #cbd5e1; padding-bottom: 14px; }
+      .header h2 { margin: 0; font-size: 20px; font-weight: 800; color: #0f172a; }
+      .header h3 { margin: 5px 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; }
+      .header p { margin: 3px 0; font-size: 12px; color: #64748b; }
+      .ledger-table { display: flex; flex-direction: column; gap: 7px; font-size: 14px; line-height: 1.35; color: #1e293b; }
+      .ledger-row { display: flex; justify-content: space-between; align-items: baseline; }
+      .ledger-label { font-weight: 700; }
+      .ledger-amount { font-family: monospace; font-weight: 700; text-align: right; }
+      .ledger-divider { border-bottom: 1px dashed #cbd5e1; margin: 4px 0; }
+      .ledger-total { margin-top: 6px; font-weight: 900; border-top: 2px solid #0f172a; padding-top: 6px; }
+      .footer { margin-top: 24px; display: flex; justify-content: space-between; font-size: 10px; color: #94a3b8; }
+    </style>
+  </head>
+  <body>
+    <div id="statement-card">
+      <div class="header">
+        <h2>Karthikeya Finance</h2>
+        <h3>ACCOUNT STATEMENT</h3>
+        <p>Period: ${escapeHtml(periodStartStr)} - ${escapeHtml(periodEndStr)}</p>
+        <p>Village: ${escapeHtml(villageName)}</p>
+        ${userEmail ? `<p>Email: ${escapeHtml(userEmail)}</p>` : ""}
+      </div>
+      ${ledgerHtml}
+      <div class="footer">
+        <span>${isTe ? "ఫైనాన్స్ డ్యాష్‌బోర్డ్" : "Finance Dashboard"}</span>
+        <span>${escapeHtml(new Date().toLocaleString())}</span>
+      </div>
+    </div>
+  </body>
+</html>`;
+
+      const filename = `account_statement_${periodStartStr.replace(/\//g, "")}_${periodEndStr.replace(/\//g, "")}.html`;
+      const tempPath = `${FileSystem.cacheDirectory}${filename}`;
+      await FileSystem.writeAsStringAsync(tempPath, fullHtml, { encoding: FileSystem.EncodingType.UTF8 });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(tempPath, { dialogTitle: "Export Account Statement" });
+      }
+    } catch (err) {
+      console.warn("Mobile file export fallback warning:", err);
+    }
     return { success: true, platform: "mobile", copied: true };
   }
 
@@ -571,6 +634,14 @@ export async function openAccountStatementPrint(
   if (!win) return { success: false, platform: "web" };
   
   const isTe = language === "te";
+  
+  try {
+    if (win.document && typeof win.document.open === "function") {
+      win.document.open();
+    }
+  } catch {
+    // Ignore origin security restriction if already open
+  }
   
   win.document.write(`
     <!doctype html>

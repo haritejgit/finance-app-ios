@@ -1476,8 +1476,7 @@ export default function AccountScreen() {
     if (Platform.OS === "web") {
       win = window.open("", "_blank", "width=600,height=780");
       if (win) {
-        win.document.write("<html><head><title>Loading...</title></head><body style='font-family:sans-serif;padding:20px;text-align:center;'><h3>Generating Account Statement...</h3><p>Please wait a moment.</p></body></html>");
-        win.document.close();
+        win.document.write("<!doctype html><html><head><title>Loading...</title></head><body style='font-family:sans-serif;padding:20px;text-align:center;'><h3>Generating Account Statement...</h3><p>Please wait a moment.</p></body></html>");
       } else {
         Alert.alert(t("error"), "Popup blocked. Please allow popups for this website to export statements.");
         return;

@@ -720,22 +720,25 @@ export default function SettingsScreen() {
                 const endOfWeek = weekDate + 7 * 24 * 60 * 60 * 1000 - 1;
                 const colIndex = 4 + weekIndex;
                 const weekPayments = customerPayments.filter((payment) => payment.paymentDate >= weekDate && payment.paymentDate <= endOfWeek);
-                const loanStartingThisWeek = customerLoans.find((loan) => {
+                const loansStartingThisWeek = customerLoans.filter((loan) => {
                   const loanStartDay = startOfDay(loan.startDate);
                   return loanStartDay >= weekDate && loanStartDay <= endOfWeek;
                 });
 
-                if (loanStartingThisWeek) {
-                  const renewalPayment = weekPayments.find((payment) => payment.paymentType === "RENEWAL_CLOSURE");
-                  const displayedAmount = money(loanStartingThisWeek.totalPayable);
-                  weeklyDisbursed[weekIndex] += getLoanDistributedAmount(loanStartingThisWeek);
-                  if (renewalPayment) {
-                    const otherPaymentsSum = weekPayments
-                      .filter((payment) => payment.id !== renewalPayment.id && isRealCollectionPayment(payment))
-                      .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
-                    const previousBalance = money(renewalPayment.amountPaid) + otherPaymentsSum;
-                    weeklyCollected[weekIndex] += previousBalance;
-                    row.push(`${Math.trunc(previousBalance)}\n${Math.trunc(displayedAmount)}`);
+                if (loansStartingThisWeek.length > 0) {
+                  let displayedAmount = 0;
+                  loansStartingThisWeek.forEach((l) => {
+                    displayedAmount += money(l.totalPayable);
+                    weeklyDisbursed[weekIndex] += getLoanDistributedAmount(l);
+                  });
+
+                  const totalPaidThisWeek = weekPayments
+                    .filter((payment) => isRealCollectionPayment(payment))
+                    .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
+
+                  if (totalPaidThisWeek > 0) {
+                    weeklyCollected[weekIndex] += totalPaidThisWeek;
+                    row.push(`${Math.trunc(totalPaidThisWeek)}\n${Math.trunc(displayedAmount)}`);
                   } else {
                     row.push(Math.trunc(displayedAmount));
                   }

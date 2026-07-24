@@ -1091,14 +1091,6 @@ interface Payment {
         return;
       }
 
-      const toMillis = (value: any): number => {
-        if (typeof value === 'number') return value;
-        if (value instanceof Date) return value.getTime();
-        if (value?.toMillis) return value.toMillis();
-        if (typeof value?.seconds === 'number') return value.seconds * 1000;
-        return 0;
-      };
-
       const money = (value: any): number => {
         const parsed = Number(value);
         return Number.isFinite(parsed) ? parsed : 0;
@@ -1496,10 +1488,11 @@ interface Payment {
               const weekPayments = customerPayments.filter(
                 (payment) => payment.paymentDate >= startOfWeek && payment.paymentDate <= endOfWeek
               );
-              const loanStartingThisWeek = customerLoans.find((loan) => {
+              const loansStartingThisWeek = customerLoans.filter((loan) => {
                 const loanStartDay = getStartOfDay(loan.startDate);
                 return loanStartDay >= startOfWeek && loanStartDay <= endOfWeek;
               });
+              const loanStartingThisWeek = loansStartingThisWeek[0];
               const segmentIndex = history.indexOf(segment);
               const isFirstWeekOfSegment = history.length > 0 && colWeekStr === segment.fromWeek;
               const carryForwardNote = isFirstWeekOfSegment && segmentIndex > 0
@@ -1512,10 +1505,13 @@ interface Payment {
                 return value === '' ? carryForwardNote : `${carryForwardNote}\n${value}`;
               };
 
-              if (loanStartingThisWeek) {
-                const principalAmount = getLoanPrincipalAmount(loanStartingThisWeek as any);
-                const displayedAmount = loanStartingThisWeek.totalPayable || (principalAmount * 1.2);
-                weeklyDisbursed[weekIdx] += getLoanDistributedAmount(loanStartingThisWeek as any);
+              if (loansStartingThisWeek.length > 0) {
+                let displayedAmount = 0;
+                loansStartingThisWeek.forEach((l) => {
+                  const principalAmount = getLoanPrincipalAmount(l as any);
+                  displayedAmount += (l.totalPayable || (principalAmount * 1.2));
+                  weeklyDisbursed[weekIdx] += getLoanDistributedAmount(l as any);
+                });
 
                 const totalPaidThisWeek = weekPayments
                   .filter((payment) => isRealCollectionPayment(payment))
