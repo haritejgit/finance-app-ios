@@ -44,6 +44,8 @@ export type Customer = {
   longitude?: number;
   aadharSubmitted?: boolean;
   passportPhotoSubmitted?: boolean;
+  chequeRequired?: boolean;
+  chequeSubmitted?: boolean;
   coName?: string;
   coId?: number;
   villageId: string;

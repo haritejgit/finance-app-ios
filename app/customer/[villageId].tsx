@@ -448,7 +448,7 @@ const CustomerItem = React.memo(function CustomerItem({
               <Icon name="warning" size={13} color="#dc3545" style={{ marginLeft: 2 }} />
             )}
             {/* Doc badges inline - only when a doc is missing */}
-            {(!customer.aadharSubmitted || !customer.passportPhotoSubmitted) && (
+            {(!customer.aadharSubmitted || !customer.passportPhotoSubmitted || (customer.chequeRequired && !customer.chequeSubmitted)) && (
               <View style={styles.docStatusGroup}>
                 {!customer.aadharSubmitted && (
                   <View style={styles.docMiniSquare}>
@@ -458,6 +458,11 @@ const CustomerItem = React.memo(function CustomerItem({
                 {!customer.passportPhotoSubmitted && (
                   <View style={styles.docMiniSquare}>
                     <Icon name="person" size={11} color="#4B5563" />
+                  </View>
+                )}
+                {customer.chequeRequired && !customer.chequeSubmitted && (
+                  <View style={styles.docMiniSquare}>
+                    <Icon name="card-outline" size={11} color="#B45309" />
                   </View>
                 )}
               </View>
@@ -470,7 +475,7 @@ const CustomerItem = React.memo(function CustomerItem({
           <Pressable
             disabled={isUpdatingLocation || (!hasLocation && !onSaveCurrentLocation)}
             style={[styles.locationIconSquare, {
-              backgroundColor: hasLocation ? "#1A3C34" : (onSaveCurrentLocation ? "#9CA3AF" : "#D1D5DB"),
+              backgroundColor: hasLocation ? "#12294A" : (onSaveCurrentLocation ? "#9CA3AF" : "#D1D5DB"),
             }]}
             onPress={(e) => {
               markActionPress(e);
@@ -491,7 +496,7 @@ const CustomerItem = React.memo(function CustomerItem({
             {isUpdatingLocation ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Icon name="location" size={13} color={hasLocation ? "#0ABFBC" : "#FFFFFF"} />
+              <Icon name="location" size={13} color={hasLocation ? "#1E7A4C" : "#FFFFFF"} />
             )}
           </Pressable>
           <Text style={styles.addressDesc} numberOfLines={1}>
@@ -1134,7 +1139,7 @@ export default function CustomerListScreen() {
           const l = activeLoans[customer.id];
           return !!l && isNewThisWeek(l.startDate);
         }
-        if (statusFilter === "docs") return customer.aadharSubmitted !== true || customer.passportPhotoSubmitted !== true;
+        if (statusFilter === "docs") return customer.aadharSubmitted !== true || customer.passportPhotoSubmitted !== true || (customer.chequeRequired === true && customer.chequeSubmitted !== true);
         return true;
       });
     }
@@ -1653,7 +1658,7 @@ export default function CustomerListScreen() {
 
   return (
     <AnimatedScreen style={styles.root}>
-    <LinearGradient colors={[colors.blue1, colors.blue2]} style={styles.root}>
+    <LinearGradient colors={[colors.background, colors.backgroundSecondary]} style={styles.root}>
       <SafeAreaView style={[styles.safe, { paddingTop: insets.top }]} edges={['top']}>
         <View style={styles.content}>
           {/* Header with back button */}
@@ -2521,7 +2526,7 @@ export default function CustomerListScreen() {
                   {/* Log / Mark Paid Buttons directly inside modal */}
                   <View style={styles.qrPayButtonsRow}>
                     <Pressable
-                      style={[styles.qrPayBtn, { backgroundColor: "#0ABFBC" }]}
+                      style={[styles.qrPayBtn, { backgroundColor: "#1E7A4C" }]}
                       onPress={async () => {
                         const targetLoan = selectedQrCustomer.loan;
                         setSelectedQrCustomer(null);
@@ -2705,7 +2710,7 @@ const styles = StyleSheet.create({
     width: 15,
     height: 15,
     borderRadius: 7.5,
-    backgroundColor: "#0ABFBC",
+    backgroundColor: "#1E7A4C",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -2728,7 +2733,7 @@ const styles = StyleSheet.create({
   cardAmount: {
     fontSize: 12,
     fontWeight: "900",
-    color: "#0ABFBC", // teal like source
+    color: "#1E7A4C", // teal like source
   },
   balanceCleared: {
     color: "#16a34a",
@@ -2771,7 +2776,7 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 6,
     borderWidth: 0,
-    backgroundColor: "#1A3C34",
+    backgroundColor: "#12294A",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -2824,7 +2829,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   singlePayBtn: {
-    backgroundColor: "#0ABFBC",
+    backgroundColor: "#1E7A4C",
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -2832,7 +2837,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 48,
     height: 32,
-    shadowColor: "#0ABFBC",
+    shadowColor: "#1E7A4C",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -2951,7 +2956,7 @@ const styles = StyleSheet.create({
   input: { backgroundColor: colors.white, borderRadius: 12, padding: 14, fontSize: 16, borderWidth: 1, borderColor: "#e0e0e0", marginBottom: 8 },
   scanInputRow: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
   scanInput: { flex: 1 },
-  scanBtn: { minWidth: 70, minHeight: 50, borderRadius: 12, backgroundColor: "#6C63FF", alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
+  scanBtn: { minWidth: 70, minHeight: 50, borderRadius: 12, backgroundColor: "#12294A", alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
   scanBtnText: { color: colors.white, fontSize: 13, fontWeight: "900" },
   dateInputContainer: { flexDirection: "row", gap: 8, alignItems: "center" },
   dateInput: { flex: 1 },
@@ -2971,9 +2976,9 @@ const styles = StyleSheet.create({
   locationBtn: { width: 50, height: 50, borderRadius: 12, backgroundColor: colors.blue2, justifyContent: "center", alignItems: "center", marginTop: 8 },
   locationBtnDisabled: { backgroundColor: "#ccc" },
   locationBtnText: { fontSize: 20, color: colors.white },
-  locationPulse: { width: 14, height: 14, borderRadius: 7, backgroundColor: "#00D4AA", borderWidth: 4, borderColor: "rgba(0,212,170,0.3)" },
+  locationPulse: { width: 14, height: 14, borderRadius: 7, backgroundColor: "#1E7A4C", borderWidth: 4, borderColor: "rgba(30,122,76,0.22)" },
   useLastLocationBtn: { alignSelf: "flex-start", borderRadius: 999, borderWidth: 1, borderColor: "#2A2A3E", paddingHorizontal: 12, paddingVertical: 8, marginTop: -4, marginBottom: 8, backgroundColor: "#222238" },
-  useLastLocationText: { color: "#00D4AA", fontSize: 12, fontWeight: "800" },
+  useLastLocationText: { color: "#1E7A4C", fontSize: 12, fontWeight: "800" },
   locationText: { fontSize: 12, color: "#666", marginBottom: 8, fontStyle: "italic" },
   checkRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8, marginBottom: 4 },
   checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: "#cbd5e1", backgroundColor: colors.white, alignItems: "center", justifyContent: "center" },

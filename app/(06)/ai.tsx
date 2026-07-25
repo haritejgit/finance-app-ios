@@ -162,7 +162,7 @@ export default function AIScreen() {
     <AnimatedScreen style={styles.root}>
       <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]}>
         <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <LinearGradient colors={["#6C63FF", "#48CAE4"]} style={styles.header}>
+          <LinearGradient colors={["#12294A", "#1E3A63"]} style={styles.header}>
             <Pressable accessibilityLabel="Go back" style={styles.headerBtn} onPress={() => router.back()}>
               <Icon name="arrow-back" size={20} color="#FFFFFF" />
             </Pressable>
@@ -274,17 +274,17 @@ const styles = StyleSheet.create({
   messageRowUser: { justifyContent: "flex-end" },
   avatar: { fontSize: 22 },
   bubble: { maxWidth: "82%", borderRadius: 18, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 11 },
-  userBubble: { backgroundColor: "#6C63FF", borderColor: "#6C63FF" },
+  userBubble: { backgroundColor: "#12294A", borderColor: "#12294A" },
   messageText: { fontSize: 14, lineHeight: 20, fontWeight: "600" },
   copyBtn: { alignSelf: "flex-end", marginTop: 6, minHeight: 24, justifyContent: "center" },
   copyText: { fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
   typingWrap: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
   typingBubble: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 11 },
   dots: { flexDirection: "row", gap: 5, height: 14, alignItems: "center" },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#6C63FF" },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#12294A" },
   inputBar: { margin: 12, borderWidth: 1, borderRadius: 24, padding: 8, flexDirection: "row", alignItems: "flex-end", gap: 8, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 4 },
   input: { flex: 1, minHeight: 42, maxHeight: 108, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14 },
-  sendBtn: { minWidth: 72, minHeight: 44, borderRadius: 22, backgroundColor: "#6C63FF", alignItems: "center", justifyContent: "center", shadowColor: "#6C63FF", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 4 },
+  sendBtn: { minWidth: 72, minHeight: 44, borderRadius: 22, backgroundColor: "#12294A", alignItems: "center", justifyContent: "center", shadowColor: "#12294A", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 4 },
   sendBtnDisabled: { opacity: 0.55 },
   sendText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
 });

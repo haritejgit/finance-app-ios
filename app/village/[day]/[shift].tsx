@@ -208,7 +208,7 @@ export default function VillageListScreen() {
 
   return (
     <AnimatedScreen style={styles.root}>
-    <LinearGradient colors={[colors.blue1, colors.blue2]} style={styles.root}>
+    <LinearGradient colors={[colors.background, colors.backgroundSecondary]} style={styles.root}>
       <SafeAreaView style={[styles.safe, { paddingTop: insets.top }]} edges={['top']}>
         <View style={styles.content}>
           <View style={styles.headerContainer}>

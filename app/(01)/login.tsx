@@ -110,17 +110,8 @@ export default function LoginScreen() {
 
   const title = forgot ? "Reset password" : isSignUp ? "Create account" : "Welcome back";
 
-  if (authLoading) {
-    return (
-      <AnimatedScreen style={styles.root}>
-        <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
-          <SafeAreaView style={[styles.safe, styles.centered]}>
-            <ActivityIndicator color={colors.white} size="large" />
-          </SafeAreaView>
-        </LinearGradient>
-      </AnimatedScreen>
-    );
-  }
+
+
 
   // ─── Nested Login Flow Handlers ───
 
@@ -196,6 +187,17 @@ export default function LoginScreen() {
 
   // ─── Render ───
 
+  if (authLoading) {
+    return (
+      <AnimatedScreen style={styles.root}>
+        <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
+          <SafeAreaView style={[styles.safe, styles.centered]}>
+            <ActivityIndicator color={colors.white} size="large" />
+          </SafeAreaView>
+        </LinearGradient>
+      </AnimatedScreen>
+    );
+  }
   return (
     <AnimatedScreen style={styles.root}>
     <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>

@@ -2088,7 +2088,7 @@ export default function AccountScreen() {
 
                       {walletDataLoading ? (
                         <View style={styles.walletLoadingRow}>
-                          <ActivityIndicator size="small" color="#2ec4b6" />
+                          <ActivityIndicator size="small" color="#1E7A4C" />
                           <Text style={styles.walletLoadingText}>Loading wallet data…</Text>
                         </View>
                       ) : walletLoadError ? (
@@ -2180,7 +2180,7 @@ export default function AccountScreen() {
 
                       {walletDataLoading ? (
                         <View style={styles.walletLoadingRow}>
-                          <ActivityIndicator size="small" color="#2ec4b6" />
+                          <ActivityIndicator size="small" color="#1E7A4C" />
                           <Text style={styles.walletLoadingText}>Calculating…</Text>
                         </View>
                       ) : !walletBalances ? (
@@ -2755,7 +2755,7 @@ const styles = StyleSheet.create({
   heroIconBox: { width: 44, height: 44, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.16)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
   heroTitle: { color: "#ffffff", fontSize: 21, fontWeight: "900" },
   heroSubtitle: { color: "rgba(255,255,255,0.8)", fontSize: 11, fontWeight: "600", marginTop: 1 },
-  tabBarContainer: { borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.15)" },
+  tabBarContainer: { borderBottomWidth: 1, borderBottomColor: "#E1E6ED" },
   tabBar: { flexDirection: "row", paddingHorizontal: 12 },
   tabButton: { 
     paddingHorizontal: 16, 
@@ -2798,7 +2798,7 @@ const styles = StyleSheet.create({
   walletSectionTitle: { color: "#111827", fontSize: 14, fontWeight: "900" },
   walletSectionDesc: { color: "#5f7f7b", fontSize: 11, fontWeight: "700" },
   walletDivider: { height: 1, backgroundColor: "#d8f7f4", marginVertical: 8 },
-  walletLiveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#2ec4b6" },
+  walletLiveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#1E7A4C" },
   walletLoadingRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10 },
   walletLoadingText: { color: "#5f7f7b", fontSize: 13, fontWeight: "700" },
   walletErrorRow: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#fff7f7", borderRadius: 10, padding: 10, borderWidth: 1, borderColor: "#fecaca" },
@@ -2815,14 +2815,14 @@ const styles = StyleSheet.create({
   investorSelectedBtn: { backgroundColor: "#1565C0", borderColor: "#1565C0" },
   paymentModeText: { color: "#64748b", fontSize: 13, fontWeight: "900" },
   paymentModeTextOn: { color: "#ffffff" },
-  primaryButton: { backgroundColor: "#ff9f1c", borderRadius: 12, paddingVertical: 14, alignItems: "center", justifyContent: "center" },
+  primaryButton: { backgroundColor: "#D4AF6A", borderRadius: 12, paddingVertical: 14, alignItems: "center", justifyContent: "center" },
   btnDisabled: { opacity: 0.7 },
   primaryButtonText: { color: "#111827", fontSize: 15, fontWeight: "900" },
   datePickerRow: { flexDirection: "row", gap: 10 },
   breakdownHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 },
   breakdownTitle: { color: "#111827", fontSize: 15, fontWeight: "900" },
   summaryActions: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
-  pdfButton: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 20, backgroundColor: "#cbf3f0", paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#2ec4b6" },
+  pdfButton: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 20, backgroundColor: "#F4F6F9", paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#1E7A4C" },
   pdfButtonText: { color: "#111827", fontSize: 12, fontWeight: "800" },
   whatsappShareBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 20, backgroundColor: "#25D366", paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#1EBE5D" },
   whatsappShareText: { color: "#ffffff", fontSize: 12, fontWeight: "900" },
@@ -2834,11 +2834,11 @@ const styles = StyleSheet.create({
   sparklineBarSlot: { flex: 1, height: 62, justifyContent: "flex-end", alignItems: "center", borderRadius: 4, backgroundColor: "#ECF7F3" },
   sparklineBar: { width: "58%", minWidth: 8, borderRadius: 4 },
   monospacePanel: { backgroundColor: "#0f2725", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#174d48" },
-  monospaceText: { fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace", color: "#cbf3f0", fontSize: 12, lineHeight: 18, fontWeight: "600" },
+  monospaceText: { fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace", color: "#F4F6F9", fontSize: 12, lineHeight: 18, fontWeight: "600" },
   emptyText: { color: "#5f7f7b", fontSize: 13, fontStyle: "italic", textAlign: "center", paddingVertical: 16 },
   logRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#d8f7f4" },
   logDetails: { flex: 1, gap: 2 },
-  logAmount: { color: "#2ec4b6", fontSize: 15, fontWeight: "900" },
+  logAmount: { color: "#1E7A4C", fontSize: 15, fontWeight: "900" },
   logDesc: { color: "#111827", fontSize: 14, fontWeight: "800" },
   logDate: { color: "#5f7f7b", fontSize: 11, fontWeight: "700" },
   deleteBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: "#fde7e5", alignItems: "center", justifyContent: "center" },
@@ -2897,8 +2897,8 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0"
   },
   modalToggleBtnActive: {
-    backgroundColor: "#2ec4b6",
-    borderColor: "#2ec4b6"
+    backgroundColor: "#1E7A4C",
+    borderColor: "#1E7A4C"
   },
   modalToggleText: {
     fontSize: 12,
@@ -2946,7 +2946,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: "#ff9f1c",
+    backgroundColor: "#D4AF6A",
     alignItems: "center"
   },
   modalConfirmText: {
@@ -2971,7 +2971,7 @@ const styles = StyleSheet.create({
   shareSheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   shareCloseBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#f1f5f9", alignItems: "center", justifyContent: "center" },
   sharePreview: { maxHeight: 320, backgroundColor: "#0f2725", borderRadius: 12, borderWidth: 1, borderColor: "#174d48", padding: 12 },
-  sharePreviewText: { fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace", color: "#cbf3f0", fontSize: 12, lineHeight: 18, fontWeight: "600" },
+  sharePreviewText: { fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace", color: "#F4F6F9", fontSize: 12, lineHeight: 18, fontWeight: "600" },
   whatsappConfirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: "#25D366", alignItems: "center" },
   whatsappConfirmText: { fontSize: 13, fontWeight: "900", color: "#ffffff" }
 });

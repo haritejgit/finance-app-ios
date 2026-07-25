@@ -328,6 +328,7 @@ function createEmptyEditForm() {
     longitude: "",
     aadharSubmitted: false,
     passportPhotoSubmitted: false,
+    chequeSubmitted: false,
     loanAmount: "",
     loanStartDate: formatDateInput(Date.now()),
     loanDisbursementMode: "CASH" as PaymentMode,
@@ -364,6 +365,7 @@ export default function ProfileScreen() {
   const [mode, setMode] = useState<PaymentMode>("CASH");
   const [renewAmount, setRenewAmount] = useState("");
   const [renewMode, setRenewMode] = useState<PaymentMode>("CASH");
+  const [renewChequeSubmitted, setRenewChequeSubmitted] = useState(false);
   const [paymentDateInput, setPaymentDateInput] = useState(formatDateInput(Date.now()));
   const [dueDateInput, setDueDateInput] = useState(formatDateInput(Date.now()));
   const [renewDateInput, setRenewDateInput] = useState(formatDateInput(Date.now()));
@@ -431,6 +433,7 @@ export default function ProfileScreen() {
       longitude: typeof customer.longitude === "number" ? String(customer.longitude) : "",
       aadharSubmitted: customer.aadharSubmitted === true,
       passportPhotoSubmitted: customer.passportPhotoSubmitted === true,
+      chequeSubmitted: customer.chequeSubmitted === true,
       loanAmount: loan ? loan.principalAmount.toString() : "",
       loanStartDate: loan ? formatDateInput(loan.startDate) : formatDateInput(Date.now()),
       loanDisbursementMode: loan ? (loan.disbursement_mode ?? loan.disbursementMode ?? "CASH") : "CASH",
@@ -561,7 +564,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const toggleDocumentSubmitted = async (field: "aadharSubmitted" | "passportPhotoSubmitted") => {
+  const toggleDocumentSubmitted = async (field: "aadharSubmitted" | "passportPhotoSubmitted" | "chequeSubmitted") => {
     if (!customer) return;
     const updatedCustomer: Customer = {
       ...customer,
@@ -751,6 +754,12 @@ export default function ProfileScreen() {
       setRenewOpen(true);
     }
   }, [renew, loan]);
+
+  useEffect(() => {
+    if (renewOpen) {
+      setRenewChequeSubmitted(customer?.chequeSubmitted === true);
+    }
+  }, [customer?.chequeSubmitted, renewOpen]);
 
   const creditSummary = useMemo(() => calculateCreditScore(payments, loan), [loan, payments]);
 
@@ -1435,6 +1444,7 @@ export default function ProfileScreen() {
         longitude: parsedLongitude,
         aadharSubmitted: editForm.aadharSubmitted,
         passportPhotoSubmitted: editForm.passportPhotoSubmitted,
+        chequeSubmitted: editForm.chequeSubmitted,
       };
 
       const parsedDate = loan ? parseDateInput(editForm.loanStartDate) : null;
@@ -1500,7 +1510,7 @@ export default function ProfileScreen() {
 
   return (
     <AnimatedScreen style={styles.root}>
-    <LinearGradient colors={[colors.blue1, colors.blue2]} style={styles.root}>
+    <LinearGradient colors={[colors.background, colors.backgroundSecondary]} style={styles.root}>
       <SafeAreaView style={styles.safe}>
         {isLoading && (
           <View style={styles.loadingContainer}>
@@ -1556,7 +1566,7 @@ export default function ProfileScreen() {
                   <View style={styles.headerInfoRow}>
                     <Icon name="checkmark" size={18} color={colors.blue2} style={{marginRight: 8}} />
                     <Text style={[styles.headerText, { color: colors.textSecondary }]}>
-                      Docs: {customer.aadharSubmitted ? "Aadhar" : "Aadhar pending"} | {customer.passportPhotoSubmitted ? "Photo" : "Photo pending"}
+                      Docs: {customer.aadharSubmitted ? "Aadhar" : "Aadhar pending"} | {customer.passportPhotoSubmitted ? "Photo" : "Photo pending"}{customer.chequeRequired ? ` | ${customer.chequeSubmitted ? "Cheque" : "Cheque pending"}` : ""}
                     </Text>
                   </View>
                 </View>
@@ -1566,8 +1576,8 @@ export default function ProfileScreen() {
             <View style={[styles.docsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.docsHeaderRow}>
                 <Text style={[styles.docsTitle, { color: colors.primary }]}>Customer Documents</Text>
-                <Text style={[styles.docsStatusText, customer.aadharSubmitted && customer.passportPhotoSubmitted ? styles.docsStatusComplete : styles.docsStatusPending]}>
-                  {customer.aadharSubmitted && customer.passportPhotoSubmitted ? "Complete" : "Pending"}
+                <Text style={[styles.docsStatusText, customer.aadharSubmitted && customer.passportPhotoSubmitted && (!customer.chequeRequired || customer.chequeSubmitted) ? styles.docsStatusComplete : styles.docsStatusPending]}>
+                  {customer.aadharSubmitted && customer.passportPhotoSubmitted && (!customer.chequeRequired || customer.chequeSubmitted) ? "Complete" : "Pending"}
                 </Text>
               </View>
               <Pressable style={[styles.docsDetailRow, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={() => toggleDocumentSubmitted("aadharSubmitted")}>
@@ -1581,6 +1591,12 @@ export default function ProfileScreen() {
                   {customer.passportPhotoSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
                 </View>
                 <Text style={[styles.docsDetailText, { color: colors.text }]}>Passport photo submitted</Text>
+              </Pressable>
+              <Pressable style={[styles.docsDetailRow, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={() => toggleDocumentSubmitted("chequeSubmitted")}>
+                <View style={[styles.docsDetailCheckbox, { backgroundColor: colors.card, borderColor: colors.border }, customer.chequeSubmitted && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
+                  {customer.chequeSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
+                </View>
+                <Text style={[styles.docsDetailText, { color: colors.text }]}>Cheque submitted{customer.chequeRequired ? "" : " (when required)"}</Text>
               </Pressable>
             </View>
 
@@ -1614,7 +1630,7 @@ export default function ProfileScreen() {
                         styles.repaymentFill,
                         {
                           width: `${repaymentProgress.percent}%`,
-                          backgroundColor: repaymentProgress.percent >= 100 ? "#00D4AA" : repaymentProgress.percent > 50 ? "#6C63FF" : "#FFB347",
+                          backgroundColor: repaymentProgress.percent >= 100 ? "#1E7A4C" : repaymentProgress.percent > 50 ? "#12294A" : "#FFB347",
                         },
                       ]}
                     />
@@ -2251,6 +2267,18 @@ export default function ProfileScreen() {
                 );
               })()}
 
+              {Number(renewAmount) >= 10000 ? (
+                <Pressable
+                  style={[styles.docsDetailRow, { backgroundColor: colors.surfaceTint, borderColor: colors.border, width: "100%" }]}
+                  onPress={() => setRenewChequeSubmitted((value) => !value)}
+                >
+                  <View style={[styles.docsDetailCheckbox, { backgroundColor: colors.card, borderColor: colors.border }, renewChequeSubmitted && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
+                    {renewChequeSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
+                  </View>
+                  <Text style={[styles.docsDetailText, { color: colors.text }]}>Did customer submit cheque?</Text>
+                </Pressable>
+              ) : null}
+
               <Pressable
                 style={[styles.primary, isRenewing && styles.primaryDisabled]}
                 disabled={isRenewing}
@@ -2270,12 +2298,14 @@ export default function ProfileScreen() {
                   setRenewDateError("");
 
                   const { deduction, disbursed, netToGive } = buildRenewalSummary(newPrincipal, activeLoanObj.balanceAmount);
+                  const requiresChequePrompt = newPrincipal >= 10000;
                   const msg =
                     `Please confirm the renewal details:\n\n` +
                     `New Loan: Rs.${newPrincipal.toLocaleString("en-IN")}\n` +
                     `Actual Disbursed: Rs.${disbursed.toLocaleString("en-IN")} (after Rs.${deduction} deduction)\n` +
                     `Less Old Balance: -Rs.${Math.round(activeLoanObj.balanceAmount).toLocaleString("en-IN")}\n\n` +
                     `Net Amount to ${netToGive >= 0 ? "GIVE" : "COLLECT"}: Rs.${Math.abs(netToGive).toLocaleString("en-IN")}/-\n\n` +
+                    (requiresChequePrompt ? `Cheque submitted: ${renewChequeSubmitted ? "Yes" : "No"}\n\n` : "") +
                     `Do you want to confirm renewal?`;
 
                   const confirmed = await confirmRenewal(msg);
@@ -2309,22 +2339,29 @@ export default function ProfileScreen() {
                         amount: newPrincipal,
                         type: "RENEWAL_DISBURSEMENT",
                         date: renewalDateMs + 1,
-                        notes: `New loan disbursed via renewal (disbursement) | Mode: ${renewMode}`,
+                        notes: `New loan disbursed via renewal (disbursement) | Mode: ${renewMode}${requiresChequePrompt ? ` | Cheque submitted: ${renewChequeSubmitted ? "Yes" : "No"}` : ""}`,
                       });
                       
                       setRenewOpen(false);
                       setRenewAmount("");
                       setRenewMode("CASH");
+                      setRenewChequeSubmitted(false);
                       setRenewDateInput(formatDateInput(Date.now()));
                       setRenewDateError("");
                       await reload({ showLoading: false, skipAutoDue: true, forceRefresh: true });
                       showToast("success", "Loan renewed", "Renewal recorded successfully.");
                     } else {
                       const createdLoan = await renewLoan(activeLoanObj as Loan, newPrincipal, renewalDateMs, renewMode);
+                      if (requiresChequePrompt && customer) {
+                        const updatedCustomer = { ...customer, chequeRequired: true, chequeSubmitted: renewChequeSubmitted };
+                        await updateCustomer(updatedCustomer);
+                        setCustomer(updatedCustomer);
+                      }
                       setLoan(createdLoan);
                       setRenewOpen(false);
                       setRenewAmount("");
                       setRenewMode("CASH");
+                      setRenewChequeSubmitted(false);
                       setRenewDateInput(formatDateInput(Date.now()));
                       setRenewDateError("");
                       await reload({ showLoading: false, skipAutoDue: true, forceRefresh: true });
@@ -2347,6 +2384,7 @@ export default function ProfileScreen() {
                   setRenewOpen(false);
                   setRenewAmount("");
                   setRenewMode("CASH");
+                  setRenewChequeSubmitted(false);
                   setRenewDateInput(formatDateInput(Date.now()));
                   setRenewDateError("");
                 }}
@@ -2572,6 +2610,29 @@ export default function ProfileScreen() {
                   ) : null}
                 </>
               )}
+
+              <Text style={[styles.sectionLabel, { color: colors.primary }]}>Submitted Documents</Text>
+              <View style={[styles.docsEditSection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
+                {([
+                  ["aadharSubmitted", "Did the customer submit the Aadhar?"],
+                  ["passportPhotoSubmitted", "Did customer submit passport size photo?"],
+                  ["chequeSubmitted", "Did customer submit cheque?"],
+                ] as const).map(([field, label]) => {
+                  const checked = editForm[field];
+                  return (
+                    <Pressable
+                      key={field}
+                      style={styles.docsCheckRow}
+                      onPress={() => setEditForm((prev) => ({ ...prev, [field]: !prev[field] }))}
+                    >
+                      <View style={[styles.docsCheckbox, { borderColor: colors.border, backgroundColor: colors.card }, checked && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
+                        {checked ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
+                      </View>
+                      <Text style={[styles.docsCheckText, { color: colors.text }]}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
               
               <View style={styles.modalButtons}>
                 <Pressable style={styles.cancelModalBtn} onPress={() => setEditOpen(false)}>
@@ -2921,7 +2982,7 @@ export default function ProfileScreen() {
                   {/* Log / Record Payment Button directly inside modal */}
                   <View style={styles.qrPayButtonsRow}>
                     <Pressable
-                      style={[styles.qrPayBtn, { backgroundColor: "#0ABFBC" }]}
+                      style={[styles.qrPayBtn, { backgroundColor: "#1E7A4C" }]}
                       onPress={() => {
                         setSelectedQrCustomer(null);
                         setAmount(activeQrAmount.toString());
@@ -2983,7 +3044,7 @@ const styles = StyleSheet.create({
   repaymentCard: { borderRadius: 16, borderWidth: 1, padding: 14, gap: 8, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
   repaymentHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
   repaymentLabel: { flex: 1, fontSize: 12, fontWeight: "700" },
-  repaymentPercent: { color: "#00D4AA", fontSize: 13, fontWeight: "900" },
+  repaymentPercent: { color: "#1E7A4C", fontSize: 13, fontWeight: "900" },
   repaymentTrack: { height: 10, backgroundColor: "#2A2A3E", borderRadius: 5, overflow: "hidden" },
   repaymentFill: { height: "100%", borderRadius: 5 },
   timelineCard: { borderRadius: 16, borderWidth: 1, padding: 14, gap: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
@@ -2997,7 +3058,7 @@ const styles = StyleSheet.create({
   timelineTooltipDate: { fontSize: 10, fontWeight: "700", textAlign: "center", marginTop: 2 },
   
   // Info Section Styles
-  infoContainer: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 14, padding: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
+  infoContainer: { backgroundColor: colors.surfaceTint, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: colors.border },
   infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 3 },
   infoIcon: { fontSize: 14, width: 20 },
   infoText: { color: colors.white, fontSize: 13, flex: 1 },
@@ -3039,7 +3100,7 @@ const styles = StyleSheet.create({
   // Old styles (keeping for compatibility)
   title: { color: colors.white, fontSize: 26, fontWeight: "700" },
   card: { backgroundColor: colors.white, borderRadius: 14, padding: 14, color: colors.blue2, fontWeight: "700" },
-  info: { color: colors.white, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 14, padding: 12 },
+  info: { color: colors.text, backgroundColor: colors.surfaceTint, borderRadius: 14, padding: 12 },
   phoneLinkOld: { color: "#4FC3F7", textDecorationLine: "underline" },
   row: { flexDirection: "row", gap: 10 },
   action: { flex: 1, padding: 14, borderRadius: 12, alignItems: "center" },

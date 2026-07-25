@@ -660,7 +660,7 @@ export default function ShiftSelectionScreen() {
                             }}
                             style={[styles.shift, { backgroundColor: colors.surfaceTint, borderColor: colors.border }, active && styles.shiftOn]}
                           >
-                            <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={17} color={active ? Colors.nearBlack : colors.primary} />
+                        <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={17} color={active ? Colors.nearBlack : colors.primary} />
                             <Text style={[styles.shiftText, { color: colors.primary }, active && styles.shiftTextOn]}>{shift}</Text>
                           </Pressable>
                         );
@@ -682,7 +682,7 @@ export default function ShiftSelectionScreen() {
                                 styles.progressBarFill,
                                 {
                                   width: `${paidPercent}%`,
-                                  backgroundColor: "#ff9f1c", // Orange
+                                  backgroundColor: "#D4AF6A", // Orange
                                   borderRadius: 0,
                                 },
                               ]}
@@ -703,7 +703,7 @@ export default function ShiftSelectionScreen() {
                         </View>
                         <View style={styles.progressDetails}>
                           <Text style={[styles.progressDetailText, { color: colors.textSecondary }]}>
-                            Paid: <Text style={{fontWeight: "900", color: "#ff9f1c"}}>{formatMoney(routeProgress.collected)}</Text>
+                            Paid: <Text style={{fontWeight: "900", color: "#D4AF6A"}}>{formatMoney(routeProgress.collected)}</Text>
                             {routeProgress.dueAmount > 0 && (
                               <> • Dues: <Text style={{fontWeight: "900", color: "#d94841"}}>{formatMoney(routeProgress.dueAmount)}</Text></>
                             )}
@@ -725,7 +725,7 @@ export default function ShiftSelectionScreen() {
                     <Pressable accessibilityLabel={t("startCollection")} onPress={startCollection}>
                       <LinearGradient colors={Gradients.ctaButton} style={styles.primaryAction}>
                         <Text style={styles.primaryActionText}>{t("startCollection")}</Text>
-                        <Icon name="arrow-forward" size={18} color={Colors.nearBlack} />
+                        <Icon name="arrow-forward" size={18} color={Colors.white} />
                       </LinearGradient>
                     </Pressable>
 
@@ -807,7 +807,7 @@ export default function ShiftSelectionScreen() {
                     >
                       {nestedExpenses.length === 0 ? (
                         <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: "center", paddingVertical: 8 }}>
-                          No expenses logged yet. Tap "Add" to record one.
+                          No expenses logged yet. Tap Add to record one.
                         </Text>
                       ) : (
                         nestedExpenses.slice(0, 10).map((exp) => (
@@ -1222,7 +1222,7 @@ const styles = StyleSheet.create({
   shiftText: { color: Colors.lightSeaGreen, fontWeight: "900", fontSize: 13 },
   shiftTextOn: { color: Colors.white },
   primaryAction: { borderRadius: 12, paddingVertical: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
-  primaryActionText: { color: Colors.nearBlack, fontWeight: "900", fontSize: 15 },
+  primaryActionText: { color: Colors.white, fontWeight: "900", fontSize: 15 },
   walletRouteSummary: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 2 },
   walletRouteText: { color: Colors.textMuted, fontSize: 11, fontWeight: "800" },
   walletRouteDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.borderLight },

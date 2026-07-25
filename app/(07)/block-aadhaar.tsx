@@ -194,7 +194,7 @@ export default function BlockAadhaarScreen() {
                       <Pressable
                         key={tab.key}
                         accessibilityLabel={tab.label}
-                        style={[styles.tab, active && { backgroundColor: "#6C63FF" }]}
+                        style={[styles.tab, active && { backgroundColor: "#12294A" }]}
                         onPress={() => setActiveTab(tab.key)}
                       >
                         <Text style={[styles.tabText, { color: active ? colors.white : colors.textSecondary }]}>{tab.label}</Text>
@@ -244,7 +244,7 @@ export default function BlockAadhaarScreen() {
                   </ScrollView>
                 ) : loading ? (
                   <View style={styles.loading}>
-                    <ActivityIndicator color="#6C63FF" />
+                    <ActivityIndicator color="#12294A" />
                     <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading blocked list...</Text>
                   </View>
                 ) : (

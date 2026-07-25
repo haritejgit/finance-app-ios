@@ -37,7 +37,7 @@ function startOfWeek() {
 }
 
 function riskTone(score: number) {
-  if (score < 40) return "#00D4AA";
+  if (score < 40) return "#1E7A4C";
   if (score <= 70) return "#FFB347";
   return "#FF6B6B";
 }

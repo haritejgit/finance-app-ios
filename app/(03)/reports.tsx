@@ -1654,7 +1654,7 @@ interface Payment {
 
   return (
     <AnimatedScreen style={styles.root}>
-    <LinearGradient colors={[colors.blue1, colors.blue2]} style={styles.root}>
+    <LinearGradient colors={[colors.background, colors.backgroundSecondary]} style={styles.root}>
       <SafeAreaView style={[styles.safe, { paddingTop: insets.top }]} edges={['top']}>
         <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer}>
           <View style={styles.reportHero}>
@@ -2536,7 +2536,7 @@ const styles = StyleSheet.create({
   statsGrid: { flexDirection: 'row', gap: 12 },
   statCard: { 
     flex: 1, 
-    backgroundColor: 'rgba(255,255,255,0.15)', 
+    backgroundColor: colors.surfaceTint,
     borderRadius: 12, 
     padding: 16, 
     alignItems: 'center' 
