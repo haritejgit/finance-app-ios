@@ -357,7 +357,7 @@ const CustomerItem = React.memo(function CustomerItem({
         />
         {!!customer.coName && (
           <Text style={styles.coNameUnder} numberOfLines={2}>
-            C/O {language === "te" ? translateTelugu(customer.coName) : customer.coName}
+            {language === "te" ? translateTelugu(customer.coName) : customer.coName}
           </Text>
         )}
       </View>
@@ -1575,7 +1575,7 @@ export default function CustomerListScreen() {
               <CustomerIdBadge numericalId={item.numericalId} id={item.id} style={{ ...styles.premiumBadge, backgroundColor: "#6B7280" }} textStyle={styles.premiumBadgeText} />
               {!!item.coName && (
                 <Text style={[styles.coNameUnder, { color: "#6B7280" }]} numberOfLines={2}>
-                  C/O {item.coName}
+                  {item.coName}
                 </Text>
               )}
             </View>
@@ -1940,12 +1940,12 @@ export default function CustomerListScreen() {
       </Modal>
 
       <Modal visible={showAdd} animationType="slide" onRequestClose={closeAddCustomer}>
-        <SafeAreaView style={[styles.modal, { paddingTop: insets.top, backgroundColor: colors.background }]} edges={['top']}>
+        <SafeAreaView style={styles.modal} edges={['top']}>
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-            <View style={[styles.modalHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>New Customer Registration</Text>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>New Customer{"\n"}Registration</Text>
               <Pressable onPress={closeAddCustomer} style={styles.closeBtn}>
-                <Text style={[styles.closeBtnText, { color: colors.gray }]}>✕</Text>
+                <Text style={styles.closeBtnText}>✕</Text>
               </Pressable>
             </View>
             {scannerOpen && Platform.OS === "web" ? (
@@ -1968,26 +1968,26 @@ export default function CustomerListScreen() {
 
                 <View style={styles.formRow}>
                   <View style={styles.formColumn}>
-                    <Text style={[styles.label, { color: colors.text }]}>Name *</Text>
+                    <Text style={styles.label}>Name <Text style={styles.requiredAsterisk}>*</Text></Text>
                     <TextInput
                       placeholder="Enter customer name"
-                      placeholderTextColor={colors.textMuted}
+                      placeholderTextColor="#9AA6B2"
                       value={form.name}
                       onChangeText={(t) => setForm((f) => ({ ...f, name: t }))}
-                      style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
+                      style={styles.input}
                     />
                   </View>
                   <View style={styles.formColumn}>
-                    <Text style={[styles.label, { color: colors.text }]}>Phone *</Text>
+                    <Text style={styles.label}>Phone <Text style={styles.requiredAsterisk}>*</Text></Text>
                     <TextInput
                       placeholder="Phone number"
-                      placeholderTextColor={colors.gray}
+                      placeholderTextColor="#9AA6B2"
                       value={form.phone}
                       onChangeText={(t) => {
                         setForm((f) => ({ ...f, phone: t.replace(/\D/g, "").slice(0, 10) }));
                         setFormErrors((current) => ({ ...current, phone: validateIndianPhone(t) }));
                       }}
-                      style={[styles.input, { backgroundColor: colors.white, borderColor: colors.border, color: colors.text }]}
+                      style={styles.input}
                       keyboardType="phone-pad"
                     />
                     {formErrors.phone ? <Text style={styles.aadharWarning}>{formErrors.phone}</Text> : null}
@@ -1995,17 +1995,17 @@ export default function CustomerListScreen() {
                 </View>
 
                 <View style={styles.formColumn}>
-                    <Text style={[styles.label, { color: colors.text }]}>Aadhar Number</Text>
+                    <Text style={styles.label}>Aadhar Number</Text>
                     <TextInput
                       placeholder="Aadhar ID"
-                      placeholderTextColor={colors.textMuted}
+                      placeholderTextColor="#9AA6B2"
                       value={form.aadhar}
                       onChangeText={(t) => {
                         const normalized = normalizeAadhar(t).slice(0, 12);
                         setForm((f) => ({ ...f, aadhar: normalized }));
                         setFormErrors((current) => ({ ...current, aadhar: validateAadhaar(normalized) }));
                       }}
-                      style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: aadharBlocked ? colors.error : colors.border, color: colors.text }]}
+                      style={[styles.input, aadharBlocked ? { borderColor: colors.error } : null]}
                       keyboardType="numeric"
                       maxLength={12}
                     />
@@ -2020,10 +2020,10 @@ export default function CustomerListScreen() {
 
                   <View style={styles.formRow}>
                     <View style={styles.formColumn}>
-                      <Text style={[styles.label, { color: colors.text }]}>Book No / ID *</Text>
+                      <Text style={styles.label}>Book No / ID <Text style={styles.requiredAsterisk}>*</Text></Text>
                       <TextInput
                         placeholder="e.g. 15"
-                        placeholderTextColor={colors.textMuted}
+                        placeholderTextColor="#9AA6B2"
                         value={form.numericalId}
                         onChangeText={(t) => {
                           const sanitized = t.replace(/\D/g, "");
@@ -2033,32 +2033,32 @@ export default function CustomerListScreen() {
                             numericalId: sanitized ? undefined : "Book No is required",
                           }));
                         }}
-                        style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: formErrors.numericalId ? colors.error : colors.border, color: colors.text }]}
+                        style={[styles.input, formErrors.numericalId ? { borderColor: colors.error } : null]}
                         keyboardType="numeric"
                       />
                       {formErrors.numericalId ? <Text style={styles.aadharWarning}>{formErrors.numericalId}</Text> : null}
                     </View>
                     <View style={styles.formColumn}>
-                      <Text style={[styles.label, { color: colors.text }]}>Co-Applicant ID</Text>
+                      <Text style={styles.label}>Co-Applicant ID</Text>
                       <TextInput
                         placeholder="Co-applicant ID"
-                        placeholderTextColor={colors.textMuted}
+                        placeholderTextColor="#9AA6B2"
                         value={form.coId}
                         onChangeText={(t) => setForm((f) => ({ ...f, coId: t }))}
-                        style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
+                        style={styles.input}
                         keyboardType="numeric"
                       />
                     </View>
                   </View>
 
-                <Text style={[styles.label, { color: colors.text }]}>Location Description</Text>
+                <Text style={styles.label}>Location Description</Text>
                 <View style={styles.locationRow}>
                   <TextInput
                     placeholder="Enter address/location"
-                    placeholderTextColor={colors.textMuted}
+                    placeholderTextColor="#9AA6B2"
                     value={form.locationDesc}
                     onChangeText={(t) => setForm((f) => ({ ...f, locationDesc: t }))}
-                    style={[styles.input, styles.textArea, { flex: 1, backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
+                    style={[styles.input, styles.textArea, { flex: 1 }]}
                     multiline
                     numberOfLines={2}
                   />
@@ -2067,7 +2067,7 @@ export default function CustomerListScreen() {
                     onPress={getCurrentLocation}
                     disabled={isGettingLocation}
                   >
-                    {isGettingLocation ? <View style={styles.locationPulse} /> : <Icon name="location" size={18} color={colors.white} />}
+                    {isGettingLocation ? <View style={styles.locationPulse} /> : <Icon name="location" size={18} color="#D4AF6A" />}
                   </Pressable>
                 </View>
                 <Pressable style={styles.useLastLocationBtn} onPress={useLastKnownLocation}>
@@ -2081,33 +2081,33 @@ export default function CustomerListScreen() {
 
                 <View style={styles.formRow}>
                   <View style={styles.formColumn}>
-                    <Text style={[styles.label, { color: colors.text }]}>Co-Applicant Name</Text>
+                    <Text style={styles.label}>Co-Applicant Name</Text>
                     <TextInput
                       placeholder="Co-applicant name (optional)"
-                      placeholderTextColor={colors.textMuted}
+                      placeholderTextColor="#9AA6B2"
                       value={form.coName}
                       onChangeText={(t) => setForm((f) => ({ ...f, coName: t }))}
-                      style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
+                      style={styles.input}
                     />
                   </View>
                   <View style={styles.formColumn}>
-                    <Text style={[styles.label, { color: colors.text }]}>Principal Amount *</Text>
+                    <Text style={styles.label}>Principal Amount <Text style={styles.requiredAsterisk}>*</Text></Text>
                     <TextInput
                       placeholder="Enter loan amount"
-                      placeholderTextColor={colors.textMuted}
+                      placeholderTextColor="#9AA6B2"
                       value={form.principal}
                       onChangeText={(t) => {
                         setForm((f) => ({ ...f, principal: t }));
                         setFormErrors((current) => ({ ...current, principal: validatePositiveAmount(t, "Loan amount") }));
                       }}
-                      style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
+                      style={styles.input}
                       keyboardType="numeric"
                     />
                     {formErrors.principal ? <Text style={styles.aadharWarning}>{formErrors.principal}</Text> : null}
                   </View>
                 </View>
 
-                <Text style={[styles.label, { color: colors.text }]}>How was money given to customer?</Text>
+                <Text style={styles.label}>How was money given to customer?</Text>
                 {Number(form.principal || 0) > 0 ? (
                   <View style={styles.cashToHandCard}>
                     <Text style={styles.cashToHandLabel}>Cash to hand</Text>
@@ -2134,7 +2134,7 @@ export default function CustomerListScreen() {
 
 
 
-                <Text style={[styles.label, { color: colors.text }]}>Submitted Documents</Text>
+                <Text style={styles.label}>Submitted Documents</Text>
                 <Pressable
                   style={styles.checkRow}
                   onPress={() => setForm((f) => ({ ...f, aadharSubmitted: !f.aadharSubmitted }))}
@@ -2142,7 +2142,7 @@ export default function CustomerListScreen() {
                   <View style={[styles.checkbox, form.aadharSubmitted && styles.checkboxOn]}>
                     {form.aadharSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
                   </View>
-                  <Text style={[styles.checkLabel, { color: colors.text }]}>Did the customer submit the Aadhar?</Text>
+                  <Text style={styles.checkLabel}>Did the customer submit the Aadhar?</Text>
                 </Pressable>
                 <Pressable
                   style={styles.checkRow}
@@ -2151,10 +2151,10 @@ export default function CustomerListScreen() {
                   <View style={[styles.checkbox, form.passportPhotoSubmitted && styles.checkboxOn]}>
                     {form.passportPhotoSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
                   </View>
-                  <Text style={[styles.checkLabel, { color: colors.text }]}>Did customer submit passport size photo?</Text>
+                  <Text style={styles.checkLabel}>Did customer submit passport size photo?</Text>
                 </Pressable>
 
-                <Text style={[styles.label, { color: colors.text }]}>Registration Date *</Text>
+                <Text style={styles.label}>Registration Date <Text style={styles.requiredAsterisk}>*</Text></Text>
                 {Platform.OS === 'web' ? (
                   <input
                     type="date"
@@ -2930,12 +2930,12 @@ const styles = StyleSheet.create({
   },
   quickCollectFabText: { color: colors.white, fontSize: 12, fontWeight: "900" },
   modal: { flex: 1, backgroundColor: "#f7f9fc" },
-  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10, backgroundColor: colors.white, borderBottomWidth: 1, borderBottomColor: "#e0e0e0", gap: 8 },
-  modalTitle: { fontSize: 24, fontWeight: "700", color: "#333", flex: 1 },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20.8, paddingVertical: 16, backgroundColor: "#FFFFFF", borderBottomWidth: 0.5, borderBottomColor: "#EEF1F5", gap: 8 },
+  modalTitle: { fontSize: 19, fontWeight: "700", color: "#12294A", flex: 1 },
   scanHeaderBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.blue1, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 9 },
   scanHeaderText: { color: colors.white, fontSize: 12, fontWeight: "900" },
-  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#f0f0f0", justifyContent: "center", alignItems: "center" },
-  closeBtnText: { fontSize: 18, color: "#666", fontWeight: "600" },
+  closeBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#F4F6F9", justifyContent: "center", alignItems: "center" },
+  closeBtnText: { fontSize: 16, color: "#6B7A8D", fontWeight: "600" },
   formContainer: { flex: 1, padding: 20 },
   selectAllBtn: { alignSelf: "flex-start", borderRadius: 999, backgroundColor: "#1565C0", paddingHorizontal: 14, paddingVertical: 9, marginBottom: 12 },
   selectAllText: { color: colors.white, fontSize: 12, fontWeight: "900" },
@@ -2958,40 +2958,41 @@ const styles = StyleSheet.create({
   reviewText: { color: colors.gray, fontSize: 12, fontWeight: "600" },
   formRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
   formColumn: { flex: 1 },
-  label: { fontSize: 14, fontWeight: "600", color: "#333", marginBottom: 6 },
+  label: { fontSize: 12.5, fontWeight: "600", color: "#12294A", marginBottom: 6 },
+  requiredAsterisk: { color: "#B03A3A" },
   aadharHint: { color: "#666", fontSize: 12, marginTop: -4, marginBottom: 8 },
   aadharWarning: { color: "#b91c1c", fontSize: 12, fontWeight: "600", marginTop: -4, marginBottom: 8 },
-  input: { backgroundColor: colors.white, borderRadius: 12, padding: 14, fontSize: 16, borderWidth: 1, borderColor: "#e0e0e0", marginBottom: 8 },
+  input: { backgroundColor: "#F9FAFC", borderRadius: 9, paddingHorizontal: 12, paddingVertical: 11, fontSize: 13.5, borderWidth: 1, borderColor: "#E1E6ED", color: "#12294A", marginBottom: 8 },
   scanInputRow: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
   scanInput: { flex: 1 },
   scanBtn: { minWidth: 70, minHeight: 50, borderRadius: 12, backgroundColor: "#12294A", alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
   scanBtnText: { color: colors.white, fontSize: 13, fontWeight: "900" },
-  dateInputContainer: { flexDirection: "row", gap: 8, alignItems: "center" },
+  dateInputContainer: { flexDirection: "row", gap: 8, alignItems: "center", marginBottom: 16 },
   dateInput: { flex: 1 },
   datePickerBtn: { 
-    width: 50, 
-    height: 50, 
-    borderRadius: 12, 
-    backgroundColor: colors.blue2, 
+    width: 44, 
+    height: 44, 
+    borderRadius: 9, 
+    backgroundColor: "#F9FAFC", 
     justifyContent: "center", 
     alignItems: "center",
     borderWidth: 1,
-    borderColor: colors.blue2,
+    borderColor: "#E1E6ED",
   },
-  datePickerBtnText: { fontSize: 20, color: colors.white },
+  datePickerBtnText: { fontSize: 15, color: "#9AA6B2" },
   textArea: { height: 70, textAlignVertical: "top" },
-  locationRow: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
-  locationBtn: { width: 50, height: 50, borderRadius: 12, backgroundColor: colors.blue2, justifyContent: "center", alignItems: "center", marginTop: 8 },
+  locationRow: { flexDirection: "row", gap: 8, alignItems: "flex-start", marginBottom: 16 },
+  locationBtn: { width: 44, height: 44, borderRadius: 9, backgroundColor: "#12294A", justifyContent: "center", alignItems: "center", marginTop: 0 },
   locationBtnDisabled: { backgroundColor: "#ccc" },
   locationBtnText: { fontSize: 20, color: colors.white },
   locationPulse: { width: 14, height: 14, borderRadius: 7, backgroundColor: "#1E7A4C", borderWidth: 4, borderColor: "rgba(30,122,76,0.22)" },
-  useLastLocationBtn: { alignSelf: "flex-start", borderRadius: 999, borderWidth: 1, borderColor: "#2A2A3E", paddingHorizontal: 12, paddingVertical: 8, marginTop: -4, marginBottom: 8, backgroundColor: "#222238" },
-  useLastLocationText: { color: "#1E7A4C", fontSize: 12, fontWeight: "800" },
+  useLastLocationBtn: { alignSelf: "flex-start", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 16, backgroundColor: "#D4AF6A22" },
+  useLastLocationText: { color: "#9A6B1E", fontSize: 12.5, fontWeight: "600" },
   locationText: { fontSize: 12, color: "#666", marginBottom: 8, fontStyle: "italic" },
-  checkRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8, marginBottom: 4 },
-  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: "#cbd5e1", backgroundColor: colors.white, alignItems: "center", justifyContent: "center" },
-  checkboxOn: { backgroundColor: colors.blue2, borderColor: colors.blue2 },
-  checkLabel: { flex: 1, color: "#333", fontSize: 14, fontWeight: "600" },
+  checkRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
+  checkbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 1, borderColor: "#cbd5e1", backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
+  checkboxOn: { backgroundColor: "#12294A", borderColor: "#12294A" },
+  checkLabel: { flex: 1, color: "#12294A", fontSize: 13 },
   dayDisplay: { 
     fontSize: 14, 
     color: "#666", 
@@ -3017,23 +3018,24 @@ const styles = StyleSheet.create({
   },
   pickerDoneBtn: { backgroundColor: colors.blue2, borderRadius: 8, padding: 12, alignItems: "center", marginTop: 10 },
   pickerDoneBtnText: { color: colors.white, fontWeight: "600", fontSize: 16 },
-  buttonContainer: { marginTop: 20, gap: 12 },
-  save: { backgroundColor: colors.blue2, borderRadius: 12, padding: 16, alignItems: "center" },
-  saveDisabled: { backgroundColor: "#ccc" },
-  saveTxt: { color: colors.white, fontWeight: "700", fontSize: 16 },
-  cancelBtn: { backgroundColor: colors.white, borderRadius: 12, padding: 16, alignItems: "center", borderWidth: 1, borderColor: "#e0e0e0" },
-  cancelTxt: { color: "#666", fontWeight: "600", fontSize: 16 },
+  buttonContainer: { marginTop: 20, gap: 12, marginBottom: 20 },
+  save: { backgroundColor: "#12294A", borderRadius: 10, padding: 13, alignItems: "center" },
+  saveDisabled: { backgroundColor: "#D9DEE5" },
+  saveTxt: { color: "#FFFFFF", fontWeight: "600", fontSize: 14.5 },
+  saveTxtDisabled: { color: "#8A97A6" },
+  cancelBtn: { backgroundColor: "#FFFFFF", borderRadius: 10, padding: 13, alignItems: "center", borderWidth: 1, borderColor: "#E1E6ED" },
+  cancelTxt: { color: "#4B5A6D", fontWeight: "600", fontSize: 14.5 },
   cancel: { textAlign: "center", marginTop: 12, color: "#666" },
   modalWrap: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.35)" },
   manualPayModal: { backgroundColor: colors.white, padding: 18, paddingBottom: 24, borderTopLeftRadius: 20, borderTopRightRadius: 20, gap: 10 },
   manualPayTitle: { color: colors.text, fontSize: 20, fontWeight: "800" },
   manualPaySubtitle: { color: colors.gray, fontSize: 13, fontWeight: "700", marginTop: -6 },
-  modeRow: { flexDirection: "row", gap: 10 },
-  modeBtn: { flex: 1, borderWidth: 1, borderColor: "#d2d8e1", borderRadius: 12, padding: 12, alignItems: "center", backgroundColor: colors.white },
-  modeBtnOn: { backgroundColor: colors.blue2, borderColor: colors.blue2 },
-  modeBtnPhoneOn: { backgroundColor: "#5F259F", borderColor: "#5F259F" },
-  modeText: { color: colors.gray, fontWeight: "800" },
-  modeTextOn: { color: colors.white },
+  modeRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
+  modeBtn: { flex: 1, borderWidth: 1, borderColor: "#E1E6ED", borderRadius: 9, padding: 12, alignItems: "center", backgroundColor: "#FFFFFF" },
+  modeBtnOn: { backgroundColor: "#12294A", borderColor: "#12294A" },
+  modeBtnPhoneOn: { backgroundColor: "#12294A", borderColor: "#12294A" },
+  modeText: { color: "#4B5A6D", fontWeight: "600" },
+  modeTextOn: { color: "#FFFFFF" },
   manualPayActions: { flexDirection: "row", gap: 10, marginTop: 8 },
   dueInlineBtn: { borderColor: "#fecaca", backgroundColor: "#fee2e2" },
   dueInlineText: { color: "#C62828", fontWeight: "900", fontSize: 14 },

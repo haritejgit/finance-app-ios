@@ -1654,165 +1654,163 @@ interface Payment {
 
   return (
     <AnimatedScreen style={styles.root}>
-    <LinearGradient colors={[colors.background, colors.backgroundSecondary]} style={styles.root}>
-      <SafeAreaView style={[styles.safe, { paddingTop: insets.top }]} edges={['top']}>
-        <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer}>
-          <View style={styles.reportHero}>
-            <Pressable style={styles.reportBackBtn} onPress={() => router.back()}>
-              <Icon name="arrow-back" size={20} color={colors.white} />
+      <View style={[styles.root, { backgroundColor: "#F4F6F9" }]}>
+        <SafeAreaView style={styles.safe} edges={['top']}>
+          {/* Header */}
+          <View style={styles.reportHeader}>
+            <Pressable style={styles.reportBackBtn} onPress={() => router.back()} accessibilityLabel="Back">
+              <Icon name="arrow-back" size={16} color="#D4AF6A" />
             </Pressable>
             <View style={styles.reportHeroIcon}>
-              <Icon name="document-text-outline" size={26} color={colors.white} />
+              <Icon name="document-text-outline" size={19} color="#D4AF6A" />
             </View>
-            <View style={styles.reportHeroCopy}>
-              <Text style={styles.reportEyebrow}>Reports</Text>
-              <Text style={styles.title}>Collection Desk</Text>
-              <Text style={styles.subtitle}>Daily totals, weekly tracker, and custom payment reports</Text>
-            </View>
-          </View>
-          <View style={styles.header}>
-            <Text style={styles.title}>📊 Reports</Text>
-            <Text style={styles.subtitle}>Generate detailed payment reports</Text>
+            <Text style={styles.reportEyebrow}>REPORTS</Text>
+            <Text style={styles.reportTitle}>Collection Desk</Text>
+            <Text style={styles.reportSubtitle}>Daily totals, weekly tracker, and custom payment reports</Text>
           </View>
 
-          <View style={styles.dateSection}>
-            <Text style={styles.sectionTitle}>Date Range</Text>
-            
-            <View style={styles.dateInputContainer}>
-              <View style={styles.dateInputRow}>
-                <Text style={styles.dateLabel}>From Date</Text>
+          <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer}>
+            {/* Date Range Card */}
+            <View style={styles.dateCard}>
+              <Text style={styles.dateCardTitle}>Date Range</Text>
+              
+              <Text style={styles.dateFieldLabel}>FROM DATE</Text>
+              <View style={styles.dateInputWrapper}>
                 {Platform.OS === 'web' ? (
                   <input
                     type="date"
                     value={fromDate}
                     onChange={(e) => setFromDate(e.target.value)}
                     style={{
-                      padding: 8,
+                      width: '100%',
+                      padding: '10px 12px',
                       borderRadius: 8,
-                      borderWidth: 1,
-                      borderColor: '#ccc',
-                      fontSize: 14,
+                      border: '1px solid #E1E6ED',
+                      fontSize: 13.5,
                       fontFamily: 'inherit',
-                      cursor: 'pointer',
+                      color: '#12294A',
+                      background: '#F9FAFC',
+                      boxSizing: 'border-box',
                     }}
                   />
                 ) : (
-                  <Pressable 
-                    style={styles.datePickerBtn} 
-                    onPress={() => {
-                      setTempFromDate(new Date(parseDateInput(fromDate) || Date.now()));
-                      setShowFromPicker(true);
-                    }}
-                  >
-                    <Text style={styles.datePickerBtnText}>📅</Text>
-                  </Pressable>
+                  <View style={styles.mobileDateInputRow}>
+                    <TextInput
+                      value={fromDate}
+                      onChangeText={setFromDate}
+                      placeholder="YYYY-MM-DD"
+                      style={styles.mobileDateInput}
+                      autoCapitalize="none"
+                    />
+                    <Pressable 
+                      style={styles.mobileDatePickerBtn} 
+                      onPress={() => {
+                        setTempFromDate(new Date(parseDateInput(fromDate) || Date.now()));
+                        setShowFromPicker(true);
+                      }}
+                    >
+                      <Text style={styles.mobileDatePickerBtnText}>📅</Text>
+                    </Pressable>
+                  </View>
                 )}
               </View>
-              {Platform.OS !== 'web' && (
-                <TextInput
-                  value={fromDate}
-                  onChangeText={setFromDate}
-                  placeholder="YYYY-MM-DD"
-                  style={styles.dateInput}
-                  autoCapitalize="none"
-                />
-              )}
               {parseDateInput(fromDate) && (
-                <Text style={styles.dayDisplay}>
+                <Text style={styles.dayDisplayItalic}>
                   {formatDateWithDay(parseDateInput(fromDate)!)}
                 </Text>
               )}
-            </View>
 
-            <View style={styles.dateInputContainer}>
-              <View style={styles.dateInputRow}>
-                <Text style={styles.dateLabel}>To Date</Text>
+              <Text style={[styles.dateFieldLabel, { marginTop: 14 }]}>TO DATE</Text>
+              <View style={styles.dateInputWrapper}>
                 {Platform.OS === 'web' ? (
                   <input
                     type="date"
                     value={toDate}
                     onChange={(e) => setToDate(e.target.value)}
                     style={{
-                      padding: 8,
+                      width: '100%',
+                      padding: '10px 12px',
                       borderRadius: 8,
-                      borderWidth: 1,
-                      borderColor: '#ccc',
-                      fontSize: 14,
+                      border: '1px solid #E1E6ED',
+                      fontSize: 13.5,
                       fontFamily: 'inherit',
-                      cursor: 'pointer',
+                      color: '#12294A',
+                      background: '#F9FAFC',
+                      boxSizing: 'border-box',
                     }}
                   />
                 ) : (
-                  <Pressable 
-                    style={styles.datePickerBtn} 
-                    onPress={() => {
-                      setTempToDate(new Date(parseDateInput(toDate) || Date.now()));
-                      setShowToPicker(true);
-                    }}
-                  >
-                    <Text style={styles.datePickerBtnText}>📅</Text>
-                  </Pressable>
+                  <View style={styles.mobileDateInputRow}>
+                    <TextInput
+                      value={toDate}
+                      onChangeText={setToDate}
+                      placeholder="YYYY-MM-DD"
+                      style={styles.mobileDateInput}
+                      autoCapitalize="none"
+                    />
+                    <Pressable 
+                      style={styles.mobileDatePickerBtn} 
+                      onPress={() => {
+                        setTempToDate(new Date(parseDateInput(toDate) || Date.now()));
+                        setShowToPicker(true);
+                      }}
+                    >
+                      <Text style={styles.mobileDatePickerBtnText}>📅</Text>
+                    </Pressable>
+                  </View>
                 )}
               </View>
-              {Platform.OS !== 'web' && (
-                <TextInput
-                  value={toDate}
-                  onChangeText={setToDate}
-                  placeholder="YYYY-MM-DD"
-                  style={styles.dateInput}
-                  autoCapitalize="none"
-                />
-              )}
               {parseDateInput(toDate) && (
-                <Text style={styles.dayDisplay}>
+                <Text style={styles.dayDisplayItalic}>
                   {formatDateWithDay(parseDateInput(toDate)!)}
                 </Text>
               )}
             </View>
-          </View>
 
-          <View style={styles.reportActionsGrid}>
-            <Pressable
-              style={[styles.reportActionCard, (!canGenerate || isGenerating) && styles.exportBtnDisabled]}
-              onPress={generateReport}
-              disabled={!canGenerate || isGenerating}
-            >
-              <View style={[styles.reportActionIcon, styles.reportActionIconBlue]}>
-                <Icon name="cash-outline" size={22} color={colors.blue2} />
-              </View>
-              <Text style={styles.reportActionTitle}>{isGenerating ? "Generating..." : "Payment Report"}</Text>
-              <Text style={styles.reportActionSub}>View and export payments</Text>
-            </Pressable>
-            <Pressable style={styles.reportActionCard} onPress={() => setShowDayReportModal(true)}>
-              <View style={[styles.reportActionIcon, styles.reportActionIconGreen]}>
-                <Icon name="sunny-outline" size={22} color={colors.teal} />
-              </View>
-              <Text style={styles.reportActionTitle}>Day Report</Text>
-              <Text style={styles.reportActionSub}>Shift collection totals</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.reportActionCard, isExporting && styles.exportBtnDisabled]}
-              onPress={exportWeeklyCollectionReport}
-              disabled={isExporting}
-            >
-              <View style={[styles.reportActionIcon, styles.reportActionIconOrange]}>
-                <Icon name="analytics-outline" size={22} color={colors.coral} />
-              </View>
-              <Text style={styles.reportActionTitle}>{isExporting ? "Exporting..." : "Weekly Report"}</Text>
-              <Text style={styles.reportActionSub}>Excel tracker format</Text>
-            </Pressable>
-            <Pressable style={styles.reportActionCard} onPress={() => setShowTotalsModal(true)}>
-              <View style={[styles.reportActionIcon, styles.reportActionIconPurple]}>
-                <Icon name="trending-up-outline" size={22} color="#7c3aed" />
-              </View>
-              <Text style={styles.reportActionTitle}>View Totals</Text>
-              <Text style={styles.reportActionSub}>Collected vs distributed</Text>
-            </Pressable>
-          </View>
+            {/* Report Actions Grid */}
+            <View style={styles.reportGrid}>
+              <Pressable
+                style={[styles.gridCard, (!canGenerate || isGenerating) && styles.exportBtnDisabled]}
+                onPress={generateReport}
+                disabled={!canGenerate || isGenerating}
+              >
+                <View style={[styles.gridIconBox, { backgroundColor: '#E4F3EA' }]}>
+                  <Icon name="cash-outline" size={19} color="#1E7A4C" />
+                </View>
+                <Text style={styles.gridCardTitle}>{isGenerating ? "Generating..." : "Payment Report"}</Text>
+                <Text style={styles.gridCardSub}>View and export payments</Text>
+              </Pressable>
 
+              <Pressable style={styles.gridCard} onPress={() => setShowDayReportModal(true)}>
+                <View style={[styles.gridIconBox, { backgroundColor: '#D4AF6A22' }]}>
+                  <Icon name="sunny-outline" size={19} color="#9A6B1E" />
+                </View>
+                <Text style={styles.gridCardTitle}>Day Report</Text>
+                <Text style={styles.gridCardSub}>Shift collection totals</Text>
+              </Pressable>
 
-        </ScrollView>
-      </SafeAreaView>
+              <Pressable
+                style={[styles.gridCard, isExporting && styles.exportBtnDisabled]}
+                onPress={exportWeeklyCollectionReport}
+                disabled={isExporting}
+              >
+                <View style={[styles.gridIconBox, { backgroundColor: '#FCF2E3' }]}>
+                  <Icon name="analytics-outline" size={19} color="#9A6B1E" />
+                </View>
+                <Text style={styles.gridCardTitle}>{isExporting ? "Exporting..." : "Weekly Report"}</Text>
+                <Text style={styles.gridCardSub}>Excel tracker format</Text>
+              </Pressable>
+
+              <Pressable style={styles.gridCard} onPress={() => setShowTotalsModal(true)}>
+                <View style={[styles.gridIconBox, { backgroundColor: '#12294A' }]}>
+                  <Icon name="trending-up-outline" size={19} color="#D4AF6A" />
+                </View>
+                <Text style={styles.gridCardTitle}>View Totals</Text>
+                <Text style={styles.gridCardSub}>Collected vs distributed</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
 
       {/* Date Pickers */}
       {showFromPicker && (
@@ -2421,7 +2419,7 @@ interface Payment {
           )}
         </View>
       )}
-    </LinearGradient>
+    </View>
     </AnimatedScreen>
   );
 }
@@ -2431,51 +2429,145 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   content: { flex: 1, padding: 20 },
   scrollContent: { flex: 1 },
-  scrollContentContainer: { padding: 16, paddingBottom: 40 },
+  scrollContentContainer: { paddingHorizontal: 14, paddingBottom: 24, paddingTop: 0, marginTop: -14 },
   header: { display: 'none' },
-  reportHero: { backgroundColor: 'rgba(255,255,255,0.16)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.24)', borderRadius: 22, padding: 16, marginBottom: 14, gap: 12, flexDirection: 'column' },
-  reportBackBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.24)', alignSelf: 'flex-start' },
-  reportHeroIcon: { width: 52, height: 52, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
-  reportHeroCopy: { gap: 3 },
-  reportEyebrow: { color: 'rgba(255,255,255,0.76)', fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
-  title: { color: colors.white, fontSize: 30, fontWeight: '900', marginBottom: 2 },
-  subtitle: { color: 'rgba(255,255,255,0.82)', fontSize: 14, lineHeight: 20 },
   
-  dateSection: { marginBottom: 14, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 18, padding: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
-  sectionHeaderRow: { marginBottom: 12 },
-  sectionHint: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '700', marginTop: -8 },
-  sectionTitle: { color: colors.white, fontSize: 18, fontWeight: '900', marginBottom: 10 },
-  dateInputContainer: { marginBottom: 14 },
-  dateInputRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  dateLabel: { color: colors.white, fontSize: 16, fontWeight: '600' },
-  datePickerBtn: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 20, 
-    backgroundColor: colors.white, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
+  reportHeader: {
+    backgroundColor: '#12294A',
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 24,
   },
-  datePickerBtnText: { fontSize: 18 },
-  dateInput: { 
-    backgroundColor: colors.white, 
-    borderRadius: 12, 
-    padding: 14, 
-    fontSize: 16,
+  reportBackBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    backgroundColor: '#1E3A63',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  reportHeroIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#1E3A63',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  reportEyebrow: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#9FB2C9',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  reportTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 6,
+  },
+  reportSubtitle: {
+    fontSize: 13,
+    color: '#9FB2C9',
+  },
+
+  dateCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 0.5,
+    borderColor: '#E1E6ED',
+    borderRadius: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    marginBottom: 14,
+  },
+  dateCardTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#12294A',
+    marginBottom: 14,
+  },
+  dateFieldLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6B7A8D',
+    letterSpacing: 0.3,
+    marginBottom: 6,
+  },
+  dateInputWrapper: {
+    marginBottom: 6,
+  },
+  dayDisplayItalic: {
+    fontSize: 11.5,
+    color: '#9AA6B2',
+    fontStyle: 'italic',
+  },
+  mobileDateInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mobileDateInput: {
+    flex: 1,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)'
-  },
-  dayDisplay: { 
-    fontSize: 14, 
-    color: 'rgba(255,255,255,0.8)', 
-    fontStyle: 'italic', 
-    marginTop: 8,
-    textAlign: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    padding: 8,
+    borderColor: '#E1E6ED',
     borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13.5,
+    color: '#12294A',
+    backgroundColor: '#F9FAFC',
   },
-  
+  mobileDatePickerBtn: {
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#1E3A63',
+  },
+  mobileDatePickerBtnText: {
+    fontSize: 16,
+  },
+
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.white, marginBottom: 12 },
+  dateLabel: { fontSize: 12, fontWeight: '600', color: colors.white, marginBottom: 6 },
+  datePickerBtn: { padding: 10, borderRadius: 8, backgroundColor: '#1E3A63', alignItems: 'center', justifyContent: 'center' },
+  datePickerBtnText: { fontSize: 16 },
+  dateInput: { borderWidth: 1, borderColor: '#E1E6ED', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13.5, color: '#12294A', backgroundColor: '#F9FAFC' },
+
+  reportGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  gridCard: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 0.5,
+    borderColor: '#E1E6ED',
+    borderRadius: 12,
+    padding: 16,
+  },
+  gridIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  gridCardTitle: {
+    fontSize: 14.5,
+    fontWeight: '600',
+    color: '#12294A',
+    marginBottom: 3,
+  },
+  gridCardSub: {
+    fontSize: 11.5,
+    color: '#9AA6B2',
+  },
+
   generateBtn: { 
     backgroundColor: colors.white, 
     borderRadius: 16, 

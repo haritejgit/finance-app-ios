@@ -233,18 +233,17 @@ export default function HistoryScreen() {
 
   return (
     <AnimatedScreen style={styles.root}>
-      <LinearGradient colors={[colors.background, colors.backgroundSecondary]} style={styles.root}>
-        <SafeAreaView style={styles.safe}>
-          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-            
+      <View style={styles.bodyWrapper}>
+        <SafeAreaView edges={["top"]} style={styles.safe}>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
             {/* Header Hero */}
             <View style={styles.headerHero}>
               <Pressable style={styles.backBtn} onPress={() => router.back()} accessibilityLabel="Back to Dashboard">
-                <Icon name="arrow-back" size={20} color={colors.white} />
+                <Icon name="arrow-back" size={20} color="#D4AF6A" />
               </Pressable>
               <View style={styles.heroBrand}>
                 <View style={styles.heroIconBox}>
-                  <Icon name="time-outline" size={24} color={colors.white} />
+                  <Icon name="time-outline" size={20} color="#D4AF6A" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.heroTitle}>{t("historyLog")}</Text>
@@ -254,131 +253,160 @@ export default function HistoryScreen() {
                 </View>
               </View>
             </View>
-
-            {loading ? (
-              <View style={styles.loaderContainer}>
-                <ActivityIndicator size="large" color={colors.white} />
-                <Text style={styles.loaderText}>{t("loading")}</Text>
-              </View>
-            ) : (
-              <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-                <View style={styles.card}>
-                  <View style={styles.datePickerRow}>
-                    <View style={[styles.inputContainer, { flex: 1 }]}>
-                      <Text style={styles.inputLabel}>{t("startDate")}</Text>
-                      <TextInput
-                        style={styles.textInput}
-                        value={startDateStr}
-                        onChangeText={(txt) => handleDateChange(txt, setStartDateStr)}
-                        placeholder="DD/MM/YYYY"
-                        maxLength={10}
-                        keyboardType="numeric"
-                        placeholderTextColor="#78909c"
-                      />
-                    </View>
-                    <View style={[styles.inputContainer, { flex: 1 }]}>
-                      <Text style={styles.inputLabel}>{t("endDate")}</Text>
-                      <TextInput
-                        style={styles.textInput}
-                        value={endDateStr}
-                        onChangeText={(txt) => handleDateChange(txt, setEndDateStr)}
-                        placeholder="DD/MM/YYYY"
-                        maxLength={10}
-                        keyboardType="numeric"
-                        placeholderTextColor="#78909c"
-                      />
-                    </View>
-                  </View>
-
-                  <View style={styles.walletDivider} />
-
-                  {transactionsHistory.length === 0 ? (
-                    <Text style={styles.emptyText}>{t("noTransactions")}</Text>
-                  ) : (
-                    transactionsHistory.map((item) => {
-                      let typeLabel = "";
-                      let amountColor = "";
-                      let amountPrefix = "";
-
-                      switch (item.type) {
-                        case "INVESTMENT":
-                          typeLabel = isTe ? "పెట్టుబడి" : "Investment";
-                          amountColor = "#0284c7";
-                          amountPrefix = "+";
-                          break;
-                        case "COLLECTION":
-                          typeLabel = isTe ? "వసూలు" : "Collection";
-                          amountColor = "#16803a";
-                          amountPrefix = "+";
-                          break;
-                        case "LOAN":
-                          typeLabel = isTe ? "రుణం (పంపిణీ)" : "Loan (Disbursed)";
-                          amountColor = "#ea580c";
-                          amountPrefix = "-";
-                          break;
-                        case "EXPENSE":
-                          typeLabel = isTe ? "ఖర్చు" : "Expense";
-                          amountColor = "#d94841";
-                          amountPrefix = "-";
-                          break;
-                      }
-
-                      return (
-                        <View key={`${item.type}-${item.id}`} style={styles.logRow}>
-                          <View style={styles.logDetails}>
-                            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                              <Text style={[styles.logAmount, { color: amountColor }]}>
-                                {amountPrefix} Rs. {item.amount.toLocaleString("en-IN")}
-                              </Text>
-                              <View style={{ backgroundColor: amountColor + "15", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                                <Text style={{ fontSize: 9, fontWeight: "800", color: amountColor, textTransform: "uppercase" }}>
-                                  {typeLabel}
-                                </Text>
-                              </View>
-                            </View>
-                            <Text style={styles.logDesc}>{item.desc}</Text>
-                            <Text style={styles.logDate}>{formatDateTime(item.date)}</Text>
-                            {item.mode ? (
-                              <Text style={styles.logDate}>Paid via {item.mode}</Text>
-                            ) : null}
-                          </View>
-                        </View>
-                      );
-                    })
-                  )}
-                </View>
-              </ScrollView>
-            )}
           </KeyboardAvoidingView>
         </SafeAreaView>
-      </LinearGradient>
+
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          {loading ? (
+            <View style={styles.loaderContainer}>
+              <ActivityIndicator size="large" color="#12294A" />
+              <Text style={styles.loaderText}>{t("loading")}</Text>
+            </View>
+          ) : (
+            <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+              {/* Date Picker Card */}
+              <View style={[styles.card, styles.dateCard]}>
+                <View style={styles.datePickerRow}>
+                  <View style={[styles.inputContainer, { flex: 1 }]}>
+                    <Text style={styles.inputLabel}>{t("startDate")}</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      value={startDateStr}
+                      onChangeText={(txt) => handleDateChange(txt, setStartDateStr)}
+                      placeholder="DD/MM/YYYY"
+                      maxLength={10}
+                      keyboardType="numeric"
+                      placeholderTextColor="#9AA6B2"
+                    />
+                  </View>
+                  <View style={[styles.inputContainer, { flex: 1 }]}>
+                    <Text style={styles.inputLabel}>{t("endDate")}</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      value={endDateStr}
+                      onChangeText={(txt) => handleDateChange(txt, setEndDateStr)}
+                      placeholder="DD/MM/YYYY"
+                      maxLength={10}
+                      keyboardType="numeric"
+                      placeholderTextColor="#9AA6B2"
+                    />
+                  </View>
+                </View>
+              </View>
+
+              {/* Transactions List Card */}
+              <View style={[styles.card, styles.txCard]}>
+                {transactionsHistory.length === 0 ? (
+                  <Text style={styles.emptyText}>{t("noTransactions")}</Text>
+                ) : (
+                  transactionsHistory.map((item, index) => {
+                    let typeLabel = "";
+                    let amountColor = "";
+                    let amountPrefix = "";
+                    let badgeBg = "";
+
+                    switch (item.type) {
+                      case "INVESTMENT":
+                        typeLabel = isTe ? "పెట్టుబడి" : "INVESTMENT";
+                        amountColor = "#0284c7";
+                        amountPrefix = "+";
+                        badgeBg = "#e0f2fe";
+                        break;
+                      case "COLLECTION":
+                        typeLabel = isTe ? "వసూలు" : "COLLECTION";
+                        amountColor = "#1E7A4C";
+                        amountPrefix = "+";
+                        badgeBg = "#E4F3EA";
+                        break;
+                      case "LOAN":
+                        typeLabel = isTe ? "రుణం (పంపిణీ)" : "LOAN";
+                        amountColor = "#ea580c";
+                        amountPrefix = "-";
+                        badgeBg = "#ffedd5";
+                        break;
+                      case "EXPENSE":
+                        typeLabel = isTe ? "ఖర్చు" : "EXPENSE";
+                        amountColor = "#d94841";
+                        amountPrefix = "-";
+                        badgeBg = "#fee2e2";
+                        break;
+                    }
+
+                    const isLast = index === transactionsHistory.length - 1;
+
+                    return (
+                      <View key={`${item.type}-${item.id}`} style={[styles.logRow, isLast && styles.logRowLast]}>
+                        <View style={styles.logDetails}>
+                          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                            <Text style={styles.logDesc}>{item.desc}</Text>
+                            <Text style={[styles.logAmount, { color: amountColor }]}>
+                              {amountPrefix} Rs. {item.amount.toLocaleString("en-IN")}
+                            </Text>
+                          </View>
+                          
+                          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
+                            <View style={{ gap: 2 }}>
+                              <Text style={styles.logDate}>{formatDateTime(item.date)}</Text>
+                              {item.mode ? (
+                                <Text style={styles.logMode}>Paid via {item.mode}</Text>
+                              ) : null}
+                            </View>
+                            <View style={[styles.typeBadge, { backgroundColor: badgeBg }]}>
+                              <Text style={[styles.typeBadgeText, { color: amountColor }]}>
+                                {typeLabel}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })
+                )}
+              </View>
+            </ScrollView>
+          )}
+        </KeyboardAvoidingView>
+      </View>
     </AnimatedScreen>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  safe: { flex: 1 },
-  headerHero: { paddingHorizontal: 20, paddingVertical: 24, gap: 12 },
-  backBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: "rgba(255, 255, 255, 0.15)", alignItems: "center", justifyContent: "center" },
+  bodyWrapper: { flex: 1, backgroundColor: "#F4F6F9" },
+  safe: { backgroundColor: "#12294A" },
+  headerHero: { paddingHorizontal: 20, paddingVertical: 16, gap: 16, backgroundColor: "#12294A" },
+  backBtn: { width: 32, height: 32, borderRadius: 9, backgroundColor: "#1E3A63", alignItems: "center", justifyContent: "center" },
   heroBrand: { flexDirection: "row", alignItems: "center", gap: 14 },
-  heroIconBox: { width: 48, height: 48, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center" },
-  heroTitle: { fontSize: 24, fontWeight: "900", color: "#FFFFFF" },
-  heroSubtitle: { fontSize: 13, color: "rgba(255,255,255,0.76)" },
+  heroIconBox: { width: 38, height: 38, borderRadius: 10, backgroundColor: "#1E3A63", alignItems: "center", justifyContent: "center" },
+  heroTitle: { fontSize: 22, fontWeight: "700", color: "#FFFFFF" },
+  heroSubtitle: { fontSize: 13, color: "#9FB2C9" },
+  
   loaderContainer: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
-  loaderText: { fontSize: 14, color: "rgba(255,255,255,0.75)", fontWeight: "600" },
+  loaderText: { fontSize: 14, color: "#12294A", fontWeight: "600" },
+  
   scroll: { flex: 1 },
-  scrollContainer: { paddingHorizontal: 16, paddingBottom: 40 },
-  card: { backgroundColor: "#FFFFFF", borderRadius: 18, padding: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  scrollContainer: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 16, gap: 16 },
+  
+  card: { backgroundColor: "#FFFFFF", borderWidth: 0.5, borderColor: "#E1E6ED", borderRadius: 12 },
+  dateCard: { padding: 18 },
+  txCard: { paddingHorizontal: 16, paddingVertical: 4 },
+  
   datePickerRow: { flexDirection: "row", gap: 12 },
   inputContainer: { gap: 6, flex: 1 },
-  inputLabel: { fontSize: 11, fontWeight: "800", color: "#546e7a", textTransform: "uppercase" },
-  textInput: { height: 48, borderRadius: 12, borderWidth: 1, borderColor: "#cfd8dc", paddingHorizontal: 12, fontSize: 15, color: "#1a252c", backgroundColor: "#fafafa" },
-  walletDivider: { height: 1, backgroundColor: "#eceff1", marginVertical: 16 },
-  emptyText: { textAlign: "center", paddingVertical: 40, color: "#78909c", fontSize: 14, fontWeight: "600" },
-  logRow: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#eceff1" },
+  inputLabel: { fontSize: 10.5, fontWeight: "600", color: "#6B7A8D", textTransform: "uppercase", letterSpacing: 0.3 },
+  textInput: { height: 40, borderRadius: 8, borderWidth: 1, borderColor: "#E1E6ED", paddingHorizontal: 10, fontSize: 13, color: "#12294A", backgroundColor: "#F9FAFC" },
+  
+  emptyText: { textAlign: "center", paddingVertical: 40, color: "#6B7A8D", fontSize: 14, fontWeight: "600" },
+  
+  logRow: { paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: "#EEF1F5" },
+  logRowLast: { borderBottomWidth: 0 },
   logDetails: { gap: 4 },
-  logAmount: { fontSize: 16, fontWeight: "900" },
-  logDesc: { fontSize: 14, fontWeight: "700", color: "#1a252c" },
-  logDate: { fontSize: 11, fontWeight: "600", color: "#78909c" },
+  logAmount: { fontSize: 16, fontWeight: "700" },
+  logDesc: { fontSize: 14, fontWeight: "600", color: "#12294A" },
+  logDate: { fontSize: 11.5, color: "#9AA6B2" },
+  logMode: { fontSize: 11.5, color: "#9AA6B2" },
+  
+  typeBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
+  typeBadgeText: { fontSize: 9.5, fontWeight: "700", textTransform: "uppercase" },
 });

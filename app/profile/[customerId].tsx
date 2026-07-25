@@ -1550,7 +1550,7 @@ export default function ProfileScreen() {
                   <Text style={styles.headerName} numberOfLines={1}>{customerDisplayName}</Text>
                   <Text style={styles.headerMeta} numberOfLines={1}>
                     Book no. {String(customer.numericalId).padStart(2, "0")}
-                    {customer.coName ? ` | C/O ${customer.coName}` : ""}
+                    {customer.coName ? ` | ${customer.coName}` : ""}
                   </Text>
                 </View>
                 <Text style={[styles.docsHeroPill, docsComplete ? styles.docsHeroPillComplete : styles.docsHeroPillPending]}>
