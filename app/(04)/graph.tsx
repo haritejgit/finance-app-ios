@@ -375,19 +375,19 @@ function VillageSelector({
 }) {
   return (
     <View style={{ marginBottom: 6 }}>
-      <Text style={{ color: Colors.nearBlack, fontSize: 11, fontWeight: "900", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>
+      <Text style={{ color: Colors.nearBlack, fontSize: 11, fontWeight: "900", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0 }}>
         Filter by Village
       </Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
         <Pressable
           style={[
             styles.periodChip,
-            { minWidth: 80, paddingHorizontal: 12, minHeight: 32, backgroundColor: "rgba(255,255,255,0.16)", borderRadius: 10 },
+            { minWidth: 80, paddingHorizontal: 12, minHeight: 32, backgroundColor: Colors.white, borderRadius: 10, borderWidth: 1, borderColor: Colors.borderLight },
             value === "ALL" && { backgroundColor: Colors.white }
           ]}
           onPress={() => onChange("ALL")}
         >
-          <Text style={[{ fontSize: 11, fontWeight: "900", color: "rgba(255,255,255,0.82)" }, value === "ALL" && { color: Colors.nearBlack }]}>
+          <Text style={[{ fontSize: 11, fontWeight: "900", color: Colors.textMuted }, value === "ALL" && { color: Colors.nearBlack }]}>
             All Villages
           </Text>
         </Pressable>
@@ -398,12 +398,12 @@ function VillageSelector({
               key={v.id}
               style={[
                 styles.periodChip,
-                { minWidth: 80, paddingHorizontal: 12, minHeight: 32, backgroundColor: "rgba(255,255,255,0.16)", borderRadius: 10 },
+                { minWidth: 80, paddingHorizontal: 12, minHeight: 32, backgroundColor: Colors.white, borderRadius: 10, borderWidth: 1, borderColor: Colors.borderLight },
                 active && { backgroundColor: Colors.white }
               ]}
               onPress={() => onChange(v.id)}
             >
-              <Text style={[{ fontSize: 11, fontWeight: "900", color: "rgba(255,255,255,0.82)" }, active && { color: Colors.nearBlack }]}>
+              <Text style={[{ fontSize: 11, fontWeight: "900", color: Colors.textMuted }, active && { color: Colors.nearBlack }]}>
                 {v.name}
               </Text>
             </Pressable>
@@ -588,7 +588,7 @@ export default function GraphScreen() {
         <LinearGradient colors={Gradients.screenBg} style={styles.root}>
           <SafeAreaView style={styles.safe}>
             <View style={styles.loading}>
-              <ActivityIndicator size="large" color="#FFFFFF" />
+              <ActivityIndicator size="large" color={Colors.nearBlack} />
               <Text style={styles.loadingText}>Loading business intelligence...</Text>
             </View>
           </SafeAreaView>
@@ -603,7 +603,7 @@ export default function GraphScreen() {
         <SafeAreaView style={styles.safe}>
           <ScrollView
             contentContainerStyle={styles.container}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(false); }} tintColor="#FFFFFF" />}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(false); }} tintColor={Colors.nearBlack} />}
           >
             <View style={styles.content}>
               <View style={styles.hero}>
@@ -881,7 +881,7 @@ const styles = StyleSheet.create({
   container: { padding: 16, paddingBottom: 34 },
   content: { width: "100%", maxWidth: Math.min(screenWidth - 32, 1120), alignSelf: "center", gap: 13 },
   loading: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
-  loadingText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
+  loadingText: { color: Colors.nearBlack, fontSize: 15, fontWeight: "900" },
   hero: {
     borderRadius: 22,
     backgroundColor: "#FFFFFF",
@@ -904,10 +904,10 @@ const styles = StyleSheet.create({
   netPillGood: { backgroundColor: Colors.frozenWater },
   netPillRisk: { backgroundColor: "#fde7e5" },
   netPillText: { fontSize: 12, fontWeight: "900" },
-  periodSelector: { flexDirection: "row", gap: 8, backgroundColor: "rgba(255,255,255,0.16)", borderRadius: 14, padding: 5 },
+  periodSelector: { flexDirection: "row", gap: 8, backgroundColor: Colors.white, borderRadius: 14, padding: 5, borderWidth: 1, borderColor: Colors.borderLight },
   periodChip: { flex: 1, minHeight: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
-  periodChipOn: { backgroundColor: Colors.white },
-  periodChipText: { color: "rgba(255,255,255,0.82)", fontSize: 11, fontWeight: "900" },
+  periodChipOn: { backgroundColor: Colors.frozenWater },
+  periodChipText: { color: Colors.textMuted, fontSize: 11, fontWeight: "900" },
   periodChipTextOn: { color: Colors.nearBlack },
 
   // Cash Position Card

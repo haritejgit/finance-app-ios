@@ -270,7 +270,7 @@ export default function VillageListScreen() {
                 )}
                 ListEmptyComponent={
                   <View style={styles.emptyContainer}>
-                    <Icon name="home-outline" size={48} color="rgba(255,255,255,0.7)" />
+                    <Icon name="home-outline" size={48} color={colors.textSecondary} />
                     <Text style={styles.emptyTitle}>{t("noVillages")}</Text>
                     <Text style={styles.emptySubtitle}>{t("addVillageSubtitle")}</Text>
                   </View>
@@ -507,8 +507,8 @@ const styles = StyleSheet.create({
   content: { flex: 1, width: "100%", maxWidth: Math.min(screenWidth - 32, 430), alignSelf: "center", paddingTop: 8 },
   headerContainer: { marginBottom: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   headerLeft: { flex: 1 },
-  header: { color: "#FFFFFF", fontSize: 28, fontWeight: "700" },
-  sub: { color: "rgba(255,255,255,0.7)" },
+  header: { color: "#12294A", fontSize: 28, fontWeight: "700" },
+  sub: { color: "#4B5A6D" },
   statsContainer: { flexDirection: "row", gap: 12, marginBottom: 16 },
   statCard: { flex: 1, borderRadius: 18, padding: 14, alignItems: "center", shadowColor: "#0f172a", shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 3 },
   statNumber: { fontSize: 20, fontWeight: "700", marginBottom: 2 },
@@ -529,8 +529,8 @@ const styles = StyleSheet.create({
   villageSubtext: { fontSize: 13 },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 16 },
-  emptyTitle: { color: "#FFFFFF", fontSize: 18, fontWeight: "800", marginBottom: 8 },
-  emptySubtitle: { color: "rgba(255,255,255,0.72)", fontSize: 14 },
+  emptyTitle: { color: "#12294A", fontSize: 18, fontWeight: "800", marginBottom: 8 },
+  emptySubtitle: { color: "#4B5A6D", fontSize: 14 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
   loadingText: { fontSize: 16, fontWeight: "600" },
   modalOverlay: { 
