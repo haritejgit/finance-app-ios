@@ -355,6 +355,11 @@ const CustomerItem = React.memo(function CustomerItem({
           style={[styles.premiumBadge, { backgroundColor: rowTone.accent }]}
           textStyle={[styles.premiumBadgeText, { color: rowTone.badgeText }]}
         />
+        {!!customer.coName && (
+          <Text style={styles.coNameUnder} numberOfLines={2}>
+            C/O {language === "te" ? translateTelugu(customer.coName) : customer.coName}
+          </Text>
+        )}
       </View>
 
       <View style={styles.centerCol}>
@@ -368,13 +373,6 @@ const CustomerItem = React.memo(function CustomerItem({
             </Text>
           ) : null}
         </View>
-        {!!customer.coName && (
-          <View style={styles.coNameRow}>
-            <Text style={styles.coNameText} numberOfLines={1}>
-              C/O {language === "te" ? translateTelugu(customer.coName) : customer.coName}
-            </Text>
-          </View>
-        )}
 
         <View style={styles.phoneIconRow}>
           {customer.phone ? (
@@ -1575,16 +1573,16 @@ export default function CustomerListScreen() {
           >
             <View style={styles.leftCol}>
               <CustomerIdBadge numericalId={item.numericalId} id={item.id} style={{ ...styles.premiumBadge, backgroundColor: "#6B7280" }} textStyle={styles.premiumBadgeText} />
+              {!!item.coName && (
+                <Text style={[styles.coNameUnder, { color: "#6B7280" }]} numberOfLines={2}>
+                  C/O {item.coName}
+                </Text>
+              )}
             </View>
             <View style={styles.centerCol}>
               <Text style={[styles.cardName, { color: "#6B7280" }]} numberOfLines={1}>
                 {item.name} <Text style={{ fontSize: 10, color: "#9CA3AF" }}>[Closed]</Text>
               </Text>
-              {!!item.coName && (
-                <View style={styles.coNameRow}>
-                  <Text style={[styles.coNameText, { color: "#6B7280" }]} numberOfLines={1}>C/O {item.coName}</Text>
-                </View>
-              )}
               <Text style={styles.cardPhone}>{item.phone || "\u2014"}</Text>
               {closedLoan ? (
                 <Text style={[styles.cardAmount, { color: "#9CA3AF" }]}>Last Balance: Rs.{Math.round(closedLoan.balanceAmount).toLocaleString("en-IN")}</Text>
@@ -2651,7 +2649,7 @@ const styles = StyleSheet.create({
   leftCol: {
     alignItems: "center",
     justifyContent: "center",
-    width: 38,
+    width: 58,
   },
   premiumBadge: {
     width: 38,
@@ -2679,7 +2677,8 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   coNameUnder: {
-    fontSize: 9,
+    fontSize: 8.5,
+    lineHeight: 10,
     color: "#1F2937",
     fontWeight: "800",
     marginTop: 2,
