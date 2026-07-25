@@ -131,6 +131,23 @@ function sanitizeCustomerInput<T extends Partial<Customer>>(input: T): T {
   } as T;
 }
 
+function normalizeCustomerRecord(data: any): Customer {
+  const coName = [
+    data.coName,
+    data.careOfName,
+    data.co_name,
+    data.c_o_name,
+    data.co,
+    data.careOf,
+  ]
+    .map((value) => cleanText(value))
+    .find(Boolean) ?? "";
+  return {
+    ...data,
+    coName,
+  } as Customer;
+}
+
 function id() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
@@ -231,7 +248,7 @@ export async function getCustomers(userId: string, villageId: string, useCache =
     where("isActive", "==", true)
   );
   const snap = await getDocs(q);
-  const customers = snap.docs.map((d) => d.data() as Customer);
+  const customers = snap.docs.map((d) => normalizeCustomerRecord(d.data()));
   setCache(cacheKey, customers);
   return customers;
 }
@@ -261,7 +278,7 @@ export async function getCustomersPage(
   try {
     const snap = await getDocs(pageQuery);
     const docs = snap.docs.slice(0, pageSize);
-    const customers = docs.map((d) => d.data() as Customer);
+    const customers = docs.map((d) => normalizeCustomerRecord(d.data()));
     if (!cursor) {
       await AsyncStorage.setItem(storageKey, JSON.stringify(customers)).catch(() => undefined);
     }
@@ -274,7 +291,7 @@ export async function getCustomersPage(
     if (!cursor) {
       const cached = await AsyncStorage.getItem(storageKey).catch(() => null);
       if (cached) {
-        return { customers: JSON.parse(cached) as Customer[], cursor: null, hasMore: false };
+        return { customers: (JSON.parse(cached) as any[]).map(normalizeCustomerRecord), cursor: null, hasMore: false };
       }
     }
     throw error;
@@ -296,7 +313,7 @@ export async function fetchCustomersPage(villageId: string, reset = false) {
 
   const snap = await getDocs(pageQuery);
   lastCustomerPageDoc = snap.docs[snap.docs.length - 1] ?? null;
-  return snap.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as object) }));
+  return snap.docs.map((docSnap) => normalizeCustomerRecord({ id: docSnap.id, ...(docSnap.data() as object) }));
 }
 
 export type CustomerSearchResult = Customer & {
@@ -319,7 +336,7 @@ export async function getAllActiveCustomersWithVillages(userId: string): Promise
   );
 
   return customersSnap.docs
-    .map((d) => d.data() as Customer)
+    .map((d) => normalizeCustomerRecord(d.data()))
     // NOTE: UI-only filter. Customer documents in Firestore are NOT modified.
     .filter((customer) => filterCustomersWithVillage([customer]).length > 0)
     .filter((customer) => customer.isActive !== false)
@@ -2159,7 +2176,7 @@ export async function getClosedCustomers(userId: string, villageId: string) {
     where("isActive", "==", false)
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data() as Customer);
+  return snap.docs.map((d) => normalizeCustomerRecord(d.data()));
 }
 
 export async function closeCustomer(customerId: string, userId: string) {
@@ -2318,7 +2335,7 @@ export async function getCustomerByAadhar(userId: string, aadhar: string, exclud
   );
   const indexedSnap = await getDocs(indexedQ);
   const indexedMatch = indexedSnap.docs
-    .map((d) => d.data() as Customer)
+    .map((d) => normalizeCustomerRecord(d.data()))
     .find((customer) => customer.isActive !== false && customer.id !== excludeCustomerId);
   if (indexedMatch) return indexedMatch;
 
@@ -2326,7 +2343,7 @@ export async function getCustomerByAadhar(userId: string, aadhar: string, exclud
   const q = query(coll.customers, where("userId", "==", userId), limit(300));
   const snap = await getDocs(q);
   return snap.docs
-    .map((d) => d.data() as Customer)
+    .map((d) => normalizeCustomerRecord(d.data()))
     .find((customer) =>
       customer.isActive !== false &&
       customer.id !== excludeCustomerId &&

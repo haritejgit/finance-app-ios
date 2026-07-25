@@ -216,9 +216,9 @@ fun CustomerItem(
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.Gray
                     )
-                    if (customer.coId != null) {
+                    if (!customer.coName.isNullOrBlank()) {
                         Text(
-                            text = " • C/O: ${customer.coId}",
+                            text = " - C/O: ${customer.coName}",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.Gray
                         )
