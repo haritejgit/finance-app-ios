@@ -24,7 +24,6 @@ import {
 import { useAuth } from "../../src/auth-context";
 import { AnimatedListItem } from "../../src/components/AnimatedListItem";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
-import { CustomerIdBadge } from "../../src/components/CustomerIdBadge";
 import { PhoneLink } from "../../src/components/PhoneLink";
 import Icon from "../../src/Icon";
 import { LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
@@ -141,7 +140,6 @@ const PaymentHistory = memo(function PaymentHistory({
   onDelete?: (payment: any) => void;
   onShare?: (payment: any) => void;
 }) {
-  const { colors } = useTheme();
   const { user, userProfile } = useAuth();
   const isOwner = !userProfile || userProfile.role !== "nested";
 
@@ -149,8 +147,8 @@ const PaymentHistory = memo(function PaymentHistory({
     return (
       <View style={styles.emptyHistoryContainer}>
         <Icon name="document-text-outline" size={44} color="#94A3B8" />
-        <Text style={[styles.emptyHistoryTitle, { color: "#FFFFFF" }]}>No Transactions Found</Text>
-        <Text style={[styles.emptyHistorySubtitle, { color: "#94A3B8" }]}>Payment records will appear here</Text>
+        <Text style={styles.emptyHistoryTitle}>No Transactions Found</Text>
+        <Text style={styles.emptyHistorySubtitle}>Payment records will appear here</Text>
       </View>
     );
   }
@@ -163,6 +161,8 @@ const PaymentHistory = memo(function PaymentHistory({
         const isDue = p.paymentType === "DUE" || p.type === "DUE";
         const isRenewal = p.paymentType === "RENEWAL_CLOSURE";
         const canManage = isOwner || p.isPendingSync || (p.nestedUid && p.nestedUid === user?.uid);
+        const historyIcon = isDue ? "close" : isRenewal ? "refresh" : p.paymentMode === "PHONE" ? "phone-portrait-outline" : "cash-outline";
+        const historyTitle = isDue ? (p.isAutoDue ? "Auto due marked" : "Due marked") : isRenewal ? "Loan renewal closure" : p.paymentMode === "PHONE" ? "PhonePe payment" : "Cash payment";
 
         return (
           <AnimatedListItem key={p.id || `pmt_${index}`} index={index}>
@@ -170,17 +170,11 @@ const PaymentHistory = memo(function PaymentHistory({
               <View style={styles.vibrantCardHeader}>
                 {/* Left: Status Icon & Details */}
                 <View style={styles.vibrantHeaderLeft}>
-                  <View style={[styles.vibrantIconBadge, { backgroundColor: isDue ? "#EF4444" : isRenewal ? "#3B82F6" : "#10B981" }]}>
-                    <Icon name={isDue ? "close" : isRenewal ? "refresh" : "checkmark"} size={13} color="#FFFFFF" />
+                  <View style={[styles.vibrantIconBadge, isDue ? styles.vibrantIconDue : styles.vibrantIconPaid]}>
+                    <Icon name={historyIcon as any} size={14} color={isDue ? "#B03A3A" : "#1E7A4C"} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.vibrantCardTitle}>
-                      {isDue 
-                        ? (p.isAutoDue ? "Auto Due Marked" : "Due Marked")
-                        : isRenewal 
-                        ? "Loan Renewal Closure"
-                        : p.paymentMode === "PHONE" ? "📱 PhonePe Payment" : "💵 Cash Payment"}
-                    </Text>
+                    <Text style={styles.vibrantCardTitle}>{historyTitle}</Text>
                     <Text style={styles.vibrantCardSubtext}>
                       {isDue ? formatPersonalCycleRange(getPersonalCycleStartTs(p.paymentDate, cycleStartDay)) : (
                         <>
@@ -202,7 +196,7 @@ const PaymentHistory = memo(function PaymentHistory({
                   ) : (
                     <View style={styles.vibrantAmountPill}>
                       <Text style={styles.vibrantAmountText}>
-                        +₹{Math.round(p.amountPaid || 0).toLocaleString("en-IN")}
+                        +Rs.{Math.round(p.amountPaid || 0).toLocaleString("en-IN")}
                       </Text>
                     </View>
                   )}
@@ -214,20 +208,20 @@ const PaymentHistory = memo(function PaymentHistory({
                 <View style={styles.vibrantActionRow}>
                   {onEdit && canManage && (
                     <Pressable style={styles.vibrantActionBtn} onPress={() => onEdit(p)}>
-                      <Icon name="create-outline" size={13} color="#60A5FA" />
-                      <Text style={[styles.vibrantActionText, { color: "#60A5FA" }]}>Edit</Text>
+                      <Icon name="create-outline" size={13} color="#4B5A6D" />
+                      <Text style={styles.vibrantActionText}>Edit</Text>
                     </Pressable>
                   )}
                   {onDelete && canManage && (
                     <Pressable style={styles.vibrantActionBtn} onPress={() => onDelete(p)}>
-                      <Icon name="trash-outline" size={13} color="#F87171" />
-                      <Text style={[styles.vibrantActionText, { color: "#F87171" }]}>Delete</Text>
+                      <Icon name="trash-outline" size={13} color="#B03A3A" />
+                      <Text style={[styles.vibrantActionText, styles.vibrantActionDanger]}>Delete</Text>
                     </Pressable>
                   )}
                   {onShare && (
-                    <Pressable style={[styles.vibrantActionBtn, { backgroundColor: "rgba(16,185,129,0.15)" }]} onPress={() => onShare(p)}>
-                      <Icon name="share-social-outline" size={13} color="#34D399" />
-                      <Text style={[styles.vibrantActionText, { color: "#34D399" }]}>Share</Text>
+                    <Pressable style={styles.vibrantActionBtn} onPress={() => onShare(p)}>
+                      <Icon name="share-social-outline" size={13} color="#1E7A4C" />
+                      <Text style={[styles.vibrantActionText, styles.vibrantActionSuccess]}>Share</Text>
                     </Pressable>
                   )}
                 </View>
@@ -1508,9 +1502,21 @@ export default function ProfileScreen() {
     }
   };
 
+  const customerDisplayName = customer?.name ? (language === "te" ? translateTelugu(customer.name) : customer.name) : "Profile";
+  const docsComplete = !!customer && customer.aadharSubmitted && customer.passportPhotoSubmitted && (!customer.chequeRequired || customer.chequeSubmitted);
+  const customerInitials = customer?.name
+    ? customer.name
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase())
+        .join("")
+    : "CU";
+  const maskedAadhaar = customer?.aadhar ? `Aadhar ...${customer.aadhar.replace(/\D/g, "").slice(-4) || customer.aadhar.slice(-4)}` : "Aadhar not set";
+
   return (
     <AnimatedScreen style={styles.root}>
-    <LinearGradient colors={[colors.background, colors.backgroundSecondary]} style={styles.root}>
+    <LinearGradient colors={["#F4F6F9", "#F4F6F9"]} style={styles.root}>
       <SafeAreaView style={styles.safe}>
         {isLoading && (
           <View style={styles.loadingContainer}>
@@ -1545,32 +1551,32 @@ export default function ProfileScreen() {
           <ScrollView contentContainerStyle={styles.scrollContent}>
             <View style={styles.content}>
             {/* Header Card */}
-            <View style={[styles.headerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.headerCard}>
               <View style={styles.profileHeaderTop}>
-                <CustomerIdBadge numericalId={customer.numericalId} id={customer.id} />
-                <Text style={[styles.headerName, { color: colors.primary }]}>{customer?.name ? (language === "te" ? translateTelugu(customer.name) : customer.name) : "Profile"}</Text>
-              </View>
-              {!!customer && (
-                <View style={styles.headerInfo}>
-                  <View style={styles.headerInfoRow}>
-                    <Icon name="person" size={18} color={colors.blue2} style={{marginRight: 8}} />
-                    <Text style={[styles.headerText, { color: colors.textSecondary }]}>Book No: {String(customer.numericalId).padStart(2, "0")}</Text>
-                  </View>
-                  <View style={styles.headerInfoRow}>
-                    <PhoneLink number={customer.phone} textStyle={[styles.headerText, styles.phoneLink, { color: colors.primary }]} />
-                  </View>
-                  <View style={styles.headerInfoRow}>
-                    <Icon name="id-card" size={18} color={colors.blue2} style={{marginRight: 8}} />
-                    <Text style={[styles.headerText, { color: colors.textSecondary }]}>Aadhar: {customer.aadhar}</Text>
-                  </View>
-                  <View style={styles.headerInfoRow}>
-                    <Icon name="checkmark" size={18} color={colors.blue2} style={{marginRight: 8}} />
-                    <Text style={[styles.headerText, { color: colors.textSecondary }]}>
-                      Docs: {customer.aadharSubmitted ? "Aadhar" : "Aadhar pending"} | {customer.passportPhotoSubmitted ? "Photo" : "Photo pending"}{customer.chequeRequired ? ` | ${customer.chequeSubmitted ? "Cheque" : "Cheque pending"}` : ""}
-                    </Text>
-                  </View>
+                <View style={styles.profileAvatar}>
+                  <Text style={styles.profileAvatarText}>{customerInitials}</Text>
                 </View>
-              )}
+                <View style={styles.profileTitleBlock}>
+                  <Text style={styles.headerName} numberOfLines={1}>{customerDisplayName}</Text>
+                  <Text style={styles.headerMeta} numberOfLines={1}>
+                    Book no. {String(customer.numericalId).padStart(2, "0")}
+                    {customer.coName ? ` | C/O ${customer.coName}` : ""}
+                  </Text>
+                </View>
+                <Text style={[styles.docsHeroPill, docsComplete ? styles.docsHeroPillComplete : styles.docsHeroPillPending]}>
+                  {docsComplete ? "Docs complete" : "Docs pending"}
+                </Text>
+              </View>
+              <View style={styles.headerInfo}>
+                <View style={styles.headerInfoRow}>
+                  <Icon name="call-outline" size={15} color="#C4D2E2" />
+                  <PhoneLink number={customer.phone} textStyle={styles.headerText} />
+                </View>
+                <View style={styles.headerInfoRow}>
+                  <Icon name="id-card-outline" size={15} color="#C4D2E2" />
+                  <Text style={styles.headerText}>{maskedAadhaar}</Text>
+                </View>
+              </View>
             </View>
 
             <View style={[styles.docsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -1602,16 +1608,16 @@ export default function ProfileScreen() {
 
             {/* Stats Cards */}
             <View style={styles.statsRow}>
-              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>CIBIL SCORE</Text>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>CIBIL SCORE</Text>
                 <View style={styles.scoreContainer}>
-                  <Text style={[styles.scoreValue, { color: colors.primary }]}>{creditSummary.score}</Text>
-                  <Text style={[styles.scoreRating, { color: creditSummary.score >= 700 ? colors.success : colors.warning }]}>{creditSummary.band}</Text>
+                  <Text style={styles.scoreValue}>{creditSummary.score}</Text>
+                  <Text style={[styles.scoreRating, creditSummary.score < 700 && { color: "#9A6B1E" }]}>{creditSummary.band}</Text>
                 </View>
               </View>
-              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>CURRENT BALANCE</Text>
-                <Text style={[styles.balanceValue, { color: colors.primary }]}>Rs.{localLoan?.balanceAmount?.toFixed(2) ?? "0.00"}</Text>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>CURRENT BALANCE</Text>
+                <Text style={styles.balanceValue}>Rs.{localLoan?.balanceAmount?.toFixed(2) ?? "0.00"}</Text>
               </View>
             </View>
 
@@ -1630,7 +1636,7 @@ export default function ProfileScreen() {
                         styles.repaymentFill,
                         {
                           width: `${repaymentProgress.percent}%`,
-                          backgroundColor: repaymentProgress.percent >= 100 ? "#1E7A4C" : repaymentProgress.percent > 50 ? "#12294A" : "#FFB347",
+                          backgroundColor: "#D4AF6A",
                         },
                       ]}
                     />
@@ -1642,7 +1648,7 @@ export default function ProfileScreen() {
                   <Text
                     style={[
                       styles.disbursementBadge,
-                      { backgroundColor: disbursementMode === "PHONE" ? "#5F259F" : "#1565C0" },
+                      { backgroundColor: disbursementMode === "PHONE" ? "#8A6B2F" : "#12294A" },
                     ]}
                   >
                     {disbursementMode === "PHONE" ? "PhonePe" : "Cash"}
@@ -1667,7 +1673,7 @@ export default function ProfileScreen() {
                 <Text style={[styles.timelineTitle, { color: colors.text }]}>Payment Timeline</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.timelineRow}>
                   {paymentTimeline.map((week) => {
-                    const circleColor = week.status === "paid" ? "#00C896" : week.status === "overdue" ? "#EF5350" : "#607D8B";
+                    const circleColor = week.status === "paid" ? "#1E7A4C" : week.status === "overdue" ? "#B03A3A" : "#9AA6B2";
                     return (
                       <Pressable
                         key={week.index}
@@ -1721,7 +1727,7 @@ export default function ProfileScreen() {
             )}
             <View style={styles.actionGrid}>
               <Pressable
-                style={[styles.actionBtn, noTextSelection, { backgroundColor: colors.paidGreen }, !localLoan || (localLoan.balanceAmount <= 0) && styles.actionBtnDisabled]}
+                style={[styles.actionBtn, styles.actionBtnPrimary, noTextSelection, !localLoan || (localLoan.balanceAmount <= 0) && styles.actionBtnDisabled]}
                 onPress={() => {
                   if (localLoan && localLoan.balanceAmount > 0) {
                     setPaymentDateInput(formatDateInput(Date.now()));
@@ -1732,12 +1738,12 @@ export default function ProfileScreen() {
                 }}
                 disabled={!localLoan || localLoan.balanceAmount <= 0}
               >
-                <Icon name="cash" size={20} color={colors.white} style={{marginBottom: 4}} />
+                <Icon name="cash" size={18} color="#FFFFFF" />
                 <Text selectable={false} style={styles.actionLabel}>Pay</Text>
               </Pressable>
               {localLoan && localLoan.balanceAmount <= 0 && (
                 <Pressable
-                  style={[styles.actionBtn, noTextSelection, { backgroundColor: colors.missedRed }]}
+                  style={[styles.actionBtn, styles.actionBtnRenew, noTextSelection]}
                   onPress={() => {
                     Alert.alert(
                       "Loan Fully Paid",
@@ -1765,23 +1771,23 @@ export default function ProfileScreen() {
                     );
                   }}
                 >
-                  <Icon name="refresh" size={20} color={colors.white} style={{marginBottom: 4}} />
-                  <Text selectable={false} style={styles.actionLabel}>Close/Renew</Text>
+                  <Icon name="refresh" size={18} color="#9A6B1E" />
+                  <Text selectable={false} style={[styles.actionLabel, styles.actionLabelRenew]}>Close/Renew</Text>
                 </Pressable>
               )}
               <Pressable
-                style={[styles.actionBtn, noTextSelection, { backgroundColor: colors.missedRed }]}
+                style={[styles.actionBtn, styles.actionBtnDue, noTextSelection]}
                 onPress={() => {
                   setDueDateInput(formatDateInput(Date.now()));
                   setDueDateError("");
                   setDueOpen(true);
                 }}
               >
-                <Icon name="warning" size={20} color={colors.white} style={{marginBottom: 4}} />
-                <Text selectable={false} style={styles.actionLabel}>Due</Text>
+                <Icon name="warning" size={18} color="#B03A3A" />
+                <Text selectable={false} style={[styles.actionLabel, styles.actionLabelDue]}>Due</Text>
               </Pressable>
               <Pressable
-                style={[styles.actionBtn, noTextSelection, { backgroundColor: colors.amber }, !localLoan && styles.actionBtnDisabled]}
+                style={[styles.actionBtn, styles.actionBtnRenew, noTextSelection, !localLoan && styles.actionBtnDisabled]}
                 onPress={() => {
                   if (!localLoan) {
                     showToast("info", "No active loan", "This customer does not have an active loan to renew.");
@@ -1791,21 +1797,21 @@ export default function ProfileScreen() {
                 }}
                 disabled={!localLoan}
               >
-                <Icon name="refresh" size={20} color={colors.white} style={{marginBottom: 4}} />
-                <Text selectable={false} style={styles.actionLabel}>Renew</Text>
+                <Icon name="refresh" size={18} color="#9A6B1E" />
+                <Text selectable={false} style={[styles.actionLabel, styles.actionLabelRenew]}>Renew</Text>
               </Pressable>
             </View>
             
-            <View style={[styles.iconBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.iconBar}>
               {isOwner && (
-                <Pressable style={[styles.iconBtn, noTextSelection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={openEditModal}>
+                <Pressable style={[styles.iconBtn, noTextSelection]} onPress={openEditModal}>
                   <Icon name="person" size={21} color={colors.blue2} />
                   <Text selectable={false} style={[styles.iconBtnLabel, { color: colors.primary }]}>Edit</Text>
                 </Pressable>
               )}
               {customer && loan && (
                 <Pressable
-                  style={[styles.iconBtn, noTextSelection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}
+                  style={[styles.iconBtn, noTextSelection]}
                   onPress={() => {
                     setSelectedQrCustomer({ customer, loan });
                     setQrCustomAmount(Math.round(getSuggestedPaymentAmount(loan)).toString());
@@ -1815,55 +1821,55 @@ export default function ProfileScreen() {
                   <Text selectable={false} style={[styles.iconBtnLabel, { color: colors.primary }]}>UPI QR</Text>
                 </Pressable>
               )}
-              <Pressable style={[styles.iconBtn, noTextSelection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={exportLedger}>
+              <Pressable style={[styles.iconBtn, noTextSelection]} onPress={exportLedger}>
                 <Icon name="download-outline" size={21} color={colors.blue2} />
                 <Text selectable={false} style={[styles.iconBtnLabel, { color: colors.primary }]}>Ledger</Text>
               </Pressable>
               <Pressable
-                style={[styles.iconBtn, noTextSelection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }, !hasCustomerCoordinates(customer) && styles.iconBtnDisabled]}
+                style={[styles.iconBtn, noTextSelection, !hasCustomerCoordinates(customer) && styles.iconBtnDisabled]}
                 onPress={openGoogleMaps}
                 disabled={!hasCustomerCoordinates(customer)}
               >
                 <Icon name="location" size={21} color={hasCustomerCoordinates(customer) ? colors.teal : colors.gray} />
                 <Text selectable={false} style={[styles.iconBtnLabel, { color: colors.primary }]}>Map</Text>
               </Pressable>
-              <Pressable style={[styles.iconBtn, noTextSelection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={openMoveVillageModal}>
+              <Pressable style={[styles.iconBtn, noTextSelection]} onPress={openMoveVillageModal}>
                 <Icon name="arrow-forward-circle-outline" size={21} color={colors.amber} />
                 <Text selectable={false} style={[styles.iconBtnLabel, { color: colors.primary }]}>Move</Text>
               </Pressable>
               {(!isOwner && !(customer as any).isTemp) ? null : (
-                <Pressable style={[styles.iconBtn, noTextSelection, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={() => setDeleteCustomerConfirmOpen(true)}>
+                <Pressable style={[styles.iconBtn, noTextSelection]} onPress={() => setDeleteCustomerConfirmOpen(true)}>
                   <Icon name="trash" size={21} color={colors.missedRed} />
                   <Text selectable={false} style={[styles.iconBtnLabel, styles.iconBtnLabelDanger]}>Delete</Text>
                 </Pressable>
               )}
             </View>
-            <View style={[styles.customerAnalyticsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.customerAnalyticsCard}>
               <View style={styles.customerAnalyticsHeader}>
-                <Text style={[styles.customerAnalyticsTitle, { color: colors.primary }]}>Customer Analytics</Text>
+                <Text style={styles.customerAnalyticsTitle}>Customer Analytics</Text>
                 <Text style={styles.customerBehaviorPill}>{customerInsights.behavior}</Text>
               </View>
               <Text style={[styles.creditScoreSummary, { color: colors.textSecondary }]}>{creditSummary.summary}</Text>
               <View style={styles.customerAnalyticsGrid}>
-                <View style={[styles.customerAnalyticsMetric, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
-                  <Text style={[styles.customerAnalyticsValue, { color: colors.text }]}>Rs.{Math.round(customerInsights.totalPaid).toLocaleString("en-IN")}</Text>
-                  <Text style={[styles.customerAnalyticsLabel, { color: colors.textSecondary }]}>Total paid</Text>
+                <View style={styles.customerAnalyticsMetric}>
+                  <Text style={styles.customerAnalyticsValue}>Rs.{Math.round(customerInsights.totalPaid).toLocaleString("en-IN")}</Text>
+                  <Text style={styles.customerAnalyticsLabel}>Total paid</Text>
                 </View>
-                <View style={[styles.customerAnalyticsMetric, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
-                  <Text style={[styles.customerAnalyticsValue, { color: colors.text }]}>Rs.{Math.round(customerInsights.averagePayment).toLocaleString("en-IN")}</Text>
-                  <Text style={[styles.customerAnalyticsLabel, { color: colors.textSecondary }]}>Avg payment</Text>
+                <View style={styles.customerAnalyticsMetric}>
+                  <Text style={styles.customerAnalyticsValue}>Rs.{Math.round(customerInsights.averagePayment).toLocaleString("en-IN")}</Text>
+                  <Text style={styles.customerAnalyticsLabel}>Avg payment</Text>
                 </View>
-                <View style={[styles.customerAnalyticsMetric, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
-                  <Text style={[styles.customerAnalyticsValue, { color: colors.text }]}>{customerInsights.dueCount}</Text>
-                  <Text style={[styles.customerAnalyticsLabel, { color: colors.textSecondary }]}>Due marks</Text>
+                <View style={styles.customerAnalyticsMetric}>
+                  <Text style={styles.customerAnalyticsValue}>{customerInsights.dueCount}</Text>
+                  <Text style={styles.customerAnalyticsLabel}>Due marks</Text>
                 </View>
-                <View style={[styles.customerAnalyticsMetric, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
-                  <Text style={[styles.customerAnalyticsValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{customerInsights.lastPayment}</Text>
-                <Text style={[styles.customerAnalyticsLabel, { color: colors.textSecondary }]}>Last paid</Text>
+                <View style={styles.customerAnalyticsMetric}>
+                  <Text style={styles.customerAnalyticsValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{customerInsights.lastPayment}</Text>
+                <Text style={styles.customerAnalyticsLabel}>Last paid</Text>
                 </View>
               </View>
             </View>
-            <Text style={[styles.history, { color: colors.white }]}>Transaction History</Text>
+            <Text style={styles.history}>Transaction History</Text>
             <PaymentHistory 
               payments={currentLoanPayments} 
               customer={customer}
@@ -3020,82 +3026,94 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 24 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 24 },
   content: { width: "100%", maxWidth: Math.min(Dimensions.get("window").width - 32, 430), alignSelf: "center", gap: 12 },
   
   // Header Card Styles
-  headerCard: { backgroundColor: colors.white, borderRadius: 18, padding: 16, borderWidth: 1, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 4 },
-  profileHeaderTop: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 10 },
-  headerName: { color: colors.blue2, fontSize: 20, fontWeight: '700', flex: 1 },
-  headerInfo: { gap: 8 },
-  headerInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerCard: { backgroundColor: "#12294A", borderRadius: 12, padding: 16, gap: 12 },
+  profileHeaderTop: { flexDirection: "row", alignItems: "center", gap: 12 },
+  profileAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#1E3A63", alignItems: "center", justifyContent: "center" },
+  profileAvatarText: { color: "#D4AF6A", fontSize: 14, fontWeight: "900" },
+  profileTitleBlock: { flex: 1, minWidth: 0 },
+  headerName: { color: "#FFFFFF", fontSize: 16, fontWeight: "900" },
+  headerMeta: { color: "#9FB2C9", fontSize: 12, fontWeight: "700", marginTop: 3 },
+  docsHeroPill: { overflow: "hidden", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, fontSize: 10.5, fontWeight: "900" },
+  docsHeroPillComplete: { backgroundColor: "#D4AF6A", color: "#12294A" },
+  docsHeroPillPending: { backgroundColor: "#FCF2E3", color: "#9A6B1E" },
+  headerInfo: { flexDirection: "row", flexWrap: "wrap", gap: 14, borderTopWidth: 1, borderTopColor: "#274870", paddingTop: 10 },
+  headerInfoRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   headerIcon: { fontSize: 14, width: 20 },
-  headerText: { color: '#555', fontSize: 13 },
-  phoneLink: { color: colors.blue2, textDecorationLine: 'underline' },
+  headerText: { color: "#C4D2E2", fontSize: 12.5, fontWeight: "700" },
+  phoneLink: { color: "#C4D2E2", textDecorationLine: "underline" },
   
   // Stats Row Styles
   statsRow: { flexDirection: 'row', gap: 10 },
-  statCard: { flex: 1, backgroundColor: colors.white, borderRadius: 16, padding: 14, alignItems: 'center', borderWidth: 1, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
-  statLabel: { color: '#888', fontSize: 10, fontWeight: '600', marginBottom: 6, letterSpacing: 0.5 },
+  statCard: { flex: 1, backgroundColor: "#FFFFFF", borderRadius: 12, padding: 16, borderWidth: 1, borderColor: "#E1E6ED", alignItems: "flex-start" },
+  statLabel: { color: "#6B7A8D", fontSize: 10.5, fontWeight: "900", marginBottom: 6, textTransform: "uppercase" },
   scoreContainer: { alignItems: 'center' },
-  scoreValue: { color: colors.blue2, fontSize: 24, fontWeight: '700' },
-  scoreRating: { color: colors.success, fontSize: 11, fontWeight: '500', marginTop: 2 },
-  balanceValue: { color: colors.blue2, fontSize: 18, fontWeight: '700', marginTop: 2 },
-  repaymentCard: { borderRadius: 16, borderWidth: 1, padding: 14, gap: 8, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  scoreValue: { color: "#1E7A4C", fontSize: 24, fontWeight: "900" },
+  scoreRating: { color: "#1E7A4C", fontSize: 11, fontWeight: "800", marginTop: 2 },
+  balanceValue: { color: "#12294A", fontSize: 22, fontWeight: "900", marginTop: 2 },
+  repaymentCard: { backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#E1E6ED", padding: 16, gap: 10 },
   repaymentHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
   repaymentLabel: { flex: 1, fontSize: 12, fontWeight: "700" },
   repaymentPercent: { color: "#1E7A4C", fontSize: 13, fontWeight: "900" },
-  repaymentTrack: { height: 10, backgroundColor: "#2A2A3E", borderRadius: 5, overflow: "hidden" },
+  repaymentTrack: { height: 6, backgroundColor: "#EEF1F5", borderRadius: 4, overflow: "hidden" },
   repaymentFill: { height: "100%", borderRadius: 5 },
-  timelineCard: { borderRadius: 16, borderWidth: 1, padding: 14, gap: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
-  timelineTitle: { fontSize: 14, fontWeight: "900" },
+  timelineCard: { backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#E1E6ED", padding: 16, gap: 10 },
+  timelineTitle: { color: "#12294A", fontSize: 14, fontWeight: "900" },
   timelineRow: { gap: 10, paddingVertical: 4 },
   timelineItem: { width: 48, minHeight: 72, alignItems: "center" },
-  timelineCircle: { width: 32, height: 32, borderRadius: 16, borderWidth: 2 },
+  timelineCircle: { width: 28, height: 28, borderRadius: 14, borderWidth: 1 },
   timelineWeekLabel: { fontSize: 10, fontWeight: "800", marginTop: 5 },
   timelineTooltip: { position: "absolute", top: 42, minWidth: 74, borderRadius: 10, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 6, zIndex: 2 },
   timelineTooltipText: { fontSize: 11, fontWeight: "900", textAlign: "center" },
   timelineTooltipDate: { fontSize: 10, fontWeight: "700", textAlign: "center", marginTop: 2 },
   
   // Info Section Styles
-  infoContainer: { backgroundColor: colors.surfaceTint, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: colors.border },
+  infoContainer: { backgroundColor: "#FFFFFF", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#E1E6ED" },
   infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 3 },
   infoIcon: { fontSize: 14, width: 20 },
-  infoText: { color: colors.white, fontSize: 13, flex: 1 },
-  docsCard: { backgroundColor: colors.white, borderRadius: 16, padding: 14, gap: 10, borderWidth: 1, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  infoText: { color: "#12294A", fontSize: 13, flex: 1, fontWeight: "700" },
+  docsCard: { backgroundColor: "#FFFFFF", borderRadius: 12, padding: 14, gap: 10, borderWidth: 1, borderColor: "#E1E6ED" },
   docsHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  docsTitle: { color: colors.blue2, fontSize: 14, fontWeight: "900" },
+  docsTitle: { color: "#12294A", fontSize: 14, fontWeight: "900" },
   docsStatusText: { fontSize: 11, fontWeight: "900", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, overflow: "hidden" },
-  docsStatusComplete: { color: "#047857", backgroundColor: "#d1fae5" },
-  docsStatusPending: { color: "#b45309", backgroundColor: "#fef3c7" },
-  docsDetailRow: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#eef4ff", borderRadius: 12, padding: 10, borderWidth: 1, borderColor: "#dbeafe" },
+  docsStatusComplete: { color: "#1E7A4C", backgroundColor: "#E4F3EA" },
+  docsStatusPending: { color: "#9A6B1E", backgroundColor: "#FCF2E3" },
+  docsDetailRow: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#F7F9FB", borderRadius: 10, padding: 10, borderWidth: 1, borderColor: "#E1E6ED" },
   docsDetailCheckbox: { width: 24, height: 24, borderRadius: 7, alignItems: "center", justifyContent: "center", backgroundColor: colors.white, borderWidth: 1, borderColor: "#bfdbfe" },
   docsDetailCheckboxOn: { backgroundColor: colors.blue2, borderColor: colors.blue2 },
   docsDetailText: { color: colors.ink, fontSize: 13, fontWeight: "800", flex: 1 },
   
   // Action Grid Styles (2x2)
-  actionGrid: { flexDirection: 'row', gap: 10 },
-  actionBtn: { flex: 1, minHeight: 74, paddingVertical: 14, paddingHorizontal: 10, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#0f172a', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 8, elevation: 3 },
+  actionGrid: { flexDirection: "row", gap: 8 },
+  actionBtn: { flex: 1, minHeight: 62, paddingVertical: 12, paddingHorizontal: 8, borderRadius: 10, alignItems: "center", justifyContent: "center", gap: 4 },
+  actionBtnPrimary: { backgroundColor: "#12294A" },
+  actionBtnDue: { backgroundColor: "#FBEAEA" },
+  actionBtnRenew: { backgroundColor: "#FCF2E3" },
   actionBtnDisabled: { opacity: 0.45 },
   actionIcon: { fontSize: 24 },
-  actionLabel: { color: colors.white, fontSize: 13, fontWeight: '600' },
+  actionLabel: { color: "#FFFFFF", fontSize: 12.5, fontWeight: "900" },
+  actionLabelDue: { color: "#B03A3A" },
+  actionLabelRenew: { color: "#9A6B1E" },
   
   // Icon Bar Styles
-  iconBar: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: colors.white, borderRadius: 18, padding: 8, borderWidth: 1, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
-  iconBtn: { flex: 1, minHeight: 52, borderRadius: 14, backgroundColor: '#eef4ff', alignItems: 'center', justifyContent: 'center', marginHorizontal: 3, gap: 3, borderWidth: 1, borderColor: '#dbeafe' },
-  iconBtnDisabled: { backgroundColor: '#f0f0f0', opacity: 0.5 },
-  iconBtnLabel: { color: colors.blue2, fontSize: 10, fontWeight: "800" },
-  iconBtnLabelDanger: { color: colors.missedRed },
+  iconBar: { flexDirection: "row", justifyContent: "space-between", backgroundColor: "#FFFFFF", borderRadius: 12, padding: 8, borderWidth: 1, borderColor: "#E1E6ED" },
+  iconBtn: { flex: 1, minHeight: 48, borderRadius: 8, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", marginHorizontal: 2, gap: 3 },
+  iconBtnDisabled: { opacity: 0.45 },
+  iconBtnLabel: { color: "#4B5A6D", fontSize: 10, fontWeight: "800" },
+  iconBtnLabelDanger: { color: "#B03A3A" },
   iconBtnIcon: { fontSize: 18 },
-  customerAnalyticsCard: { backgroundColor: colors.white, borderRadius: 18, padding: 14, gap: 12, borderWidth: 1, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  customerAnalyticsCard: { backgroundColor: "#FFFFFF", borderRadius: 12, padding: 16, gap: 12, borderWidth: 1, borderColor: "#E1E6ED" },
   customerAnalyticsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  customerAnalyticsTitle: { color: colors.blue2, fontSize: 15, fontWeight: "900" },
-  customerBehaviorPill: { color: "#047857", backgroundColor: "#d1fae5", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4, overflow: "hidden", fontSize: 10, fontWeight: "900" },
+  customerAnalyticsTitle: { color: "#12294A", fontSize: 14, fontWeight: "900" },
+  customerBehaviorPill: { color: "#9A6B1E", backgroundColor: "#FCF2E3", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, overflow: "hidden", fontSize: 10, fontWeight: "900" },
   creditScoreSummary: { fontSize: 12, lineHeight: 17, fontWeight: "700" },
   customerAnalyticsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  customerAnalyticsMetric: { flex: 1, minWidth: "45%", backgroundColor: "#f8fafc", borderRadius: 12, padding: 10, borderWidth: 1, borderColor: "#e2e8f0" },
-  customerAnalyticsValue: { color: colors.ink, fontSize: 15, fontWeight: "900" },
-  customerAnalyticsLabel: { color: colors.gray, fontSize: 10, fontWeight: "800", textTransform: "uppercase", marginTop: 3 },
+  customerAnalyticsMetric: { flex: 1, minWidth: "45%", backgroundColor: "#F7F9FB", borderRadius: 10, padding: 12 },
+  customerAnalyticsValue: { color: "#12294A", fontSize: 18, fontWeight: "900" },
+  customerAnalyticsLabel: { color: "#6B7A8D", fontSize: 11, fontWeight: "800", marginTop: 3 },
   
   // Old styles (keeping for compatibility)
   title: { color: colors.white, fontSize: 26, fontWeight: "700" },
@@ -3123,11 +3141,11 @@ const styles = StyleSheet.create({
   docsCheckText: { flex: 1, color: "#334155", fontSize: 13, fontWeight: "700" },
   datePickerButton: { backgroundColor: "#f5f5f5", padding: 12, borderRadius: 10, borderWidth: 1, borderColor: "#ddd", marginBottom: 8 },
   datePickerButtonText: { fontSize: 16, color: "#333" },
-  history: { color: colors.white, fontSize: 18, fontWeight: "700" },
-  emptyHistoryContainer: { backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 16, padding: 40, alignItems: "center", marginVertical: 20 },
+  history: { color: "#12294A", fontSize: 14, fontWeight: "900", marginTop: 2 },
+  emptyHistoryContainer: { backgroundColor: "#FFFFFF", borderRadius: 12, padding: 28, alignItems: "center", marginVertical: 4, borderWidth: 1, borderColor: "#E1E6ED" },
   emptyHistoryIcon: { fontSize: 48, marginBottom: 16 },
-  emptyHistoryTitle: { fontSize: 18, fontWeight: "700", color: colors.white, marginBottom: 8 },
-  emptyHistorySubtitle: { fontSize: 14, color: "rgba(255,255,255,0.8)", textAlign: "center" },
+  emptyHistoryTitle: { fontSize: 16, fontWeight: "900", color: "#12294A", marginBottom: 8 },
+  emptyHistorySubtitle: { fontSize: 13, color: "#6B7A8D", textAlign: "center" },
   paymentCard: { backgroundColor: colors.white, borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1 },
   paymentHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 },
   paymentDateContainer: { alignItems: "flex-start" },
@@ -3209,30 +3227,34 @@ const styles = StyleSheet.create({
   modeBtnActive: { backgroundColor: colors.blue2, borderColor: colors.blue2 },
   modeText: { color: "#666", fontWeight: "600" },
   modeTextActive: { color: colors.white },
-  disbursementRow: { borderRadius: 16, borderWidth: 1, padding: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", shadowColor: "#0f172a", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+  disbursementRow: { borderRadius: 12, borderWidth: 1, borderColor: "#E1E6ED", backgroundColor: "#FFFFFF", padding: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
 
   // Vibrant Card Timeline Styles
-  timelineContainer: { marginTop: 12, marginBottom: 16, gap: 10 },
-  vibrantTimelineCard: { backgroundColor: "#1E293B", borderRadius: 14, borderWidth: 1, borderColor: "#334155", padding: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 3 },
+  timelineContainer: { backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#E1E6ED", paddingHorizontal: 14, paddingVertical: 4, marginBottom: 12 },
+  vibrantTimelineCard: { backgroundColor: "#FFFFFF", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#EEF1F5" },
   vibrantCardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   vibrantHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, paddingRight: 8 },
-  vibrantIconBadge: { width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center" },
-  vibrantCardTitle: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
-  vibrantCardSubtext: { color: "#94A3B8", fontSize: 11, marginTop: 2 },
-  vibrantAmountPill: { backgroundColor: "rgba(16,185,129,0.18)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "rgba(16,185,129,0.3)" },
-  vibrantAmountText: { color: "#34D399", fontSize: 16, fontWeight: "900" },
-  vibrantDuePill: { backgroundColor: "rgba(239,68,68,0.18)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "rgba(239,68,68,0.3)" },
-  vibrantDueText: { color: "#F87171", fontSize: 13, fontWeight: "900" },
-  vibrantActionRow: { flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: "#334155" },
-  vibrantActionBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.06)" },
-  vibrantActionText: { fontSize: 12, fontWeight: "700" },
+  vibrantIconBadge: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  vibrantIconPaid: { backgroundColor: "#E4F3EA" },
+  vibrantIconDue: { backgroundColor: "#FBEAEA" },
+  vibrantCardTitle: { color: "#12294A", fontSize: 13, fontWeight: "900" },
+  vibrantCardSubtext: { color: "#9AA6B2", fontSize: 11, marginTop: 2, fontWeight: "700" },
+  vibrantAmountPill: { paddingHorizontal: 0, paddingVertical: 0 },
+  vibrantAmountText: { color: "#1E7A4C", fontSize: 12.5, fontWeight: "900" },
+  vibrantDuePill: { paddingHorizontal: 0, paddingVertical: 0 },
+  vibrantDueText: { color: "#B03A3A", fontSize: 12.5, fontWeight: "900" },
+  vibrantActionRow: { flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 8 },
+  vibrantActionBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: "#F7F9FB" },
+  vibrantActionText: { color: "#4B5A6D", fontSize: 11, fontWeight: "800" },
+  vibrantActionDanger: { color: "#B03A3A" },
+  vibrantActionSuccess: { color: "#1E7A4C" },
   
   // Previous loan history button
-  showPrevHistoryBtn: { marginVertical: 18, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 999, backgroundColor: "#1E293B", borderWidth: 2, borderColor: "#3B82F6", alignItems: "center", alignSelf: "center", shadowColor: "#3B82F6", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
-  showPrevHistoryText: { fontSize: 14, fontWeight: "800", color: "#60A5FA" },
-  prevHistoryTitle: { fontSize: 17, fontWeight: "900", marginVertical: 14, color: "#60A5FA", letterSpacing: 0.5 },
+  showPrevHistoryBtn: { marginVertical: 12, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E1E6ED", alignItems: "center", alignSelf: "center" },
+  showPrevHistoryText: { fontSize: 13, fontWeight: "900", color: "#12294A" },
+  prevHistoryTitle: { fontSize: 14, fontWeight: "900", marginVertical: 10, color: "#12294A" },
   disbursementLabel: { fontSize: 13, fontWeight: "800" },
-  disbursementBadge: { overflow: "hidden", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, color: colors.white, fontSize: 12, fontWeight: "900" },
+  disbursementBadge: { overflow: "hidden", borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5, color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
   locationUpdateSection: { backgroundColor: "#f8f9fa", borderRadius: 12, padding: 16, marginVertical: 8, borderWidth: 1, borderColor: "#e0e0e0" },
   locationLabel: { fontSize: 14, fontWeight: "600", color: "#333", marginBottom: 8 },
   locationCoords: { fontSize: 14, color: "#28a745", marginBottom: 12, fontFamily: Platform.OS === "ios" ? "Courier" : "monospace" },

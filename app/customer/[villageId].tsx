@@ -1663,7 +1663,7 @@ export default function CustomerListScreen() {
             )}
           </View>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.routeSummary}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.routeSummaryScroller} contentContainerStyle={styles.routeSummary}>
             <View style={styles.routeSummaryCard}>
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Total Customers</Text>
               <Text style={styles.routeSummaryValue}>{customerStats.total}</Text>
@@ -2604,6 +2604,7 @@ const styles = StyleSheet.create({
   reopenAllSection: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14, marginTop: 8, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.16)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)" },
   reopenAllText: { color: colors.white, fontSize: 13, fontWeight: "900" },
   routeSummary: { flexDirection: "row", gap: 8, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12 },
+  routeSummaryScroller: { flexGrow: 0, height: 82, maxHeight: 82 },
   routeSummaryCard: { minWidth: 76, minHeight: 58, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 8, alignItems: "center", justifyContent: "center", backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E1E6ED" },
   routeSummaryLabel: { color: "#9AA6B2", fontSize: 9, fontWeight: "900", textTransform: "uppercase", textAlign: "center" },
   routeSummaryValue: { color: "#12294A", fontSize: 16, fontWeight: "900", marginTop: 3 },
