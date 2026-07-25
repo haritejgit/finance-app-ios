@@ -156,30 +156,32 @@ const PaymentHistory = memo(function PaymentHistory({
   const cycleStartDay = getOrDeriveCycleStartDay(customer);
 
   return (
-    <View style={styles.timelineContainer}>
+    <View style={styles.historyListContainer}>
       {payments.map((p, index) => {
         const isDue = p.paymentType === "DUE" || p.type === "DUE";
         const isRenewal = p.paymentType === "RENEWAL_CLOSURE";
         const canManage = isOwner || p.isPendingSync || (p.nestedUid && p.nestedUid === user?.uid);
         const historyIcon = isDue ? "close" : isRenewal ? "refresh" : p.paymentMode === "PHONE" ? "phone-portrait-outline" : "cash-outline";
-        const historyTitle = isDue ? (p.isAutoDue ? "Auto due marked" : "Due marked") : isRenewal ? "Loan renewal closure" : p.paymentMode === "PHONE" ? "PhonePe payment" : "Cash payment";
+        const historyTitle = isDue ? (p.isAutoDue ? "Auto Due Marked" : "Due Marked") : isRenewal ? "Loan Renewal Closure" : p.paymentMode === "PHONE" ? "PhonePe Payment" : "Cash Payment";
+        const iconBg = isDue ? "#FEE2E2" : isRenewal ? "#FCF2E3" : "#E4F3EA";
+        const iconColor = isDue ? "#B03A3A" : isRenewal ? "#9A6B1E" : "#1E7A4C";
 
         return (
           <AnimatedListItem key={p.id || `pmt_${index}`} index={index}>
-            <View style={styles.vibrantTimelineCard}>
+            <View style={styles.historyCardItem}>
               <View style={styles.vibrantCardHeader}>
                 {/* Left: Status Icon & Details */}
                 <View style={styles.vibrantHeaderLeft}>
-                  <View style={[styles.vibrantIconBadge, isDue ? styles.vibrantIconDue : styles.vibrantIconPaid]}>
-                    <Icon name={historyIcon as any} size={14} color={isDue ? "#B03A3A" : "#1E7A4C"} />
+                  <View style={[styles.vibrantIconBadge, { backgroundColor: iconBg }]}>
+                    <Icon name={historyIcon as any} size={15} color={iconColor} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.vibrantCardTitle}>{historyTitle}</Text>
                     <Text style={styles.vibrantCardSubtext}>
                       {isDue ? formatPersonalCycleRange(getPersonalCycleStartTs(p.paymentDate, cycleStartDay)) : (
                         <>
-                          {new Date(p.paymentDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          {" • "}
+                          {new Date(p.paymentDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          {", "}
                           {new Date(p.paymentDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
                         </>
                       )}
@@ -187,41 +189,36 @@ const PaymentHistory = memo(function PaymentHistory({
                   </View>
                 </View>
 
-                {/* Right: Large Bold Amount Pill */}
+                {/* Right: Amount or DUE Pill */}
                 <View style={{ alignItems: "flex-end" }}>
                   {isDue ? (
-                    <View style={styles.vibrantDuePill}>
-                      <Text style={styles.vibrantDueText}>DUE</Text>
+                    <View style={styles.dueBadgePill}>
+                      <Text style={styles.dueBadgeText}>DUE</Text>
                     </View>
                   ) : (
-                    <View style={styles.vibrantAmountPill}>
-                      <Text style={styles.vibrantAmountText}>
-                        +Rs.{Math.round(p.amountPaid || 0).toLocaleString("en-IN")}
-                      </Text>
-                    </View>
+                    <Text style={styles.historyAmountText}>
+                      +Rs. {Math.round(p.amountPaid || 0).toLocaleString("en-IN")}
+                    </Text>
                   )}
                 </View>
               </View>
 
               {/* Action Buttons Row */}
               {(canManage || onShare) && (
-                <View style={styles.vibrantActionRow}>
+                <View style={styles.historyActionRow}>
                   {onEdit && canManage && (
-                    <Pressable style={styles.vibrantActionBtn} onPress={() => onEdit(p)}>
-                      <Icon name="create-outline" size={13} color="#4B5A6D" />
-                      <Text style={styles.vibrantActionText}>Edit</Text>
+                    <Pressable style={styles.historyActionBtn} onPress={() => onEdit(p)}>
+                      <Text style={styles.historyActionText}>Edit</Text>
                     </Pressable>
                   )}
                   {onDelete && canManage && (
-                    <Pressable style={styles.vibrantActionBtn} onPress={() => onDelete(p)}>
-                      <Icon name="trash-outline" size={13} color="#B03A3A" />
-                      <Text style={[styles.vibrantActionText, styles.vibrantActionDanger]}>Delete</Text>
+                    <Pressable style={[styles.historyActionBtn, styles.historyActionBtnDelete]} onPress={() => onDelete(p)}>
+                      <Text style={[styles.historyActionText, styles.historyActionDangerText]}>Delete</Text>
                     </Pressable>
                   )}
                   {onShare && (
-                    <Pressable style={styles.vibrantActionBtn} onPress={() => onShare(p)}>
-                      <Icon name="share-social-outline" size={13} color="#1E7A4C" />
-                      <Text style={[styles.vibrantActionText, styles.vibrantActionSuccess]}>Share</Text>
+                    <Pressable style={[styles.historyActionBtn, styles.historyActionBtnShare]} onPress={() => onShare(p)}>
+                      <Text style={[styles.historyActionText, styles.historyActionShareText]}>Share</Text>
                     </Pressable>
                   )}
                 </View>
@@ -1621,46 +1618,71 @@ export default function ProfileScreen() {
               </>
             ) : null}
 
-            {localLoan ? (
-              <View style={[styles.timelineCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[styles.timelineTitle, { color: colors.text }]}>Payment Timeline</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.timelineRow}>
-                  {paymentTimeline.map((week) => {
-                    const circleColor = week.status === "paid" ? "#1E7A4C" : week.status === "overdue" ? "#B03A3A" : "#9AA6B2";
-                    const weekIcon = week.status === "paid" ? "checkmark" : week.status === "overdue" ? "close" : "time-outline";
-                    return (
-                      <Pressable
-                        key={week.index}
-                        style={styles.timelineItem}
-                        onPress={() => setSelectedTimelineWeek(selectedTimelineWeek === week.index ? null : week.index)}
-                      >
-                        <View
-                          style={[
-                            styles.timelineCircle,
-                            week.status === "upcoming"
-                              ? { borderColor: circleColor, backgroundColor: "transparent" }
-                              : { borderColor: circleColor, backgroundColor: circleColor },
-                          ]}
+            {localLoan ? (() => {
+              const paidCount = paymentTimeline.filter(w => w.status === "paid").length;
+              const dueCount = paymentTimeline.filter(w => w.status === "overdue").length;
+              const upcomingCount = paymentTimeline.filter(w => w.status === "upcoming").length;
+
+              return (
+                <View style={styles.timelineCard}>
+                  <View style={styles.timelineHeaderRow}>
+                    <Text style={styles.timelineTitle}>Payment Timeline</Text>
+                    <View style={styles.timelineLegendRow}>
+                      <View style={styles.legendItem}>
+                        <View style={[styles.legendDot, { backgroundColor: "#1E7A4C" }]} />
+                        <Text style={styles.legendText}>Paid</Text>
+                      </View>
+                      <View style={styles.legendItem}>
+                        <View style={[styles.legendDot, { backgroundColor: "#B03A3A" }]} />
+                        <Text style={styles.legendText}>Due</Text>
+                      </View>
+                      <View style={styles.legendItem}>
+                        <View style={[styles.legendDot, { backgroundColor: "#9AA6B2" }]} />
+                        <Text style={styles.legendText}>Pending</Text>
+                      </View>
+                    </View>
+                  </View>
+                  
+                  <Text style={styles.timelineSubtitleText}>
+                    {paidCount} paid · {dueCount} due · {upcomingCount} upcoming
+                  </Text>
+
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.timelineRow}>
+                    {paymentTimeline.map((week) => {
+                      const isPaid = week.status === "paid";
+                      const isOverdue = week.status === "overdue";
+                      const bg = isPaid ? "#E4F3EA" : isOverdue ? "#FEE2E2" : "#F4F6F9";
+                      const iconColor = isPaid ? "#1E7A4C" : isOverdue ? "#B03A3A" : "#9AA6B2";
+                      const borderCol = isPaid ? "transparent" : isOverdue ? "transparent" : "#E1E6ED";
+                      const weekIcon = isPaid ? "checkmark" : isOverdue ? "close" : "time-outline";
+
+                      return (
+                        <Pressable
+                          key={week.index}
+                          style={styles.timelineItem}
+                          onPress={() => setSelectedTimelineWeek(selectedTimelineWeek === week.index ? null : week.index)}
                         >
-                          <Icon name={weekIcon as any} size={14} color={week.status === "upcoming" ? circleColor : "#FFFFFF"} />
-                        </View>
-                        <Text style={[styles.timelineWeekLabel, { color: colors.textMuted }]}>W{week.index + 1}</Text>
-                        {selectedTimelineWeek === week.index ? (
-                          <View style={[styles.timelineTooltip, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
-                            <Text style={[styles.timelineTooltipText, { color: colors.text }]}>
-                              Rs.{Math.round(week.amount).toLocaleString("en-IN")}
-                            </Text>
-                            <Text style={[styles.timelineTooltipDate, { color: colors.textSecondary }]}>
-                              {formatPersonalCycleRange(week.date)}
-                            </Text>
+                          <View style={[styles.timelineCircle, { backgroundColor: bg, borderColor: borderCol }]}>
+                            <Icon name={weekIcon as any} size={14} color={iconColor} />
                           </View>
-                        ) : null}
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            ) : null}
+                          <Text style={styles.timelineWeekLabel}>W{week.index + 1}</Text>
+                          {selectedTimelineWeek === week.index ? (
+                            <View style={styles.timelineTooltip}>
+                              <Text style={styles.timelineTooltipText}>
+                                Rs.{Math.round(week.amount).toLocaleString("en-IN")}
+                              </Text>
+                              <Text style={styles.timelineTooltipDate}>
+                                {formatPersonalCycleRange(week.date)}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              );
+            })() : null}
 
             <View style={styles.actionGrid}>
               <Pressable
@@ -3000,15 +3022,21 @@ const styles = StyleSheet.create({
   repaymentMetaRow: { flexDirection: "row", justifyContent: "space-between", gap: 10, borderTopWidth: 1, borderTopColor: "#EEF1F5", paddingTop: 10 },
   repaymentMetaItem: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
   repaymentMetaText: { color: "#4B5A6D", fontSize: 12.5, fontWeight: "700" },
-  timelineCard: { backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#E1E6ED", padding: 16, gap: 10 },
+  timelineCard: { backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#E1E6ED", padding: 16, gap: 8 },
+  timelineHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  timelineLegendRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  legendDot: { width: 7, height: 7, borderRadius: 3.5 },
+  legendText: { color: "#6B7A8D", fontSize: 10.5, fontWeight: "700" },
   timelineTitle: { color: "#12294A", fontSize: 14, fontWeight: "900" },
+  timelineSubtitleText: { color: "#9AA6B2", fontSize: 11.5, fontWeight: "700" },
   timelineRow: { gap: 10, paddingVertical: 4 },
   timelineItem: { width: 48, minHeight: 72, alignItems: "center" },
-  timelineCircle: { width: 28, height: 28, borderRadius: 14, borderWidth: 1 },
-  timelineWeekLabel: { fontSize: 10, fontWeight: "800", marginTop: 5 },
-  timelineTooltip: { position: "absolute", top: 42, minWidth: 74, borderRadius: 10, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 6, zIndex: 2 },
-  timelineTooltipText: { fontSize: 11, fontWeight: "900", textAlign: "center" },
-  timelineTooltipDate: { fontSize: 10, fontWeight: "700", textAlign: "center", marginTop: 2 },
+  timelineCircle: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  timelineWeekLabel: { fontSize: 10, fontWeight: "800", marginTop: 5, color: "#6B7A8D" },
+  timelineTooltip: { position: "absolute", top: 46, minWidth: 80, borderRadius: 10, borderWidth: 1, borderColor: "#E1E6ED", backgroundColor: "#FFFFFF", paddingHorizontal: 8, paddingVertical: 6, zIndex: 2 },
+  timelineTooltipText: { fontSize: 11, fontWeight: "900", textAlign: "center", color: "#12294A" },
+  timelineTooltipDate: { fontSize: 10, fontWeight: "700", textAlign: "center", marginTop: 2, color: "#6B7A8D" },
   
   // Info Section Styles
   infoContainer: { backgroundColor: "#FFFFFF", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#E1E6ED" },
@@ -3187,7 +3215,21 @@ const styles = StyleSheet.create({
   vibrantActionBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: "#F7F9FB" },
   vibrantActionText: { color: "#4B5A6D", fontSize: 11, fontWeight: "800" },
   vibrantActionDanger: { color: "#B03A3A" },
-  vibrantActionSuccess: { color: "#1E7A4C" },
+  vibrantActionShareText: { color: "#1E7A4C" },
+
+  // PaymentHistory Card Styles
+  historyListContainer: { gap: 8 },
+  historyCardItem: { backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#E1E6ED", paddingHorizontal: 14, paddingTop: 14, overflow: "hidden" },
+  historyAmountText: { color: "#1E7A4C", fontSize: 13.5, fontWeight: "900" },
+  dueBadgePill: { backgroundColor: "#FEE2E2", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
+  dueBadgeText: { color: "#B03A3A", fontSize: 10.5, fontWeight: "900", textTransform: "uppercase" },
+  historyActionRow: { flexDirection: "row", alignItems: "center", gap: 0, marginTop: 12, borderTopWidth: 0.5, borderTopColor: "#EEF1F5" },
+  historyActionBtn: { flex: 1, alignItems: "center", paddingVertical: 10, borderRightWidth: 0.5, borderRightColor: "#EEF1F5" },
+  historyActionBtnDelete: { backgroundColor: "#FFF5F5" },
+  historyActionBtnShare: { backgroundColor: "#F0FAF5" },
+  historyActionText: { color: "#4B5A6D", fontSize: 12, fontWeight: "800" },
+  historyActionDangerText: { color: "#B03A3A" },
+  historyActionShareText: { color: "#1E7A4C" },
   
   // Previous loan history button
   showPrevHistoryBtn: { marginVertical: 12, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E1E6ED", alignItems: "center", alignSelf: "center" },

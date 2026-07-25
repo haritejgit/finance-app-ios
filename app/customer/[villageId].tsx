@@ -92,6 +92,7 @@ type AddCustomerForm = {
   coordinates: { latitude: number; longitude: number } | null;
   aadharSubmitted: boolean;
   passportPhotoSubmitted: boolean;
+  chequeSubmitted: boolean;
 };
 
 function createEmptyCustomerForm(): AddCustomerForm {
@@ -108,6 +109,7 @@ function createEmptyCustomerForm(): AddCustomerForm {
     coordinates: null,
     aadharSubmitted: false,
     passportPhotoSubmitted: false,
+    chequeSubmitted: false,
   };
 }
 
@@ -2153,6 +2155,17 @@ export default function CustomerListScreen() {
                   </View>
                   <Text style={styles.checkLabel}>Did customer submit passport size photo?</Text>
                 </Pressable>
+                {Number(form.principal || 0) >= 10000 && (
+                  <Pressable
+                    style={styles.checkRow}
+                    onPress={() => setForm((f) => ({ ...f, chequeSubmitted: !f.chequeSubmitted }))}
+                  >
+                    <View style={[styles.checkbox, form.chequeSubmitted && styles.checkboxOn]}>
+                      {form.chequeSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
+                    </View>
+                    <Text style={styles.checkLabel}>Did customer submit Bank Cheque? (Req. for 10K+)</Text>
+                  </Pressable>
+                )}
 
                 <Text style={styles.label}>Registration Date <Text style={styles.requiredAsterisk}>*</Text></Text>
                 {Platform.OS === 'web' ? (
@@ -2354,6 +2367,8 @@ export default function CustomerListScreen() {
                               longitude: form.coordinates?.longitude,
                               aadharSubmitted: form.aadharSubmitted,
                               passportPhotoSubmitted: form.passportPhotoSubmitted,
+                              chequeRequired: Number(form.principal || 0) >= 10000,
+                              chequeSubmitted: Number(form.principal || 0) >= 10000 ? form.chequeSubmitted : false,
                               coName: form.coName || undefined,
                               coId: form.coId ? Number(form.coId) : undefined,
                             },

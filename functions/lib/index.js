@@ -24,14 +24,15 @@ function toMillis(value) {
     return Number.isFinite(parsed) ? parsed : 0;
 }
 function getPersonalCycleStartTs(dateMs, cycleStartDay) {
-    const d = new Date(toMillis(dateMs));
-    d.setHours(0, 0, 0, 0);
-    const currentDay = d.getDay(); // 0 (Sun) - 6 (Sat)
+    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+    const d = new Date(toMillis(dateMs) + IST_OFFSET);
+    d.setUTCHours(0, 0, 0, 0);
+    const currentDay = d.getUTCDay(); // 0 (Sun) - 6 (Sat)
     let diff = currentDay - cycleStartDay;
     if (diff < 0)
         diff += 7;
-    d.setDate(d.getDate() - diff);
-    return d.getTime();
+    d.setUTCDate(d.getUTCDate() - diff);
+    return d.getTime() - IST_OFFSET;
 }
 function getOrDeriveCycleStartDay(customer, loanStartDate) {
     if (customer && typeof customer.cycleStartDay === "number" && customer.cycleStartDay >= 0 && customer.cycleStartDay <= 6) {
