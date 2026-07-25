@@ -210,13 +210,15 @@ export default function VillageListScreen() {
     <AnimatedScreen style={styles.root}>
     <LinearGradient colors={[colors.background, colors.backgroundSecondary]} style={styles.root}>
       <SafeAreaView style={[styles.safe, { paddingTop: insets.top }]} edges={['top']}>
-        <View style={styles.content}>
-          <View style={styles.headerContainer}>
-            <View style={styles.headerLeft}>
-              <Text style={styles.header}>{t("villages")}</Text>
-              <Text style={styles.sub}>{day} • {shift}</Text>
-            </View>
-          </View>
+
+        {/* Solid navy header */}
+        <View style={styles.headerBand}>
+          <Text style={styles.header}>{t("villages")}</Text>
+          <Text style={styles.sub}>{day} · {shift}</Text>
+        </View>
+
+        {/* Body content with overlap */}
+        <View style={styles.bodyContent}>
 
           {loading ? (
             <View style={styles.loadingContainer}>
@@ -224,14 +226,15 @@ export default function VillageListScreen() {
             </View>
           ) : (
             <>
+              {/* Stat cards */}
               <View style={styles.statsContainer}>
-                <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-                  <Text style={[styles.statNumber, { color: colors.text }]}>{filtered.length}</Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t("activeVillages")}</Text>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNumber}>{filtered.length}</Text>
+                  <Text style={styles.statLabel}>{t("activeVillages")}</Text>
                 </View>
-                <View style={[styles.statCard, { backgroundColor: colors.card }]}>
-                  <Text style={[styles.statNumber, { color: colors.text }]}>{villages.length}</Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{t("totalVillages")}</Text>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNumber}>{villages.length}</Text>
+                  <Text style={styles.statLabel}>{t("totalVillages")}</Text>
                 </View>
               </View>
 
@@ -247,30 +250,28 @@ export default function VillageListScreen() {
                 getItemLayout={(_, index) => ({ length: 84, offset: 84 * index, index })}
                 renderItem={({ item, index }) => (
                   <AnimatedListItem index={index}>
-                  <Pressable
-                    onPress={() => router.push(`/customer/${item.id}`)}
-                    onLongPress={isOwner ? () => openRenameModal(item) : undefined}
-                    delayLongPress={450}
-                    style={[styles.villageCard, { backgroundColor: colors.card }]}
-                  >
-                    <View style={styles.villageHeader}>
+                    <Pressable
+                      onPress={() => router.push(`/customer/${item.id}`)}
+                      onLongPress={isOwner ? () => openRenameModal(item) : undefined}
+                      delayLongPress={450}
+                      style={styles.villageCard}
+                    >
                       <View style={styles.villageIcon}>
-                        <Icon name="business-outline" size={20} color={colors.blue2} />
+                        <Icon name="business-outline" size={21} color="#12294A" />
                       </View>
                       <View style={styles.villageInfo}>
-                        <Text style={[styles.villageName, { color: colors.text }]}>{item.name}</Text>
-                        <Text style={[styles.villageSubtext, { color: colors.textSecondary }]}>{t("tapToViewCustomers")}</Text>
+                        <Text style={styles.villageName}>{item.name}</Text>
+                        <Text style={styles.villageSubtext}>{t("tapToViewCustomers")}</Text>
                       </View>
-                      <View style={[styles.villageIndex, { backgroundColor: colors.primary }]}>
-                        <Text style={[styles.villageIndexText, { color: colors.white }]}>{index + 1}</Text>
+                      <View style={styles.villageIndex}>
+                        <Text style={styles.villageIndexText}>{index + 1}</Text>
                       </View>
-                    </View>
-                  </Pressable>
+                    </Pressable>
                   </AnimatedListItem>
                 )}
                 ListEmptyComponent={
                   <View style={styles.emptyContainer}>
-                    <Icon name="home-outline" size={48} color={colors.textSecondary} />
+                    <Icon name="home-outline" size={48} color="#9AA6B2" />
                     <Text style={styles.emptyTitle}>{t("noVillages")}</Text>
                     <Text style={styles.emptySubtitle}>{t("addVillageSubtitle")}</Text>
                   </View>
@@ -504,29 +505,38 @@ const screenWidth = Dimensions.get("window").width;
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  content: { flex: 1, width: "100%", maxWidth: Math.min(screenWidth - 32, 430), alignSelf: "center", paddingTop: 8 },
-  headerContainer: { marginBottom: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  headerLeft: { flex: 1 },
-  header: { color: "#12294A", fontSize: 28, fontWeight: "700" },
-  sub: { color: "#4B5A6D" },
-  statsContainer: { flexDirection: "row", gap: 12, marginBottom: 16 },
-  statCard: { flex: 1, borderRadius: 18, padding: 14, alignItems: "center", shadowColor: "#0f172a", shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 3 },
-  statNumber: { fontSize: 20, fontWeight: "700", marginBottom: 2 },
-  statLabel: { fontSize: 11, marginTop: 2 },
+
+  // Solid navy header band
+  headerBand: { backgroundColor: "#12294A", paddingHorizontal: 18, paddingTop: 14, paddingBottom: 28 },
+  header: { color: "#FFFFFF", fontSize: 26, fontWeight: "700", marginBottom: 4 },
+  sub: { color: "#9FB2C9", fontSize: 13 },
+
+  // Body overlaps header by 20px
+  bodyContent: { flex: 1, paddingHorizontal: 14, marginTop: -20 },
+
+  // Stat cards
+  statsContainer: { flexDirection: "row", gap: 12, marginBottom: 12 },
+  statCard: { flex: 1, backgroundColor: "#FFFFFF", borderWidth: 0.5, borderColor: "#E1E6ED", borderRadius: 12, paddingVertical: 18, paddingHorizontal: 14, alignItems: "center" },
+  statNumber: { fontSize: 26, fontWeight: "700", color: "#12294A", marginBottom: 4 },
+  statLabel: { fontSize: 12.5, color: "#6B7A8D" },
+
   input: { flex: 1, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, borderWidth: 1, fontSize: 16 },
   addBtnDisabled: { opacity: 0.3 },
   addHint: { fontSize: 13, fontWeight: "700", marginTop: -4, marginBottom: 10, textAlign: "center" },
   listContainer: { paddingBottom: 96 },
   fab: { position: "absolute", width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", shadowColor: "#0f172a", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.24, shadowRadius: 12, elevation: 8 },
   fabText: { color: "#FFFFFF", fontSize: 34, fontWeight: "600", lineHeight: 38 },
-  villageCard: { borderRadius: 18, padding: 14, marginBottom: 10, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 3 },
+
+  // Village row card
+  villageCard: { backgroundColor: "#FFFFFF", borderWidth: 0.5, borderColor: "#E1E6ED", borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 14 },
   villageHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  villageIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: "#eaf2ff", alignItems: "center", justifyContent: "center", marginRight: 10 },
-  villageInfo: { flex: 1 },
-  villageName: { fontWeight: "700", fontSize: 18, marginBottom: 4 },
-  villageIndex: { width: 32, height: 32, borderRadius: 16, justifyContent: "center", alignItems: "center" },
-  villageIndexText: { fontWeight: "700", fontSize: 14 },
-  villageSubtext: { fontSize: 13 },
+  villageIcon: { width: 44, height: 44, borderRadius: 10, backgroundColor: "#D4E2F3", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  villageInfo: { flex: 1, minWidth: 0 },
+  villageName: { fontWeight: "600", fontSize: 16, color: "#12294A", marginBottom: 2 },
+  villageIndex: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#12294A", justifyContent: "center", alignItems: "center", flexShrink: 0 },
+  villageIndexText: { fontWeight: "700", fontSize: 14, color: "#FFFFFF" },
+  villageSubtext: { fontSize: 12.5, color: "#9AA6B2" },
+
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 16 },
   emptyTitle: { color: "#12294A", fontSize: 18, fontWeight: "800", marginBottom: 8 },
