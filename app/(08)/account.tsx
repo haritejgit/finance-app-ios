@@ -2189,7 +2189,7 @@ export default function AccountScreen() {
                         <>
                           <View style={styles.totalFundsCard}>
                             <Text style={styles.totalFundsLabel}>Total Available (Cash + PhonePe)</Text>
-                            <Text style={[styles.totalFundsValue, { color: walletBalances.totalAvailable >= 0 ? "#12294A" : "#B03A3A" }]}>
+                            <Text style={[styles.totalFundsValue, { color: walletBalances.totalAvailable >= 0 ? "#1E7A4C" : "#B03A3A" }]}>
                               Rs.{Math.round(walletBalances.totalAvailable).toLocaleString("en-IN")}
                             </Text>
                             <Text style={styles.walletCardSub}>Auto-updated from your transactions</Text>
@@ -2201,7 +2201,7 @@ export default function AccountScreen() {
                             ]).map(([label, wallet, tone]) => (
                               <View key={label} style={styles.walletCard}>
                                 <Text style={[styles.walletCardTitle, { color: tone }]}>{label}</Text>
-                                <Text style={[styles.walletCardValue, { color: wallet.current >= 0 ? "#12294A" : "#B03A3A" }]}>
+                                <Text style={[styles.walletCardValue, { color: wallet.current >= 0 ? "#1E7A4C" : "#B03A3A" }]}>
                                   Rs.{Math.round(wallet.current).toLocaleString("en-IN")}
                                 </Text>
                                 <Text style={styles.walletCardSub}>Since {formatDDMMYYYY(walletBalances.openingDate)}</Text>
@@ -2749,14 +2749,14 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   loaderContainer: { flex: 1, justifyContent: "center", alignItems: "center", gap: 12 },
   loaderText: { color: "rgba(255,255,255,0.8)", fontSize: 14, fontWeight: "600" },
-  headerHero: { backgroundColor: "#12294A", paddingHorizontal: 18, paddingTop: 14, paddingBottom: 14, flexDirection: "row", alignItems: "center", gap: 12 },
-  backBtn: { width: 34, height: 34, borderRadius: 9, backgroundColor: "#1E3A63", alignItems: "center", justifyContent: "center" },
+  headerHero: { backgroundColor: "#12294A", paddingHorizontal: 20, paddingTop: 18, paddingBottom: 14, flexDirection: "row", alignItems: "center", gap: 12 },
+  backBtn: { width: 32, height: 32, borderRadius: 9, backgroundColor: "#1E3A63", alignItems: "center", justifyContent: "center" },
   heroBrand: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
-  heroIconBox: { width: 34, height: 34, borderRadius: 9, backgroundColor: "#1E3A63", alignItems: "center", justifyContent: "center" },
-  heroTitle: { color: "#ffffff", fontSize: 17, fontWeight: "900" },
+  heroIconBox: { width: 32, height: 32, borderRadius: 9, backgroundColor: "#1E3A63", alignItems: "center", justifyContent: "center" },
+  heroTitle: { color: "#ffffff", fontSize: 15, fontWeight: "900" },
   heroSubtitle: { color: "#9FB2C9", fontSize: 11, fontWeight: "700", marginTop: 1 },
   tabBarContainer: { backgroundColor: "#12294A", paddingBottom: 12 },
-  tabBar: { flexDirection: "row", paddingHorizontal: 18, gap: 7 },
+  tabBar: { flexDirection: "row", paddingHorizontal: 20, gap: 6 },
   tabButton: {
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -2769,10 +2769,10 @@ const styles = StyleSheet.create({
   tabText: { color: "#C4D2E2", fontSize: 12, fontWeight: "800" },
   tabTextActive: { color: "#12294A", fontWeight: "900" },
   scroll: { flex: 1 },
-  scrollContainer: { padding: 14, paddingBottom: 36 },
+  scrollContainer: { padding: 14, paddingBottom: 90 },
   cardContainer: { gap: 12 },
   card: { backgroundColor: "#ffffff", borderRadius: 12, padding: 16, gap: 12, borderWidth: 1, borderColor: "#E1E6ED" },
-  cardTitle: { color: "#12294A", fontSize: 16, fontWeight: "900" },
+  cardTitle: { color: "#12294A", fontSize: 15, fontWeight: "900" },
   cardDesc: { color: "#6B7A8D", fontSize: 12, fontWeight: "700", marginTop: -4 },
   inputContainer: { gap: 6 },
   inputLabel: { color: "#6B7A8D", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
@@ -2780,7 +2780,7 @@ const styles = StyleSheet.create({
   notesInput: { minHeight: 108, maxHeight: 300, textAlignVertical: "top" },
   notesReadOnly: { color: "#12294A", fontSize: 13, lineHeight: 20, fontWeight: "600", backgroundColor: "#F9FAFC", borderRadius: 8, padding: 12, borderWidth: 1, borderColor: "#E1E6ED" },
   notesError: { color: "#B03A3A", fontSize: 12, fontWeight: "800" },
-  smallEditBtn: { alignSelf: "flex-start", borderRadius: 8, backgroundColor: "#ffffff", borderWidth: 1, borderColor: "#D4AF6A", paddingHorizontal: 12, paddingVertical: 7 },
+  smallEditBtn: { alignSelf: "flex-start", borderRadius: 20, backgroundColor: "#ffffff", borderWidth: 1, borderColor: "#D4AF6A", paddingHorizontal: 12, paddingVertical: 7 },
   smallEditText: { color: "#8A6B2F", fontSize: 12, fontWeight: "900" },
   walletSavedRow: { gap: 8 },
   walletSavedText: { color: "#12294A", fontSize: 13, fontWeight: "800", lineHeight: 19 },
@@ -2795,7 +2795,7 @@ const styles = StyleSheet.create({
   walletBreakdown: { color: "#6B7A8D", fontSize: 10, lineHeight: 15, fontWeight: "700" },
   // Wallet section styles — two-section A/B layout
   walletSectionHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
-  walletSectionBadge: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  walletSectionBadge: { width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   walletSectionBadgeText: { fontSize: 13, fontWeight: "900" },
   walletSectionTitle: { color: "#12294A", fontSize: 14, fontWeight: "900" },
   walletSectionDesc: { color: "#6B7A8D", fontSize: 11, fontWeight: "700" },
@@ -2811,7 +2811,7 @@ const styles = StyleSheet.create({
   walletAutoNote: { color: "#6B7A8D", fontSize: 11, fontWeight: "700", textAlign: "center", marginTop: 4 },
   blockAadhaarCard: { borderColor: "#F0C7C7", backgroundColor: "#FBEAEA" },
   blockAadhaarHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
-  blockAadhaarIcon: { width: 38, height: 38, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: "#F6D3D3" },
+  blockAadhaarIcon: { width: 36, height: 36, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: "#F6D3D3" },
   paymentModeRow: { flexDirection: "row", gap: 8 },
   paymentModeBtn: { flex: 1, borderRadius: 8, backgroundColor: "#F4F6F9", borderWidth: 1, borderColor: "#E1E6ED", paddingVertical: 10, alignItems: "center" },
   investorSelectedBtn: { backgroundColor: "#12294A", borderColor: "#12294A" },

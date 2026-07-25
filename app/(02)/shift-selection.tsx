@@ -29,7 +29,7 @@ import { getDashboardAnalytics, subscribeDashboardAnalytics, type CustomerState,
 import Icon from "../../src/Icon";
 import { lightImpact } from "../../src/interactions";
 import { CustomerSearchResult, getAllActiveCustomersWithVillages, runRetroactiveCleanup, addNestedExpense, updateNestedExpense, deleteNestedExpense, type NestedExpense } from "../../src/repository";
-import { Colors, Gradients } from "../../src/theme";
+import { Colors } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
 import { useLanguage } from "../../src/language-context";
 import { translateTelugu } from "../../src/exports";
@@ -88,13 +88,12 @@ function DashboardPanel({
   children: React.ReactNode;
   action?: React.ReactNode;
 }) {
-  const { colors } = useTheme();
   return (
-    <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <View style={styles.panel}>
       <View style={styles.sectionHeader}>
         <View style={styles.sectionCopy}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
-          {subtitle ? <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>{subtitle}</Text> : null}
+          <Text style={styles.sectionTitle}>{title}</Text>
+          {subtitle ? <Text style={styles.sectionSub}>{subtitle}</Text> : null}
         </View>
         {action}
       </View>
@@ -109,24 +108,25 @@ function DashboardMetric({
   icon,
   tone,
   caption,
+  valueTone,
 }: {
   title: string;
   value: string;
   icon: string;
   tone: string;
   caption: string;
+  valueTone?: string;
 }) {
-  const { colors } = useTheme();
   return (
-    <View style={[styles.metricCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <View style={styles.metricCard}>
       <View style={[styles.metricIcon, { backgroundColor: `${tone}18` }]}>
         <Icon name={icon} size={17} color={tone} />
       </View>
-      <Text style={[styles.metricTitle, { color: colors.textSecondary }]}>{title}</Text>
-      <Text style={[styles.metricValue, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+      <Text style={styles.metricTitle}>{title}</Text>
+      <Text style={[styles.metricValue, valueTone ? { color: valueTone } : null]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
         {value}
       </Text>
-      <Text style={[styles.metricCaption, { color: colors.textMuted }]}>{caption}</Text>
+      <Text style={styles.metricCaption}>{caption}</Text>
     </View>
   );
 }
@@ -156,11 +156,10 @@ function EmptyLine({ text }: { text: string }) {
 }
 
 function BottomNavButton({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) {
-  const { colors } = useTheme();
   return (
-    <Pressable accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.bottomNavButton, { backgroundColor: colors.card, borderColor: colors.border }, pressed && styles.pressed]}>
-      <Icon name={icon} size={15} color={colors.primary} />
-      <Text style={[styles.bottomNavText, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
+    <Pressable accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.bottomNavButton, pressed && styles.pressed]}>
+      <Icon name={icon} size={17} color={label.toLowerCase().includes("account") ? "#D4AF6A" : "#4B5A6D"} />
+      <Text style={[styles.bottomNavText, label.toLowerCase().includes("account") && styles.bottomNavTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
     </Pressable>
   );
 }
@@ -574,7 +573,7 @@ export default function ShiftSelectionScreen() {
 
   return (
     <AnimatedScreen style={styles.root}>
-      <LinearGradient colors={[colors.background, colors.backgroundSecondary]} style={styles.root}>
+      <LinearGradient colors={["#F4F6F9", "#F4F6F9"]} style={styles.root}>
         <SafeAreaView style={styles.safe}>
           <ScrollView
             contentContainerStyle={styles.container}
@@ -627,9 +626,9 @@ export default function ShiftSelectionScreen() {
                 <>
                   <DashboardPanel
                     title={t("collectionRoute")}
-                    action={<Text style={[styles.routeMeta, { color: colors.textMuted }]}>{selectedDay} / {selectedShift}</Text>}
+                    action={<Text style={styles.routeMeta}>{selectedDay} / {selectedShift}</Text>}
                   >
-                    <Text style={[styles.controlLabel, { color: colors.textSecondary }]}>{t("day")}</Text>
+                    <Text style={styles.controlLabel}>{t("day")}</Text>
                     <View style={styles.dayGrid}>
                       {days.map((day, index) => (
                         <Pressable
@@ -639,14 +638,14 @@ export default function ShiftSelectionScreen() {
                              lightImpact();
                              setSelectedDay(day);
                            }}
-                           style={[styles.dayChip, { backgroundColor: colors.surfaceTint, borderColor: colors.border }, selectedDay === day && styles.dayChipOn]}
+                           style={[styles.dayChip, selectedDay === day && styles.dayChipOn]}
                         >
-                          <Text style={[styles.dayChipText, { color: colors.text }, selectedDay === day && styles.dayChipTextOn]}>{shortDays[index]}</Text>
+                          <Text style={[styles.dayChipText, selectedDay === day && styles.dayChipTextOn]}>{shortDays[index]}</Text>
                         </Pressable>
                       ))}
                     </View>
 
-                    <Text style={[styles.controlLabel, { color: colors.textSecondary }]}>{t("shift")}</Text>
+                    <Text style={styles.controlLabel}>{t("shift")}</Text>
                     <View style={styles.shiftRow}>
                       {shifts.map((shift) => {
                         const active = selectedShift === shift;
@@ -658,24 +657,24 @@ export default function ShiftSelectionScreen() {
                               lightImpact();
                               setSelectedShift(shift);
                             }}
-                            style={[styles.shift, { backgroundColor: colors.surfaceTint, borderColor: colors.border }, active && styles.shiftOn]}
+                            style={[styles.shift, active && styles.shiftOn]}
                           >
-                        <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={17} color={active ? Colors.nearBlack : colors.primary} />
-                            <Text style={[styles.shiftText, { color: colors.primary }, active && styles.shiftTextOn]}>{shift}</Text>
+                        <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={17} color={active ? "#12294A" : "#4B5A6D"} />
+                            <Text style={[styles.shiftText, active && styles.shiftTextOn]}>{shift}</Text>
                           </Pressable>
                         );
                       })}
                     </View>
 
                     {routeProgress.customerCount > 0 && (
-                      <View style={[styles.progressCard, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
+                      <View style={styles.progressCard}>
                         <View style={styles.progressHeader}>
-                          <Text style={[styles.progressTitle, { color: colors.text }]}>
+                          <Text style={styles.progressTitle}>
                             {selectedDay} {selectedShift === "Morning" ? "☀️" : "🌙"} Route Progress
                           </Text>
-                          <Text style={[styles.progressPercentText, { color: colors.primary }]}>{progressPercent}%</Text>
+                          <Text style={styles.progressPercentText}>{progressPercent}%</Text>
                         </View>
-                        <View style={[styles.progressBarBg, { backgroundColor: colors.border, flexDirection: "row", overflow: "hidden" }]}>
+                        <View style={styles.progressBarBg}>
                           {paidPercent > 0 && (
                             <View
                               style={[
@@ -702,7 +701,7 @@ export default function ShiftSelectionScreen() {
                           )}
                         </View>
                         <View style={styles.progressDetails}>
-                          <Text style={[styles.progressDetailText, { color: colors.textSecondary }]}>
+                          <Text style={styles.progressDetailText}>
                             Paid: <Text style={{fontWeight: "900", color: "#D4AF6A"}}>{formatMoney(routeProgress.collected)}</Text>
                             {routeProgress.dueAmount > 0 && (
                               <> • Dues: <Text style={{fontWeight: "900", color: "#d94841"}}>{formatMoney(routeProgress.dueAmount)}</Text></>
@@ -710,11 +709,11 @@ export default function ShiftSelectionScreen() {
                             {" "}/ {formatMoney(routeProgress.target)}
                           </Text>
                           {remainingCustomers > 0 ? (
-                            <Text style={[styles.progressHintText, { color: colors.amberGlow }]}>
+                            <Text style={styles.progressHintText}>
                               Rs. {Math.round(remainingTarget).toLocaleString("en-IN")} left • {remainingCustomers} customer{remainingCustomers === 1 ? "" : "s"} remaining
                             </Text>
                           ) : (
-                            <Text style={[styles.progressHintText, {color: "#16803a", fontWeight: "900"}]}>
+                            <Text style={[styles.progressHintText, {color: "#1E7A4C", fontWeight: "900"}]}>
                               🎉 Route Visited! {routeProgress.paidCustomerCount} Paid • {routeProgress.dueCustomerCount} Dues
                             </Text>
                           )}
@@ -723,10 +722,10 @@ export default function ShiftSelectionScreen() {
                     )}
 
                     <Pressable accessibilityLabel={t("startCollection")} onPress={startCollection}>
-                      <LinearGradient colors={Gradients.ctaButton} style={styles.primaryAction}>
+                      <View style={styles.primaryAction}>
                         <Text style={styles.primaryActionText}>{t("startCollection")}</Text>
                         <Icon name="arrow-forward" size={18} color={Colors.white} />
-                      </LinearGradient>
+                      </View>
                     </Pressable>
 
                     <View style={styles.walletRouteSummary}>
@@ -773,19 +772,19 @@ export default function ShiftSelectionScreen() {
                   <View style={styles.metricGrid}>
                     {isOwner ? (
                       <>
-                        <DashboardMetric title={t("balance")} value={formatMoney(balance)} caption={t("collectedMinusPending")} icon="wallet-outline" tone="#FFFFFF" />
-                        <DashboardMetric title={t("income")} value={formatMoney(totals?.monthlyRevenue ?? 0)} caption={t("collectedThisMonth")} icon="cash-outline" tone={Colors.lightSeaGreen} />
-                        <DashboardMetric title={t("expense")} value={formatMoney(totals?.distributedThisMonth ?? 0)} caption={t("distributedThisMonth")} icon="trending-up-outline" tone={Colors.amberGlow} />
-                        <DashboardMetric title="Current Amount" value={formatMoney(mainCurrentAmount)} caption="BF + collection − dist. − exp." icon="calculator-outline" tone={Colors.lightSeaGreen} />
+                        <DashboardMetric title={t("balance")} value={formatMoney(balance)} caption={t("collectedMinusPending")} icon="cash-outline" tone="#B03A3A" valueTone="#B03A3A" />
+                        <DashboardMetric title={t("income")} value={formatMoney(totals?.monthlyRevenue ?? 0)} caption={t("collectedThisMonth")} icon="trending-up-outline" tone="#1E7A4C" valueTone="#1E7A4C" />
+                        <DashboardMetric title={t("expense")} value={formatMoney(totals?.distributedThisMonth ?? 0)} caption={t("distributedThisMonth")} icon="arrow-down-outline" tone="#9A6B1E" valueTone="#9A6B1E" />
+                        <DashboardMetric title="Current Amount" value={formatMoney(mainCurrentAmount)} caption="BF + collection - dist. - exp." icon="alert-triangle-outline" tone="#B03A3A" valueTone="#B03A3A" />
                       </>
                     ) : (
                       <>
-                        <DashboardMetric title="BF (Opening)" value={formatMoney(totals?.balancingFund ?? 0)} caption="Opening balance" icon="wallet-outline" tone="#FFFFFF" />
-                        <DashboardMetric title="Current Amount" value={formatMoney(totals?.netCashPosition ?? 0)} caption="BF + collected − dist. − exp." icon="calculator-outline" tone={Colors.lightSeaGreen} />
-                        <DashboardMetric title="Today Collected" value={formatMoney(totals?.collectionToday ?? 0)} caption="Collected today" icon="cash-outline" tone={Colors.lightSeaGreen} />
-                        <DashboardMetric title="Today Distributed" value={formatMoney(totals?.distributedToday ?? 0)} caption="Distributed today" icon="trending-up-outline" tone={Colors.amberGlow} />
-                        <DashboardMetric title="Total Collected" value={formatMoney(totals?.totalCollection ?? 0)} caption="All-time collected" icon="cash-outline" tone={Colors.lightSeaGreen} />
-                        <DashboardMetric title="Total Distributed" value={formatMoney(totals?.totalDistributed ?? 0)} caption="All-time distributed" icon="trending-up-outline" tone={Colors.amberGlow} />
+                        <DashboardMetric title="BF (Opening)" value={formatMoney(totals?.balancingFund ?? 0)} caption="Opening balance" icon="wallet-outline" tone="#12294A" valueTone="#12294A" />
+                        <DashboardMetric title="Current Amount" value={formatMoney(totals?.netCashPosition ?? 0)} caption="BF + collected - dist. - exp." icon="calculator-outline" tone="#B03A3A" valueTone="#B03A3A" />
+                        <DashboardMetric title="Today Collected" value={formatMoney(totals?.collectionToday ?? 0)} caption="Collected today" icon="cash-outline" tone="#1E7A4C" valueTone="#1E7A4C" />
+                        <DashboardMetric title="Today Distributed" value={formatMoney(totals?.distributedToday ?? 0)} caption="Distributed today" icon="trending-up-outline" tone="#9A6B1E" valueTone="#9A6B1E" />
+                        <DashboardMetric title="Total Collected" value={formatMoney(totals?.totalCollection ?? 0)} caption="All-time collected" icon="cash-outline" tone="#1E7A4C" valueTone="#1E7A4C" />
+                        <DashboardMetric title="Total Distributed" value={formatMoney(totals?.totalDistributed ?? 0)} caption="All-time distributed" icon="trending-up-outline" tone="#9A6B1E" valueTone="#9A6B1E" />
                       </>
                     )}
                   </View>
@@ -845,7 +844,7 @@ export default function ShiftSelectionScreen() {
                         subtitle={t("collectedVsDistributedByWeek")}
                         action={
                           <View style={styles.legend}>
-                            <View style={[styles.legendDot, { backgroundColor: Colors.lightSeaGreen }]} />
+                            <View style={[styles.legendDot, { backgroundColor: "#12294A" }]} />
                             <Text style={styles.legendText}>{t("in")}</Text>
                             <View style={[styles.legendDot, { backgroundColor: Colors.amberGlow }]} />
                             <Text style={styles.legendText}>{t("out")}</Text>
@@ -860,7 +859,7 @@ export default function ShiftSelectionScreen() {
                         subtitle={t("alertsFromTransactions")}
                         action={
                           <View style={styles.panelIcon}>
-                            <Icon name="sparkles-outline" size={18} color={Colors.nearBlack} />
+                            <Icon name="sparkles-outline" size={14} color="#D4AF6A" />
                           </View>
                         }
                       >
@@ -889,8 +888,8 @@ export default function ShiftSelectionScreen() {
                               style={styles.transactionRow}
                               onPress={() => item.customerId && router.push(`/profile/${item.customerId}`)}
                             >
-                              <View style={styles.transactionIcon}>
-                                <Icon name="cash-outline" size={15} color={Colors.nearBlack} />
+                            <View style={styles.transactionIcon}>
+                                <Icon name="cash-outline" size={14} color="#1E7A4C" />
                               </View>
                               <View style={styles.rowCopy}>
                                 <Text style={styles.rowTitle}>{item.customerName}</Text>
@@ -921,7 +920,7 @@ export default function ShiftSelectionScreen() {
                           onPress={() => router.push(`/profile/${alert.customerId}`)}
                         >
                           <View style={styles.alertIcon}>
-                            <Icon name="alert-circle-outline" size={15} color="#FFFFFF" />
+                            <Icon name="alert-circle-outline" size={14} color="#B03A3A" />
                           </View>
                           <View style={styles.rowCopy}>
                             <Text style={styles.rowTitle}>{alert.customerName}</Text>
@@ -929,7 +928,7 @@ export default function ShiftSelectionScreen() {
                               {alert.villageName} / {alert.dueCount} due / {formatMoney(alert.dueAmount)}
                             </Text>
                           </View>
-                          <Icon name="warning" size={16} color="#94A3B8" />
+                          <Icon name="warning" size={14} color="#D4AF6A" />
                         </Pressable>
                       ))
                     ) : (
@@ -1152,7 +1151,7 @@ export default function ShiftSelectionScreen() {
               nav.push("/ai-advisor" as any);
             }}
           >
-            <Icon name="sparkles-outline" size={24} color="#FFFFFF" />
+            <Icon name="sparkles-outline" size={24} color="#12294A" />
           </Pressable>
         )}
       </LinearGradient>
@@ -1165,8 +1164,8 @@ const screenWidth = Dimensions.get("window").width;
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  container: { paddingHorizontal: 14, paddingVertical: 14, paddingBottom: 36 },
-  content: { width: "100%", maxWidth: Math.min(screenWidth - 36, 920), alignSelf: "center", gap: 12 },
+  container: { paddingHorizontal: 14, paddingVertical: 14, paddingBottom: 36, backgroundColor: "#F4F6F9" },
+  content: { width: "100%", maxWidth: Math.min(screenWidth - 28, 380), alignSelf: "center", gap: 12 },
   headerCard: {
     backgroundColor: Colors.white,
     borderRadius: 12,
@@ -1201,31 +1200,31 @@ const styles = StyleSheet.create({
   },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
   sectionCopy: { flex: 1 },
-  sectionTitle: { color: Colors.nearBlack, fontSize: 15, lineHeight: 20, fontWeight: "900" },
-  sectionSub: { color: Colors.textMuted, fontSize: 11, fontWeight: "800", marginTop: 1 },
-  routeMeta: { color: Colors.textMuted, fontSize: 11, fontWeight: "900" },
-  controlLabel: { color: Colors.textMuted, fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
+  sectionTitle: { color: "#12294A", fontSize: 15, lineHeight: 20, fontWeight: "900" },
+  sectionSub: { color: "#9AA6B2", fontSize: 11.5, fontWeight: "700", marginTop: 1 },
+  routeMeta: { color: "#6B7A8D", fontSize: 12, fontWeight: "700" },
+  controlLabel: { color: "#9AA6B2", fontSize: 10.5, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.3 },
   dayGrid: { flexDirection: "row", gap: 6 },
-  dayChip: { flex: 1, borderWidth: 1, borderColor: Colors.borderLight, borderRadius: 8, paddingVertical: 8, alignItems: "center", backgroundColor: "#F4F6F9", minWidth: 38 },
+  dayChip: { flex: 1, borderWidth: 0, borderRadius: 8, paddingVertical: 7, alignItems: "center", backgroundColor: "#F4F6F9", minWidth: 38 },
   dayChipOn: { backgroundColor: Colors.amberGlow, borderColor: Colors.amberGlow },
-  dayChipText: { color: Colors.nearBlack, fontSize: 12, fontWeight: "900" },
-  dayChipTextOn: { color: Colors.white },
+  dayChipText: { color: "#4B5A6D", fontSize: 12, fontWeight: "700" },
+  dayChipTextOn: { color: "#12294A", fontWeight: "900" },
   shiftRow: { flexDirection: "row", gap: 8 },
-  shift: { flex: 1, minHeight: 42, borderRadius: 8, borderWidth: 1, borderColor: Colors.borderLight, backgroundColor: "#F4F6F9", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7, paddingHorizontal: 8 },
+  shift: { flex: 1, minHeight: 38, borderRadius: 8, borderWidth: 0, backgroundColor: "#F4F6F9", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7, paddingHorizontal: 8 },
   shiftOn: { backgroundColor: Colors.amberGlow, borderColor: Colors.amberGlow },
-  shiftText: { color: Colors.lightSeaGreen, fontWeight: "900", fontSize: 13 },
-  shiftTextOn: { color: Colors.white },
-  primaryAction: { borderRadius: 9, paddingVertical: 13, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
+  shiftText: { color: "#4B5A6D", fontWeight: "700", fontSize: 13 },
+  shiftTextOn: { color: "#12294A", fontWeight: "900" },
+  primaryAction: { backgroundColor: "#12294A", borderRadius: 9, paddingVertical: 13, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
   primaryActionText: { color: Colors.white, fontWeight: "900", fontSize: 15 },
   walletRouteSummary: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 2 },
   walletRouteText: { color: Colors.textMuted, fontSize: 11, fontWeight: "800" },
   walletRouteDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.borderLight },
-  metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  metricCard: { flexGrow: 1, flexBasis: "47%", minWidth: 150, minHeight: 124, borderRadius: 12, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.borderLight, padding: 14 },
-  metricIcon: { width: 33, height: 33, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 9 },
-  metricTitle: { color: Colors.textMuted, fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
-  metricValue: { color: Colors.nearBlack, fontSize: 21, lineHeight: 26, fontWeight: "900", marginTop: 3 },
-  metricCaption: { color: Colors.textMuted, fontSize: 11, fontWeight: "800", marginTop: 2 },
+  metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  metricCard: { flexGrow: 1, flexBasis: "46%", minWidth: 150, minHeight: 122, borderRadius: 12, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E1E6ED", padding: 16 },
+  metricIcon: { width: 26, height: 26, borderRadius: 7, alignItems: "center", justifyContent: "center", marginBottom: 8 },
+  metricTitle: { color: "#9AA6B2", fontSize: 11, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.3 },
+  metricValue: { color: "#12294A", fontSize: 19, lineHeight: 24, fontWeight: "900", marginTop: 3 },
+  metricCaption: { color: "#9AA6B2", fontSize: 11, fontWeight: "700", marginTop: 2 },
   legend: { flexDirection: "row", alignItems: "center", gap: 5 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { color: Colors.textMuted, fontSize: 10, fontWeight: "900" },
@@ -1234,27 +1233,28 @@ const styles = StyleSheet.create({
   chartBarWrap: { height: 116, flexDirection: "row", alignItems: "flex-end", gap: 5 },
   chartBar: { width: 10, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
   chartBarOut: { backgroundColor: Colors.amberGlow },
-  chartBarIn: { backgroundColor: Colors.lightSeaGreen },
+  chartBarIn: { backgroundColor: "#12294A" },
   chartLabel: { color: Colors.textMuted, fontSize: 10, fontWeight: "900" },
-  panelIcon: { width: 36, height: 36, borderRadius: 13, backgroundColor: Colors.frozenWater, alignItems: "center", justifyContent: "center" },
+  panelIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#F4F6F9", alignItems: "center", justifyContent: "center" },
   insightRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   insightDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.amberGlow, marginTop: 5 },
-  insightText: { flex: 1, color: "#426c67", fontSize: 13, lineHeight: 19, fontWeight: "800" },
-  csvButton: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, backgroundColor: Colors.frozenWater, paddingHorizontal: 10, paddingVertical: 7 },
-  csvText: { color: Colors.lightSeaGreen, fontSize: 10, fontWeight: "900" },
-  transactionRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13, borderTopWidth: 1, borderTopColor: Colors.borderLight },
-  transactionIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: Colors.frozenWater, alignItems: "center", justifyContent: "center" },
+  insightText: { flex: 1, color: "#3E4C5E", fontSize: 13, lineHeight: 19, fontWeight: "700" },
+  csvButton: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 6, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E1E6ED", paddingHorizontal: 8, paddingVertical: 5 },
+  csvText: { color: "#12294A", fontSize: 10, fontWeight: "900" },
+  transactionRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9, borderTopWidth: 1, borderTopColor: "#EEF1F5" },
+  transactionIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#E4F3EA", alignItems: "center", justifyContent: "center" },
   rowCopy: { flex: 1, minWidth: 0 },
   rowTitle: { color: Colors.nearBlack, fontSize: 14, fontWeight: "900" },
   rowMeta: { color: Colors.textMuted, fontSize: 12, fontWeight: "800", marginTop: 2 },
   transactionAmount: { color: Colors.lightSeaGreen, fontSize: 13, fontWeight: "900" },
-  alertBadge: { overflow: "hidden", borderRadius: 999, backgroundColor: "#fde7e5", color: Colors.danger, paddingHorizontal: 10, paddingVertical: 6, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
-  alertRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13, borderTopWidth: 1, borderTopColor: Colors.borderLight },
-  alertIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: Colors.danger, alignItems: "center", justifyContent: "center" },
+  alertBadge: { overflow: "hidden", borderRadius: 6, backgroundColor: "#FBEAEA", color: "#B03A3A", paddingHorizontal: 8, paddingVertical: 4, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
+  alertRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9, borderTopWidth: 1, borderTopColor: "#EEF1F5" },
+  alertIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#FBEAEA", alignItems: "center", justifyContent: "center" },
   emptyText: { color: Colors.textMuted, fontSize: 13, fontWeight: "800", paddingVertical: 12 },
-  bottomNav: { flexDirection: "row", gap: 5, paddingHorizontal: 2 },
-  bottomNavButton: { flex: 1, minHeight: 52, borderRadius: 12, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.borderLight, alignItems: "center", justifyContent: "center", gap: 2, paddingHorizontal: 2, paddingVertical: 4 },
-  bottomNavText: { color: Colors.nearBlack, fontSize: 10, fontWeight: "900", textAlign: "center" },
+  bottomNav: { flexDirection: "row", justifyContent: "space-between", backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#E1E6ED", padding: 10 },
+  bottomNavButton: { flex: 1, minHeight: 42, borderRadius: 8, backgroundColor: "#FFFFFF", borderWidth: 0, alignItems: "center", justifyContent: "center", gap: 2, paddingHorizontal: 2, paddingVertical: 4 },
+  bottomNavText: { color: "#4B5A6D", fontSize: 10.5, fontWeight: "800", textAlign: "center" },
+  bottomNavTextActive: { color: "#12294A", fontWeight: "900" },
   progressCard: { backgroundColor: "#fafbfc", borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: Colors.borderLight },
   progressHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
   progressTitle: { fontSize: 12, fontWeight: "900", color: Colors.nearBlack },
@@ -1265,7 +1265,7 @@ const styles = StyleSheet.create({
   progressDetailText: { fontSize: 11, fontWeight: "800", color: Colors.textMuted },
   progressHintText: { fontSize: 10, fontWeight: "800", color: Colors.amberGlow },
   logoutLink: { alignItems: "center", paddingVertical: 8 },
-  logoutText: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
+  logoutText: { color: "#B03A3A", fontSize: 13, fontWeight: "900" },
   pressed: { opacity: 0.76, transform: [{ scale: 0.98 }] },
   skeletonPanel: { backgroundColor: Colors.white, borderRadius: 18, borderWidth: 1, borderColor: Colors.borderLight, padding: 16, gap: 14 },
   skeletonLine: { height: 16, borderRadius: 999, backgroundColor: "#DCE6F7" },

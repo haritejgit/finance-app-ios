@@ -558,16 +558,6 @@ export default function ProfileScreen() {
     }
   };
 
-  const toggleDocumentSubmitted = async (field: "aadharSubmitted" | "passportPhotoSubmitted" | "chequeSubmitted") => {
-    if (!customer) return;
-    const updatedCustomer: Customer = {
-      ...customer,
-      [field]: !customer[field],
-    };
-    await updateCustomer(updatedCustomer);
-    setCustomer(updatedCustomer);
-  };
-
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -1512,7 +1502,7 @@ export default function ProfileScreen() {
         .map((part) => part[0]?.toUpperCase())
         .join("")
     : "CU";
-  const maskedAadhaar = customer?.aadhar ? `Aadhar ...${customer.aadhar.replace(/\D/g, "").slice(-4) || customer.aadhar.slice(-4)}` : "Aadhar not set";
+  const fullAadhaar = customer?.aadhar ? `Aadhar ${customer.aadhar}` : "Aadhar not set";
 
   return (
     <AnimatedScreen style={styles.root}>
@@ -1574,36 +1564,9 @@ export default function ProfileScreen() {
                 </View>
                 <View style={styles.headerInfoRow}>
                   <Icon name="id-card-outline" size={15} color="#C4D2E2" />
-                  <Text style={styles.headerText}>{maskedAadhaar}</Text>
+                  <Text style={styles.headerText}>{fullAadhaar}</Text>
                 </View>
               </View>
-            </View>
-
-            <View style={[styles.docsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.docsHeaderRow}>
-                <Text style={[styles.docsTitle, { color: colors.primary }]}>Customer Documents</Text>
-                <Text style={[styles.docsStatusText, customer.aadharSubmitted && customer.passportPhotoSubmitted && (!customer.chequeRequired || customer.chequeSubmitted) ? styles.docsStatusComplete : styles.docsStatusPending]}>
-                  {customer.aadharSubmitted && customer.passportPhotoSubmitted && (!customer.chequeRequired || customer.chequeSubmitted) ? "Complete" : "Pending"}
-                </Text>
-              </View>
-              <Pressable style={[styles.docsDetailRow, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={() => toggleDocumentSubmitted("aadharSubmitted")}>
-                <View style={[styles.docsDetailCheckbox, { backgroundColor: colors.card, borderColor: colors.border }, customer.aadharSubmitted && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
-                  {customer.aadharSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
-                </View>
-                <Text style={[styles.docsDetailText, { color: colors.text }]}>Aadhar submitted</Text>
-              </Pressable>
-              <Pressable style={[styles.docsDetailRow, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={() => toggleDocumentSubmitted("passportPhotoSubmitted")}>
-                <View style={[styles.docsDetailCheckbox, { backgroundColor: colors.card, borderColor: colors.border }, customer.passportPhotoSubmitted && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
-                  {customer.passportPhotoSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
-                </View>
-                <Text style={[styles.docsDetailText, { color: colors.text }]}>Passport photo submitted</Text>
-              </Pressable>
-              <Pressable style={[styles.docsDetailRow, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={() => toggleDocumentSubmitted("chequeSubmitted")}>
-                <View style={[styles.docsDetailCheckbox, { backgroundColor: colors.card, borderColor: colors.border }, customer.chequeSubmitted && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
-                  {customer.chequeSubmitted ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
-                </View>
-                <Text style={[styles.docsDetailText, { color: colors.text }]}>Cheque submitted{customer.chequeRequired ? "" : " (when required)"}</Text>
-              </Pressable>
             </View>
 
             {/* Stats Cards */}
@@ -1641,29 +1604,19 @@ export default function ProfileScreen() {
                       ]}
                     />
                   </View>
-                </View>
-
-                <View style={[styles.disbursementRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <Text style={[styles.disbursementLabel, { color: colors.textSecondary }]}>Disbursed via:</Text>
-                  <Text
-                    style={[
-                      styles.disbursementBadge,
-                      { backgroundColor: disbursementMode === "PHONE" ? "#8A6B2F" : "#12294A" },
-                    ]}
-                  >
-                    {disbursementMode === "PHONE" ? "PhonePe" : "Cash"}
-                  </Text>
-                </View>
-
-                <View style={[styles.disbursementRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <Text style={[styles.disbursementLabel, { color: colors.textSecondary }]}>Loan Taken Date:</Text>
-                  <Text style={[styles.disbursementLabel, { color: colors.text, fontWeight: "700" }]}>
-                    {new Date(localLoan.startDate).toLocaleDateString("en-IN", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </Text>
+                  <View style={styles.repaymentMetaRow}>
+                    <View style={styles.repaymentMetaItem}>
+                      <Icon name={disbursementMode === "PHONE" ? "phone-portrait-outline" : "cash-outline"} size={15} color="#4B5A6D" />
+                      <Text style={styles.repaymentMetaText}>Disbursed via {disbursementMode === "PHONE" ? "PhonePe" : "cash"}</Text>
+                    </View>
+                    <Text style={styles.repaymentMetaText}>
+                      Taken {new Date(localLoan.startDate).toLocaleDateString("en-IN", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </Text>
+                  </View>
                 </View>
               </>
             ) : null}
@@ -1674,6 +1627,7 @@ export default function ProfileScreen() {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.timelineRow}>
                   {paymentTimeline.map((week) => {
                     const circleColor = week.status === "paid" ? "#1E7A4C" : week.status === "overdue" ? "#B03A3A" : "#9AA6B2";
+                    const weekIcon = week.status === "paid" ? "checkmark" : week.status === "overdue" ? "close" : "time-outline";
                     return (
                       <Pressable
                         key={week.index}
@@ -1687,7 +1641,9 @@ export default function ProfileScreen() {
                               ? { borderColor: circleColor, backgroundColor: "transparent" }
                               : { borderColor: circleColor, backgroundColor: circleColor },
                           ]}
-                        />
+                        >
+                          <Icon name={weekIcon as any} size={14} color={week.status === "upcoming" ? circleColor : "#FFFFFF"} />
+                        </View>
                         <Text style={[styles.timelineWeekLabel, { color: colors.textMuted }]}>W{week.index + 1}</Text>
                         {selectedTimelineWeek === week.index ? (
                           <View style={[styles.timelineTooltip, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
@@ -1706,25 +1662,6 @@ export default function ProfileScreen() {
               </View>
             ) : null}
 
-            {/* Additional Info */}
-            {!!customer && (
-              <View style={[styles.infoContainer, { backgroundColor: colors.glass, borderColor: colors.glassBorder }]}>
-                {(customer.coName || customer.coId) && (
-                  <View style={styles.infoRow}>
-                    <Icon name="people" size={18} color={colors.blue2} style={{marginRight: 8}} />
-                    <Text style={[styles.infoText, { color: colors.text }]}>
-                      C/O: {customer.coName || 'N/A'} {customer.coId ? `(ID: ${customer.coId})` : ''}
-                    </Text>
-                  </View>
-                )}
-                {customer.locationDesc && (
-                  <View style={styles.infoRow}>
-                    <Icon name="location" size={18} color={colors.blue2} style={{marginRight: 8}} />
-                    <Text style={[styles.infoText, { color: colors.text }]}>{customer.locationDesc}</Text>
-                  </View>
-                )}
-              </View>
-            )}
             <View style={styles.actionGrid}>
               <Pressable
                 style={[styles.actionBtn, styles.actionBtnPrimary, noTextSelection, !localLoan || (localLoan.balanceAmount <= 0) && styles.actionBtnDisabled]}
@@ -3060,6 +2997,9 @@ const styles = StyleSheet.create({
   repaymentPercent: { color: "#1E7A4C", fontSize: 13, fontWeight: "900" },
   repaymentTrack: { height: 6, backgroundColor: "#EEF1F5", borderRadius: 4, overflow: "hidden" },
   repaymentFill: { height: "100%", borderRadius: 5 },
+  repaymentMetaRow: { flexDirection: "row", justifyContent: "space-between", gap: 10, borderTopWidth: 1, borderTopColor: "#EEF1F5", paddingTop: 10 },
+  repaymentMetaItem: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
+  repaymentMetaText: { color: "#4B5A6D", fontSize: 12.5, fontWeight: "700" },
   timelineCard: { backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#E1E6ED", padding: 16, gap: 10 },
   timelineTitle: { color: "#12294A", fontSize: 14, fontWeight: "900" },
   timelineRow: { gap: 10, paddingVertical: 4 },

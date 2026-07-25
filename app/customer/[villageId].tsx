@@ -1633,7 +1633,10 @@ export default function CustomerListScreen() {
               <Icon name="arrow-back" size={18} color="#D4AF6A" />
             </Pressable>
             <View style={styles.headerTextWrap}>
-              <Text style={styles.headerTitle}>{village?.name || 'Customers'} <Text style={{ fontSize: 10, opacity: 0.6 }}>v2</Text></Text>
+              <View style={styles.headerTitleRow}>
+                <Text style={styles.headerTitle}>{village?.name || 'Customers'}</Text>
+                <Text style={styles.versionPill}>v2</Text>
+              </View>
               <Text style={styles.headerSub}>
                 {filtered.length} customer{filtered.length !== 1 ? 's' : ''} | R: {userProfile?.role || 'null'} | M: {(userProfile?.parentUid || 'null').substring(0, 5)}
               </Text>
@@ -1665,24 +1668,24 @@ export default function CustomerListScreen() {
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.routeSummaryScroller} contentContainerStyle={styles.routeSummary}>
             <View style={styles.routeSummaryCard}>
-              <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Total Customers</Text>
+              <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Total Cust.</Text>
               <Text style={styles.routeSummaryValue}>{customerStats.total}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
-              <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Today Customers</Text>
+              <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Today Cust.</Text>
               <Text style={styles.routeSummaryValue}>{customerStats.today}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Paid</Text>
-              <Text style={styles.routeSummaryValue}>{customerStats.paid}</Text>
+              <Text style={[styles.routeSummaryValue, styles.routeSummaryValuePaid]}>{customerStats.paid}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Total Dues</Text>
-              <Text style={styles.routeSummaryValue}>{customerStats.dues}</Text>
+              <Text style={[styles.routeSummaryValue, styles.routeSummaryValueDue]}>{customerStats.dues}</Text>
             </View>
             <View style={styles.routeSummaryCard}>
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Remaining</Text>
-              <Text style={styles.routeSummaryValue}>{customerStats.remaining}</Text>
+              <Text style={[styles.routeSummaryValue, styles.routeSummaryValueRemaining]}>{customerStats.remaining}</Text>
             </View>
           </ScrollView>
           <View style={styles.customerLegend}>
@@ -2553,12 +2556,14 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
   content: { flex: 1, width: "100%", maxWidth: 430, alignSelf: "center", paddingHorizontal: 0 },
-  routeHeader: { backgroundColor: "#12294A", paddingHorizontal: 18, paddingTop: 16, paddingBottom: 12 },
+  routeHeader: { backgroundColor: "#12294A", paddingHorizontal: 20, paddingTop: 18, paddingBottom: 14 },
   headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 14, gap: 10 },
   backBtn: { width: 32, height: 32, borderRadius: 9, backgroundColor: "#1E3A63", justifyContent: "center", alignItems: "center", borderWidth: 0 },
   backBtnText: { color: colors.white, fontSize: 20, fontWeight: "700" },
   headerTextWrap: { flex: 1 },
-  headerTitle: { color: colors.white, fontSize: 18, fontWeight: "900" },
+  headerTitleRow: { flexDirection: "row", alignItems: "center", gap: 5, minWidth: 0 },
+  headerTitle: { color: colors.white, fontSize: 18, fontWeight: "900", flexShrink: 1 },
+  versionPill: { overflow: "hidden", borderRadius: 5, backgroundColor: "#1E3A63", color: "#D4AF6A", fontSize: 10, fontWeight: "900", paddingHorizontal: 4, paddingVertical: 1 },
   headerSub: { color: "#9FB2C9", fontSize: 11.5, marginTop: 2 },
   searchShell: { flexDirection: "row", alignItems: "center", gap: 9, backgroundColor: "#1E3A63", borderWidth: 0, borderRadius: 10, paddingHorizontal: 13, marginBottom: 12 },
   search: { flex: 1, paddingVertical: 11, fontSize: 13 },
@@ -2603,11 +2608,14 @@ const styles = StyleSheet.create({
   manualInputError: { color: "#b91c1c", fontSize: 12, fontWeight: "700" },
   reopenAllSection: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14, marginTop: 8, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.16)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)" },
   reopenAllText: { color: colors.white, fontSize: 13, fontWeight: "900" },
-  routeSummary: { flexDirection: "row", gap: 8, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12 },
-  routeSummaryScroller: { flexGrow: 0, height: 82, maxHeight: 82 },
+  routeSummary: { flexDirection: "row", gap: 8, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10 },
+  routeSummaryScroller: { flexGrow: 0, height: 78, maxHeight: 78 },
   routeSummaryCard: { minWidth: 76, minHeight: 58, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 8, alignItems: "center", justifyContent: "center", backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E1E6ED" },
   routeSummaryLabel: { color: "#9AA6B2", fontSize: 9, fontWeight: "900", textTransform: "uppercase", textAlign: "center" },
   routeSummaryValue: { color: "#12294A", fontSize: 16, fontWeight: "900", marginTop: 3 },
+  routeSummaryValuePaid: { color: "#1E7A4C" },
+  routeSummaryValueDue: { color: "#B03A3A" },
+  routeSummaryValueRemaining: { color: "#9A6B1E" },
   customerLegend: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 16, paddingBottom: 10 },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
   legendSwatch: { width: 8, height: 8, borderRadius: 2, borderWidth: 1 },
