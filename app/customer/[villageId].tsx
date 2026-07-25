@@ -368,6 +368,13 @@ const CustomerItem = React.memo(function CustomerItem({
             </Text>
           ) : null}
         </View>
+        {!!customer.coName && (
+          <View style={styles.coNameRow}>
+            <Text style={styles.coNameText} numberOfLines={1}>
+              C/O {language === "te" ? translateTelugu(customer.coName) : customer.coName}
+            </Text>
+          </View>
+        )}
 
         <View style={styles.phoneIconRow}>
           {customer.phone ? (
@@ -1573,6 +1580,11 @@ export default function CustomerListScreen() {
               <Text style={[styles.cardName, { color: "#6B7280" }]} numberOfLines={1}>
                 {item.name} <Text style={{ fontSize: 10, color: "#9CA3AF" }}>[Closed]</Text>
               </Text>
+              {!!item.coName && (
+                <View style={styles.coNameRow}>
+                  <Text style={[styles.coNameText, { color: "#6B7280" }]} numberOfLines={1}>C/O {item.coName}</Text>
+                </View>
+              )}
               <Text style={styles.cardPhone}>{item.phone || "\u2014"}</Text>
               {closedLoan ? (
                 <Text style={[styles.cardAmount, { color: "#9CA3AF" }]}>Last Balance: Rs.{Math.round(closedLoan.balanceAmount).toLocaleString("en-IN")}</Text>
@@ -2688,6 +2700,8 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#12294A",
   },
+  coNameRow: { flexDirection: "row", alignItems: "center", minWidth: 0, marginTop: -1 },
+  coNameText: { flexShrink: 1, color: "#4B5A6D", fontSize: 9.5, lineHeight: 13, fontWeight: "800" },
   rowStatusPill: { overflow: "hidden", fontSize: 8.5, fontWeight: "900", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 5 },
   phoneIconRow: {
     flexDirection: "row",
