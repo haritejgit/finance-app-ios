@@ -1259,7 +1259,7 @@ const styles = StyleSheet.create({
   progressHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
   progressTitle: { fontSize: 12, fontWeight: "900", color: Colors.nearBlack },
   progressPercentText: { fontSize: 13, fontWeight: "900", color: Colors.lightSeaGreen },
-  progressBarBg: { height: 8, backgroundColor: "#e2e8f0", borderRadius: 4, overflow: "hidden", marginBottom: 8 },
+  progressBarBg: { height: 8, backgroundColor: "#e2e8f0", borderRadius: 4, overflow: "hidden", marginBottom: 8, flexDirection: "row" },
   progressBarFill: { height: "100%", borderRadius: 4 },
   progressDetails: { gap: 2 },
   progressDetailText: { fontSize: 11, fontWeight: "800", color: Colors.textMuted },
