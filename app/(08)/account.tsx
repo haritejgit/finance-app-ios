@@ -1648,11 +1648,11 @@ export default function AccountScreen() {
         ) : null}
         <View style={styles.summaryActions}>
           <Pressable style={styles.pdfButton} onPress={handleExportPDF}>
-            <Icon name="document-text-outline" size={14} color="#111827" />
+            <Icon name="document-text-outline" size={14} color="#12294A" />
             <Text style={styles.pdfButtonText}>{isTe ? "ఎగుమతి" : "Export"}</Text>
           </Pressable>
           <Pressable style={styles.whatsappShareBtn} onPress={() => setShowWhatsAppSheet(true)} accessibilityLabel="Share via WhatsApp">
-            <Icon name="logo-whatsapp" size={14} color="#ffffff" />
+            <Icon name="logo-whatsapp" size={14} color="#D4AF6A" />
             <Text style={styles.whatsappShareText}>Share</Text>
           </Pressable>
         </View>
@@ -1661,7 +1661,7 @@ export default function AccountScreen() {
       <View style={styles.sparklineCard}>
         <View style={styles.sparklineHeader}>
           <Text style={styles.sparklineLabel}>Last 7 Days</Text>
-          <Text style={[styles.sparklineTotal, { color: sevenDayNet >= 0 ? "#0F8A5F" : "#C62828" }]}>
+          <Text style={[styles.sparklineTotal, { color: sevenDayNet >= 0 ? "#12294A" : "#B03A3A" }]}>
             {sevenDayNet >= 0 ? "+" : "-"}Rs.{formatIndianNumber(Math.abs(sevenDayNet))}
           </Text>
         </View>
@@ -1675,7 +1675,7 @@ export default function AccountScreen() {
                     styles.sparklineBar,
                     {
                       height,
-                      backgroundColor: day.net >= 0 ? "#25A970" : "#E15241",
+                      backgroundColor: day.net >= 0 ? "#12294A" : "#D4AF6A",
                     },
                   ]}
                 />
@@ -1695,13 +1695,13 @@ export default function AccountScreen() {
     <Pressable style={[styles.card, styles.blockAadhaarCard]} onPress={() => router.push("/block-aadhaar" as any)}>
       <View style={styles.blockAadhaarHeader}>
         <View style={styles.blockAadhaarIcon}>
-          <Icon name="shield-checkmark-outline" size={20} color="#C62828" />
+          <Icon name="shield-checkmark-outline" size={20} color="#B03A3A" />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.cardTitle}>Block Aadhaar</Text>
           <Text style={styles.cardDesc}>Prevent blocked Aadhaar numbers from new registrations</Text>
         </View>
-        <Icon name="arrow-forward" size={20} color="#C62828" />
+        <Icon name="arrow-forward" size={20} color="#B03A3A" />
       </View>
     </Pressable>
   );
@@ -1774,16 +1774,16 @@ export default function AccountScreen() {
                   style={[{
                     paddingHorizontal: 16,
                     paddingVertical: 10,
-                    borderRadius: 20,
-                    backgroundColor: bulkVillageId === v.id ? "#1565C0" : "#F5F9FF",
+                    borderRadius: 8,
+                    backgroundColor: bulkVillageId === v.id ? "#12294A" : "#F4F6F9",
                     borderWidth: 1,
-                    borderColor: bulkVillageId === v.id ? "#1565C0" : "#dbeafe",
+                    borderColor: bulkVillageId === v.id ? "#12294A" : "#E1E6ED",
                     marginRight: 8,
                   }]}
                   onPress={() => setBulkVillageId(v.id)}
                 >
                   <Text style={{
-                    color: bulkVillageId === v.id ? "#ffffff" : "#546E7A",
+                    color: bulkVillageId === v.id ? "#D4AF6A" : "#6B7A8D",
                     fontSize: 13,
                     fontWeight: "800",
                   }}>{v.name}</Text>
@@ -1796,9 +1796,9 @@ export default function AccountScreen() {
         <View style={styles.walletDivider} />
 
         {/* Info label about deselecting */}
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#eff6ff", padding: 10, borderRadius: 10, borderWidth: 1, borderColor: "#bfdbfe" }}>
-          <Icon name="information-circle-outline" size={16} color="#1e40af" />
-          <Text style={{ fontSize: 11, fontWeight: "700", color: "#1e40af", flex: 1 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#F4F6F9", padding: 10, borderRadius: 10, borderWidth: 1, borderColor: "#E1E6ED" }}>
+          <Icon name="information-circle-outline" size={16} color="#12294A" />
+          <Text style={{ fontSize: 11, fontWeight: "700", color: "#12294A", flex: 1 }}>
             {t("deselectHint")}
           </Text>
         </View>
@@ -1807,7 +1807,7 @@ export default function AccountScreen() {
         <Text style={[styles.inputLabel, { marginTop: 10 }]}>Customers List</Text>
         {bulkLoading ? (
           <View style={{ paddingVertical: 20, alignItems: "center" }}>
-            <ActivityIndicator size="small" color="#1565C0" />
+            <ActivityIndicator size="small" color="#12294A" />
           </View>
         ) : !bulkVillageId ? (
           <Text style={styles.emptyText}>Please select a village above.</Text>
@@ -1842,14 +1842,14 @@ export default function AccountScreen() {
                       <Icon
                         name={isSelected ? "checkbox" : "square-outline"}
                         size={24}
-                        color={isSelected ? "#1565C0" : "#64748b"}
+                        color={isSelected ? "#12294A" : "#6B7A8D"}
                       />
                     </Pressable>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 14, fontWeight: "800", color: "#1e293b" }}>
+                      <Text style={{ fontSize: 14, fontWeight: "800", color: "#12294A" }}>
                         {c.name}
                       </Text>
-                      <Text style={{ fontSize: 11, fontWeight: "600", color: "#64748b" }}>
+                      <Text style={{ fontSize: 11, fontWeight: "600", color: "#6B7A8D" }}>
                         ID: {c.numericalId} {loan ? `| Active Bal: Rs.${loan.balanceAmount}` : ""}
                       </Text>
                     </View>
@@ -2000,11 +2000,11 @@ export default function AccountScreen() {
             {/* Header Hero */}
             <View style={styles.headerHero}>
               <Pressable style={styles.backBtn} onPress={() => router.back()} accessibilityLabel="Back to Dashboard">
-                <Icon name="arrow-back" size={20} color={colors.white} />
+                <Icon name="arrow-back" size={20} color={colors.amberGlow} />
               </Pressable>
               <View style={styles.heroBrand}>
                 <View style={styles.heroIconBox}>
-                  <Icon name="wallet-outline" size={24} color={colors.white} />
+                  <Icon name="briefcase-outline" size={21} color={colors.amberGlow} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.heroTitle}>{t("accountWorkspace")}</Text>
@@ -2038,11 +2038,11 @@ export default function AccountScreen() {
                     <Pressable
                       key={tab}
                       onPress={() => setActiveTab(tab)}
-                      style={[styles.tabButton, active && { borderBottomColor: colors.white }]}
+                      style={[styles.tabButton, active && styles.tabButtonActive]}
                     >
                       <Text 
                         numberOfLines={1}
-                        style={[styles.tabText, active && { color: colors.white, fontWeight: "800" }]}
+                        style={[styles.tabText, active && styles.tabTextActive]}
                       >
                         {label}
                       </Text>
@@ -2078,7 +2078,7 @@ export default function AccountScreen() {
                       {/* ── SECTION A: Wallet Snapshot (Manual Entry) ── */}
                       <View style={styles.walletSectionHeader}>
                         <View style={[styles.walletSectionBadge, { backgroundColor: "#e3f2fd" }]}>
-                          <Text style={[styles.walletSectionBadgeText, { color: "#1565C0" }]}>A</Text>
+                          <Text style={[styles.walletSectionBadgeText, { color: "#12294A" }]}>A</Text>
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={styles.walletSectionTitle}>Wallet Snapshot</Text>
@@ -2096,12 +2096,12 @@ export default function AccountScreen() {
                           setWalletDataLoading(true);
                           setWalletLoadError(null);
                         }}>
-                          <Icon name="alert-circle-outline" size={16} color="#C62828" />
+                          <Icon name="alert-circle-outline" size={16} color="#B03A3A" />
                           <Text style={styles.walletErrorText}>{walletLoadError}</Text>
                         </Pressable>
                       ) : !liveUserProfile?.walletOpeningDate && !editingWallet ? (
                         <Pressable style={styles.walletEmptyPrompt} onPress={() => setEditingWallet(true)}>
-                          <Icon name="wallet-outline" size={20} color="#5f7f7b" />
+                          <Icon name="wallet-outline" size={20} color="#6B7A8D" />
                           <Text style={styles.walletEmptyText}>Set your starting balance to begin tracking</Text>
                         </Pressable>
                       ) : !editingWallet ? (
@@ -2169,7 +2169,7 @@ export default function AccountScreen() {
                       <View style={styles.walletDivider} />
                       <View style={styles.walletSectionHeader}>
                         <View style={[styles.walletSectionBadge, { backgroundColor: "#e8f5e9" }]}>
-                          <Text style={[styles.walletSectionBadgeText, { color: "#2E7D32" }]}>B</Text>
+                          <Text style={[styles.walletSectionBadgeText, { color: "#8A6B2F" }]}>B</Text>
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={styles.walletSectionTitle}>Live Balance</Text>
@@ -2189,19 +2189,19 @@ export default function AccountScreen() {
                         <>
                           <View style={styles.totalFundsCard}>
                             <Text style={styles.totalFundsLabel}>Total Available (Cash + PhonePe)</Text>
-                            <Text style={[styles.totalFundsValue, { color: walletBalances.totalAvailable >= 0 ? "#2E7D32" : "#C62828" }]}>
+                            <Text style={[styles.totalFundsValue, { color: walletBalances.totalAvailable >= 0 ? "#12294A" : "#B03A3A" }]}>
                               Rs.{Math.round(walletBalances.totalAvailable).toLocaleString("en-IN")}
                             </Text>
                             <Text style={styles.walletCardSub}>Auto-updated from your transactions</Text>
                           </View>
                           <View style={styles.walletCardsRow}>
                             {([
-                              ["Cash", walletBalances.cash, "#1565C0"] as const,
-                              ["PhonePe", walletBalances.phonePe, "#5F259F"] as const,
+                              ["Cash", walletBalances.cash, "#12294A"] as const,
+                              ["PhonePe", walletBalances.phonePe, "#8A6B2F"] as const,
                             ]).map(([label, wallet, tone]) => (
                               <View key={label} style={styles.walletCard}>
                                 <Text style={[styles.walletCardTitle, { color: tone }]}>{label}</Text>
-                                <Text style={[styles.walletCardValue, { color: wallet.current >= 0 ? "#2E7D32" : "#C62828" }]}>
+                                <Text style={[styles.walletCardValue, { color: wallet.current >= 0 ? "#12294A" : "#B03A3A" }]}>
                                   Rs.{Math.round(wallet.current).toLocaleString("en-IN")}
                                 </Text>
                                 <Text style={styles.walletCardSub}>Since {formatDDMMYYYY(walletBalances.openingDate)}</Text>
@@ -2215,7 +2215,7 @@ export default function AccountScreen() {
                               </View>
                             ))}
                           </View>
-                          <Text style={styles.walletAutoNote}>🔄 Auto-updated from your transactions</Text>
+                          <Text style={styles.walletAutoNote}>Auto-updated from your transactions</Text>
                         </>
                       )}
                     </View>
@@ -2251,7 +2251,7 @@ export default function AccountScreen() {
                               key={paymentMode}
                               style={[
                                 styles.paymentModeBtn,
-                                invPaymentMode === paymentMode && { backgroundColor: paymentMode === "PHONE" ? "#5F259F" : "#1565C0", borderColor: paymentMode === "PHONE" ? "#5F259F" : "#1565C0" },
+                                invPaymentMode === paymentMode && { backgroundColor: paymentMode === "PHONE" ? "#8A6B2F" : "#12294A", borderColor: paymentMode === "PHONE" ? "#8A6B2F" : "#12294A" },
                               ]}
                               onPress={() => setInvPaymentMode(paymentMode)}
                             >
@@ -2357,7 +2357,7 @@ export default function AccountScreen() {
                               key={paymentMode}
                               style={[
                                 styles.paymentModeBtn,
-                                expPaymentMode === paymentMode && { backgroundColor: paymentMode === "PHONE" ? "#5F259F" : "#1565C0", borderColor: paymentMode === "PHONE" ? "#5F259F" : "#1565C0" },
+                                expPaymentMode === paymentMode && { backgroundColor: paymentMode === "PHONE" ? "#8A6B2F" : "#12294A", borderColor: paymentMode === "PHONE" ? "#8A6B2F" : "#12294A" },
                               ]}
                               onPress={() => setExpPaymentMode(paymentMode)}
                             >
@@ -2613,7 +2613,7 @@ export default function AccountScreen() {
                           key={paymentMode}
                           style={[
                             styles.paymentModeBtn,
-                            editExpPaymentMode === paymentMode && { backgroundColor: paymentMode === "PHONE" ? "#5F259F" : "#1565C0", borderColor: paymentMode === "PHONE" ? "#5F259F" : "#1565C0" },
+                            editExpPaymentMode === paymentMode && { backgroundColor: paymentMode === "PHONE" ? "#8A6B2F" : "#12294A", borderColor: paymentMode === "PHONE" ? "#8A6B2F" : "#12294A" },
                           ]}
                           onPress={() => setEditExpPaymentMode(paymentMode)}
                         >
@@ -2690,7 +2690,7 @@ export default function AccountScreen() {
                           key={paymentMode}
                           style={[
                             styles.paymentModeBtn,
-                            editInvPaymentMode === paymentMode && { backgroundColor: paymentMode === "PHONE" ? "#5F259F" : "#1565C0", borderColor: paymentMode === "PHONE" ? "#5F259F" : "#1565C0" },
+                            editInvPaymentMode === paymentMode && { backgroundColor: paymentMode === "PHONE" ? "#8A6B2F" : "#12294A", borderColor: paymentMode === "PHONE" ? "#8A6B2F" : "#12294A" },
                           ]}
                           onPress={() => setEditInvPaymentMode(paymentMode)}
                         >
@@ -2749,98 +2749,100 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   loaderContainer: { flex: 1, justifyContent: "center", alignItems: "center", gap: 12 },
   loaderText: { color: "rgba(255,255,255,0.8)", fontSize: 14, fontWeight: "600" },
-  headerHero: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, flexDirection: "row", alignItems: "center", gap: 14 },
-  backBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.16)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
-  heroBrand: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
-  heroIconBox: { width: 44, height: 44, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.16)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
-  heroTitle: { color: "#ffffff", fontSize: 21, fontWeight: "900" },
-  heroSubtitle: { color: "rgba(255,255,255,0.8)", fontSize: 11, fontWeight: "600", marginTop: 1 },
-  tabBarContainer: { borderBottomWidth: 1, borderBottomColor: "#E1E6ED" },
-  tabBar: { flexDirection: "row", paddingHorizontal: 12 },
-  tabButton: { 
-    paddingHorizontal: 16, 
-    paddingVertical: 12, 
-    alignItems: "center", 
-    borderBottomWidth: 2, 
-    borderBottomColor: "transparent",
+  headerHero: { backgroundColor: "#12294A", paddingHorizontal: 18, paddingTop: 14, paddingBottom: 14, flexDirection: "row", alignItems: "center", gap: 12 },
+  backBtn: { width: 34, height: 34, borderRadius: 9, backgroundColor: "#1E3A63", alignItems: "center", justifyContent: "center" },
+  heroBrand: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
+  heroIconBox: { width: 34, height: 34, borderRadius: 9, backgroundColor: "#1E3A63", alignItems: "center", justifyContent: "center" },
+  heroTitle: { color: "#ffffff", fontSize: 17, fontWeight: "900" },
+  heroSubtitle: { color: "#9FB2C9", fontSize: 11, fontWeight: "700", marginTop: 1 },
+  tabBarContainer: { backgroundColor: "#12294A", paddingBottom: 12 },
+  tabBar: { flexDirection: "row", paddingHorizontal: 18, gap: 7 },
+  tabButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    alignItems: "center",
+    borderRadius: 8,
+    backgroundColor: "#1E3A63",
     flexShrink: 0
   },
-  tabText: { color: "rgba(255,255,255,0.65)", fontSize: 13, fontWeight: "700" },
+  tabButtonActive: { backgroundColor: "#D4AF6A" },
+  tabText: { color: "#C4D2E2", fontSize: 12, fontWeight: "800" },
+  tabTextActive: { color: "#12294A", fontWeight: "900" },
   scroll: { flex: 1 },
-  scrollContainer: { padding: 16, paddingBottom: 36 },
-  cardContainer: { gap: 14 },
-  card: { backgroundColor: "#ffffff", borderRadius: 18, padding: 16, gap: 12, shadowColor: "#111827", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 4 },
-  cardTitle: { color: "#111827", fontSize: 18, fontWeight: "900" },
-  cardDesc: { color: "#5f7f7b", fontSize: 12, fontWeight: "700", marginTop: -4 },
+  scrollContainer: { padding: 14, paddingBottom: 36 },
+  cardContainer: { gap: 12 },
+  card: { backgroundColor: "#ffffff", borderRadius: 12, padding: 16, gap: 12, borderWidth: 1, borderColor: "#E1E6ED" },
+  cardTitle: { color: "#12294A", fontSize: 16, fontWeight: "900" },
+  cardDesc: { color: "#6B7A8D", fontSize: 12, fontWeight: "700", marginTop: -4 },
   inputContainer: { gap: 6 },
-  inputLabel: { color: "#426c67", fontSize: 12, fontWeight: "800", textTransform: "uppercase" },
-  textInput: { backgroundColor: "#f6fffe", borderWidth: 1, borderColor: "#d8f7f4", borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, fontSize: 15, color: "#111827" },
+  inputLabel: { color: "#6B7A8D", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
+  textInput: { backgroundColor: "#F9FAFC", borderWidth: 1, borderColor: "#E1E6ED", borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12, fontSize: 13, color: "#12294A" },
   notesInput: { minHeight: 108, maxHeight: 300, textAlignVertical: "top" },
-  notesReadOnly: { color: "#111827", fontSize: 14, lineHeight: 21, fontWeight: "600", backgroundColor: "#f6fffe", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#d8f7f4" },
-  notesError: { color: "#C62828", fontSize: 12, fontWeight: "800" },
-  smallEditBtn: { alignSelf: "flex-start", borderRadius: 999, backgroundColor: "#E3F2FD", borderWidth: 1, borderColor: "#1565C0", paddingHorizontal: 12, paddingVertical: 7 },
-  smallEditText: { color: "#1565C0", fontSize: 12, fontWeight: "900" },
+  notesReadOnly: { color: "#12294A", fontSize: 13, lineHeight: 20, fontWeight: "600", backgroundColor: "#F9FAFC", borderRadius: 8, padding: 12, borderWidth: 1, borderColor: "#E1E6ED" },
+  notesError: { color: "#B03A3A", fontSize: 12, fontWeight: "800" },
+  smallEditBtn: { alignSelf: "flex-start", borderRadius: 8, backgroundColor: "#ffffff", borderWidth: 1, borderColor: "#D4AF6A", paddingHorizontal: 12, paddingVertical: 7 },
+  smallEditText: { color: "#8A6B2F", fontSize: 12, fontWeight: "900" },
   walletSavedRow: { gap: 8 },
-  walletSavedText: { color: "#111827", fontSize: 13, fontWeight: "800", lineHeight: 19 },
-  totalFundsCard: { borderRadius: 14, backgroundColor: "#F5F9FF", borderWidth: 1, borderColor: "#dbeafe", padding: 14, gap: 4 },
-  totalFundsLabel: { color: "#546E7A", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
+  walletSavedText: { color: "#12294A", fontSize: 13, fontWeight: "800", lineHeight: 19 },
+  totalFundsCard: { borderRadius: 10, backgroundColor: "#F4F6F9", padding: 14, gap: 4 },
+  totalFundsLabel: { color: "#6B7A8D", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
   totalFundsValue: { fontSize: 24, fontWeight: "900" },
   walletCardsRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  walletCard: { flex: 1, minWidth: 150, borderRadius: 14, backgroundColor: "#ffffff", borderWidth: 1, borderColor: "#dbeafe", padding: 12, gap: 5 },
+  walletCard: { flex: 1, minWidth: 150, borderRadius: 10, backgroundColor: "#ffffff", borderWidth: 1, borderColor: "#E1E6ED", padding: 12, gap: 5 },
   walletCardTitle: { fontSize: 13, fontWeight: "900" },
   walletCardValue: { fontSize: 20, fontWeight: "900" },
-  walletCardSub: { color: "#546E7A", fontSize: 11, fontWeight: "800" },
-  walletBreakdown: { color: "#546E7A", fontSize: 10, lineHeight: 15, fontWeight: "700" },
+  walletCardSub: { color: "#6B7A8D", fontSize: 11, fontWeight: "800" },
+  walletBreakdown: { color: "#6B7A8D", fontSize: 10, lineHeight: 15, fontWeight: "700" },
   // Wallet section styles — two-section A/B layout
   walletSectionHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
   walletSectionBadge: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   walletSectionBadgeText: { fontSize: 13, fontWeight: "900" },
-  walletSectionTitle: { color: "#111827", fontSize: 14, fontWeight: "900" },
-  walletSectionDesc: { color: "#5f7f7b", fontSize: 11, fontWeight: "700" },
-  walletDivider: { height: 1, backgroundColor: "#d8f7f4", marginVertical: 8 },
+  walletSectionTitle: { color: "#12294A", fontSize: 14, fontWeight: "900" },
+  walletSectionDesc: { color: "#6B7A8D", fontSize: 11, fontWeight: "700" },
+  walletDivider: { height: 1, backgroundColor: "#E1E6ED", marginVertical: 8 },
   walletLiveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#1E7A4C" },
   walletLoadingRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10 },
-  walletLoadingText: { color: "#5f7f7b", fontSize: 13, fontWeight: "700" },
-  walletErrorRow: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#fff7f7", borderRadius: 10, padding: 10, borderWidth: 1, borderColor: "#fecaca" },
-  walletErrorText: { color: "#C62828", fontSize: 13, fontWeight: "800", flex: 1 },
-  walletEmptyPrompt: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#f0fffe", borderRadius: 12, padding: 14, borderWidth: 1, borderColor: "#d8f7f4" },
-  walletEmptyText: { color: "#5f7f7b", fontSize: 13, fontWeight: "700", flex: 1 },
-  walletSavedDate: { color: "#5f7f7b", fontSize: 11, fontWeight: "700" },
-  walletAutoNote: { color: "#5f7f7b", fontSize: 11, fontWeight: "700", textAlign: "center", marginTop: 4 },
-  blockAadhaarCard: { borderColor: "#fecaca", backgroundColor: "#fff7f7" },
+  walletLoadingText: { color: "#6B7A8D", fontSize: 13, fontWeight: "700" },
+  walletErrorRow: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#FBEAEA", borderRadius: 10, padding: 10, borderWidth: 1, borderColor: "#F0C7C7" },
+  walletErrorText: { color: "#B03A3A", fontSize: 13, fontWeight: "800", flex: 1 },
+  walletEmptyPrompt: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#F4F6F9", borderRadius: 10, padding: 14, borderWidth: 1, borderColor: "#E1E6ED" },
+  walletEmptyText: { color: "#6B7A8D", fontSize: 13, fontWeight: "700", flex: 1 },
+  walletSavedDate: { color: "#6B7A8D", fontSize: 11, fontWeight: "700" },
+  walletAutoNote: { color: "#6B7A8D", fontSize: 11, fontWeight: "700", textAlign: "center", marginTop: 4 },
+  blockAadhaarCard: { borderColor: "#F0C7C7", backgroundColor: "#FBEAEA" },
   blockAadhaarHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
-  blockAadhaarIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#fee2e2" },
+  blockAadhaarIcon: { width: 38, height: 38, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: "#F6D3D3" },
   paymentModeRow: { flexDirection: "row", gap: 8 },
-  paymentModeBtn: { flex: 1, borderRadius: 999, backgroundColor: "#F5F9FF", borderWidth: 1, borderColor: "#d2d8e1", paddingVertical: 10, alignItems: "center" },
-  investorSelectedBtn: { backgroundColor: "#1565C0", borderColor: "#1565C0" },
-  paymentModeText: { color: "#64748b", fontSize: 13, fontWeight: "900" },
+  paymentModeBtn: { flex: 1, borderRadius: 8, backgroundColor: "#F4F6F9", borderWidth: 1, borderColor: "#E1E6ED", paddingVertical: 10, alignItems: "center" },
+  investorSelectedBtn: { backgroundColor: "#12294A", borderColor: "#12294A" },
+  paymentModeText: { color: "#6B7A8D", fontSize: 13, fontWeight: "900" },
   paymentModeTextOn: { color: "#ffffff" },
-  primaryButton: { backgroundColor: "#D4AF6A", borderRadius: 12, paddingVertical: 14, alignItems: "center", justifyContent: "center" },
+  primaryButton: { backgroundColor: "#D4AF6A", borderRadius: 9, paddingVertical: 13, alignItems: "center", justifyContent: "center" },
   btnDisabled: { opacity: 0.7 },
-  primaryButtonText: { color: "#111827", fontSize: 15, fontWeight: "900" },
+  primaryButtonText: { color: "#12294A", fontSize: 14, fontWeight: "900" },
   datePickerRow: { flexDirection: "row", gap: 10 },
   breakdownHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 },
-  breakdownTitle: { color: "#111827", fontSize: 15, fontWeight: "900" },
+  breakdownTitle: { color: "#12294A", fontSize: 15, fontWeight: "900" },
   summaryActions: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
-  pdfButton: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 20, backgroundColor: "#F4F6F9", paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#1E7A4C" },
-  pdfButtonText: { color: "#111827", fontSize: 12, fontWeight: "800" },
-  whatsappShareBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 20, backgroundColor: "#25D366", paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#1EBE5D" },
-  whatsappShareText: { color: "#ffffff", fontSize: 12, fontWeight: "900" },
-  sparklineCard: { borderRadius: 12, backgroundColor: "#F7FCFA", borderWidth: 1, borderColor: "#D9F3EA", padding: 12, gap: 8, maxHeight: 120 },
+  pdfButton: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 8, backgroundColor: "#F4F6F9", paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#E1E6ED" },
+  pdfButtonText: { color: "#12294A", fontSize: 12, fontWeight: "800" },
+  whatsappShareBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 8, backgroundColor: "#12294A", paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#12294A" },
+  whatsappShareText: { color: "#D4AF6A", fontSize: 12, fontWeight: "900" },
+  sparklineCard: { borderRadius: 10, backgroundColor: "#F4F6F9", padding: 12, gap: 8, maxHeight: 120 },
   sparklineHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  sparklineLabel: { color: "#426c67", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
+  sparklineLabel: { color: "#6B7A8D", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
   sparklineTotal: { fontSize: 15, fontWeight: "900" },
   sparklineBars: { height: 62, flexDirection: "row", alignItems: "flex-end", gap: 6 },
-  sparklineBarSlot: { flex: 1, height: 62, justifyContent: "flex-end", alignItems: "center", borderRadius: 4, backgroundColor: "#ECF7F3" },
+  sparklineBarSlot: { flex: 1, height: 62, justifyContent: "flex-end", alignItems: "center", borderRadius: 4, backgroundColor: "#E7EBF0" },
   sparklineBar: { width: "58%", minWidth: 8, borderRadius: 4 },
-  monospacePanel: { backgroundColor: "#0f2725", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#174d48" },
-  monospaceText: { fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace", color: "#F4F6F9", fontSize: 12, lineHeight: 18, fontWeight: "600" },
-  emptyText: { color: "#5f7f7b", fontSize: 13, fontStyle: "italic", textAlign: "center", paddingVertical: 16 },
-  logRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#d8f7f4" },
+  monospacePanel: { backgroundColor: "#12294A", borderRadius: 10, padding: 14 },
+  monospaceText: { fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace", color: "#C4D2E2", fontSize: 12, lineHeight: 18, fontWeight: "600" },
+  emptyText: { color: "#6B7A8D", fontSize: 13, fontStyle: "italic", textAlign: "center", paddingVertical: 16 },
+  logRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#E1E6ED" },
   logDetails: { flex: 1, gap: 2 },
   logAmount: { color: "#1E7A4C", fontSize: 15, fontWeight: "900" },
-  logDesc: { color: "#111827", fontSize: 14, fontWeight: "800" },
-  logDate: { color: "#5f7f7b", fontSize: 11, fontWeight: "700" },
+  logDesc: { color: "#12294A", fontSize: 14, fontWeight: "800" },
+  logDate: { color: "#6B7A8D", fontSize: 11, fontWeight: "700" },
   deleteBtn: { width: 36, height: 36, borderRadius: 10, backgroundColor: "#fde7e5", alignItems: "center", justifyContent: "center" },
 
   // Custom Export Dialog Modal Styles

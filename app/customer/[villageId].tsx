@@ -267,36 +267,18 @@ const CustomerItem = React.memo(function CustomerItem({
   const isFullyPaid = !!loan && loan.balanceAmount <= 0 && loan.status !== "RENEWED";
   const didntPayLastWeek = !!loan && loan.status === "ACTIVE" && loan.startDate < weekStart(Date.now()) && !paidLastWeek;
   
-  const getStatusBadge = useCallback(() => {
-    const badges = [];
-    if (isNew) {
-      badges.push(
-        <View key="new" style={styles.statusBadgeContainer}>
-          <Icon name="star" size={10} color="#4F46E5" />
-          <Text style={styles.statusBadgeNew}> NEW</Text>
-        </View>
-      );
+  const rowTone = useMemo(() => {
+    if (status === "paid") {
+      return { label: "PAID", bg: "#E4F3EA", border: "#BFE0CC", divider: "#CBE7D4", accent: "#1E7A4C", badgeText: "#FFFFFF" };
     }
-    if (badges.length === 0) return null;
-    return (
-      <View style={styles.badgesRow}>
-        {badges}
-      </View>
-    );
-  }, [isNew]);
-
-  const getBackgroundColor = useCallback(() => {
-    if (status === 'paid') {
-      return '#d4edda'; // Soft green for paid
-    }
-    if (status === 'due') {
-      return '#f8d7da'; // Soft red for due
+    if (status === "due") {
+      return { label: "DUE", bg: "#FBEAEA", border: "#F0C7C7", divider: "#F2D2D2", accent: "#B03A3A", badgeText: "#FFFFFF" };
     }
     if (isNew) {
-      return '#E0E7FF'; // Soft indigo/grey tint for new
+      return { label: "NEW", bg: "#FCF2E3", border: "#F0DBB0", divider: "#F2E2BE", accent: "#D4AF6A", badgeText: "#12294A" };
     }
-    return '#F5F9FF'; // Premium light blue tint (Card BG)
-  }, [status, isNew]);
+    return { label: "", bg: "#FFFFFF", border: "#E1E6ED", divider: "#EEF1F5", accent: "#12294A", badgeText: "#FFFFFF" };
+  }, [isNew, status]);
 
   const markActionPress = useCallback((event?: { stopPropagation?: () => void }) => {
     event?.stopPropagation?.();
@@ -359,41 +341,37 @@ const CustomerItem = React.memo(function CustomerItem({
         styles.item,
         noTextSelection,
         {
-          backgroundColor: getBackgroundColor(),
+          backgroundColor: rowTone.bg,
+          borderColor: rowTone.border,
+          borderLeftColor: rowTone.accent,
         },
       ]}
       onPress={openCustomer}
     >
-      {/* Column 1: Left Badge Info */}
       <View style={styles.leftCol}>
         <CustomerIdBadge 
           numericalId={customer.numericalId} 
           id={customer.id} 
-          style={styles.premiumBadge}
-          textStyle={styles.premiumBadgeText}
+          style={[styles.premiumBadge, { backgroundColor: rowTone.accent }]}
+          textStyle={[styles.premiumBadgeText, { color: rowTone.badgeText }]}
         />
-        {customer.coId ? (
-          <View style={styles.coPill}>
-            <Text style={styles.coPillText}>c/o: {customer.coId}</Text>
-          </View>
-        ) : null}
-        {customer.coName ? (
-          <Text style={styles.coNameUnder} numberOfLines={1}>
-            {customer.coName}
-          </Text>
-        ) : null}
       </View>
 
-      {/* Column 2: Center Details */}
       <View style={styles.centerCol}>
-        <Text style={[styles.cardName, status === "paid" ? { color: "#16803a" } : status === "due" ? { color: "#dc3545" } : { color: "#111827" }]} numberOfLines={1}>
-          {language === "te" ? translateTelugu(customer.name) : customer.name}
-        </Text>
-        {getStatusBadge()}
+        <View style={styles.customerNameRow}>
+          <Text style={styles.cardName} numberOfLines={1}>
+            {language === "te" ? translateTelugu(customer.name) : customer.name}
+          </Text>
+          {rowTone.label ? (
+            <Text style={[styles.rowStatusPill, { backgroundColor: rowTone.accent, color: rowTone.badgeText }]}>
+              {rowTone.label}
+            </Text>
+          ) : null}
+        </View>
 
         <View style={styles.phoneIconRow}>
           {customer.phone ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <>
               <Pressable
                 onPress={(e) => {
                   e.stopPropagation();
@@ -402,7 +380,7 @@ const CustomerItem = React.memo(function CustomerItem({
                 }}
                 style={styles.callLink}
               >
-                <Icon name="call" size={12} color="#1565C0" />
+                <Icon name="call" size={11} color="#9AA6B2" />
                 <Text style={styles.cardPhone}>{customer.phone}</Text>
               </Pressable>
               
@@ -413,21 +391,13 @@ const CustomerItem = React.memo(function CustomerItem({
                     lightImpact();
                     onShowQr && onShowQr(customer, loan);
                   }}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 3,
-                    backgroundColor: "#F3E8FF",
-                    paddingHorizontal: 6,
-                    paddingVertical: 2,
-                    borderRadius: 4,
-                  }}
+                  style={styles.upiPill}
                 >
-                  <Icon name="qr-code" size={10} color="#6B21A8" />
-                  <Text style={{ color: "#6B21A8", fontSize: 10, fontWeight: "700" }}>UPI QR</Text>
+                  <Icon name="qr-code" size={9} color="#9A6B1E" />
+                  <Text style={styles.upiPillText}>UPI QR</Text>
                 </Pressable>
               )}
-            </View>
+            </>
           ) : (
             <Text style={styles.cardPhone}>—</Text>
           )}
@@ -436,7 +406,7 @@ const CustomerItem = React.memo(function CustomerItem({
         {loan ? (
           <View style={styles.amountStatusRow}>
             {/* Balance amount */}
-            <Text style={[styles.cardAmount, loan.balanceAmount <= 0 && styles.balanceCleared]}>
+            <Text style={styles.cardAmount}>
               Rs.{Math.round(loan.balanceAmount).toLocaleString("en-IN")}
             </Text>
             {loan.balanceAmount > 0 && (
@@ -445,7 +415,7 @@ const CustomerItem = React.memo(function CustomerItem({
               </Text>
             )}
             {didntPayLastWeek && (
-              <Icon name="warning" size={13} color="#dc3545" style={{ marginLeft: 2 }} />
+              <Icon name="warning" size={12} color="#B03A3A" style={{ marginLeft: 1 }} />
             )}
             {/* Doc badges inline - only when a doc is missing */}
             {(!customer.aadharSubmitted || !customer.passportPhotoSubmitted || (customer.chequeRequired && !customer.chequeSubmitted)) && (
@@ -470,43 +440,38 @@ const CustomerItem = React.memo(function CustomerItem({
           </View>
         ) : null}
 
-        {/* Address Row - green if location saved, grey if not */}
-        <View style={styles.addressRow}>
-          <Pressable
-            disabled={isUpdatingLocation || (!hasLocation && !onSaveCurrentLocation)}
-            style={[styles.locationIconSquare, {
-              backgroundColor: hasLocation ? "#12294A" : (onSaveCurrentLocation ? "#9CA3AF" : "#D1D5DB"),
-            }]}
-            onPress={(e) => {
-              markActionPress(e);
-              lightImpact();
-              if (hasLocation) {
-                onOpenDirections(customer);
-              } else if (onSaveCurrentLocation) {
-                onSaveCurrentLocation(customer);
-              }
-            }}
-            onLongPress={(e) => {
-              markActionPress(e);
-              if (!hasLocation && onSaveCurrentLocation) {
-                onSaveCurrentLocation(customer);
-              }
-            }}
-          >
-            {isUpdatingLocation ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Icon name="location" size={13} color={hasLocation ? "#1E7A4C" : "#FFFFFF"} />
-            )}
-          </Pressable>
-          <Text style={styles.addressDesc} numberOfLines={1}>
-            [{customer.locationDesc || "Loc Description"}]
+        <Pressable
+          disabled={isUpdatingLocation || (!hasLocation && !onSaveCurrentLocation)}
+          style={[styles.locationPill, hasLocation ? styles.locationPillSaved : styles.locationPillEmpty]}
+          onPress={(e) => {
+            markActionPress(e);
+            lightImpact();
+            if (hasLocation) {
+              onOpenDirections(customer);
+            } else if (onSaveCurrentLocation) {
+              onSaveCurrentLocation(customer);
+            }
+          }}
+          onLongPress={(e) => {
+            markActionPress(e);
+            if (!hasLocation && onSaveCurrentLocation) {
+              onSaveCurrentLocation(customer);
+            }
+          }}
+        >
+          {isUpdatingLocation ? (
+            <ActivityIndicator size="small" color={hasLocation ? "#D4AF6A" : "#9AA6B2"} />
+          ) : (
+            <Icon name="location" size={10} color={hasLocation ? "#D4AF6A" : "#9AA6B2"} />
+          )}
+          <Text style={[styles.addressDesc, hasLocation ? styles.addressDescSaved : null]} numberOfLines={1}>
+            {customer.locationDesc || "Loc Description"}
           </Text>
-        </View>
+        </Pressable>
       </View>
 
       {/* Right vertical line divider */}
-      <View style={styles.divider} />
+      <View style={[styles.divider, { backgroundColor: rowTone.divider }]} />
 
       {/* Column 3: Right Actions — Pay Button + Dedicated DUE Button */}
       <View style={styles.rightCol}>
@@ -1661,10 +1626,11 @@ export default function CustomerListScreen() {
     <LinearGradient colors={[colors.background, colors.backgroundSecondary]} style={styles.root}>
       <SafeAreaView style={[styles.safe, { paddingTop: insets.top }]} edges={['top']}>
         <View style={styles.content}>
+          <View style={styles.routeHeader}>
           {/* Header with back button */}
           <View style={styles.headerRow}>
             <Pressable onPress={() => router.back()} style={styles.backBtn}>
-              <Icon name="arrow-back" size={20} color={colors.white} />
+              <Icon name="arrow-back" size={18} color="#D4AF6A" />
             </Pressable>
             <View style={styles.headerTextWrap}>
               <Text style={styles.headerTitle}>{village?.name || 'Customers'} <Text style={{ fontSize: 10, opacity: 0.6 }}>v2</Text></Text>
@@ -1685,8 +1651,6 @@ export default function CustomerListScreen() {
             />
           </View>
 
-
-
           <View style={styles.compactFilterRow}>
             <Pressable style={styles.compactFilterBtn} onPress={() => setFilterMenuOpen(true)}>
               <Icon name="filter-outline" size={16} color={colors.blue2} />
@@ -1698,7 +1662,8 @@ export default function CustomerListScreen() {
               </Pressable>
             )}
           </View>
-          <View style={styles.routeSummary}>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.routeSummary}>
             <View style={styles.routeSummaryCard}>
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Total Customers</Text>
               <Text style={styles.routeSummaryValue}>{customerStats.total}</Text>
@@ -1719,6 +1684,19 @@ export default function CustomerListScreen() {
               <Text style={styles.routeSummaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Remaining</Text>
               <Text style={styles.routeSummaryValue}>{customerStats.remaining}</Text>
             </View>
+          </ScrollView>
+          <View style={styles.customerLegend}>
+            {[
+              ["#E4F3EA", "#1E7A4C", "Paid"],
+              ["#FBEAEA", "#B03A3A", "Due"],
+              ["#FCF2E3", "#D4AF6A", "New"],
+              ["#FFFFFF", "#E1E6ED", "Regular"],
+            ].map(([bg, border, label]) => (
+              <View key={label} style={styles.legendItem}>
+                <View style={[styles.legendSwatch, { backgroundColor: bg, borderColor: border }]} />
+                <Text style={styles.legendItemText}>{label}</Text>
+              </View>
+            ))}
           </View>
           <FlatList
             ref={flatListRef}
@@ -2573,24 +2551,20 @@ export default function CustomerListScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  callLink: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-  },
   safe: { flex: 1 },
-  content: { flex: 1, width: "100%", maxWidth: 430, alignSelf: "center", paddingTop: 8, paddingHorizontal: 8 },
-  headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 10 },
-  backBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.18)", justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.26)" },
+  content: { flex: 1, width: "100%", maxWidth: 430, alignSelf: "center", paddingHorizontal: 0 },
+  routeHeader: { backgroundColor: "#12294A", paddingHorizontal: 18, paddingTop: 16, paddingBottom: 12 },
+  headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 14, gap: 10 },
+  backBtn: { width: 32, height: 32, borderRadius: 9, backgroundColor: "#1E3A63", justifyContent: "center", alignItems: "center", borderWidth: 0 },
   backBtnText: { color: colors.white, fontSize: 20, fontWeight: "700" },
   headerTextWrap: { flex: 1 },
-  headerTitle: { color: colors.white, fontSize: 22, fontWeight: "800" },
-  headerSub: { color: "rgba(255,255,255,0.7)", fontSize: 12 },
-  searchShell: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "rgba(255,255,255,0.16)", borderColor: "rgba(255,255,255,0.35)", borderWidth: 1, borderRadius: 18, paddingHorizontal: 13, marginBottom: 10 },
-  search: { flex: 1, paddingVertical: 13, fontSize: 14 },
-  compactFilterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
-  compactFilterBtn: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 7, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: colors.white, borderWidth: 1, borderColor: "rgba(255,255,255,0.55)" },
-  compactFilterText: { color: colors.blue2, fontSize: 12, fontWeight: "900" },
+  headerTitle: { color: colors.white, fontSize: 18, fontWeight: "900" },
+  headerSub: { color: "#9FB2C9", fontSize: 11.5, marginTop: 2 },
+  searchShell: { flexDirection: "row", alignItems: "center", gap: 9, backgroundColor: "#1E3A63", borderWidth: 0, borderRadius: 10, paddingHorizontal: 13, marginBottom: 12 },
+  search: { flex: 1, paddingVertical: 11, fontSize: 13 },
+  compactFilterRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  compactFilterBtn: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 7, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: colors.white, borderWidth: 0 },
+  compactFilterText: { color: colors.blue2, fontSize: 12.5, fontWeight: "900" },
   clearFilterBtn: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.18)", borderWidth: 1, borderColor: "rgba(255,255,255,0.3)" },
   filterOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
   filterSheet: { backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 18, gap: 12 },
@@ -2629,44 +2603,45 @@ const styles = StyleSheet.create({
   manualInputError: { color: "#b91c1c", fontSize: 12, fontWeight: "700" },
   reopenAllSection: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14, marginTop: 8, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.16)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)" },
   reopenAllText: { color: colors.white, fontSize: 13, fontWeight: "900" },
-  routeSummary: { flexDirection: "row", gap: 6, marginBottom: 8 },
-  routeSummaryCard: { flex: 1, minHeight: 44, borderRadius: 10, paddingHorizontal: 5, paddingVertical: 6, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.14)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)" },
-  routeSummaryLabel: { color: "rgba(255,255,255,0.72)", fontSize: 8, fontWeight: "800", textTransform: "uppercase", textAlign: "center" },
-  routeSummaryValue: { color: colors.white, fontSize: 14, fontWeight: "900", marginTop: 1 },
+  routeSummary: { flexDirection: "row", gap: 8, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12 },
+  routeSummaryCard: { minWidth: 76, minHeight: 58, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 8, alignItems: "center", justifyContent: "center", backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E1E6ED" },
+  routeSummaryLabel: { color: "#9AA6B2", fontSize: 9, fontWeight: "900", textTransform: "uppercase", textAlign: "center" },
+  routeSummaryValue: { color: "#12294A", fontSize: 16, fontWeight: "900", marginTop: 3 },
+  customerLegend: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 16, paddingBottom: 10 },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  legendSwatch: { width: 8, height: 8, borderRadius: 2, borderWidth: 1 },
+  legendItemText: { color: "#4B5A6D", fontSize: 10, fontWeight: "700" },
   list: { flex: 1 },
-  listContent: { flexGrow: 1, paddingBottom: 116 },
-  item: { 
-    backgroundColor: colors.white, 
-    borderRadius: 14, 
-    paddingVertical: 6,
-    paddingHorizontal: 9,
-    marginBottom: 7, 
-    flexDirection: "row", 
-    alignItems: "center", 
-    gap: 7, 
-    shadowColor: "#0f172a", 
-    shadowOffset: { width: 0, height: 3 }, 
-    shadowOpacity: 0.08, 
-    shadowRadius: 8, 
-    elevation: 3,
+  listContent: { flexGrow: 1, paddingHorizontal: 14, paddingBottom: 116 },
+  item: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderLeftWidth: 3,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 7,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   leftCol: {
     alignItems: "center",
     justifyContent: "center",
-    width: 58,
+    width: 38,
   },
   premiumBadge: {
     width: 38,
     height: 38,
-    borderRadius: 9,
-    backgroundColor: "#0B5D34",
+    borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 0,
   },
   premiumBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: "900",
   },
   coPill: {
@@ -2692,19 +2667,24 @@ const styles = StyleSheet.create({
   },
   centerCol: {
     flex: 1,
-    paddingHorizontal: 6,
+    minWidth: 0,
     justifyContent: "flex-start",
-    gap: 2,
+    gap: 1,
   },
+  customerNameRow: { flexDirection: "row", alignItems: "center", gap: 5, minWidth: 0 },
   cardName: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#111827",
+    flexShrink: 1,
+    fontSize: 12.5,
+    lineHeight: 17,
+    fontWeight: "900",
+    color: "#12294A",
   },
+  rowStatusPill: { overflow: "hidden", fontSize: 8.5, fontWeight: "900", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 5 },
   phoneIconRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
+    flexWrap: "wrap",
   },
   phoneCircleBadge: {
     width: 15,
@@ -2715,10 +2695,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   cardPhone: {
-    fontSize: 10,
-    color: "#000000",
-    fontWeight: "700",
+    fontSize: 10.5,
+    color: "#6B7A8D",
+    fontWeight: "800",
   },
+  callLink: { flexDirection: "row", alignItems: "center", gap: 4 },
+  upiPill: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "rgba(212,175,106,0.16)", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 5 },
+  upiPillText: { color: "#9A6B1E", fontSize: 8.5, fontWeight: "900" },
   amountStatusRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -2731,9 +2714,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   cardAmount: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: "900",
-    color: "#1E7A4C", // teal like source
+    color: "#12294A",
   },
   balanceCleared: {
     color: "#16a34a",
@@ -2771,6 +2754,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
     gap: 5,
   },
+  locationPill: { alignSelf: "flex-start", maxWidth: "100%", marginTop: 2, borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2, flexDirection: "row", alignItems: "center", gap: 3, borderWidth: 1 },
+  locationPillSaved: { backgroundColor: "#12294A", borderColor: "#12294A" },
+  locationPillEmpty: { backgroundColor: "#FFFFFF", borderColor: "#E1E6ED" },
   locationIconSquare: {
     width: 24,
     height: 24,
@@ -2784,17 +2770,17 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   addressDesc: {
-    fontSize: 9,
-    color: "#1F2937",
-    fontWeight: "700",
+    fontSize: 9.5,
+    color: "#4B5A6D",
+    fontWeight: "800",
     lineHeight: 12,
-    flex: 1,
+    flexShrink: 1,
   },
+  addressDescSaved: { color: "#FFFFFF" },
   divider: {
     width: 1,
-    backgroundColor: "#0D1B2A", // match navy border
-    marginVertical: 4,
-    height: "90%",
+    alignSelf: "stretch",
+    marginVertical: 2,
   },
   rightCol: {
     width: 52,
@@ -2816,10 +2802,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   dueSquareBtn: {
-    backgroundColor: "#DC2626",
-    borderRadius: 8,
+    backgroundColor: "#B03A3A",
+    borderRadius: 20,
     width: 48,
-    height: 24,
+    height: 28,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2830,13 +2816,13 @@ const styles = StyleSheet.create({
   },
   singlePayBtn: {
     backgroundColor: "#1E7A4C",
-    borderRadius: 10,
+    borderRadius: 20,
     paddingHorizontal: 10,
     paddingVertical: 6,
     alignItems: "center",
     justifyContent: "center",
     width: 48,
-    height: 32,
+    height: 28,
     shadowColor: "#1E7A4C",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,

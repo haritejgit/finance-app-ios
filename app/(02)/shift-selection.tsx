@@ -589,34 +589,34 @@ export default function ShiftSelectionScreen() {
                 },
               ]}
             >
-              <View style={[styles.headerCard, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
+              <View style={[styles.headerCard, { backgroundColor: colors.blue2, borderColor: colors.blue2, borderWidth: 1 }]}>
                 <View style={styles.headerTop}>
                   <View style={styles.brandRow}>
-                    <View style={[styles.brandIcon, { backgroundColor: colors.primarySoft }]}>
-                      <Icon name="wallet-outline" size={19} color={colors.primary} />
+                    <View style={[styles.brandIcon, { backgroundColor: colors.blue1 }]}>
+                      <Icon name="business-outline" size={19} color={colors.amberGlow} />
                     </View>
                     <View style={styles.headerCopy}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <Text style={[styles.eyebrow, { color: colors.textMuted }]}>{t("premiumWorkspace")}</Text>
-                        <Text style={{ fontSize: 9, fontWeight: "900", color: "#FFFFFF", backgroundColor: colors.primary, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, overflow: "hidden" }}>v1.0.3</Text>
+                        <Text style={[styles.eyebrow, { color: "#9FB2C9" }]}>{t("premiumWorkspace")}</Text>
+                        <Text style={{ fontSize: 9, fontWeight: "900", color: "#12294A", backgroundColor: colors.amberGlow, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, overflow: "hidden" }}>v1.0.3</Text>
                       </View>
-                      <Text style={[styles.header, { color: colors.text }]}>{t("financeDashboard")}</Text>
-                      <Text style={[styles.welcome, { color: colors.textSecondary }]}>{getGreeting(t)}, {displayName} | {todayLabel}</Text>
+                      <Text style={[styles.header, { color: colors.white }]}>{t("financeDashboard")}</Text>
+                      <Text style={[styles.welcome, { color: "#C4D2E2" }]}>{getGreeting(t)}, {displayName} | {todayLabel}</Text>
                     </View>
                   </View>
-                  <Pressable accessibilityLabel={t("searchCustomers")} style={styles.searchButton} onPress={openCustomerSearch}>
-                    <Icon name="search" size={20} color="#FFFFFF" />
+                  <Pressable accessibilityLabel={t("searchCustomers")} style={[styles.searchButton, { backgroundColor: colors.blue1 }]} onPress={openCustomerSearch}>
+                    <Icon name="search" size={20} color={colors.amberGlow} />
                   </Pressable>
                 </View>
 
-                <Pressable style={[styles.todayCard, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]} onPress={() => nav.push("/graph")}>
-                  <View style={[styles.todayIcon, { backgroundColor: colors.warningSoft }]}>
+                <Pressable style={[styles.todayCard, { backgroundColor: colors.blue1, borderColor: colors.blue1 }]} onPress={() => nav.push("/graph")}>
+                  <View style={[styles.todayIcon, { backgroundColor: "rgba(212,175,106,0.14)" }]}>
                     <Icon name="cash-outline" size={18} color={colors.amberGlow} />
                   </View>
                   <View style={styles.todayCopy}>
-                    <Text style={[styles.todayLabel, { color: colors.textSecondary }]}>{t("collectedToday")}</Text>
-                    <Text style={[styles.todayValue, { color: colors.text }]}>{formatMoney(totals?.collectionToday ?? 0)}</Text>
-                    <Text style={[styles.todayHint, { color: colors.textSecondary }]}>{t("distributedTodayHint")} {formatMoney(totals?.distributedToday ?? 0)}</Text>
+                    <Text style={[styles.todayLabel, { color: "#9FB2C9" }]}>{t("collectedToday")}</Text>
+                    <Text style={[styles.todayValue, { color: colors.white }]}>{formatMoney(totals?.collectionToday ?? 0)}</Text>
+                    <Text style={[styles.todayHint, { color: "#7E93AC" }]}>{t("distributedTodayHint")} {formatMoney(totals?.distributedToday ?? 0)}</Text>
                   </View>
                 </Pressable>
               </View>
@@ -1165,69 +1165,63 @@ const screenWidth = Dimensions.get("window").width;
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  container: { paddingHorizontal: 18, paddingVertical: 12, paddingBottom: 36 },
+  container: { paddingHorizontal: 14, paddingVertical: 14, paddingBottom: 36 },
   content: { width: "100%", maxWidth: Math.min(screenWidth - 36, 920), alignSelf: "center", gap: 12 },
   headerCard: {
     backgroundColor: Colors.white,
-    borderRadius: 18,
-    padding: 14,
+    borderRadius: 12,
+    padding: 16,
     gap: 12,
-    shadowColor: Colors.lightSeaGreen,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.16,
-    shadowRadius: 18,
-    elevation: 5,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   headerTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   brandRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
-  brandIcon: { width: 36, height: 36, borderRadius: 11, backgroundColor: Colors.frozenWater, alignItems: "center", justifyContent: "center" },
+  brandIcon: { width: 36, height: 36, borderRadius: 9, backgroundColor: Colors.frozenWater, alignItems: "center", justifyContent: "center" },
   headerCopy: { flex: 1 },
   eyebrow: { color: Colors.textMuted, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
   header: { color: Colors.nearBlack, fontSize: 22, lineHeight: 27, fontWeight: "900" },
   welcome: { color: "#426c67", fontSize: 12, marginTop: 2, fontWeight: "800" },
-  searchButton: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: Colors.lightSeaGreen },
-  todayCard: { minHeight: 74, borderRadius: 14, backgroundColor: "#f6fffe", flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: Colors.borderLight },
-  todayIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: Colors.honeyBronze, alignItems: "center", justifyContent: "center" },
+  searchButton: { width: 36, height: 36, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: Colors.lightSeaGreen },
+  todayCard: { minHeight: 74, borderRadius: 10, backgroundColor: "#f6fffe", flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: Colors.borderLight },
+  todayIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.honeyBronze, alignItems: "center", justifyContent: "center" },
   todayCopy: { flex: 1 },
   todayLabel: { color: Colors.textMuted, fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
   todayValue: { color: Colors.nearBlack, fontSize: 27, lineHeight: 31, fontWeight: "900" },
   todayHint: { color: "#426c67", fontSize: 11, fontWeight: "800" },
   panel: {
     backgroundColor: Colors.white,
-    borderRadius: 18,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.borderLight,
-    padding: 14,
+    padding: 16,
     gap: 12,
-    shadowColor: Colors.lightSeaGreen,
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
   sectionCopy: { flex: 1 },
-  sectionTitle: { color: Colors.nearBlack, fontSize: 19, lineHeight: 23, fontWeight: "900" },
+  sectionTitle: { color: Colors.nearBlack, fontSize: 15, lineHeight: 20, fontWeight: "900" },
   sectionSub: { color: Colors.textMuted, fontSize: 11, fontWeight: "800", marginTop: 1 },
   routeMeta: { color: Colors.textMuted, fontSize: 11, fontWeight: "900" },
   controlLabel: { color: Colors.textMuted, fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
   dayGrid: { flexDirection: "row", gap: 6 },
-  dayChip: { flex: 1, borderWidth: 1, borderColor: Colors.borderLight, borderRadius: 11, paddingVertical: 10, alignItems: "center", backgroundColor: "#f6fffe", minWidth: 38 },
+  dayChip: { flex: 1, borderWidth: 1, borderColor: Colors.borderLight, borderRadius: 8, paddingVertical: 8, alignItems: "center", backgroundColor: "#F4F6F9", minWidth: 38 },
   dayChipOn: { backgroundColor: Colors.amberGlow, borderColor: Colors.amberGlow },
   dayChipText: { color: Colors.nearBlack, fontSize: 12, fontWeight: "900" },
   dayChipTextOn: { color: Colors.white },
   shiftRow: { flexDirection: "row", gap: 8 },
-  shift: { flex: 1, minHeight: 46, borderRadius: 12, borderWidth: 1, borderColor: Colors.borderLight, backgroundColor: "#f6fffe", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7, paddingHorizontal: 8 },
+  shift: { flex: 1, minHeight: 42, borderRadius: 8, borderWidth: 1, borderColor: Colors.borderLight, backgroundColor: "#F4F6F9", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7, paddingHorizontal: 8 },
   shiftOn: { backgroundColor: Colors.amberGlow, borderColor: Colors.amberGlow },
   shiftText: { color: Colors.lightSeaGreen, fontWeight: "900", fontSize: 13 },
   shiftTextOn: { color: Colors.white },
-  primaryAction: { borderRadius: 12, paddingVertical: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
+  primaryAction: { borderRadius: 9, paddingVertical: 13, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
   primaryActionText: { color: Colors.white, fontWeight: "900", fontSize: 15 },
   walletRouteSummary: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 2 },
   walletRouteText: { color: Colors.textMuted, fontSize: 11, fontWeight: "800" },
   walletRouteDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.borderLight },
   metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  metricCard: { flexGrow: 1, flexBasis: "47%", minWidth: 150, minHeight: 116, borderRadius: 16, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.borderLight, padding: 13 },
+  metricCard: { flexGrow: 1, flexBasis: "47%", minWidth: 150, minHeight: 124, borderRadius: 12, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.borderLight, padding: 14 },
   metricIcon: { width: 33, height: 33, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 9 },
   metricTitle: { color: Colors.textMuted, fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
   metricValue: { color: Colors.nearBlack, fontSize: 21, lineHeight: 26, fontWeight: "900", marginTop: 3 },
