@@ -2708,7 +2708,7 @@ const styles = StyleSheet.create({
   },
   customerNameRow: { flexDirection: "row", alignItems: "flex-start", flexWrap: "wrap", gap: 4, minWidth: 0 },
   cardName: {
-    flexShrink: 1,
+    flexBasis: "100%",
     fontSize: 12.5,
     lineHeight: 17,
     fontWeight: "900",
