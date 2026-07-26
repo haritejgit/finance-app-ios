@@ -366,7 +366,7 @@ const CustomerItem = React.memo(function CustomerItem({
 
       <View style={styles.centerCol}>
         <View style={styles.customerNameRow}>
-          <Text style={styles.cardName} numberOfLines={1}>
+          <Text style={styles.cardName} numberOfLines={2}>
             {language === "te" ? translateTelugu(customer.name) : customer.name}
           </Text>
           {rowTone.label ? (
@@ -1582,7 +1582,7 @@ export default function CustomerListScreen() {
               )}
             </View>
             <View style={styles.centerCol}>
-              <Text style={[styles.cardName, { color: "#6B7280" }]} numberOfLines={1}>
+              <Text style={[styles.cardName, { color: "#6B7280" }]} numberOfLines={2}>
                 {item.name} <Text style={{ fontSize: 10, color: "#9CA3AF" }}>[Closed]</Text>
               </Text>
               <Text style={styles.cardPhone}>{item.phone || "\u2014"}</Text>
@@ -2706,7 +2706,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
     gap: 1,
   },
-  customerNameRow: { flexDirection: "row", alignItems: "center", gap: 5, minWidth: 0 },
+  customerNameRow: { flexDirection: "row", alignItems: "flex-start", flexWrap: "wrap", gap: 4, minWidth: 0 },
   cardName: {
     flexShrink: 1,
     fontSize: 12.5,
