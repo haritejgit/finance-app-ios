@@ -1544,7 +1544,7 @@ export default function ProfileScreen() {
                   <Text style={styles.profileAvatarText}>{customerInitials}</Text>
                 </View>
                 <View style={styles.profileTitleBlock}>
-                  <Text style={styles.headerName} numberOfLines={1}>{customerDisplayName}</Text>
+                  <Text style={styles.headerName} numberOfLines={2}>{customerDisplayName}</Text>
                   <Text style={styles.headerMeta} numberOfLines={1}>
                     Book no. {String(customer.numericalId).padStart(2, "0")}
                     {customer.coName ? ` | ${customer.coName}` : ""}
@@ -2990,7 +2990,7 @@ const styles = StyleSheet.create({
   
   // Header Card Styles
   headerCard: { backgroundColor: "#12294A", borderRadius: 12, padding: 16, gap: 12 },
-  profileHeaderTop: { flexDirection: "row", alignItems: "center", gap: 12 },
+  profileHeaderTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   profileAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#1E3A63", alignItems: "center", justifyContent: "center" },
   profileAvatarText: { color: "#D4AF6A", fontSize: 14, fontWeight: "900" },
   profileTitleBlock: { flex: 1, minWidth: 0 },
