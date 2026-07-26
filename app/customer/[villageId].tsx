@@ -9,6 +9,7 @@ import { Image } from "expo-image";
 
 import {
   ActivityIndicator,
+  Animated,
   Alert as RNAlert,
   FlatList,
   KeyboardAvoidingView,
@@ -1149,17 +1150,21 @@ export default function CustomerListScreen() {
         const isCreatedToday = isToday(customer.createdAt);
         const isPaid = status === "paid";
         const isDue = status === "due";
+        const loan = activeLoans[customer.id];
 
         stats.total += 1;
         if (isCreatedToday) stats.today += 1;
-        if (isPaid) stats.paid += 1;
+        if (isPaid) {
+          stats.paid += 1;
+          stats.estimatedCollected += getSuggestedPaymentAmount(loan);
+        }
         if (isDue) stats.dues += 1;
         if (!isNew && !isPaid && !isDue) stats.remaining += 1;
         return stats;
       },
-      { total: 0, today: 0, paid: 0, dues: 0, remaining: 0 }
+      { total: 0, today: 0, paid: 0, dues: 0, remaining: 0, estimatedCollected: 0 }
     );
-  }, [filtered, paymentStatuses]);
+  }, [filtered, paymentStatuses, activeLoans]);
 
   const quickCollectCustomers = useMemo(
     () => customers.filter((customer) => {
@@ -1700,6 +1705,51 @@ export default function CustomerListScreen() {
               <Text style={[styles.routeSummaryValue, styles.routeSummaryValueRemaining]}>{customerStats.remaining}</Text>
             </View>
           </ScrollView>
+
+          {/* ── Live Collection Progress Bar ── */}
+          {customerStats.total > 0 && statusFilter !== "closed" && (() => {
+            const paidPct  = customerStats.paid  / customerStats.total;
+            const duePct   = customerStats.dues  / customerStats.total;
+            const donePct  = Math.round(paidPct * 100);
+            const msg =
+              donePct === 100 ? "All collected! 🎉" :
+              donePct >= 75   ? "Almost done! 🎯" :
+              donePct >= 50   ? "Halfway there! ⚡" :
+              donePct >= 25   ? "Keep going! 🔥" :
+                                "Let's go! 💪";
+            return (
+              <View style={styles.progressWrap}>
+                <View style={styles.progressTrack}>
+                  {customerStats.paid > 0 && (
+                    <View style={[styles.progressSegPaid, { flex: customerStats.paid }]} />
+                  )}
+                  {customerStats.dues > 0 && (
+                    <View style={[styles.progressSegDue, { flex: customerStats.dues }]} />
+                  )}
+                  {customerStats.remaining > 0 && (
+                    <View style={[styles.progressSegRem, { flex: customerStats.remaining }]} />
+                  )}
+                </View>
+                <View style={styles.progressRow}>
+                  <Text style={styles.progressMsg}>{msg}</Text>
+                  <View style={styles.progressRightGroup}>
+                    {customerStats.estimatedCollected > 0 && (
+                      <Text style={styles.progressAmt}>
+                        ~Rs.{Math.round(customerStats.estimatedCollected).toLocaleString("en-IN")}
+                      </Text>
+                    )}
+                    <Text style={[
+                      styles.progressPct,
+                      donePct === 100 ? { color: "#1E7A4C" } :
+                      donePct >= 50   ? { color: "#9A6B1E" } :
+                                        { color: "#B03A3A" }
+                    ]}>{donePct}%</Text>
+                  </View>
+                </View>
+              </View>
+            );
+          })()}
+
           <View style={styles.customerLegend}>
             {[
               ["#E4F3EA", "#1E7A4C", "Paid"],
@@ -2645,6 +2695,17 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
   legendSwatch: { width: 8, height: 8, borderRadius: 2, borderWidth: 1 },
   legendItemText: { color: "#4B5A6D", fontSize: 10, fontWeight: "700" },
+  // Progress bar
+  progressWrap: { marginHorizontal: 14, marginBottom: 10, backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 12, padding: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.14)" },
+  progressTrack: { flexDirection: "row", height: 8, borderRadius: 8, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.15)", marginBottom: 7 },
+  progressSegPaid: { backgroundColor: "#1E7A4C" },
+  progressSegDue:  { backgroundColor: "#B03A3A" },
+  progressSegRem:  { backgroundColor: "rgba(255,255,255,0.18)" },
+  progressRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  progressMsg: { color: "rgba(255,255,255,0.82)", fontSize: 11, fontWeight: "800" },
+  progressRightGroup: { flexDirection: "row", alignItems: "center", gap: 8 },
+  progressAmt: { color: "rgba(255,255,255,0.65)", fontSize: 11, fontWeight: "700" },
+  progressPct: { fontSize: 13, fontWeight: "900" },
   list: { flex: 1 },
   listContent: { flexGrow: 1, paddingHorizontal: 14, paddingBottom: 116 },
   item: {
