@@ -237,7 +237,6 @@ const CustomerItem = React.memo(function CustomerItem({
   onSaveCurrentLocation,
   onCloseRenew,
   onShowQr,
-  onWhatsApp,
   status,
   isNew,
   loan,
@@ -255,7 +254,6 @@ const CustomerItem = React.memo(function CustomerItem({
   onSaveCurrentLocation: (customer: Customer) => void;
   onCloseRenew?: (customer: Customer, loan: Loan) => void;
   onShowQr?: (customer: Customer, loan: Loan) => void;
-  onWhatsApp: (customer: Customer, loan?: Loan, status?: PaymentStatus) => void;
   status: PaymentStatus;
   isNew?: boolean;
   loan?: Loan;
@@ -406,16 +404,6 @@ const CustomerItem = React.memo(function CustomerItem({
                   <Text style={styles.upiPillText}>UPI QR</Text>
                 </Pressable>
               )}
-              <Pressable
-                onPress={(e) => {
-                  e.stopPropagation();
-                  lightImpact();
-                  onWhatsApp(customer, loan, status);
-                }}
-                style={styles.waBubble}
-              >
-                <Icon name="logo-whatsapp" size={13} color="#25D366" />
-              </Pressable>
             </>
           ) : (
             <Text style={styles.cardPhone}>—</Text>
@@ -1195,30 +1183,6 @@ export default function CustomerListScreen() {
     router.push(`/profile/${customerId}`);
   }, []);
 
-  const handleWhatsApp = useCallback((customer: Customer, loan?: Loan, status?: PaymentStatus) => {
-    if (!customer.phone) return;
-    const rawPhone = customer.phone.replace(/\D/g, '');
-    const fullPhone = rawPhone.startsWith('91') ? rawPhone : `91${rawPhone}`;
-    const bookNo = String(customer.numericalId).padStart(2, '0');
-    const balance = loan ? Math.round(loan.balanceAmount) : 0;
-    const suggested = Math.round(getSuggestedPaymentAmount(loan));
-    const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-
-    let message = '';
-    if (status === 'paid') {
-      message = `✅ *Payment Received*\nName: ${customer.name}\nBook No: ${bookNo}\nBalance Remaining: Rs.${balance.toLocaleString('en-IN')}\nDate: ${today}\n\nThank you! 🙏\n— Karthikeya Finance`;
-    } else if (status === 'due') {
-      message = `⚠️ *Payment Due*\nDear ${customer.name},\nYour weekly installment (Book: ${bookNo}) of Rs.${suggested.toLocaleString('en-IN')} is pending.\nPlease arrange payment at your earliest.\n\n— Karthikeya Finance`;
-    } else {
-      message = `📢 *Payment Reminder*\nDear ${customer.name},\nFriendly reminder for your weekly installment.\nBook: ${bookNo} | Amount: Rs.${suggested.toLocaleString('en-IN')}\n\n— Karthikeya Finance`;
-    }
-
-    const waUrl = `whatsapp://send?phone=${fullPhone}&text=${encodeURIComponent(message)}`;
-    Linking.openURL(waUrl).catch(() => {
-      Linking.openURL(`https://wa.me/${fullPhone}?text=${encodeURIComponent(message)}`).catch(() => undefined);
-    });
-  }, []);
-
   const handleCloseCustomer = useCallback(async (customer: Customer) => {
     if (!user) return;
     try {
@@ -1656,7 +1620,6 @@ export default function CustomerListScreen() {
             setSelectedQrCustomer({ customer: c, loan: l });
             setQrCustomAmount(Math.round(getSuggestedPaymentAmount(l)).toString());
           }}
-          onWhatsApp={handleWhatsApp}
           status={paymentStatuses[item.id] || 'none'} 
           isNew={isNewThisWeek(item.createdAt)}
           loan={activeLoans[item.id]}
@@ -1667,7 +1630,7 @@ export default function CustomerListScreen() {
         />
       );
     },
-    [activeLoans, lastPaymentDates, markCustomerDue, openCustomer, openDirections, openManualPayment, handleQuickPay, paymentStatuses, payingCustomerId, promptCloseOrRenew, saveCurrentLocationForCustomer, updatingLocationCustomerId, statusFilter, closedCustomerLoans, handleReopenCustomer, handleWhatsApp]
+    [activeLoans, lastPaymentDates, markCustomerDue, openCustomer, openDirections, openManualPayment, handleQuickPay, paymentStatuses, payingCustomerId, promptCloseOrRenew, saveCurrentLocationForCustomer, updatingLocationCustomerId, statusFilter, closedCustomerLoans, handleReopenCustomer]
   );
 
   return (
