@@ -271,13 +271,13 @@ const CustomerItem = React.memo(function CustomerItem({
   
   const rowTone = useMemo(() => {
     if (status === "paid") {
-      return { label: "PAID", bg: "#E4F3EA", border: "#BFE0CC", divider: "#CBE7D4", accent: "#1E7A4C", badgeText: "#FFFFFF" };
+      return { label: "✓", bg: "#E4F3EA", border: "#BFE0CC", divider: "#CBE7D4", accent: "#1E7A4C", badgeText: "#FFFFFF" };
     }
     if (status === "due") {
-      return { label: "DUE", bg: "#FBEAEA", border: "#F0C7C7", divider: "#F2D2D2", accent: "#B03A3A", badgeText: "#FFFFFF" };
+      return { label: "✗", bg: "#FBEAEA", border: "#F0C7C7", divider: "#F2D2D2", accent: "#B03A3A", badgeText: "#FFFFFF" };
     }
     if (isNew) {
-      return { label: "NEW", bg: "#FCF2E3", border: "#F0DBB0", divider: "#F2E2BE", accent: "#D4AF6A", badgeText: "#12294A" };
+      return { label: "", bg: "#FCF2E3", border: "#F0DBB0", divider: "#F2E2BE", accent: "#D4AF6A", badgeText: "#12294A" };
     }
     return { label: "", bg: "#FFFFFF", border: "#E1E6ED", divider: "#EEF1F5", accent: "#12294A", badgeText: "#FFFFFF" };
   }, [isNew, status]);
@@ -2716,7 +2716,7 @@ const styles = StyleSheet.create({
   },
   coNameRow: { flexDirection: "row", alignItems: "center", minWidth: 0, marginTop: -1 },
   coNameText: { flexShrink: 1, color: "#4B5A6D", fontSize: 9.5, lineHeight: 13, fontWeight: "800" },
-  rowStatusPill: { overflow: "hidden", fontSize: 8.5, fontWeight: "900", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 5 },
+  rowStatusPill: { overflow: "hidden", fontSize: 11, fontWeight: "900", width: 18, height: 18, borderRadius: 9, textAlign: "center", lineHeight: 18 },
   phoneIconRow: {
     flexDirection: "row",
     alignItems: "center",
