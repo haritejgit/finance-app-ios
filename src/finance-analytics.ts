@@ -84,6 +84,7 @@ export type DashboardAnalytics = {
     onTimePaymentRate: number;
   };
   predictions: PredictionItem[];
+  expectedCollectionTomorrow: number;
   recentTransactions: {
     id: string;
     customerId?: string;
@@ -566,6 +567,33 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
       confidence: Math.max(15, Math.round(baseConfidence * decay)),
     };
   });
+  // Calculate Tomorrow's Expected Collection based on tomorrow's scheduled village routes
+  const tomorrowObj = new Date();
+  tomorrowObj.setDate(tomorrowObj.getDate() + 1);
+  const tomorrowDayName = tomorrowObj.toLocaleDateString("en-US", { weekday: "long" }).toLowerCase();
+  
+  const tomorrowVillageIds = new Set(
+    villages
+      .filter((v) => v.dayOfWeek && v.dayOfWeek.toLowerCase() === tomorrowDayName)
+      .map((v) => v.id)
+  );
+
+  let expectedCollectionTomorrow = 0;
+  customers.forEach((c) => {
+    if (tomorrowVillageIds.size > 0 && !tomorrowVillageIds.has(c.villageId)) return;
+    const loan = activeLoanByCustomerId.get(c.id);
+    if (loan && loan.balanceAmount > 0) {
+      const installment = Math.max(1, Math.round(Number(loan.principalAmount || 10000) / 10));
+      expectedCollectionTomorrow += installment;
+    }
+  });
+
+  if (expectedCollectionTomorrow === 0 && activeLoans.length > 0) {
+    const totalWeeklyExpected = activeLoans.reduce((sum, loan) => {
+      return sum + Math.max(1, Math.round(Number(loan.principalAmount || 10000) / 10));
+    }, 0);
+    expectedCollectionTomorrow = Math.round(totalWeeklyExpected / 6);
+  }
 
   const recentTransactions = regularPayments
     .sort((a, b) => b.paymentDate - a.paymentDate)
@@ -834,6 +862,7 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
       onTimePaymentRate,
     },
     predictions,
+    expectedCollectionTomorrow,
     recentTransactions,
     dueAlerts,
     customerStates,

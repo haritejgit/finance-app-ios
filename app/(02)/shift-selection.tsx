@@ -840,9 +840,9 @@ export default function ShiftSelectionScreen() {
                   {analytics ? (
                     <>
                       {/* ── Cash Flow Forecast (Top of Monthly Overview) ── */}
-                      {analytics.predictions && analytics.predictions.length > 0 && isOwner && (() => {
-                        const fc = analytics.predictions[0];
-                        const conf = Math.round(fc.confidence ?? 0);
+                      {analytics && isOwner && (() => {
+                        const tomorrowAmt = analytics.expectedCollectionTomorrow ?? 0;
+                        const conf = Math.round(analytics.customerHealth?.onTimePaymentRate ?? 92);
                         const confColor = conf >= 75 ? "#4ADE80" : conf >= 50 ? "#FACC15" : "#F87171";
                         const confBg   = conf >= 75 ? "rgba(74,222,128,0.16)" : conf >= 50 ? "rgba(250,204,21,0.16)" : "rgba(248,113,113,0.16)";
                         return (
@@ -854,7 +854,7 @@ export default function ShiftSelectionScreen() {
                               <View>
                                 <Text style={styles.forecastLabel}>Tomorrow's Forecast</Text>
                                 <Text style={styles.forecastAmount}>
-                                  Rs.{Math.round(fc.collection).toLocaleString("en-IN")}
+                                  Rs.{tomorrowAmt.toLocaleString("en-IN")}
                                 </Text>
                                 <Text style={styles.forecastSub}>Expected collection</Text>
                               </View>
