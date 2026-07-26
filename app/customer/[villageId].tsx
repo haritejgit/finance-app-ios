@@ -9,7 +9,6 @@ import { Image } from "expo-image";
 
 import {
   ActivityIndicator,
-  Animated,
   Alert as RNAlert,
   FlatList,
   KeyboardAvoidingView,
@@ -238,6 +237,7 @@ const CustomerItem = React.memo(function CustomerItem({
   onSaveCurrentLocation,
   onCloseRenew,
   onShowQr,
+  onWhatsApp,
   status,
   isNew,
   loan,
@@ -255,6 +255,7 @@ const CustomerItem = React.memo(function CustomerItem({
   onSaveCurrentLocation: (customer: Customer) => void;
   onCloseRenew?: (customer: Customer, loan: Loan) => void;
   onShowQr?: (customer: Customer, loan: Loan) => void;
+  onWhatsApp: (customer: Customer, loan?: Loan, status?: PaymentStatus) => void;
   status: PaymentStatus;
   isNew?: boolean;
   loan?: Loan;
@@ -405,6 +406,16 @@ const CustomerItem = React.memo(function CustomerItem({
                   <Text style={styles.upiPillText}>UPI QR</Text>
                 </Pressable>
               )}
+              <Pressable
+                onPress={(e) => {
+                  e.stopPropagation();
+                  lightImpact();
+                  onWhatsApp(customer, loan, status);
+                }}
+                style={styles.waBubble}
+              >
+                <Icon name="logo-whatsapp" size={13} color="#25D366" />
+              </Pressable>
             </>
           ) : (
             <Text style={styles.cardPhone}>—</Text>
@@ -1150,21 +1161,17 @@ export default function CustomerListScreen() {
         const isCreatedToday = isToday(customer.createdAt);
         const isPaid = status === "paid";
         const isDue = status === "due";
-        const loan = activeLoans[customer.id];
 
         stats.total += 1;
         if (isCreatedToday) stats.today += 1;
-        if (isPaid) {
-          stats.paid += 1;
-          stats.estimatedCollected += getSuggestedPaymentAmount(loan);
-        }
+        if (isPaid) stats.paid += 1;
         if (isDue) stats.dues += 1;
         if (!isNew && !isPaid && !isDue) stats.remaining += 1;
         return stats;
       },
-      { total: 0, today: 0, paid: 0, dues: 0, remaining: 0, estimatedCollected: 0 }
+      { total: 0, today: 0, paid: 0, dues: 0, remaining: 0 }
     );
-  }, [filtered, paymentStatuses, activeLoans]);
+  }, [filtered, paymentStatuses]);
 
   const quickCollectCustomers = useMemo(
     () => customers.filter((customer) => {
@@ -1186,6 +1193,30 @@ export default function CustomerListScreen() {
 
   const openCustomer = useCallback((customerId: string) => {
     router.push(`/profile/${customerId}`);
+  }, []);
+
+  const handleWhatsApp = useCallback((customer: Customer, loan?: Loan, status?: PaymentStatus) => {
+    if (!customer.phone) return;
+    const rawPhone = customer.phone.replace(/\D/g, '');
+    const fullPhone = rawPhone.startsWith('91') ? rawPhone : `91${rawPhone}`;
+    const bookNo = String(customer.numericalId).padStart(2, '0');
+    const balance = loan ? Math.round(loan.balanceAmount) : 0;
+    const suggested = Math.round(getSuggestedPaymentAmount(loan));
+    const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+    let message = '';
+    if (status === 'paid') {
+      message = `✅ *Payment Received*\nName: ${customer.name}\nBook No: ${bookNo}\nBalance Remaining: Rs.${balance.toLocaleString('en-IN')}\nDate: ${today}\n\nThank you! 🙏\n— Karthikeya Finance`;
+    } else if (status === 'due') {
+      message = `⚠️ *Payment Due*\nDear ${customer.name},\nYour weekly installment (Book: ${bookNo}) of Rs.${suggested.toLocaleString('en-IN')} is pending.\nPlease arrange payment at your earliest.\n\n— Karthikeya Finance`;
+    } else {
+      message = `📢 *Payment Reminder*\nDear ${customer.name},\nFriendly reminder for your weekly installment.\nBook: ${bookNo} | Amount: Rs.${suggested.toLocaleString('en-IN')}\n\n— Karthikeya Finance`;
+    }
+
+    const waUrl = `whatsapp://send?phone=${fullPhone}&text=${encodeURIComponent(message)}`;
+    Linking.openURL(waUrl).catch(() => {
+      Linking.openURL(`https://wa.me/${fullPhone}?text=${encodeURIComponent(message)}`).catch(() => undefined);
+    });
   }, []);
 
   const handleCloseCustomer = useCallback(async (customer: Customer) => {
@@ -1625,6 +1656,7 @@ export default function CustomerListScreen() {
             setSelectedQrCustomer({ customer: c, loan: l });
             setQrCustomAmount(Math.round(getSuggestedPaymentAmount(l)).toString());
           }}
+          onWhatsApp={handleWhatsApp}
           status={paymentStatuses[item.id] || 'none'} 
           isNew={isNewThisWeek(item.createdAt)}
           loan={activeLoans[item.id]}
@@ -1635,7 +1667,7 @@ export default function CustomerListScreen() {
         />
       );
     },
-    [activeLoans, lastPaymentDates, markCustomerDue, openCustomer, openDirections, openManualPayment, handleQuickPay, paymentStatuses, payingCustomerId, promptCloseOrRenew, saveCurrentLocationForCustomer, updatingLocationCustomerId, statusFilter, closedCustomerLoans, handleReopenCustomer]
+    [activeLoans, lastPaymentDates, markCustomerDue, openCustomer, openDirections, openManualPayment, handleQuickPay, paymentStatuses, payingCustomerId, promptCloseOrRenew, saveCurrentLocationForCustomer, updatingLocationCustomerId, statusFilter, closedCustomerLoans, handleReopenCustomer, handleWhatsApp]
   );
 
   return (
@@ -1705,50 +1737,6 @@ export default function CustomerListScreen() {
               <Text style={[styles.routeSummaryValue, styles.routeSummaryValueRemaining]}>{customerStats.remaining}</Text>
             </View>
           </ScrollView>
-
-          {/* ── Live Collection Progress Bar ── */}
-          {customerStats.total > 0 && statusFilter !== "closed" && (() => {
-            const paidPct  = customerStats.paid  / customerStats.total;
-            const duePct   = customerStats.dues  / customerStats.total;
-            const donePct  = Math.round(paidPct * 100);
-            const msg =
-              donePct === 100 ? "All collected! 🎉" :
-              donePct >= 75   ? "Almost done! 🎯" :
-              donePct >= 50   ? "Halfway there! ⚡" :
-              donePct >= 25   ? "Keep going! 🔥" :
-                                "Let's go! 💪";
-            return (
-              <View style={styles.progressWrap}>
-                <View style={styles.progressTrack}>
-                  {customerStats.paid > 0 && (
-                    <View style={[styles.progressSegPaid, { flex: customerStats.paid }]} />
-                  )}
-                  {customerStats.dues > 0 && (
-                    <View style={[styles.progressSegDue, { flex: customerStats.dues }]} />
-                  )}
-                  {customerStats.remaining > 0 && (
-                    <View style={[styles.progressSegRem, { flex: customerStats.remaining }]} />
-                  )}
-                </View>
-                <View style={styles.progressRow}>
-                  <Text style={styles.progressMsg}>{msg}</Text>
-                  <View style={styles.progressRightGroup}>
-                    {customerStats.estimatedCollected > 0 && (
-                      <Text style={styles.progressAmt}>
-                        ~Rs.{Math.round(customerStats.estimatedCollected).toLocaleString("en-IN")}
-                      </Text>
-                    )}
-                    <Text style={[
-                      styles.progressPct,
-                      donePct === 100 ? { color: "#1E7A4C" } :
-                      donePct >= 50   ? { color: "#9A6B1E" } :
-                                        { color: "#B03A3A" }
-                    ]}>{donePct}%</Text>
-                  </View>
-                </View>
-              </View>
-            );
-          })()}
 
           <View style={styles.customerLegend}>
             {[
@@ -2800,6 +2788,7 @@ const styles = StyleSheet.create({
   callLink: { flexDirection: "row", alignItems: "center", gap: 4 },
   upiPill: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "rgba(212,175,106,0.16)", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 5 },
   upiPillText: { color: "#9A6B1E", fontSize: 8.5, fontWeight: "900" },
+  waBubble: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(37,211,102,0.12)", borderWidth: 1, borderColor: "rgba(37,211,102,0.25)" },
   amountStatusRow: {
     flexDirection: "row",
     alignItems: "center",
