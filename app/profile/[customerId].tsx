@@ -1828,7 +1828,57 @@ export default function ProfileScreen() {
                 </View>
               </View>
             </View>
+
+            {/* ── Smart Loan Recommendation ── */}
+            {localLoan && (() => {
+              const principal = Number(localLoan.principalAmount ?? (localLoan as any).principal_amount ?? (localLoan as any).loanAmount ?? 10000);
+              let recommended = principal;
+              let reason = "";
+              let reasonIcon = "✦";
+              if (creditSummary.score >= 800) {
+                recommended = Math.round(principal * 1.5 / 1000) * 1000;
+                reason = "Excellent repayment history";
+                reasonIcon = "🏆";
+              } else if (creditSummary.score >= 700) {
+                recommended = Math.round(principal * 1.25 / 1000) * 1000;
+                reason = "Good payment track record";
+                reasonIcon = "⭐";
+              } else if (creditSummary.score >= 600) {
+                recommended = principal;
+                reason = "Average payment history";
+                reasonIcon = "👍";
+              } else {
+                recommended = Math.max(1000, Math.round(principal * 0.75 / 1000) * 1000);
+                reason = "Needs payment improvement";
+                reasonIcon = "⚠️";
+              }
+              const isGood = creditSummary.score >= 700;
+              return (
+                <View style={styles.loanRecoCard}>
+                  <View style={styles.loanRecoHeader}>
+                    <View style={styles.loanRecoIconWrap}>
+                      <Icon name="sparkles-outline" size={14} color="#1E7A4C" />
+                    </View>
+                    <Text style={styles.loanRecoTitle}>Smart Loan Recommendation</Text>
+                  </View>
+                  <View style={styles.loanRecoBody}>
+                    <View>
+                      <Text style={styles.loanRecoLabel}>Next Loan Eligible For</Text>
+                      <Text style={[styles.loanRecoAmount, !isGood && { color: "#9A6B1E" }]}>
+                        Rs.{recommended.toLocaleString("en-IN")}
+                      </Text>
+                    </View>
+                    <View style={styles.loanRecoBadge}>
+                      <Text style={styles.loanRecoIcon}>{reasonIcon}</Text>
+                      <Text style={styles.loanRecoReason}>{reason}</Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })()}
+
             <Text style={styles.history}>Transaction History</Text>
+
             <PaymentHistory 
               payments={currentLoanPayments} 
               customer={customer}
@@ -3277,4 +3327,15 @@ const styles = StyleSheet.create({
   qrPayButtonsRow: { flexDirection: "row", gap: 10, width: "100%", marginTop: 8 },
   qrPayBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   qrPayBtnText: { color: colors.white, fontSize: 14, fontWeight: "900" },
+  // Smart Loan Recommendation
+  loanRecoCard: { backgroundColor: "#E4F3EA", borderRadius: 14, borderWidth: 1, borderColor: "#BFE0CC", padding: 14, marginHorizontal: 14, marginBottom: 14 },
+  loanRecoHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  loanRecoIconWrap: { width: 26, height: 26, borderRadius: 8, backgroundColor: "rgba(30,122,76,0.15)", alignItems: "center", justifyContent: "center" },
+  loanRecoTitle: { color: "#12502E", fontSize: 12, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.4 },
+  loanRecoBody: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  loanRecoLabel: { color: "#2E7D4F", fontSize: 10, fontWeight: "700", marginBottom: 2 },
+  loanRecoAmount: { color: "#1E7A4C", fontSize: 22, fontWeight: "900" },
+  loanRecoBadge: { alignItems: "center", backgroundColor: "rgba(30,122,76,0.12)", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+  loanRecoIcon: { fontSize: 18 },
+  loanRecoReason: { color: "#12502E", fontSize: 9, fontWeight: "800", textAlign: "center", marginTop: 2, maxWidth: 90 },
 });

@@ -620,6 +620,34 @@ export default function ShiftSelectionScreen() {
                 </Pressable>
               </View>
 
+              {/* ── Cash Flow Forecast ── */}
+              {analytics?.predictions && analytics.predictions.length > 0 && isOwner && (() => {
+                const fc = analytics.predictions[0];
+                const conf = Math.round(fc.confidence ?? 0);
+                const confColor = conf >= 75 ? "#1E7A4C" : conf >= 50 ? "#D4AF6A" : "#B03A3A";
+                const confBg   = conf >= 75 ? "rgba(30,122,76,0.18)" : conf >= 50 ? "rgba(212,175,106,0.18)" : "rgba(176,58,58,0.18)";
+                return (
+                  <View style={styles.forecastCard}>
+                    <View style={styles.forecastLeft}>
+                      <View style={styles.forecastIconWrap}>
+                        <Icon name="sparkles-outline" size={15} color="#D4AF6A" />
+                      </View>
+                      <View>
+                        <Text style={styles.forecastLabel}>Tomorrow's Forecast</Text>
+                        <Text style={styles.forecastAmount}>
+                          Rs.{Math.round(fc.collection).toLocaleString("en-IN")}
+                        </Text>
+                        <Text style={styles.forecastSub}>Expected collection</Text>
+                      </View>
+                    </View>
+                    <View style={[styles.forecastConfBadge, { backgroundColor: confBg }]}>
+                      <Text style={[styles.forecastConfPct, { color: confColor }]}>{conf}%</Text>
+                      <Text style={[styles.forecastConfLabel, { color: confColor }]}>Confidence</Text>
+                    </View>
+                  </View>
+                );
+              })()}
+
               {loading && !analytics ? (
                 <DashboardSkeleton />
               ) : (
@@ -1309,4 +1337,14 @@ const styles = StyleSheet.create({
   expenseInput: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
   expenseSaveBtn: { backgroundColor: Colors.danger, borderRadius: 14, paddingVertical: 14, alignItems: "center", marginTop: 8 },
   expenseSaveBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "800" },
+  // Forecast card
+  forecastCard: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "rgba(255,255,255,0.07)", borderRadius: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.13)", paddingVertical: 12, paddingHorizontal: 14, marginHorizontal: 2, marginBottom: 10 },
+  forecastLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+  forecastIconWrap: { width: 34, height: 34, borderRadius: 10, backgroundColor: "rgba(212,175,106,0.14)", alignItems: "center", justifyContent: "center" },
+  forecastLabel: { color: "rgba(255,255,255,0.55)", fontSize: 9, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.5 },
+  forecastAmount: { color: "#FFFFFF", fontSize: 20, fontWeight: "900", marginTop: 1 },
+  forecastSub: { color: "rgba(255,255,255,0.45)", fontSize: 9, fontWeight: "700", marginTop: 1 },
+  forecastConfBadge: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, alignItems: "center" },
+  forecastConfPct: { fontSize: 20, fontWeight: "900" },
+  forecastConfLabel: { fontSize: 9, fontWeight: "800", textTransform: "uppercase", marginTop: 1 },
 });

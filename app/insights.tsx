@@ -7,6 +7,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuth } from "../src/auth-context";
 import { AnimatedScreen } from "../src/components/AnimatedScreen";
 import { db } from "../src/firebase";
+import { askGeminiForecast, type ForecastStats } from "../src/gemini";
 import Icon from "../src/Icon";
 import { getGradient, shadows } from "../src/theme";
 import { useTheme } from "../src/theme-context";
@@ -50,6 +51,8 @@ export default function InsightsScreen() {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [forecastText, setForecastText] = useState("");
+  const [forecastLoading, setForecastLoading] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -234,6 +237,66 @@ export default function InsightsScreen() {
                         </View>
                       ))}
                   </View>
+
+                  {/* ── AI Forecast ── */}
+                  <View style={[styles.card, { backgroundColor: "#0D1E30", borderColor: "rgba(212,175,106,0.3)" }]}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                      <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: "rgba(212,175,106,0.15)", alignItems: "center", justifyContent: "center" }}>
+                        <Icon name="sparkles-outline" size={15} color="#D4AF6A" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: "#FFFFFF", fontSize: 15, fontWeight: "900" }}>AI Business Forecast</Text>
+                        <Text style={{ color: "rgba(255,255,255,0.55)", fontSize: 11, fontWeight: "600" }}>Powered by Gemini AI</Text>
+                      </View>
+                    </View>
+
+                    {forecastText ? (
+                      <Text style={{ color: "rgba(255,255,255,0.88)", fontSize: 13, lineHeight: 20, fontWeight: "500" }}>
+                        {forecastText}
+                      </Text>
+                    ) : (
+                      <Text style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: "600" }}>
+                        Get AI-powered predictions for defaults, cash flow trends, and best lending months.
+                      </Text>
+                    )}
+
+                    <Pressable
+                      style={[styles.forecastBtn, forecastLoading && { opacity: 0.6 }]}
+                      disabled={forecastLoading}
+                      onPress={async () => {
+                        setForecastLoading(true);
+                        const overdue = insight.customerRisks.filter(r => r.riskScore > 60).length;
+                        const totalCustomers = insight.customerRisks.length;
+                        const stats: ForecastStats = {
+                          totalCustomers,
+                          activeLoans: insight.activeLoans,
+                          todayCollection: 0,
+                          monthCollection: insight.recoveredThisMonth,
+                          overdueCount: overdue,
+                          monthDistributed: insight.distributedThisMonth,
+                          totalDistributed: insight.distributedThisMonth,
+                          totalCollected: insight.recoveredThisMonth,
+                          onTimePaymentRate: totalCustomers > 0 ? Math.round(((totalCustomers - overdue) / totalCustomers) * 100) : 100,
+                          overdueRate: totalCustomers > 0 ? Math.round((overdue / totalCustomers) * 100) : 0,
+                          avgLoanAmount: loans.length > 0 ? loans.reduce((s, l) => s + Number(l.principalAmount || 0), 0) / loans.length : 0,
+                          weeklyCollections: [],
+                        };
+                        const result = await askGeminiForecast(stats);
+                        setForecastText(result);
+                        setForecastLoading(false);
+                      }}
+                    >
+                      {forecastLoading ? (
+                        <ActivityIndicator size="small" color="#12294A" />
+                      ) : (
+                        <Icon name="sparkles-outline" size={14} color="#12294A" />
+                      )}
+                      <Text style={styles.forecastBtnText}>
+                        {forecastLoading ? "Generating..." : forecastText ? "Regenerate Forecast" : "Generate AI Forecast"}
+                      </Text>
+                    </Pressable>
+                  </View>
+
                 </>
               )}
             </View>
@@ -301,4 +364,6 @@ const styles = StyleSheet.create({
   riskBadge: { minWidth: 44, overflow: "hidden", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, color: "#FFFFFF", textAlign: "center", fontSize: 13, fontWeight: "900" },
   defaulterRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 7 },
   flames: { fontSize: 15, fontWeight: "800" },
+  forecastBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#D4AF6A", borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16, marginTop: 4 },
+  forecastBtnText: { color: "#12294A", fontSize: 14, fontWeight: "900" },
 });

@@ -13,6 +13,7 @@ import {
   View,
   Modal,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import Clipboard from "@react-native-clipboard/clipboard";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -474,6 +475,38 @@ export default function AccountScreen() {
   } | null>(null);
   const [periodBf, setPeriodBf] = useState<number>(0);
   const [rangeSummaryLoading, setRangeSummaryLoading] = useState(false);
+
+  // ── Auto Backup ──
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [lastBackupTime, setLastBackupTime] = useState("");
+  const [backupDone, setBackupDone] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem("kf_backup_timestamp").then(val => { if (val) setLastBackupTime(val); }).catch(() => {});
+  }, []);
+
+  const handleBackup = useCallback(async () => {
+    if (!user) return;
+    setBackupLoading(true);
+    try {
+      const snapshot = JSON.stringify({
+        timestamp: Date.now(), version: "1.0", uid: user.uid,
+        customers: customers.map(c => ({ id: c.id, name: c.name, phone: c.phone, numericalId: c.numericalId })),
+        investments: investments.map(i => ({ id: i.id, amount: i.amount, date: i.date, description: (i as any).description || "" })),
+        expenses: expenses.map(e => ({ id: e.id, amount: e.amount, date: e.date, description: e.description || "" })),
+      });
+      await AsyncStorage.setItem("kf_backup_data", snapshot);
+      const ts = new Date().toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true });
+      await AsyncStorage.setItem("kf_backup_timestamp", ts);
+      setLastBackupTime(ts);
+      setBackupDone(true);
+      setTimeout(() => setBackupDone(false), 3000);
+    } catch {
+      Alert.alert("Backup Failed", "Could not save backup. Please try again.");
+    } finally {
+      setBackupLoading(false);
+    }
+  }, [user, customers, investments, expenses]);
   const [sparklineSummary, setSparklineSummary] = useState<{
     payments: AllPaymentEver[];
     loans: AllLoanEver[];
@@ -2447,6 +2480,26 @@ export default function AccountScreen() {
                 {activeTab === "notes" && (
                   <View style={styles.cardContainer}>
                     {renderNotesCard()}
+                    {/* ── Auto Backup ── */}
+                    <View style={{ marginTop: 16, backgroundColor: "#E4F3EA", borderRadius: 14, borderWidth: 1, borderColor: "rgba(30,122,76,0.3)", padding: 16, gap: 12 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                        <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: "rgba(30,122,76,0.15)", alignItems: "center", justifyContent: "center" }}>
+                          <Icon name="cloud-upload-outline" size={16} color="#1E7A4C" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: "#12502E", fontSize: 14, fontWeight: "900" }}>Auto Backup</Text>
+                          <Text style={{ color: "#2E7D4F", fontSize: 11, fontWeight: "600" }}>
+                            {lastBackupTime ? `Last backup: ${lastBackupTime}` : "No backup yet"}
+                          </Text>
+                        </View>
+                        {backupDone && <Text style={{ fontSize: 18 }}>✅</Text>}
+                      </View>
+                      <Text style={{ color: "#2E7D4F", fontSize: 12, lineHeight: 18 }}>Saves a local snapshot of customers, investments and expenses. One tap to back up.</Text>
+                      <Pressable style={[styles.backupBtn, backupLoading && { opacity: 0.6 }]} disabled={backupLoading} onPress={handleBackup}>
+                        {backupLoading ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Icon name="cloud-upload-outline" size={16} color="#FFFFFF" />}
+                        <Text style={styles.backupBtnText}>{backupLoading ? "Backing up..." : "Backup Now"}</Text>
+                      </Pressable>
+                    </View>
                   </View>
                 )}
 
@@ -2975,5 +3028,7 @@ const styles = StyleSheet.create({
   sharePreview: { maxHeight: 320, backgroundColor: "#0f2725", borderRadius: 12, borderWidth: 1, borderColor: "#174d48", padding: 12 },
   sharePreviewText: { fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace", color: "#F4F6F9", fontSize: 12, lineHeight: 18, fontWeight: "600" },
   whatsappConfirmBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: "#25D366", alignItems: "center" },
-  whatsappConfirmText: { fontSize: 13, fontWeight: "900", color: "#ffffff" }
+  whatsappConfirmText: { fontSize: 13, fontWeight: "900", color: "#ffffff" },
+  backupBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#1E7A4C", borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16 },
+  backupBtnText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
 });
