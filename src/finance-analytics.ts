@@ -138,6 +138,11 @@ function getMonthRange(offset: number): { start: number; end: number; label: str
   return { start, end, label, month: targetDate.getMonth(), year: targetDate.getFullYear() };
 }
 
+function getExpectedWeeklyCollectionAmount(loan: Loan): number {
+  const principal = getLoanPrincipalAmount(loan as any);
+  return Math.min(loan.balanceAmount, Math.max(1, Math.round(principal / 10)));
+}
+
 export async function getDashboardAnalytics(userId: string, nestedUserId?: string, selectedVillageId?: string): Promise<DashboardAnalytics> {
   // For nested users, never use cache — their collectionToday changes frequently
   const cacheKey = `${DASHBOARD_CACHE_PREFIX}${userId}:${nestedUserId || ""}:${selectedVillageId || "ALL"}:${startOfDay(Date.now())}`;
@@ -567,33 +572,23 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
       confidence: Math.max(15, Math.round(baseConfidence * decay)),
     };
   });
-  // Calculate Tomorrow's Expected Collection based on tomorrow's scheduled village routes
+  // Calculate Tomorrow's Expected Collection from tomorrow's route target, not collected payments.
   const tomorrowObj = new Date();
   tomorrowObj.setDate(tomorrowObj.getDate() + 1);
-  const tomorrowDayName = tomorrowObj.toLocaleDateString("en-US", { weekday: "long" }).toLowerCase();
-  
+  const tomorrowDayLong = tomorrowObj.toLocaleDateString("en-US", { weekday: "long" }).toLowerCase();
+  const tomorrowDayShort = tomorrowObj.toLocaleDateString("en-US", { weekday: "short" }).toLowerCase();
+
+  const isTomorrowVillage = (v: any) => {
+    if (!v?.dayOfWeek) return false;
+    const dayStr = String(v.dayOfWeek).trim().toLowerCase();
+    return dayStr.includes(tomorrowDayLong) || tomorrowDayLong.includes(dayStr) || dayStr.startsWith(tomorrowDayShort);
+  };
+
   const tomorrowVillageIds = new Set(
-    villages
-      .filter((v) => v.dayOfWeek && v.dayOfWeek.toLowerCase() === tomorrowDayName)
-      .map((v) => v.id)
+    villages.filter(isTomorrowVillage).map((v) => v.id)
   );
 
   let expectedCollectionTomorrow = 0;
-  customers.forEach((c) => {
-    if (tomorrowVillageIds.size > 0 && !tomorrowVillageIds.has(c.villageId)) return;
-    const loan = activeLoanByCustomerId.get(c.id);
-    if (loan && loan.balanceAmount > 0) {
-      const installment = Math.max(1, Math.round(Number(loan.principalAmount || 10000) / 10));
-      expectedCollectionTomorrow += installment;
-    }
-  });
-
-  if (expectedCollectionTomorrow === 0 && activeLoans.length > 0) {
-    const totalWeeklyExpected = activeLoans.reduce((sum, loan) => {
-      return sum + Math.max(1, Math.round(Number(loan.principalAmount || 10000) / 10));
-    }, 0);
-    expectedCollectionTomorrow = Math.round(totalWeeklyExpected / 6);
-  }
 
   const recentTransactions = regularPayments
     .sort((a, b) => b.paymentDate - a.paymentDate)
@@ -675,7 +670,7 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
       const customer = customerById.get(customerId)!;
       const village = villageById.get(customer.villageId);
       const loan = activeLoanByCustomerId.get(customerId)!;
-      const weeklyAmount = Math.min(Math.max(1, Math.round(loan.principalAmount / 10)), loan.balanceAmount);
+      const weeklyAmount = getExpectedWeeklyCollectionAmount(loan);
       const dueAmount = Math.min(loan.balanceAmount, weeklyAmount * dueCount);
       return {
         customerId,
@@ -799,7 +794,7 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
           const loan = activeLoanByCustomerId.get(c.id);
           if (loan && loan.balanceAmount > 0 && loan.startDate < weekStartVal) {
             customerCount++;
-            const weeklyAmount = Math.min(Math.max(1, Math.round(loan.principalAmount / 10)), loan.balanceAmount);
+            const weeklyAmount = getExpectedWeeklyCollectionAmount(loan);
             target += weeklyAmount;
 
             if (weekPaidCustomerIds.has(c.id)) {
@@ -824,6 +819,22 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
       };
     });
   });
+
+  if (tomorrowVillageIds.size > 0) {
+    customers.forEach((c) => {
+      if (!tomorrowVillageIds.has(c.villageId)) return;
+      const loan = activeLoanByCustomerId.get(c.id);
+      if (loan && loan.balanceAmount > 0 && loan.startDate < weekStartVal) {
+        expectedCollectionTomorrow += getExpectedWeeklyCollectionAmount(loan);
+      }
+    });
+  } else {
+    const totalWeeklyExpected = activeLoans.reduce((sum, loan) => {
+      if (loan.startDate >= weekStartVal) return sum;
+      return sum + getExpectedWeeklyCollectionAmount(loan);
+    }, 0);
+    expectedCollectionTomorrow = Math.round(totalWeeklyExpected / 6);
+  }
 
   const dashboardAnalytics: DashboardAnalytics = {
     totals: {

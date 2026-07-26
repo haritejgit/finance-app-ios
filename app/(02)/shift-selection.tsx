@@ -852,7 +852,7 @@ export default function ShiftSelectionScreen() {
                                 <Icon name="sparkles-outline" size={15} color="#D4AF6A" />
                               </View>
                               <View>
-                                <Text style={styles.forecastLabel}>Tomorrow's Forecast</Text>
+                                <Text style={styles.forecastLabel}>{"Tomorrow's Forecast"}</Text>
                                 <Text style={styles.forecastAmount}>
                                   Rs.{tomorrowAmt.toLocaleString("en-IN")}
                                 </Text>
