@@ -45,6 +45,12 @@ const filters: { key: "all" | CustomerState; label: string }[] = [
   { key: "paid", label: "Paid today" },
   { key: "closed", label: "Closed" },
 ];
+type BottomAction = {
+  key: string;
+  label: string;
+  icon: string;
+  action: () => void;
+};
 
 function formatMoney(value: number) {
   return `Rs.${Math.round(value || 0).toLocaleString("en-IN")}`;
@@ -155,18 +161,18 @@ function EmptyLine({ text }: { text: string }) {
   return <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{text}</Text>;
 }
 
-function BottomNavButton({ label, icon, onPress }: { label: string; icon: string; onPress: () => void }) {
+function BottomNavButton({ label, icon, active, onPress }: { label: string; icon: string; active: boolean; onPress: () => void }) {
   return (
     <Pressable accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.bottomNavButton, pressed && styles.pressed]}>
-      <Icon name={icon} size={17} color={label.toLowerCase().includes("account") ? "#D4AF6A" : "#4B5A6D"} />
-      <Text style={[styles.bottomNavText, label.toLowerCase().includes("account") && styles.bottomNavTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
+      <Icon name={icon} size={17} color={active ? "#12294A" : "#4B5A6D"} />
+      <Text style={[styles.bottomNavText, active && styles.bottomNavTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
     </Pressable>
   );
 }
 
 export default function ShiftSelectionScreen() {
   const nav = useRouter();
-  const { user, userProfile, logout } = useAuth();
+  const { user, userProfile } = useAuth();
   const { colors } = useTheme();
   const { t, language } = useLanguage();
   const [selectedDay, setSelectedDay] = useState("Monday");
@@ -181,6 +187,9 @@ export default function ShiftSelectionScreen() {
   const [allCustomers, setAllCustomers] = useState<CustomerSearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const intro = useRef(new Animated.Value(0)).current;
+  const bottomNavSlide = useRef(new Animated.Value(0)).current;
+  const [bottomNavWidth, setBottomNavWidth] = useState(0);
+  const [activeBottomKey, setActiveBottomKey] = useState("account");
 
   const logDebug = useCallback(async (message: string, extra: any = {}) => {
     try {
@@ -419,7 +428,7 @@ export default function ShiftSelectionScreen() {
   const todayLabel = useMemo(() => new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" }), []);
   const bottomActions = useMemo(
     () => {
-      const actions = [
+      const actions: BottomAction[] = [
         { key: "reports", label: t("reports"), icon: "document-text-outline", action: () => nav.push("/reports") },
         { key: "account", label: t("account"), icon: "wallet-outline", action: () => nav.push("/account") },
         { key: "analytics", label: t("analytics"), icon: "bar-chart-outline", action: () => nav.push("/graph") },
@@ -433,6 +442,23 @@ export default function ShiftSelectionScreen() {
     },
     [nav, t, isOwner]
   );
+  const visibleActiveBottomKey = bottomActions.some((item) => item.key === activeBottomKey)
+    ? activeBottomKey
+    : bottomActions[0]?.key;
+  const activeBottomIndex = Math.max(0, bottomActions.findIndex((item) => item.key === visibleActiveBottomKey));
+  const bottomNavTrackWidth = Math.max(0, bottomNavWidth - 12);
+  const bottomNavItemWidth = bottomActions.length > 0 ? bottomNavTrackWidth / bottomActions.length : 0;
+
+  useEffect(() => {
+    if (!bottomNavItemWidth) return;
+    Animated.spring(bottomNavSlide, {
+      toValue: activeBottomIndex * bottomNavItemWidth,
+      useNativeDriver: true,
+      damping: 18,
+      stiffness: 180,
+      mass: 0.7,
+    }).start();
+  }, [activeBottomIndex, bottomNavItemWidth, bottomNavSlide]);
 
   const startCollection = useCallback(() => {
     lightImpact();
@@ -964,30 +990,36 @@ export default function ShiftSelectionScreen() {
                     )}
                   </DashboardPanel>
 
-                  <View style={styles.bottomNav}>
+                  <View
+                    style={styles.bottomNav}
+                    onLayout={(event) => setBottomNavWidth(event.nativeEvent.layout.width)}
+                  >
+                    {bottomNavItemWidth > 0 ? (
+                      <Animated.View
+                        pointerEvents="none"
+                        style={[
+                          styles.bottomNavIndicator,
+                          {
+                            width: bottomNavItemWidth,
+                            transform: [{ translateX: bottomNavSlide }],
+                          },
+                        ]}
+                      />
+                    ) : null}
                     {bottomActions.map((item) => (
                       <BottomNavButton
-                        key={item.label}
+                        key={item.key}
                         label={item.label}
                         icon={item.icon}
+                        active={visibleActiveBottomKey === item.key}
                         onPress={() => {
                           lightImpact();
+                          setActiveBottomKey(item.key);
                           item.action();
                         }}
                       />
                     ))}
                   </View>
-
-                  <Pressable
-                    style={styles.logoutLink}
-                    onPress={async () => {
-                      lightImpact();
-                      await logout();
-                      router.replace("/login");
-                    }}
-                  >
-                    <Text style={styles.logoutText}>{t("logout")}</Text>
-                  </Pressable>
                 </>
               )}
             </Animated.View>
@@ -1279,8 +1311,9 @@ const styles = StyleSheet.create({
   alertRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9, borderTopWidth: 1, borderTopColor: "#EEF1F5" },
   alertIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#FBEAEA", alignItems: "center", justifyContent: "center" },
   emptyText: { color: Colors.textMuted, fontSize: 13, fontWeight: "800", paddingVertical: 12 },
-  bottomNav: { flexDirection: "row", justifyContent: "space-between", backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#E1E6ED", padding: 10 },
-  bottomNavButton: { flex: 1, minHeight: 42, borderRadius: 8, backgroundColor: "#FFFFFF", borderWidth: 0, alignItems: "center", justifyContent: "center", gap: 2, paddingHorizontal: 2, paddingVertical: 4 },
+  bottomNav: { position: "relative", flexDirection: "row", justifyContent: "space-between", backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#E1E6ED", padding: 6, overflow: "hidden" },
+  bottomNavIndicator: { position: "absolute", top: 6, bottom: 6, left: 6, borderRadius: 9, backgroundColor: "#F0D28F" },
+  bottomNavButton: { flex: 1, minHeight: 54, borderRadius: 9, borderWidth: 0, alignItems: "center", justifyContent: "center", gap: 3, paddingHorizontal: 2, paddingVertical: 5, zIndex: 1 },
   bottomNavText: { color: "#4B5A6D", fontSize: 10.5, fontWeight: "800", textAlign: "center" },
   bottomNavTextActive: { color: "#12294A", fontWeight: "900" },
   progressCard: { backgroundColor: "#fafbfc", borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: Colors.borderLight },
@@ -1292,8 +1325,6 @@ const styles = StyleSheet.create({
   progressDetails: { gap: 2 },
   progressDetailText: { fontSize: 11, fontWeight: "800", color: Colors.textMuted },
   progressHintText: { fontSize: 10, fontWeight: "800", color: Colors.amberGlow },
-  logoutLink: { alignItems: "center", paddingVertical: 8 },
-  logoutText: { color: "#B03A3A", fontSize: 13, fontWeight: "900" },
   pressed: { opacity: 0.76, transform: [{ scale: 0.98 }] },
   skeletonPanel: { backgroundColor: Colors.white, borderRadius: 18, borderWidth: 1, borderColor: Colors.borderLight, padding: 16, gap: 14 },
   skeletonLine: { height: 16, borderRadius: 999, backgroundColor: "#DCE6F7" },
