@@ -463,7 +463,7 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
       distribution: loans
         .filter((loan) => loan.startDate >= start && loan.startDate <= end && allCustomersById.has(loan.customerId))
         .reduce((sum, loan) => sum + loan.distributedAmount, 0),
-      dues: payments.filter((payment) => payment.paymentType === "DUE" && payment.paymentDate >= start && payment.paymentDate <= end).length,
+      dues: payments.filter((payment) => (payment.paymentType === "DUE" || (payment as any).type === "DUE") && payment.paymentDate >= start && payment.paymentDate <= end).length,
       investments: investmentsRaw
         .filter((inv) => inv.date >= start && inv.date <= end)
         .reduce((sum, inv) => sum + (inv.amount || 0), 0),
@@ -714,7 +714,7 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
   const onTimePaymentRate = openCustomers > 0 ? Math.round((onTimeCustomers / openCustomers) * 100) : 100;
 
   const dueMarksThisMonth = payments.filter(
-    (payment) => payment.paymentType === "DUE" && payment.paymentDate >= monthStart && payment.paymentDate <= monthEnd
+    (payment) => (payment.paymentType === "DUE" || (payment as any).type === "DUE") && payment.paymentDate >= monthStart && payment.paymentDate <= monthEnd
   ).length;
   const currentWeekCollection = weeklyTrend[weeklyTrend.length - 1]?.collection ?? 0;
   const previousWeekCollection = weeklyTrend[weeklyTrend.length - 2]?.collection ?? 0;
