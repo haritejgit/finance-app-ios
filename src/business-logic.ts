@@ -19,13 +19,15 @@ export function money(value: any): number {
 }
 
 export function startOfDay(ts: number): number {
+  if (!ts || !Number.isFinite(ts)) return 0;
   const d = new Date(ts);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
 }
 
 export function endOfDay(ts: number): number {
-  return startOfDay(ts) + DAY_MS - 1;
+  const s = startOfDay(ts);
+  return s ? s + DAY_MS - 1 : 0;
 }
 
 export function startOfMonth(offset = 0): number {
@@ -43,6 +45,7 @@ export function endOfMonth(offset = 0): number {
 }
 
 export function weekStart(ts: number): number {
+  if (!ts || !Number.isFinite(ts)) return 0;
   const d = new Date(ts);
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
@@ -51,7 +54,8 @@ export function weekStart(ts: number): number {
   return d.getTime();
 }
 
-export function getLoanPrincipalAmount(loan: Partial<Loan> & Record<string, any>): number {
+export function getLoanPrincipalAmount(loan?: Partial<Loan> & Record<string, any> | null): number {
+  if (!loan) return 0;
   return money(loan.principalAmount ?? loan.principal_amount ?? loan.loanAmount ?? loan.amount);
 }
 
@@ -64,15 +68,16 @@ export function getNetDistributedAmount(amount: number): number {
   return calculateDisbursedAmount(amount);
 }
 
-export function getLoanDistributedAmount(loan: Partial<Loan> & Record<string, any>): number {
+export function getLoanDistributedAmount(loan?: Partial<Loan> & Record<string, any> | null): number {
   return calculateDisbursedAmount(getLoanPrincipalAmount(loan));
 }
 
-export function isRealCollectionPayment(payment: Record<string, any>): boolean {
-  const kind = payment.paymentType ?? payment.type ?? "REGULAR";
-  if (kind === "DUE") {
-    return Number(payment.amountPaid || 0) > 0;
+export function isRealCollectionPayment(payment?: Record<string, any> | null): boolean {
+  if (!payment) return false;
+  if (payment.paymentType === "DUE" || payment.type === "DUE") {
+    return Number(payment.amountPaid || payment.amount_paid || 0) > 0;
   }
+  const kind = payment.paymentType ?? payment.type ?? "REGULAR";
   if (kind === "RENEWAL_CLOSURE") return true;
   return kind === "REGULAR" || kind === "CASH" || kind === "PHONE";
 }
@@ -90,11 +95,14 @@ export function loanWeekNumber(loanStartDate: number, targetDate: number): numbe
 }
 
 export function uniqueById<T extends { id?: string }>(items: T[]): T[] {
+  if (!Array.isArray(items)) return [];
   const seen = new Set<string>();
   return items.filter((item, index) => {
+    if (!item) return false;
     const key = item.id || `missing:${index}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
 }
+

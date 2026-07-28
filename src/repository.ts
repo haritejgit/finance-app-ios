@@ -922,7 +922,7 @@ export async function getPaymentStatusesForCustomersThisWeek(userId: string, cus
         const paymentDate = toMillis(payment.paymentDate);
         if (paymentDate < startMs || paymentDate > endMs) return;
 
-        if (payment.paymentType === "DUE") {
+        if (payment.paymentType === "DUE" || (payment as any).type === "DUE") {
           if (statuses[customerId] !== "paid") {
             statuses[customerId] = "due";
           }

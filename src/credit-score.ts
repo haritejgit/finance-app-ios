@@ -35,8 +35,8 @@ function getBand(score: number): CreditScoreBand {
 
 export function calculateCreditScore(payments: Payment[], activeLoan?: Loan | null): CreditScoreSummary {
   const sorted = [...payments].sort((a, b) => toMillis(b.paymentDate) - toMillis(a.paymentDate));
-  const regular = sorted.filter((payment) => payment.paymentType === "REGULAR" || payment.paymentType === "RENEWAL_CLOSURE");
-  const dues = sorted.filter((payment) => payment.paymentType === "DUE");
+  const dues = sorted.filter((payment) => payment.paymentType === "DUE" || (payment as any).type === "DUE");
+  const regular = sorted.filter((payment) => (payment.paymentType === "REGULAR" || payment.paymentType === "RENEWAL_CLOSURE" || (payment as any).type === "CASH" || (payment as any).type === "PHONE") && payment.paymentType !== "DUE" && (payment as any).type !== "DUE");
   const totalEvents = regular.length + dues.length;
   const paidCount = regular.filter((payment) => money(payment.amountPaid) > 0).length;
   const dueRate = totalEvents > 0 ? dues.length / totalEvents : 0;
