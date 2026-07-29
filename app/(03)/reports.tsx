@@ -1494,11 +1494,25 @@ interface Payment {
               });
               const loanStartingThisWeek = loansStartingThisWeek[0];
               const segmentIndex = history.indexOf(segment);
-              const isFirstWeekOfSegment = history.length > 0 && colWeekStr === segment.fromWeek;
-              const carryForwardNote = isFirstWeekOfSegment && segmentIndex > 0
-                ? `Carried forward: \u20B9${Math.trunc(customerPayments
-                    .filter((payment) => isRealCollectionPayment(payment) && payment.paymentDate < startOfWeek)
-                    .reduce((sum, payment) => sum + money(payment.amountPaid), 0))}`
+              const isFirstWeekOfSegment = history.length > 0
+                ? colWeekStr === segment.fromWeek
+                : (!!customer.movedFromVillage && customer.villageId === village.id && colWeekStr === legacyMovedWeek);
+              const isMovedVillageImport = history.length > 0
+                ? segmentIndex > 0
+                : (!!customer.movedFromVillage && customer.villageId === village.id);
+
+              const carryForwardNote = isFirstWeekOfSegment && isMovedVillageImport
+                ? (() => {
+                    const totalPaidTillMoved = Math.trunc(
+                      customerPayments
+                        .filter((payment) => isRealCollectionPayment(payment) && payment.paymentDate < startOfWeek)
+                        .reduce((sum, payment) => sum + money(payment.amountPaid), 0)
+                    );
+                    const totalGivenPrincipal = Math.trunc(
+                      customerLoans.reduce((sum, l) => sum + getLoanPrincipalAmount(l as any), 0)
+                    );
+                    return `Paid till moved: \u20B9${totalPaidTillMoved}\nAmount given: \u20B9${totalGivenPrincipal}`;
+                  })()
                 : '';
               const withCarryForward = (value: any) => {
                 if (!carryForwardNote) return value;
