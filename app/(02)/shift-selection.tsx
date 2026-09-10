@@ -468,8 +468,8 @@ export default function ShiftSelectionScreen() {
   const totals = analytics?.totals;
   const balance = (totals?.totalCollection ?? 0) - (totals?.pendingAmount ?? 0);
   const savings = (totals?.monthlyRevenue ?? 0) - (totals?.distributedThisMonth ?? 0);
-  // Main account current amount: BF + collection - distribution - expenses
-  const mainCurrentAmount = (totals?.balancingFund ?? 0) + (totals?.totalCollection ?? 0) - (totals?.totalDistributed ?? 0) - (totals?.totalExpenses ?? 0);
+  // Main account current amount follows the Analytics Center all-time ledger.
+  const mainCurrentAmount = totals?.netCashPosition ?? 0;
   const dueAlerts = analytics?.dueAlerts ?? [];
   // Nested account current amount: BF + collectionToday - distributedToday - expensesToday
   const nestedExpensesToday = useMemo(() => {
@@ -801,7 +801,7 @@ export default function ShiftSelectionScreen() {
                         <DashboardMetric title={t("balance")} value={formatMoney(balance)} caption={t("collectedMinusPending")} icon="cash-outline" tone="#B03A3A" valueTone="#B03A3A" />
                         <DashboardMetric title={t("income")} value={formatMoney(totals?.monthlyRevenue ?? 0)} caption={t("collectedThisMonth")} icon="trending-up-outline" tone="#1E7A4C" valueTone="#1E7A4C" />
                         <DashboardMetric title={t("expense")} value={formatMoney(totals?.distributedThisMonth ?? 0)} caption={t("distributedThisMonth")} icon="arrow-down-outline" tone="#9A6B1E" valueTone="#9A6B1E" />
-                        <DashboardMetric title="Current Amount" value={formatMoney(mainCurrentAmount)} caption="BF + collection - dist. - exp." icon="alert-triangle-outline" tone="#B03A3A" valueTone="#B03A3A" />
+                        <DashboardMetric title="Current Amount" value={formatMoney(mainCurrentAmount)} caption="BF + invested + collection - dist. - exp." icon="alert-triangle-outline" tone="#B03A3A" valueTone="#B03A3A" />
                       </>
                     ) : (
                       <>
