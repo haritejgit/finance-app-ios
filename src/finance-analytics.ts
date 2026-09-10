@@ -124,7 +124,41 @@ function changeText(current: number, previous: number, label: string) {
 
 async function getUserCollection<T>(userId: string, name: string): Promise<T[]> {
   const snap = await getDocs(query(collection(db, name), where("userId", "==", userId)));
-  return snap.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as object) })) as T[];
+  return snap.docs.map((docSnap) => ({ ...(docSnap.data() as object), id: docSnap.id })) as T[];
+}
+
+function normalizeCustomerForAnalytics(customer: any): Customer {
+  return {
+    ...customer,
+    id: customer.id,
+    villageId: customer.villageId ?? customer.village_id ?? customer.village ?? "",
+  } as Customer;
+}
+
+function normalizeLoanForAnalytics(loan: any): Loan {
+  return {
+    ...loan,
+    id: loan.id,
+    customerId: loan.customerId ?? loan.customer_id ?? "",
+    startDate: toMillis(loan.startDate ?? loan.start_date ?? loan.date ?? loan.createdAt),
+    principalAmount: getLoanPrincipalAmount(loan),
+    balanceAmount: money(loan.balanceAmount ?? loan.balance_amount),
+    totalPayable: money(loan.totalPayable ?? loan.total_payable),
+  } as Loan;
+}
+
+function normalizePaymentForAnalytics(payment: any, customerIdByLoanId: Map<string, string>): Payment {
+  const loanId = payment.loanId ?? payment.loan_id ?? "";
+  return {
+    ...payment,
+    id: payment.id,
+    loanId,
+    customerId: payment.customerId ?? payment.customer_id ?? customerIdByLoanId.get(loanId),
+    paymentDate: toMillis(payment.paymentDate ?? payment.date ?? payment.createdAt),
+    amountPaid: money(payment.amountPaid ?? payment.amount_paid ?? payment.amount),
+    paymentType: payment.paymentType ?? payment.payment_type ?? payment.type ?? "REGULAR",
+    paymentMode: payment.paymentMode ?? payment.payment_mode ?? "CASH",
+  } as Payment;
 }
 
 // Helper to get start/end of a specific month offset (0 = current, -1 = previous, etc.)
@@ -293,6 +327,10 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
     }
   }
 
+  // Normalize before applying an optional village filter so legacy village_id
+  // records remain visible in both the all-village and per-village views.
+  customersRaw = customersRaw.map(normalizeCustomerForAnalytics);
+
   if (selectedVillageId && selectedVillageId !== "ALL") {
     customersRaw = customersRaw.filter((c) => c.villageId === selectedVillageId);
     nestedCusts = nestedCusts.filter((c) => c.villageId === selectedVillageId);
@@ -364,7 +402,7 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
   }
 
   const villageById = new Map(villages.map((village) => [village.id, village]));
-  const allCustomers = filterCustomersWithVillage(customersRaw)
+  const allCustomers = filterCustomersWithVillage(customersRaw.map(normalizeCustomerForAnalytics))
     .filter((customer) => villageById.has(customer.villageId));
   const allCustomersById = new Map(allCustomers.map((customer) => [customer.id, customer]));
 
@@ -372,14 +410,13 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
   const customerById = new Map(customers.map((customer) => [customer.id, customer]));
   // NOTE: UI-only filter. Customer documents in Firestore are NOT modified.
   const namedListCustomerIds = new Set(customers.map((customer) => customer.id));
-  const loansNormalized = loansRaw.map((loan) => ({
-    ...loan,
-    startDate: toMillis(loan.startDate),
-    principalAmount: getLoanPrincipalAmount(loan as any),
-    distributedAmount: getLoanDistributedAmount(loan as any),
-    balanceAmount: money(loan.balanceAmount),
-    totalPayable: money(loan.totalPayable),
-  }));
+  const loansNormalized = loansRaw.map((rawLoan) => {
+    const loan = normalizeLoanForAnalytics(rawLoan);
+    return {
+      ...loan,
+      distributedAmount: getLoanDistributedAmount(loan as any),
+    };
+  });
   const seenLoanKeys = new Set<string>();
   const loans = loansNormalized.filter((loan) => {
     const key = `${loan.customerId}:${loan.startDate}:${loan.principalAmount}:${loan.status}`;
@@ -391,12 +428,7 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
   const activeLoanByCustomerId = new Map(activeLoans.map((loan) => [loan.customerId, loan]));
   const customerIdByLoanId = new Map(loans.map((loan) => [loan.id, loan.customerId]));
   const payments = paymentsRaw
-    .map((payment) => ({
-      ...payment,
-      paymentDate: toMillis(payment.paymentDate),
-      amountPaid: money(payment.amountPaid),
-      customerId: payment.customerId ?? customerIdByLoanId.get(payment.loanId),
-    }))
+    .map((payment) => normalizePaymentForAnalytics(payment, customerIdByLoanId))
     .filter((payment) => !!payment.customerId && allCustomersById.has(payment.customerId));
 
   const todayStart = startOfDay(Date.now());

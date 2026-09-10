@@ -1352,8 +1352,14 @@ export default function SettingsScreen() {
             <Pressable
               style={styles.logoutBtn}
               onPress={async () => {
-                await logout();
-                router.replace("/login");
+                try {
+                  await logout();
+                  // replace alone leaves protected screens in history.
+                  router.dismissAll();
+                  router.replace("/login");
+                } catch (error: any) {
+                  Alert.alert(t("error"), error?.message ?? "Could not log out. Please try again.");
+                }
               }}
             >
               <Icon name="log-out-outline" size={18} color={colors.white} />

@@ -3,7 +3,7 @@ import * as WebBrowser from "expo-web-browser";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, Dimensions, Easing, StyleSheet, Text, TextInput, View, ActivityIndicator, Pressable, ScrollView } from "react-native";
+import { Animated, Dimensions, Easing, StyleSheet, Text, TextInput, View, ActivityIndicator, Platform, Pressable, ScrollView } from "react-native";
 import { useAuth } from "../../src/auth-context";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import { colors as baseColors, getGradient } from "../../src/theme";
@@ -42,10 +42,15 @@ export default function LoginScreen() {
   const [nestedLoading, setNestedLoading] = useState(false);
   const [nestedError, setNestedError] = useState<string | null>(null);
   const [nestedSuccess, setNestedSuccess] = useState<string | null>(null);
-  const [, response, promptAsync] = Google.useIdTokenAuthRequest({
-    iosClientId: process.env.EXPO_PUBLIC_FIREBASE_IOS_GOOGLE_CLIENT_ID,
-    webClientId: process.env.EXPO_PUBLIC_FIREBASE_WEB_GOOGLE_CLIENT_ID,
-  });
+  const googleClientId = Platform.select({
+    ios: process.env.EXPO_PUBLIC_FIREBASE_IOS_GOOGLE_CLIENT_ID,
+    web: process.env.EXPO_PUBLIC_FIREBASE_WEB_GOOGLE_CLIENT_ID,
+    default: process.env.EXPO_PUBLIC_FIREBASE_WEB_GOOGLE_CLIENT_ID,
+  }) ?? "missing-google-client-id";
+  const googleSignInConfigured = googleClientId !== "missing-google-client-id";
+  // Expo AuthSession throws during render if its platform client ID is absent.
+  // Keep email/nested login available when Google OAuth is not configured.
+  const [, response, promptAsync] = Google.useIdTokenAuthRequest({ webClientId: googleClientId });
 
   React.useEffect(() => {
     const run = async () => {
@@ -293,7 +298,7 @@ export default function LoginScreen() {
                     </Pressable>
                   )}
 
-                  {!isSignUp && !forgot && (
+                  {!isSignUp && !forgot && googleSignInConfigured && (
                     <Pressable style={[styles.googleBtn, { backgroundColor: colors.primarySoft, borderColor: colors.border }]} onPress={() => promptAsync()}>
                       <Icon name="logo-google" size={18} color={colors.blue2} />
                       <Text style={[styles.googleText, { color: colors.primary }]}>Continue with Google</Text>

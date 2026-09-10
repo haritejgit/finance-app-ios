@@ -144,6 +144,8 @@ function normalizeCustomerRecord(data: any): Customer {
     .find(Boolean) ?? "";
   return {
     ...data,
+    id: data.id,
+    villageId: data.villageId ?? data.village_id ?? data.village ?? "",
     coName,
   } as Customer;
 }
@@ -160,7 +162,7 @@ export async function getVillages(userId: string, useCache = true) {
   }
   const q = query(coll.villages, where("userId", "==", userId));
   const snap = await getDocs(q);
-  const villages = snap.docs.map((d) => d.data() as Village);
+  const villages = snap.docs.map((d) => ({ ...(d.data() as Village), id: d.id }));
   setCache(cacheKey, villages);
   return villages;
 }
@@ -241,14 +243,13 @@ export async function getCustomers(userId: string, villageId: string, useCache =
   }
   // No longer normalize automatically on every fetch to preserve unique, non-shifting IDs.
   // await normalizeCustomerNumericalIdsForVillage(userId, villageId);
-  const q = query(
-    coll.customers,
-    where("userId", "==", userId),
-    where("villageId", "==", villageId),
-    where("isActive", "==", true)
-  );
-  const snap = await getDocs(q);
-  const customers = snap.docs.map((d) => normalizeCustomerRecord(d.data()));
+  // Read this owner's customers and filter locally. Legacy records can use
+  // village_id instead of villageId, which cannot be represented by one
+  // Firestore query without dropping either format.
+  const snap = await getDocs(query(coll.customers, where("userId", "==", userId)));
+  const customers = snap.docs
+    .map((d) => normalizeCustomerRecord({ ...d.data(), id: d.id }))
+    .filter((customer) => customer.villageId === villageId && customer.isActive !== false);
   setCache(cacheKey, customers);
   return customers;
 }
@@ -269,7 +270,6 @@ export async function getCustomersPage(
   const constraints = [
     where("userId", "==", userId),
     where("villageId", "==", villageId),
-    where("isActive", "==", true),
     orderBy("numericalId", "asc"),
   ];
   const pageQuery = cursor
@@ -278,7 +278,9 @@ export async function getCustomersPage(
   try {
     const snap = await getDocs(pageQuery);
     const docs = snap.docs.slice(0, pageSize);
-    const customers = docs.map((d) => normalizeCustomerRecord(d.data()));
+    const customers = docs
+      .map((d) => normalizeCustomerRecord({ ...d.data(), id: d.id }))
+      .filter((customer) => customer.isActive !== false);
     if (!cursor) {
       await AsyncStorage.setItem(storageKey, JSON.stringify(customers)).catch(() => undefined);
     }
@@ -303,7 +305,6 @@ export async function fetchCustomersPage(villageId: string, reset = false) {
 
   const baseConstraints = [
     where("villageId", "==", villageId),
-    where("isActive", "==", true),
     orderBy("numericalId", "asc"),
   ];
 
@@ -313,7 +314,9 @@ export async function fetchCustomersPage(villageId: string, reset = false) {
 
   const snap = await getDocs(pageQuery);
   lastCustomerPageDoc = snap.docs[snap.docs.length - 1] ?? null;
-  return snap.docs.map((docSnap) => normalizeCustomerRecord({ id: docSnap.id, ...(docSnap.data() as object) }));
+  return snap.docs
+    .map((docSnap) => normalizeCustomerRecord({ ...(docSnap.data() as object), id: docSnap.id }))
+    .filter((customer) => customer.isActive !== false);
 }
 
 export type CustomerSearchResult = Customer & {
@@ -330,13 +333,13 @@ export async function getAllActiveCustomersWithVillages(userId: string): Promise
 
   const villagesById = new Map(
     villagesSnap.docs.map((d) => {
-      const village = d.data() as Village;
+      const village = { ...(d.data() as Village), id: d.id };
       return [village.id, village];
     })
   );
 
   return customersSnap.docs
-    .map((d) => normalizeCustomerRecord(d.data()))
+    .map((d) => normalizeCustomerRecord({ ...d.data(), id: d.id }))
     // NOTE: UI-only filter. Customer documents in Firestore are NOT modified.
     .filter((customer) => filterCustomersWithVillage([customer]).length > 0)
     .filter((customer) => customer.isActive !== false)

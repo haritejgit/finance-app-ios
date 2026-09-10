@@ -65,7 +65,6 @@ import {
   translateStatementLabel,
 } from "../../src/statement-format";
 import { calculateWalletBalances } from "../../src/wallet-balances";
-import { getDashboardAnalytics } from "../../src/finance-analytics";
 
 import { useLanguage } from "../../src/language-context";
 
@@ -444,7 +443,6 @@ export default function AccountScreen() {
   } | null>(null);
   const [periodBf, setPeriodBf] = useState<number>(0);
   const [rangeSummaryLoading, setRangeSummaryLoading] = useState(false);
-  const [authoritativeNetCashPosition, setAuthoritativeNetCashPosition] = useState<number | null>(null);
 
   // ── Auto Backup ──
   const [backupLoading, setBackupLoading] = useState(false);
@@ -703,14 +701,12 @@ export default function AccountScreen() {
     if (!startTs || !endTs) return;
     setRangeSummaryLoading(true);
     try {
-      const [data, openingBalance, analytics] = await Promise.all([
+      const [data, openingBalance] = await Promise.all([
         getAccountSummaryForRange(user.uid, startTs, endTs),
         getAccountOpeningBalanceForDate(user.uid, startTs, { useExactDateOverride: false }),
-        getDashboardAnalytics(user.uid),
       ]);
       setRangeSummary(data);
       setPeriodBf(openingBalance);
-      setAuthoritativeNetCashPosition(analytics.totals.netCashPosition);
     } catch (err) {
       console.error("Range summary load error:", err);
     } finally {
@@ -1333,8 +1329,7 @@ export default function AccountScreen() {
 
   // Monospace String Output
   const liveMonospaceBreakdown = useMemo(() => {
-    const { sumInvs, sumColls, sumLoans, expenseTotals, netTotal: periodNetTotal } = calculatedSummary;
-    const netTotal = authoritativeNetCashPosition ?? periodNetTotal;
+    const { sumInvs, sumColls, sumLoans, expenseTotals, netTotal } = calculatedSummary;
     const transactionsForSummary: ExportTransaction[] = [
       ...(sumInvs > 0 ? [{ date: 0, type: "INVESTMENT" as const, desc: "Investments", amount: sumInvs }] : []),
       ...expenseTotals.map((item) => ({
@@ -1361,7 +1356,7 @@ export default function AccountScreen() {
       }),
       language
     );
-  }, [authoritativeNetCashPosition, calculatedSummary, endDateStr, language, periodBf, startDateStr]);
+  }, [calculatedSummary, endDateStr, language, periodBf, startDateStr]);
 
   const currentStatementData = useMemo(() => {
     const { rangeInvs, sumColls, sumLoans, expenseTotals, netTotal } = calculatedSummary;
