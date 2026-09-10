@@ -1229,13 +1229,12 @@ export default function AccountScreen() {
       const custLabel = cust ? `${cust.name} (#${cust.numericalId})` : (isTe ? "ఖాతాదారు" : "Customer");
       const lAny = l as any;
       const isRenewal = l.status === "RENEWED" || (lAny.notes && lAny.notes.includes("renew"));
-      const principal = Number(l.principalAmount ?? l.amount ?? 0);
 
       list.push({
         id: `loan_${l.id}`,
         date: ts,
         type: "LOAN",
-        amount: principal,
+        amount: l.amount,
         desc: isRenewal
           ? (isTe ? `🔄 నవీకరణ (మళ్లీ ఇచ్చిన అప్పు) - ${custLabel}` : `🔄 Loan Renewed - ${custLabel}`)
           : (isTe ? `🆕 కొత్త అప్పు - ${custLabel}` : `🆕 New Loan Given - ${custLabel}`),

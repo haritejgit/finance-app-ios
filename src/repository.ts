@@ -914,7 +914,7 @@ export async function getPaymentStatusesForCustomersThisWeek(userId: string, cus
       const customerIdByLoanId = new Map<string, string>();
       loansSnap.docs.forEach((d) => {
         const loan = d.data() as Loan;
-        customerIdByLoanId.set(loan.id, loan.customerId);
+        customerIdByLoanId.set(d.id, loan.customerId);
       });
 
       customerPaymentsSnap.docs.forEach((d) => {
@@ -973,7 +973,7 @@ export async function getLastRegularPaymentDatesForCustomers(userId: string, cus
       const customerIdByLoanId = new Map<string, string>();
       loansSnap.docs.forEach((d) => {
         const loan = d.data() as Loan;
-        customerIdByLoanId.set(loan.id, loan.customerId);
+        customerIdByLoanId.set(d.id, loan.customerId);
       });
 
       customerPaymentsSnap.docs
@@ -1735,8 +1735,8 @@ function mapPaymentDoc(
     id: docSnap.id,
     amount: money(d.amountPaid ?? d.amount_paid ?? d.amount),
     amountPaid: money(d.amountPaid ?? d.amount_paid ?? d.amount),
-    date: new Date(millis || Date.now()),
-    paymentDate: millis || Date.now(),
+    date: new Date(millis),
+    paymentDate: millis,
     customerId: d.customerId ?? d.customer_id ?? customerIdByLoanId?.get(loanId),
     loanId,
     paymentType: d.paymentType ?? d.type,
@@ -1753,8 +1753,8 @@ function mapLoanDoc(docSnap: { id: string; data: () => any }): AllLoanEver {
     id: docSnap.id,
     amount: getLoanDistributedAmount(d),
     principalAmount: getLoanPrincipalAmount(d),
-    date: new Date(millis || Date.now()),
-    startDate: millis || Date.now(),
+    date: new Date(millis),
+    startDate: millis,
     status: d.status || "ACTIVE",
     customerId: d.customerId ?? d.customer_id,
     disbursement_mode: d.disbursement_mode ?? d.disbursementMode ?? "CASH",
@@ -1792,7 +1792,7 @@ export async function getAccountSummaryForRange(
   const customerIdByLoanId = new Map(
     loansSnap.docs.map((d) => {
       const loan = d.data() as Loan;
-      return [loan.id, loan.customerId];
+      return [d.id, loan.customerId];
     })
   );
 
@@ -1904,7 +1904,7 @@ export async function getAccountOpeningBalanceForDate(
   const customerIdByLoanId = new Map(
     loansSnap.docs.map((d) => {
       const loan = d.data() as Loan;
-      return [loan.id, loan.customerId];
+      return [d.id, loan.customerId];
     })
   );
 
@@ -1979,7 +1979,7 @@ export const getAllPaymentsEver = async (userId?: string): Promise<AllPaymentEve
   const customerIdByLoanId = new Map<string, string>(
     loansSnap?.docs.map((d) => {
       const loan = d.data() as Loan;
-      return [loan.id, loan.customerId] as [string, string];
+      return [d.id, loan.customerId] as [string, string];
     }) ?? []
   );
   return snap.docs
@@ -2055,7 +2055,7 @@ export const getWeeklyChartData = async (userId?: string, villageId?: string): P
     return {
       id: docSnap.id,
       amount: getLoanDistributedAmount(d),
-      date: new Date(millis || Date.now()),
+      date: new Date(millis),
       customerId: d.customerId ?? d.customer_id,
     };
   }).filter((loan) => {
@@ -2064,7 +2064,12 @@ export const getWeeklyChartData = async (userId?: string, villageId?: string): P
     return true;
   });
 
-  const customerIdByLoanId = new Map(loansRaw.map((l) => [l.id, l.customerId]));
+  const customerIdByLoanId = new Map<string, string>(
+    loansSnap.docs.map((docSnap) => {
+      const loan = docSnap.data() as any;
+      return [docSnap.id, loan.customerId ?? loan.customer_id] as [string, string];
+    })
+  );
 
   const paymentsRaw = paymentsSnap.docs.map((docSnap) => {
     const d = docSnap.data() as any;
@@ -2073,7 +2078,7 @@ export const getWeeklyChartData = async (userId?: string, villageId?: string): P
     return {
       id: docSnap.id,
       amount: money(d.amountPaid ?? d.amount_paid ?? d.amount),
-      date: new Date(millis || Date.now()),
+      date: new Date(millis),
       customerId: d.customerId ?? d.customer_id ?? customerIdByLoanId.get(d.loanId ?? d.loan_id),
       paymentType: d.paymentType ?? d.type,
     };
@@ -2115,7 +2120,9 @@ export async function getTodayDashboardStats(userId: string) {
   const endMs = end.getTime();
 
   const [paymentsSnap, loansSnap, customersSnap] = await Promise.all([
-    getDocs(query(coll.payments, where("userId", "==", userId), where("paymentDate", ">=", startMs), where("paymentDate", "<=", endMs))),
+    // Legacy payments can use payment_date or date, so filter normalized dates
+    // locally instead of omitting them through a paymentDate-only query.
+    getDocs(query(coll.payments, where("userId", "==", userId))),
     getDocs(query(coll.loans, where("userId", "==", userId), where("startDate", ">=", startMs), where("startDate", "<=", endMs))),
     getDocs(query(coll.customers, where("userId", "==", userId))),
   ]);
@@ -2132,16 +2139,27 @@ export async function getTodayDashboardStats(userId: string) {
   todayLoans.forEach((loan) => activeLoanCustomerById.set(loan.id, loan.customerId));
 
   const collectionToday = paymentsSnap.docs
-    .map((d) => d.data() as Payment)
+    .map((d) => {
+      const payment = d.data() as any;
+      return {
+        payment,
+        paymentDate: toMillis(payment.paymentDate ?? payment.payment_date ?? payment.date ?? payment.createdAt),
+        customerId: payment.customerId ?? payment.customer_id ?? activeLoanCustomerById.get(payment.loanId ?? payment.loan_id),
+        amount: money(payment.amountPaid ?? payment.amount_paid ?? payment.amount),
+      };
+    })
     .filter((payment) => {
-      const customerId = payment.customerId ?? activeLoanCustomerById.get(payment.loanId);
       return (
-        payment.paymentType !== "DUE" &&
-        !!customerId &&
-        activeCustomerIds.has(customerId)
+        payment.paymentDate >= startMs &&
+        payment.paymentDate <= endMs &&
+        payment.payment.paymentType !== "DUE" &&
+        payment.payment.type !== "DUE" &&
+        isRealCollectionPayment(payment.payment) &&
+        !!payment.customerId &&
+        activeCustomerIds.has(payment.customerId)
       );
     })
-    .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
+    .reduce((sum, payment) => sum + payment.amount, 0);
 
   const distributedToday = todayLoans
     .reduce((sum, loan) => sum + getLoanDistributedAmount(loan), 0);
@@ -2161,14 +2179,22 @@ export const getAllTimeTotals = async (userId?: string): Promise<{ distributed: 
 };
 
 export async function getPaymentsByDate(userId: string, startDate: number, endDate: number) {
-  const q = query(
-    coll.payments,
-    where("userId", "==", userId),
-    where("paymentDate", ">=", startDate),
-    where("paymentDate", "<=", endDate)
-  );
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data() as Payment);
+  // Read the owner's payment ledger once, then normalize both current and legacy
+  // date fields. A Firestore range query on paymentDate alone omits legacy rows.
+  const snap = await getDocs(query(coll.payments, where("userId", "==", userId)));
+  return snap.docs
+    .map((docSnap) => {
+      const data = docSnap.data() as any;
+      return {
+        ...data,
+        id: docSnap.id,
+        amountPaid: money(data.amountPaid ?? data.amount_paid ?? data.amount),
+        paymentDate: toMillis(data.paymentDate ?? data.payment_date ?? data.date ?? data.createdAt),
+        paymentType: data.paymentType ?? data.payment_type ?? data.type ?? "REGULAR",
+        paymentMode: data.paymentMode ?? data.payment_mode ?? (data.type === "PHONE" ? "PHONE" : "CASH"),
+      } as Payment;
+    })
+    .filter((payment) => payment.paymentDate >= startDate && payment.paymentDate <= endDate);
 }
 
 export async function getClosedCustomers(userId: string, villageId: string) {
