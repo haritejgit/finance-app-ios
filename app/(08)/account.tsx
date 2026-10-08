@@ -1073,7 +1073,7 @@ export default function AccountScreen() {
 
     try {
       setBulkSubmitting(true);
-      await addBulkPaymentsAndDues(entries, paymentDate);
+      await addBulkPaymentsAndDues(entries, paymentDate, villageCustomers);
       Alert.alert(t("success"), "Bulk entry recorded successfully.");
       
       // Clear inputs

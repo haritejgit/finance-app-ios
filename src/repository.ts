@@ -1161,25 +1161,15 @@ export async function addPaymentsBatch(
 
 export async function addBulkPaymentsAndDues(
   entries: { loan: Loan; amountPaid: number; isDue: boolean }[],
-  paymentDate: number
+  paymentDate: number,
+  customers: Customer[]
 ) {
   if (entries.length === 0) return 0;
   const batch = writeBatch(db);
   const userId = auth.currentUser?.uid || entries[0].loan.userId;
-
-  // Fetch customers in chunks of 30 to get their cycleStartDay
-  const customerIds = Array.from(new Set(entries.map((e) => e.loan.customerId)));
-  const customersMap = new Map<string, Customer>();
-  const chunks: string[][] = [];
-  for (let i = 0; i < customerIds.length; i += 30) {
-    chunks.push(customerIds.slice(i, i + 30));
-  }
-  for (const chunk of chunks) {
-    const snap = await getDocs(query(coll.customers, where("userId", "==", userId), where("__name__", "in", chunk)));
-    snap.docs.forEach((d) => {
-      customersMap.set(d.id, d.data() as Customer);
-    });
-  }
+  const customersMap = new Map<string, Customer>(
+    customers.map((customer): [string, Customer] => [customer.id, customer])
+  );
 
   for (const { loan, amountPaid, isDue } of entries) {
     if (isDue) {
