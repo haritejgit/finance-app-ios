@@ -744,7 +744,7 @@ export async function getActiveLoansByCustomerIds(userId: string, customerIds: s
       
       const customerLoans: Record<string, Loan[]> = {};
       snap.docs.forEach((d) => {
-        const loan = d.data() as Loan;
+        const loan = { ...d.data(), id: d.id } as Loan;
         if (!customerLoans[loan.customerId]) {
           customerLoans[loan.customerId] = [];
         }
