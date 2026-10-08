@@ -630,7 +630,7 @@ export default function AccountScreen() {
 
         villageCustomers.forEach((c) => {
           initialAmounts[c.id] = "";
-          initialSelected[c.id] = true;
+          initialSelected[c.id] = false;
         });
 
         setBulkAmounts(initialAmounts);
@@ -1780,7 +1780,10 @@ export default function AccountScreen() {
       const amount = Number(bulkAmounts[customer.id] || 0);
       return total + (Number.isFinite(amount) && amount > 0 ? amount : 0);
     }, 0);
-    const payingCount = selectedCustomers.filter((customer) => Number(bulkAmounts[customer.id] || 0) > 0).length;
+    const payingCount = selectedCustomers.filter((customer) => {
+      const amount = Number(bulkAmounts[customer.id] || 0);
+      return Number.isFinite(amount) && amount > 0;
+    }).length;
     const dueCount = selectedCustomers.filter((customer) => {
       const amount = Number(bulkAmounts[customer.id] || 0);
       return !Number.isFinite(amount) || amount <= 0;
@@ -1790,6 +1793,28 @@ export default function AccountScreen() {
         ...previous,
         ...Object.fromEntries(activeCustomers.map((customer) => [customer.id, selected])),
       }));
+      if (selected) {
+        setBulkAmounts((previous) => ({
+          ...previous,
+          ...Object.fromEntries(activeCustomers.map((customer) => {
+            const loan = bulkActiveLoans[customer.id];
+            return [customer.id, loan ? String(getExpectedWeeklyCollectionAmount(loan)) : ""];
+          })),
+        }));
+      }
+    };
+    const toggleBulkCustomer = (customerId: string) => {
+      const willSelect = bulkSelected[customerId] !== true;
+      setBulkSelected((previous) => ({ ...previous, [customerId]: willSelect }));
+      if (willSelect) {
+        const loan = bulkActiveLoans[customerId];
+        setBulkAmounts((previous) => ({
+          ...previous,
+          [customerId]: loan ? String(getExpectedWeeklyCollectionAmount(loan)) : "",
+        }));
+      } else {
+        setBulkAmounts((previous) => ({ ...previous, [customerId]: "" }));
+      }
     };
 
     return (
@@ -1941,57 +1966,62 @@ export default function AccountScreen() {
               const hasPayment = Number.isFinite(numericAmount) && numericAmount > 0;
               return (
                 <View key={customer.id} style={[styles.bulkCustomerCard, !isSelected && styles.bulkCustomerCardUnselected]}>
-                  <View style={styles.bulkCustomerTopRow}>
+                  <View style={styles.bulkCustomerCompactRow}>
                     <Pressable
-                      style={styles.bulkCheckboxButton}
-                      onPress={() => setBulkSelected((previous) => ({ ...previous, [customer.id]: !isSelected }))}
+                      style={styles.bulkCustomerMain}
+                      onPress={() => toggleBulkCustomer(customer.id)}
                       accessibilityRole="checkbox"
                       accessibilityState={{ checked: isSelected }}
                     >
-                      <Icon name={isSelected ? "checkbox" : "square-outline"} size={23} color={isSelected ? "#12294A" : "#9AA7B5"} />
+                      <Icon
+                        name="warning-outline"
+                        size={18}
+                        color={isSelected ? (hasPayment ? "#1E7A4C" : "#C18B19") : "#9AA7B5"}
+                      />
+                      <View style={styles.bulkCustomerDetails}>
+                        <View style={styles.bulkCustomerNameRow}>
+                          <Text style={styles.bulkCustomerNumber}>#{customer.numericalId}</Text>
+                          <Text style={styles.bulkCustomerName} numberOfLines={1}>{customer.name}</Text>
+                        </View>
+                        <View style={styles.bulkCustomerInfoRow}>
+                          <View style={styles.bulkCompactInfo}>
+                            <Text style={styles.bulkInfoLabel}>Current Balance</Text>
+                            <Text style={styles.bulkCompactInfoValue}>Rs. {Number(loan?.balanceAmount || 0).toLocaleString("en-IN")}</Text>
+                          </View>
+                          <View style={styles.bulkCompactInfo}>
+                            <Text style={styles.bulkInfoLabel}>Expected Payment</Text>
+                            <Text style={styles.bulkCompactInfoValue}>Rs. {getExpectedWeeklyCollectionAmount(loan).toLocaleString("en-IN")}</Text>
+                          </View>
+                        </View>
+                      </View>
                     </Pressable>
-                    <View style={styles.bulkCustomerIdentity}>
-                      <Text style={styles.bulkCustomerNumber}>Customer #{customer.numericalId}</Text>
-                      <Text style={styles.bulkCustomerName} numberOfLines={1}>{customer.name}</Text>
-                    </View>
-                    <View style={[
-                      styles.bulkStatusBadge,
-                      isSelected && (hasPayment ? styles.bulkPaidBadge : styles.bulkDueBadge),
-                      !isSelected && styles.bulkSkippedBadge,
-                    ]}>
-                      <Text style={[
-                        styles.bulkStatusText,
-                        isSelected && (hasPayment ? styles.bulkPaidText : styles.bulkDueText),
-                        !isSelected && styles.bulkSkippedText,
+                    <View style={styles.bulkCustomerEntry}>
+                      <View style={[
+                        styles.bulkStatusBadge,
+                        isSelected && (hasPayment ? styles.bulkPaidBadge : styles.bulkDueBadge),
+                        !isSelected && styles.bulkSkippedBadge,
                       ]}>
-                        {isSelected ? (hasPayment ? "Paid" : "Due") : "Skipped"}
-                      </Text>
+                        <Text style={[
+                          styles.bulkStatusText,
+                          isSelected && (hasPayment ? styles.bulkPaidText : styles.bulkDueText),
+                          !isSelected && styles.bulkSkippedText,
+                        ]}>
+                          {isSelected ? (hasPayment ? "Paid" : "Due") : "Skipped"}
+                        </Text>
+                      </View>
+                      <Text style={styles.bulkAmountLabel}>Amount Paid</Text>
+                      <TextInput
+                        style={[styles.bulkAmountInput, !isSelected && styles.bulkAmountInputDisabled]}
+                        placeholder="₹ Amount"
+                        placeholderTextColor="#98A4B2"
+                        keyboardType="decimal-pad"
+                        value={amountText}
+                        onChangeText={(value) => setBulkAmounts((previous) => ({ ...previous, [customer.id]: value }))}
+                        editable={isSelected}
+                        selectTextOnFocus
+                        accessibilityLabel={`Amount paid for ${customer.name}`}
+                      />
                     </View>
-                  </View>
-
-                  <View style={styles.bulkCustomerInfoRow}>
-                    <View style={styles.bulkInfoCell}>
-                      <Text style={styles.bulkInfoLabel}>Current Balance</Text>
-                      <Text style={styles.bulkInfoValue}>Rs. {Number(loan?.balanceAmount || 0).toLocaleString("en-IN")}</Text>
-                    </View>
-                    <View style={styles.bulkInfoCell}>
-                      <Text style={styles.bulkInfoLabel}>Expected Payment</Text>
-                      <Text style={styles.bulkInfoValue}>Rs. {getExpectedWeeklyCollectionAmount(loan).toLocaleString("en-IN")}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.bulkAmountRow}>
-                    <Text style={styles.bulkAmountLabel}>Amount Paid</Text>
-                    <TextInput
-                      style={[styles.bulkAmountInput, !isSelected && styles.bulkAmountInputDisabled]}
-                      placeholder={isSelected ? "Enter amount" : "Not selected"}
-                      placeholderTextColor="#98A4B2"
-                      keyboardType="decimal-pad"
-                      value={amountText}
-                      onChangeText={(value) => setBulkAmounts((previous) => ({ ...previous, [customer.id]: value }))}
-                      editable={isSelected}
-                      selectTextOnFocus
-                    />
                   </View>
                 </View>
               );
@@ -2953,14 +2983,16 @@ const styles = StyleSheet.create({
   bulkActionButton: { flexGrow: 1, flexBasis: "45%", minHeight: 39, alignItems: "center", justifyContent: "center", paddingHorizontal: 8, borderRadius: 10, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#D8E0E9" },
   bulkActionText: { color: "#12294A", fontSize: 11, fontWeight: "900", textAlign: "center" },
   bulkEmptyCard: { minHeight: 76, alignItems: "center", justifyContent: "center", padding: 16, backgroundColor: "#FFFFFF", borderRadius: 14, borderWidth: 1, borderColor: "#E1E6ED" },
-  bulkCustomerList: { gap: 10 },
-  bulkCustomerCard: { padding: 13, gap: 12, backgroundColor: "#FFFFFF", borderRadius: 15, borderWidth: 1, borderColor: "#E1E6ED" },
+  bulkCustomerList: { gap: 7 },
+  bulkCustomerCard: { paddingHorizontal: 9, paddingVertical: 8, backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#E1E6ED" },
   bulkCustomerCardUnselected: { backgroundColor: "#F7F8FA", borderColor: "#E7EBF0" },
-  bulkCustomerTopRow: { flexDirection: "row", alignItems: "center", gap: 9 },
-  bulkCheckboxButton: { width: 28, height: 34, alignItems: "center", justifyContent: "center" },
-  bulkCustomerIdentity: { flex: 1, minWidth: 0 },
-  bulkCustomerNumber: { color: "#8A6B2F", fontSize: 10, fontWeight: "900", letterSpacing: 0.4 },
-  bulkCustomerName: { color: "#12294A", fontSize: 15, fontWeight: "900", marginTop: 1 },
+  bulkCustomerCompactRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  bulkCustomerMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 7, paddingVertical: 2 },
+  bulkCustomerDetails: { flex: 1, minWidth: 0, gap: 5 },
+  bulkCustomerNameRow: { flexDirection: "row", alignItems: "center", gap: 5, minWidth: 0 },
+  bulkCustomerNumber: { color: "#8A6B2F", fontSize: 11, fontWeight: "900", flexShrink: 0 },
+  bulkCustomerName: { flex: 1, minWidth: 0, color: "#12294A", fontSize: 12, fontWeight: "900" },
+  bulkCustomerEntry: { width: 88, alignItems: "stretch", gap: 3 },
   bulkStatusBadge: { minWidth: 58, alignItems: "center", justifyContent: "center", paddingHorizontal: 9, paddingVertical: 6, borderRadius: 20 },
   bulkPaidBadge: { backgroundColor: "#E4F3EA" },
   bulkDueBadge: { backgroundColor: "#FFF3CF" },
@@ -2969,13 +3001,12 @@ const styles = StyleSheet.create({
   bulkPaidText: { color: "#1E7A4C" },
   bulkDueText: { color: "#94701B" },
   bulkSkippedText: { color: "#718096" },
-  bulkCustomerInfoRow: { flexDirection: "row", gap: 8 },
-  bulkInfoCell: { flex: 1, minWidth: 0, padding: 10, backgroundColor: "#F7F9FB", borderRadius: 10 },
-  bulkInfoLabel: { color: "#7B8998", fontSize: 9, fontWeight: "900", textTransform: "uppercase" },
-  bulkInfoValue: { color: "#12294A", fontSize: 13, fontWeight: "900", marginTop: 4 },
-  bulkAmountRow: { gap: 6 },
-  bulkAmountLabel: { color: "#6B7A8D", fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
-  bulkAmountInput: { minHeight: 44, paddingHorizontal: 12, borderRadius: 10, backgroundColor: "#FBFCFD", borderWidth: 1, borderColor: "#D8E0E9", color: "#12294A", fontSize: 16, fontWeight: "800" },
+  bulkCustomerInfoRow: { flexDirection: "row", gap: 12 },
+  bulkCompactInfo: { minWidth: 0, flexShrink: 1 },
+  bulkInfoLabel: { color: "#7B8998", fontSize: 7, fontWeight: "900", textTransform: "uppercase" },
+  bulkCompactInfoValue: { color: "#12294A", fontSize: 10, fontWeight: "900", marginTop: 1 },
+  bulkAmountLabel: { color: "#7B8998", fontSize: 7, fontWeight: "900", textAlign: "center", textTransform: "uppercase" },
+  bulkAmountInput: { minHeight: 32, width: "100%", paddingHorizontal: 6, borderRadius: 8, backgroundColor: "#FBFCFD", borderWidth: 1, borderColor: "#D8E0E9", color: "#12294A", fontSize: 12, fontWeight: "800", textAlign: "right" },
   bulkAmountInputDisabled: { backgroundColor: "#EEF1F4", color: "#98A4B2" },
   bulkSubmitButton: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#D4AF6A", borderRadius: 12, marginTop: 2 },
   bulkSubmitText: { color: "#12294A", fontSize: 14, fontWeight: "900" },
