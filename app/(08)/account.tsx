@@ -65,6 +65,7 @@ import {
   translateStatementLabel,
 } from "../../src/statement-format";
 import { calculateWalletBalances } from "../../src/wallet-balances";
+import { getExpectedWeeklyCollectionAmount } from "../../src/finance-analytics";
 
 import { useLanguage } from "../../src/language-context";
 
@@ -506,6 +507,8 @@ export default function AccountScreen() {
   const [bulkSelected, setBulkSelected] = useState<Record<string, boolean>>({});
   const [bulkLoading, setBulkLoading] = useState<boolean>(false);
   const [bulkSubmitting, setBulkSubmitting] = useState<boolean>(false);
+  const [bulkPaymentMode, setBulkPaymentMode] = useState<PaymentMode>("CASH");
+  const [bulkLoadedKey, setBulkLoadedKey] = useState("");
 
   // Edit Expense Modal State
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -589,26 +592,37 @@ export default function AccountScreen() {
     }
   }, [activeTab, bulkVillageId, villages]);
 
-  // Fetch active loans when the bulk entry village or date is changed
+  // Fetch active loans when the bulk entry village or date is changed.
   useEffect(() => {
-    if (!user || !bulkVillageId) {
-      setBulkActiveLoans({});
-      return;
-    }
-    const villageCustomers = customers.filter((c) => c.villageId === bulkVillageId);
-    if (villageCustomers.length === 0) {
+    const targetDate = parseDDMMYYYY(bulkDateStr);
+    const loadKey = `${bulkVillageId}:${bulkDateStr}`;
+    if (!user || !bulkVillageId || !targetDate) {
       setBulkActiveLoans({});
       setBulkAmounts({});
       setBulkSelected({});
+      setBulkLoadedKey("");
+      setBulkLoading(false);
       return;
     }
 
+    const villageCustomers = customers.filter((c) => c.villageId === bulkVillageId);
+    setBulkActiveLoans({});
+    setBulkAmounts({});
+    setBulkSelected({});
+    setBulkLoadedKey("");
+    if (villageCustomers.length === 0) {
+      setBulkLoading(false);
+      setBulkLoadedKey(loadKey);
+      return;
+    }
+
+    let cancelled = false;
     const fetchLoans = async () => {
       try {
         setBulkLoading(true);
         const ids = villageCustomers.map((c) => c.id);
-        const targetDate = parseDDMMYYYY(bulkDateStr) || Date.now();
         const loansMap = await getActiveLoansByCustomerIds(user.uid, ids, targetDate);
+        if (cancelled) return;
         setBulkActiveLoans(loansMap);
 
         const initialAmounts: Record<string, string> = {};
@@ -621,15 +635,20 @@ export default function AccountScreen() {
 
         setBulkAmounts(initialAmounts);
         setBulkSelected(initialSelected);
+        setBulkLoadedKey(loadKey);
       } catch (err: any) {
+        if (cancelled) return;
         console.error("Error loading active loans for bulk entry:", err);
         Alert.alert(t("error"), "Failed to load active loans for this village.");
       } finally {
-        setBulkLoading(false);
+        if (!cancelled) setBulkLoading(false);
       }
     };
 
     fetchLoans();
+    return () => {
+      cancelled = true;
+    };
   }, [user, bulkVillageId, bulkDateStr, customers, t]);
 
   useEffect(() => {
@@ -1036,7 +1055,7 @@ export default function AccountScreen() {
     const entries: { loan: any; amountPaid: number; isDue: boolean }[] = [];
 
     for (const c of villageCustomers) {
-      const isSel = bulkSelected[c.id] !== false; // Defaultly every person should be selected
+      const isSel = bulkSelected[c.id] === true;
       if (!isSel) continue;
 
       const loan = bulkActiveLoans[c.id];
@@ -1066,6 +1085,11 @@ export default function AccountScreen() {
       }
     }
 
+    if (bulkLoading || bulkLoadedKey !== `${bulkVillageId}:${bulkDateStr}`) {
+      Alert.alert(t("error"), "Please wait for the selected village and date to finish loading.");
+      return;
+    }
+
     if (entries.length === 0) {
       Alert.alert(t("error"), "No active loans found or no customers selected.");
       return;
@@ -1073,7 +1097,7 @@ export default function AccountScreen() {
 
     try {
       setBulkSubmitting(true);
-      await addBulkPaymentsAndDues(entries, paymentDate, villageCustomers);
+      await addBulkPaymentsAndDues(entries, paymentDate, villageCustomers, bulkPaymentMode);
       Alert.alert(t("success"), "Bulk entry recorded successfully.");
       
       // Clear inputs
@@ -1085,13 +1109,20 @@ export default function AccountScreen() {
 
       // Trigger standard data reload
       await loadData();
+      const refreshedLoans = await getActiveLoansByCustomerIds(
+        user.uid,
+        villageCustomers.map((customer) => customer.id),
+        paymentDate,
+        true
+      );
+      setBulkActiveLoans(refreshedLoans);
     } catch (err: any) {
       console.error("Bulk entry save error:", err);
       Alert.alert(t("error"), err?.message ?? "An error occurred while saving bulk entry.");
     } finally {
       setBulkSubmitting(false);
     }
-  }, [user, bulkDateStr, bulkVillageId, customers, bulkSelected, bulkActiveLoans, bulkAmounts, t, loadData]);
+  }, [user, bulkDateStr, bulkVillageId, customers, bulkSelected, bulkActiveLoans, bulkAmounts, bulkPaymentMode, bulkLoading, bulkLoadedKey, t, loadData]);
 
   // Edit Investment
   const handleEditInvestment = useCallback((investment: Investment) => {
@@ -1739,162 +1770,248 @@ export default function AccountScreen() {
 
   const renderBulkEntryCard = () => {
     const villageCustomers = customers.filter((c) => c.villageId === bulkVillageId);
-    
-    // Filter to customers with active loans
     const activeCustomers = villageCustomers.filter((c) => {
       const loan = bulkActiveLoans[c.id];
       return loan && loan.status === "ACTIVE";
     });
+    const isDataReady = bulkLoadedKey === `${bulkVillageId}:${bulkDateStr}` && !bulkLoading;
+    const selectedCustomers = activeCustomers.filter((customer) => bulkSelected[customer.id] === true);
+    const totalCollection = selectedCustomers.reduce((total, customer) => {
+      const amount = Number(bulkAmounts[customer.id] || 0);
+      return total + (Number.isFinite(amount) && amount > 0 ? amount : 0);
+    }, 0);
+    const payingCount = selectedCustomers.filter((customer) => Number(bulkAmounts[customer.id] || 0) > 0).length;
+    const dueCount = selectedCustomers.filter((customer) => {
+      const amount = Number(bulkAmounts[customer.id] || 0);
+      return !Number.isFinite(amount) || amount <= 0;
+    }).length;
+    const setAllCustomersSelected = (selected: boolean) => {
+      setBulkSelected((previous) => ({
+        ...previous,
+        ...Object.fromEntries(activeCustomers.map((customer) => [customer.id, selected])),
+      }));
+    };
 
     return (
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>{t("bulkEntry")}</Text>
-        <Text style={styles.cardDesc}>Record payments or dues for a village on a specific date.</Text>
-
-        {/* Date Selector */}
-        <View style={styles.inputContainer}>
-          <Text style={styles.inputLabel}>{t("selectDate")}</Text>
-          <DatePickerField
-            value={bulkDateStr}
-            onChange={setBulkDateStr}
-            placeholder="DD/MM/YYYY"
-          />
-        </View>
-
-        {/* Village Scrollable list */}
-        <View style={styles.inputContainer}>
-          <Text style={styles.inputLabel}>{t("selectVillage")}</Text>
-          {villages.length === 0 ? (
-            <Text style={styles.emptyText}>No villages found.</Text>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: "row", marginVertical: 4 }}>
-              {villages.map((v) => (
-                <Pressable
-                  key={v.id}
-                  style={[{
-                    paddingHorizontal: 16,
-                    paddingVertical: 10,
-                    borderRadius: 8,
-                    backgroundColor: bulkVillageId === v.id ? "#12294A" : "#F4F6F9",
-                    borderWidth: 1,
-                    borderColor: bulkVillageId === v.id ? "#12294A" : "#E1E6ED",
-                    marginRight: 8,
-                  }]}
-                  onPress={() => setBulkVillageId(v.id)}
-                >
-                  <Text style={{
-                    color: bulkVillageId === v.id ? "#D4AF6A" : "#6B7A8D",
-                    fontSize: 13,
-                    fontWeight: "800",
-                  }}>{v.name}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          )}
-        </View>
-
-        <View style={styles.walletDivider} />
-
-        {/* Info label about deselecting */}
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#F4F6F9", padding: 10, borderRadius: 10, borderWidth: 1, borderColor: "#E1E6ED" }}>
-          <Icon name="information-circle-outline" size={16} color="#12294A" />
-          <Text style={{ fontSize: 11, fontWeight: "700", color: "#12294A", flex: 1 }}>
-            {t("deselectHint")}
-          </Text>
-        </View>
-
-        {/* Customer List */}
-        <Text style={[styles.inputLabel, { marginTop: 10 }]}>Customers List</Text>
-        {bulkLoading ? (
-          <View style={{ paddingVertical: 20, alignItems: "center" }}>
-            <ActivityIndicator size="small" color="#12294A" />
+      <View style={styles.bulkPage}>
+        <View style={styles.bulkHeader}>
+          <View style={styles.bulkHeaderIcon}>
+            <Icon name="wallet-outline" size={21} color="#D4AF6A" />
           </View>
-        ) : !bulkVillageId ? (
-          <Text style={styles.emptyText}>Please select a village above.</Text>
-        ) : activeCustomers.length === 0 ? (
-          <Text style={styles.emptyText}>No customers with active loans in this village.</Text>
-        ) : (
-          <View style={{ gap: 4 }}>
-            {activeCustomers.map((c) => {
-              const isSelected = bulkSelected[c.id] !== false;
-              const loan = bulkActiveLoans[c.id];
-              return (
-                <View
-                  key={c.id}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    paddingVertical: 10,
-                    borderBottomWidth: 1,
-                    borderBottomColor: "#f1f5f9",
-                    opacity: isSelected ? 1 : 0.5,
-                  }}
-                >
-                  {/* Checkbox and Customer details */}
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.bulkHeaderTitle}>{t("bulkEntry")}</Text>
+            <Text style={styles.bulkHeaderSubtitle}>Record a village collection</Text>
+          </View>
+        </View>
+
+        <View style={styles.bulkSetupCard}>
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>{t("selectDate")}</Text>
+            <DatePickerField value={bulkDateStr} onChange={setBulkDateStr} placeholder="DD/MM/YYYY" />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>{t("selectVillage")}</Text>
+            {villages.length === 0 ? (
+              <Text style={styles.emptyText}>No villages found.</Text>
+            ) : (
+              <View style={styles.bulkVillageList}>
+                {villages.map((village) => {
+                  const isVillageSelected = bulkVillageId === village.id;
+                  return (
                     <Pressable
-                      onPress={() => {
-                        setBulkSelected((prev) => ({ ...prev, [c.id]: !isSelected }));
-                      }}
-                      style={{ padding: 4 }}
+                      key={village.id}
+                      style={[styles.bulkVillageChip, isVillageSelected && styles.bulkVillageChipSelected]}
+                      onPress={() => setBulkVillageId(village.id)}
                     >
-                      <Icon
-                        name={isSelected ? "checkbox" : "square-outline"}
-                        size={24}
-                        color={isSelected ? "#12294A" : "#6B7A8D"}
-                      />
-                    </Pressable>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 14, fontWeight: "800", color: "#12294A" }}>
-                        {c.name}
+                      <Text style={[styles.bulkVillageChipText, isVillageSelected && styles.bulkVillageChipTextSelected]}>
+                        {village.name}
                       </Text>
-                      <Text style={{ fontSize: 11, fontWeight: "600", color: "#6B7A8D" }}>
-                        ID: {c.numericalId} {loan ? `| Active Bal: Rs.${loan.balanceAmount}` : ""}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Payment Mode</Text>
+            <View style={styles.paymentModeRow}>
+              {(["CASH", "PHONE"] as const).map((mode) => {
+                const isModeSelected = bulkPaymentMode === mode;
+                return (
+                  <Pressable
+                    key={mode}
+                    style={[styles.bulkModeButton, isModeSelected && styles.bulkModeButtonSelected]}
+                    onPress={() => setBulkPaymentMode(mode)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isModeSelected }}
+                  >
+                    <Icon name={mode === "PHONE" ? "phone-portrait-outline" : "cash-outline"} size={17} color={isModeSelected ? "#D4AF6A" : "#6B7A8D"} />
+                    <Text style={[styles.bulkModeText, isModeSelected && styles.bulkModeTextSelected]}>
+                      {mode === "PHONE" ? "PhonePe" : "Cash"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.bulkSummaryCard}>
+          <Text style={styles.bulkSummaryEyebrow}>TOTAL COLLECTION</Text>
+          <Text style={styles.bulkSummaryTotal}>Rs. {totalCollection.toLocaleString("en-IN")}</Text>
+          <View style={styles.bulkSummaryStats}>
+            <View style={styles.bulkSummaryStat}>
+              <Text style={styles.bulkSummaryStatValue}>{payingCount}</Text>
+              <Text style={styles.bulkSummaryStatLabel}>Paying</Text>
+            </View>
+            <View style={styles.bulkSummaryStatDivider} />
+            <View style={styles.bulkSummaryStat}>
+              <Text style={styles.bulkSummaryStatValue}>{dueCount}</Text>
+              <Text style={styles.bulkSummaryStatLabel}>Due</Text>
+            </View>
+            <View style={styles.bulkSummaryStatDivider} />
+            <View style={styles.bulkSummaryStat}>
+              <Text style={styles.bulkSummaryStatValue}>{selectedCustomers.length}</Text>
+              <Text style={styles.bulkSummaryStatLabel}>Selected</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.bulkListHeader}>
+          <View>
+            <Text style={styles.bulkSectionTitle}>Customers</Text>
+            <Text style={styles.bulkSectionSubtitle}>
+              {villages.find((village) => village.id === bulkVillageId)?.name || "Select a village"}
+            </Text>
+          </View>
+          <Text style={styles.bulkCustomerCount}>{activeCustomers.length}</Text>
+        </View>
+
+        <View style={styles.bulkActionRow}>
+          <Pressable style={styles.bulkActionButton} onPress={() => setAllCustomersSelected(true)} disabled={!isDataReady}>
+            <Text style={styles.bulkActionText}>Select All</Text>
+          </Pressable>
+          <Pressable style={styles.bulkActionButton} onPress={() => setAllCustomersSelected(false)} disabled={!isDataReady}>
+            <Text style={styles.bulkActionText}>Deselect All</Text>
+          </Pressable>
+          <Pressable
+            style={styles.bulkActionButton}
+            onPress={() => {
+              const expectedAmounts: Record<string, string> = {};
+              selectedCustomers.forEach((customer) => {
+                const loan = bulkActiveLoans[customer.id];
+                if (loan) expectedAmounts[customer.id] = String(getExpectedWeeklyCollectionAmount(loan));
+              });
+              setBulkAmounts((previous) => ({ ...previous, ...expectedAmounts }));
+            }}
+            disabled={!isDataReady || selectedCustomers.length === 0}
+          >
+            <Text style={styles.bulkActionText}>Fill Expected</Text>
+          </Pressable>
+          <Pressable
+            style={styles.bulkActionButton}
+            onPress={() => setBulkAmounts(Object.fromEntries(activeCustomers.map((customer) => [customer.id, ""])))}
+            disabled={!isDataReady}
+          >
+            <Text style={styles.bulkActionText}>Clear Amounts</Text>
+          </Pressable>
+        </View>
+
+        {!isDataReady ? (
+          <View style={styles.bulkEmptyCard}>
+            {bulkLoading ? (
+              <ActivityIndicator size="small" color="#12294A" />
+            ) : (
+              <Text style={styles.emptyText}>Select a valid date and village to load customers.</Text>
+            )}
+          </View>
+        ) : activeCustomers.length === 0 ? (
+          <View style={styles.bulkEmptyCard}>
+            <Text style={styles.emptyText}>No customers with active loans in this village.</Text>
+          </View>
+        ) : (
+          <View style={styles.bulkCustomerList}>
+            {activeCustomers.map((customer) => {
+              const isSelected = bulkSelected[customer.id] === true;
+              const loan = bulkActiveLoans[customer.id];
+              const amountText = bulkAmounts[customer.id] || "";
+              const numericAmount = Number(amountText);
+              const hasPayment = Number.isFinite(numericAmount) && numericAmount > 0;
+              return (
+                <View key={customer.id} style={[styles.bulkCustomerCard, !isSelected && styles.bulkCustomerCardUnselected]}>
+                  <View style={styles.bulkCustomerTopRow}>
+                    <Pressable
+                      style={styles.bulkCheckboxButton}
+                      onPress={() => setBulkSelected((previous) => ({ ...previous, [customer.id]: !isSelected }))}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: isSelected }}
+                    >
+                      <Icon name={isSelected ? "checkbox" : "square-outline"} size={23} color={isSelected ? "#12294A" : "#9AA7B5"} />
+                    </Pressable>
+                    <View style={styles.bulkCustomerIdentity}>
+                      <Text style={styles.bulkCustomerNumber}>Customer #{customer.numericalId}</Text>
+                      <Text style={styles.bulkCustomerName} numberOfLines={1}>{customer.name}</Text>
+                    </View>
+                    <View style={[
+                      styles.bulkStatusBadge,
+                      isSelected && (hasPayment ? styles.bulkPaidBadge : styles.bulkDueBadge),
+                      !isSelected && styles.bulkSkippedBadge,
+                    ]}>
+                      <Text style={[
+                        styles.bulkStatusText,
+                        isSelected && (hasPayment ? styles.bulkPaidText : styles.bulkDueText),
+                        !isSelected && styles.bulkSkippedText,
+                      ]}>
+                        {isSelected ? (hasPayment ? "Paid" : "Due") : "Skipped"}
                       </Text>
                     </View>
                   </View>
 
-                  {/* Amount Input */}
-                  <TextInput
-                    style={{
-                      width: 90,
-                      backgroundColor: isSelected ? "#f8fafc" : "#e2e8f0",
-                      borderWidth: 1,
-                      borderColor: "#cbd5e1",
-                      borderRadius: 8,
-                      paddingVertical: 6,
-                      paddingHorizontal: 10,
-                      fontSize: 14,
-                      color: "#0f172a",
-                      textAlign: "right",
-                    }}
-                    placeholder={isSelected ? "Due" : "N/A"}
-                    placeholderTextColor="#94a3b8"
-                    keyboardType="numeric"
-                    value={bulkAmounts[c.id] || ""}
-                    onChangeText={(val) => {
-                      setBulkAmounts((prev) => ({ ...prev, [c.id]: val }));
-                    }}
-                    editable={isSelected}
-                  />
+                  <View style={styles.bulkCustomerInfoRow}>
+                    <View style={styles.bulkInfoCell}>
+                      <Text style={styles.bulkInfoLabel}>Current Balance</Text>
+                      <Text style={styles.bulkInfoValue}>Rs. {Number(loan?.balanceAmount || 0).toLocaleString("en-IN")}</Text>
+                    </View>
+                    <View style={styles.bulkInfoCell}>
+                      <Text style={styles.bulkInfoLabel}>Expected Payment</Text>
+                      <Text style={styles.bulkInfoValue}>Rs. {getExpectedWeeklyCollectionAmount(loan).toLocaleString("en-IN")}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.bulkAmountRow}>
+                    <Text style={styles.bulkAmountLabel}>Amount Paid</Text>
+                    <TextInput
+                      style={[styles.bulkAmountInput, !isSelected && styles.bulkAmountInputDisabled]}
+                      placeholder={isSelected ? "Enter amount" : "Not selected"}
+                      placeholderTextColor="#98A4B2"
+                      keyboardType="decimal-pad"
+                      value={amountText}
+                      onChangeText={(value) => setBulkAmounts((previous) => ({ ...previous, [customer.id]: value }))}
+                      editable={isSelected}
+                      selectTextOnFocus
+                    />
+                  </View>
                 </View>
               );
             })}
           </View>
         )}
 
-        {/* Done/Submit Button */}
-        {activeCustomers.length > 0 && (
+        {isDataReady && activeCustomers.length > 0 && (
           <Pressable
-            style={[styles.primaryButton, (bulkSubmitting || bulkLoading) && styles.btnDisabled, { marginTop: 12 }]}
+            style={[styles.bulkSubmitButton, (bulkSubmitting || selectedCustomers.length === 0) && styles.btnDisabled]}
             onPress={handleBulkSubmit}
-            disabled={bulkSubmitting || bulkLoading}
+            disabled={bulkSubmitting || selectedCustomers.length === 0}
           >
             {bulkSubmitting ? (
-              <ActivityIndicator size="small" color="#111827" />
+              <ActivityIndicator size="small" color="#12294A" />
             ) : (
-              <Text style={styles.primaryButtonText}>{t("done")}</Text>
+              <>
+                <Icon name="checkmark-circle-outline" size={19} color="#12294A" />
+                <Text style={styles.bulkSubmitText}>Save Collection</Text>
+              </>
             )}
           </Pressable>
         )}
@@ -2805,6 +2922,63 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContainer: { padding: 14, paddingBottom: 90 },
   cardContainer: { gap: 12 },
+  bulkPage: { gap: 12 },
+  bulkHeader: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 2, paddingVertical: 4 },
+  bulkHeaderIcon: { width: 42, height: 42, borderRadius: 13, backgroundColor: "#12294A", alignItems: "center", justifyContent: "center" },
+  bulkHeaderTitle: { color: "#12294A", fontSize: 20, fontWeight: "900" },
+  bulkHeaderSubtitle: { color: "#6B7A8D", fontSize: 12, fontWeight: "600", marginTop: 2 },
+  bulkSetupCard: { backgroundColor: "#FFFFFF", borderRadius: 16, padding: 15, gap: 16, borderWidth: 1, borderColor: "#E1E6ED" },
+  bulkVillageList: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  bulkVillageChip: { maxWidth: "100%", paddingHorizontal: 13, paddingVertical: 9, borderRadius: 10, backgroundColor: "#F4F6F9", borderWidth: 1, borderColor: "#E1E6ED" },
+  bulkVillageChipSelected: { backgroundColor: "#12294A", borderColor: "#12294A" },
+  bulkVillageChipText: { color: "#6B7A8D", fontSize: 12, fontWeight: "800" },
+  bulkVillageChipTextSelected: { color: "#D4AF6A" },
+  bulkModeButton: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 11, borderRadius: 10, backgroundColor: "#F4F6F9", borderWidth: 1, borderColor: "#E1E6ED" },
+  bulkModeButtonSelected: { backgroundColor: "#12294A", borderColor: "#12294A" },
+  bulkModeText: { color: "#6B7A8D", fontSize: 13, fontWeight: "900" },
+  bulkModeTextSelected: { color: "#D4AF6A" },
+  bulkSummaryCard: { backgroundColor: "#12294A", borderRadius: 16, paddingHorizontal: 17, paddingVertical: 16, borderWidth: 1, borderColor: "#1E3A63" },
+  bulkSummaryEyebrow: { color: "#B9C7D8", fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
+  bulkSummaryTotal: { color: "#D4AF6A", fontSize: 30, fontWeight: "900", marginTop: 4 },
+  bulkSummaryStats: { flexDirection: "row", alignItems: "center", marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: "#355071" },
+  bulkSummaryStat: { flex: 1, alignItems: "center", gap: 2 },
+  bulkSummaryStatValue: { color: "#FFFFFF", fontSize: 16, fontWeight: "900" },
+  bulkSummaryStatLabel: { color: "#B9C7D8", fontSize: 10, fontWeight: "800" },
+  bulkSummaryStatDivider: { width: 1, height: 28, backgroundColor: "#355071" },
+  bulkListHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 2, marginTop: 3 },
+  bulkSectionTitle: { color: "#12294A", fontSize: 16, fontWeight: "900" },
+  bulkSectionSubtitle: { color: "#6B7A8D", fontSize: 11, fontWeight: "700", marginTop: 2 },
+  bulkCustomerCount: { minWidth: 28, paddingHorizontal: 8, paddingVertical: 4, textAlign: "center", color: "#12294A", backgroundColor: "#E9EEF4", borderRadius: 20, fontSize: 11, fontWeight: "900" },
+  bulkActionRow: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
+  bulkActionButton: { flexGrow: 1, flexBasis: "45%", minHeight: 39, alignItems: "center", justifyContent: "center", paddingHorizontal: 8, borderRadius: 10, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#D8E0E9" },
+  bulkActionText: { color: "#12294A", fontSize: 11, fontWeight: "900", textAlign: "center" },
+  bulkEmptyCard: { minHeight: 76, alignItems: "center", justifyContent: "center", padding: 16, backgroundColor: "#FFFFFF", borderRadius: 14, borderWidth: 1, borderColor: "#E1E6ED" },
+  bulkCustomerList: { gap: 10 },
+  bulkCustomerCard: { padding: 13, gap: 12, backgroundColor: "#FFFFFF", borderRadius: 15, borderWidth: 1, borderColor: "#E1E6ED" },
+  bulkCustomerCardUnselected: { backgroundColor: "#F7F8FA", borderColor: "#E7EBF0" },
+  bulkCustomerTopRow: { flexDirection: "row", alignItems: "center", gap: 9 },
+  bulkCheckboxButton: { width: 28, height: 34, alignItems: "center", justifyContent: "center" },
+  bulkCustomerIdentity: { flex: 1, minWidth: 0 },
+  bulkCustomerNumber: { color: "#8A6B2F", fontSize: 10, fontWeight: "900", letterSpacing: 0.4 },
+  bulkCustomerName: { color: "#12294A", fontSize: 15, fontWeight: "900", marginTop: 1 },
+  bulkStatusBadge: { minWidth: 58, alignItems: "center", justifyContent: "center", paddingHorizontal: 9, paddingVertical: 6, borderRadius: 20 },
+  bulkPaidBadge: { backgroundColor: "#E4F3EA" },
+  bulkDueBadge: { backgroundColor: "#FFF3CF" },
+  bulkSkippedBadge: { backgroundColor: "#E9EEF4" },
+  bulkStatusText: { fontSize: 10, fontWeight: "900" },
+  bulkPaidText: { color: "#1E7A4C" },
+  bulkDueText: { color: "#94701B" },
+  bulkSkippedText: { color: "#718096" },
+  bulkCustomerInfoRow: { flexDirection: "row", gap: 8 },
+  bulkInfoCell: { flex: 1, minWidth: 0, padding: 10, backgroundColor: "#F7F9FB", borderRadius: 10 },
+  bulkInfoLabel: { color: "#7B8998", fontSize: 9, fontWeight: "900", textTransform: "uppercase" },
+  bulkInfoValue: { color: "#12294A", fontSize: 13, fontWeight: "900", marginTop: 4 },
+  bulkAmountRow: { gap: 6 },
+  bulkAmountLabel: { color: "#6B7A8D", fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
+  bulkAmountInput: { minHeight: 44, paddingHorizontal: 12, borderRadius: 10, backgroundColor: "#FBFCFD", borderWidth: 1, borderColor: "#D8E0E9", color: "#12294A", fontSize: 16, fontWeight: "800" },
+  bulkAmountInputDisabled: { backgroundColor: "#EEF1F4", color: "#98A4B2" },
+  bulkSubmitButton: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#D4AF6A", borderRadius: 12, marginTop: 2 },
+  bulkSubmitText: { color: "#12294A", fontSize: 14, fontWeight: "900" },
   card: { backgroundColor: "#ffffff", borderRadius: 12, padding: 16, gap: 12, borderWidth: 1, borderColor: "#E1E6ED" },
   cardTitle: { color: "#12294A", fontSize: 15, fontWeight: "900" },
   cardDesc: { color: "#6B7A8D", fontSize: 12, fontWeight: "700", marginTop: -4 },

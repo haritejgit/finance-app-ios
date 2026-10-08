@@ -1162,73 +1162,95 @@ export async function addPaymentsBatch(
 export async function addBulkPaymentsAndDues(
   entries: { loan: Loan; amountPaid: number; isDue: boolean }[],
   paymentDate: number,
-  customers: Customer[]
+  customers: Customer[],
+  mode: PaymentMode = "CASH"
 ) {
   if (entries.length === 0) return 0;
-  const batch = writeBatch(db);
   const userId = auth.currentUser?.uid || entries[0].loan.userId;
   const customersMap = new Map<string, Customer>(
     customers.map((customer): [string, Customer] => [customer.id, customer])
   );
+  const paymentMode = normalizeMode(mode);
+  const dayStart = startOfDay(paymentDate);
+  const dayEnd = endOfDay(paymentDate);
+  const paymentsOnDate = await getPaymentsByDate(userId, dayStart, dayEnd);
+  const submittedLoanIds = new Set(entries.map(({ loan }) => loan.id));
+  const existingLoanIds = new Set(
+    paymentsOnDate
+      .filter((payment) => submittedLoanIds.has(payment.loanId))
+      .map((payment) => payment.loanId)
+  );
 
-  for (const { loan, amountPaid, isDue } of entries) {
+  for (const { loan, isDue } of entries) {
     if (isDue) {
       const customer = customersMap.get(loan.customerId);
       const cycleStartDay = customer ? getOrDeriveCycleStartDay(customer, loan.startDate) : new Date(loan.startDate).getDay();
       const weekIndex = getPersonalCycleWeekIndex(paymentDate, loan.startDate, cycleStartDay);
       const weekNumber = weekIndex + 1;
       const dueId = `due_${loan.id}_w${weekNumber}`;
+      const dueDoc = await getDoc(doc(db, "payments", dueId));
+      if (dueDoc.exists()) existingLoanIds.add(loan.id);
+    }
+  }
 
+  if (existingLoanIds.size > 0) {
+    const names = entries
+      .filter(({ loan }) => existingLoanIds.has(loan.id))
+      .map(({ loan }) => customersMap.get(loan.customerId)?.name ?? loan.customerId);
+    throw new Error(`A payment or due is already recorded for ${names.join(", ")} on this date.`);
+  }
+
+  const batch = writeBatch(db);
+  for (const { loan, amountPaid, isDue } of entries) {
+    if (isDue) {
+      const customer = customersMap.get(loan.customerId);
+      const cycleStartDay = customer ? getOrDeriveCycleStartDay(customer, loan.startDate) : new Date(loan.startDate).getDay();
+      const weekIndex = getPersonalCycleWeekIndex(paymentDate, loan.startDate, cycleStartDay);
       const payment: Payment = {
-        id: dueId,
+        id: `due_${loan.id}_w${weekIndex + 1}`,
         loanId: loan.id,
         customerId: loan.customerId,
         amountPaid: 0,
         paymentDate,
-        weekNumber,
+        weekNumber: weekIndex + 1,
         paymentType: "DUE",
         paymentMode: "CASH",
         type: "DUE",
         userId,
       };
       batch.set(doc(db, "payments", payment.id), stripUndefined(payment));
-    } else {
-      assertPositiveAmount(amountPaid, "Payment amount");
-      const payment: Payment = {
-        id: id(),
-        loanId: loan.id,
-        customerId: loan.customerId,
-        amountPaid,
-        paymentDate,
-        weekNumber: loanWeekNumber(loan.startDate, paymentDate),
-        paymentType: "REGULAR",
-        paymentMode: "CASH",
-        type: "CASH",
-        userId,
-      };
-      batch.set(doc(db, "payments", payment.id), stripUndefined(payment));
+      continue;
+    }
 
-      if (loan.status === "RENEWED") {
-        const closureQuery = query(
-          coll.payments,
-          where("loanId", "==", loan.id),
-          where("paymentType", "==", "RENEWAL_CLOSURE")
-        );
-        const closureSnap = await getDocs(closureQuery);
-        if (!closureSnap.empty) {
-          const closureDoc = closureSnap.docs[0];
-          const closureData = closureDoc.data() as Payment;
-          const newClosureAmount = Math.max(0, closureData.amountPaid - amountPaid);
-          batch.update(doc(db, "payments", closureDoc.id), {
-            amountPaid: newClosureAmount
-          });
-        } else {
-          const newBalance = Math.max(0, money(loan.balanceAmount) - amountPaid);
-          batch.update(doc(db, "loans", loan.id), {
-            balanceAmount: newBalance,
-            status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
-          });
-        }
+    assertPositiveAmount(amountPaid, "Payment amount");
+    const payment: Payment = {
+      id: `bulk_${loan.id}_${dayStart}_${paymentMode.toLowerCase()}`,
+      loanId: loan.id,
+      customerId: loan.customerId,
+      amountPaid,
+      paymentDate,
+      weekNumber: loanWeekNumber(loan.startDate, paymentDate),
+      paymentType: "REGULAR",
+      paymentMode,
+      type: paymentMode,
+      userId,
+    };
+    batch.set(doc(db, "payments", payment.id), stripUndefined(payment));
+
+    if (loan.status === "RENEWED") {
+      const closureQuery = query(
+        coll.payments,
+        where("loanId", "==", loan.id),
+        where("paymentType", "==", "RENEWAL_CLOSURE")
+      );
+      const closureSnap = await getDocs(closureQuery);
+      if (!closureSnap.empty) {
+        const closureDoc = closureSnap.docs[0];
+        const closureData = closureDoc.data() as Payment;
+        const newClosureAmount = Math.max(0, closureData.amountPaid - amountPaid);
+        batch.update(doc(db, "payments", closureDoc.id), {
+          amountPaid: newClosureAmount
+        });
       } else {
         const newBalance = Math.max(0, money(loan.balanceAmount) - amountPaid);
         batch.update(doc(db, "loans", loan.id), {
@@ -1236,6 +1258,12 @@ export async function addBulkPaymentsAndDues(
           status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
         });
       }
+    } else {
+      const newBalance = Math.max(0, money(loan.balanceAmount) - amountPaid);
+      batch.update(doc(db, "loans", loan.id), {
+        balanceAmount: newBalance,
+        status: newBalance <= 0 ? "CLOSED" : "ACTIVE",
+      });
     }
   }
 

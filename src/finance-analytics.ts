@@ -172,7 +172,7 @@ function getMonthRange(offset: number): { start: number; end: number; label: str
   return { start, end, label, month: targetDate.getMonth(), year: targetDate.getFullYear() };
 }
 
-function getExpectedWeeklyCollectionAmount(loan: Loan): number {
+export function getExpectedWeeklyCollectionAmount(loan: Loan): number {
   const principal = getLoanPrincipalAmount(loan as any);
   return Math.min(loan.balanceAmount, Math.max(1, Math.round(principal / 10)));
 }
