@@ -38,6 +38,7 @@ export type Customer = {
   numericalId: number;
   name: string;
   phone: string;
+  alternativePhone?: string;
   aadhar: string;
   locationDesc: string;
   latitude?: number;

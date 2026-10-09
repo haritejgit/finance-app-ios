@@ -83,6 +83,7 @@ type AddCustomerForm = {
   numericalId: string;
   name: string;
   phone: string;
+  alternativePhone: string;
   aadhar: string;
   locationDesc: string;
   coName: string;
@@ -100,6 +101,7 @@ function createEmptyCustomerForm(): AddCustomerForm {
     numericalId: "",
     name: "",
     phone: "",
+    alternativePhone: "",
     aadhar: "",
     locationDesc: "",
     coName: "",
@@ -408,6 +410,9 @@ const CustomerItem = React.memo(function CustomerItem({
           ) : (
             <Text style={styles.cardPhone}>—</Text>
           )}
+          {customer.alternativePhone ? (
+            <Text style={styles.cardPhone}>Alt: {customer.alternativePhone}</Text>
+          ) : null}
         </View>
 
         {loan ? (
@@ -850,7 +855,7 @@ export default function CustomerListScreen() {
   }, [query]);
 
   useEffect(() => {
-    if (!showAdd || !user) {
+    if (!showAdd || !user || !effectiveOwnerId) {
       setAadharWarning("");
       setAadharChecking(false);
       setAadharBlocked(false);
@@ -870,7 +875,7 @@ export default function CustomerListScreen() {
     const timeout = setTimeout(async () => {
       try {
         if (normalizedAadhar.length === 12) {
-          const blocked = await isAadhaarBlocked(normalizedAadhar, user.uid);
+          const blocked = await isAadhaarBlocked(normalizedAadhar, effectiveOwnerId);
           if (cancelled) return;
           if (blocked) {
             setAadharBlocked(true);
@@ -879,7 +884,7 @@ export default function CustomerListScreen() {
           }
         }
         setAadharBlocked(false);
-        const existingCustomer = await getCustomerByAadhar(user.uid, normalizedAadhar);
+        const existingCustomer = await getCustomerByAadhar(effectiveOwnerId, normalizedAadhar);
         if (cancelled) return;
         if (existingCustomer) {
           setAadharWarning(
@@ -888,6 +893,11 @@ export default function CustomerListScreen() {
         } else {
           setAadharWarning("");
         }
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Aadhaar status check failed:", error);
+        setAadharBlocked(true);
+        setAadharWarning("Unable to verify Aadhaar status. Check the connection and try again.");
       } finally {
         if (!cancelled) {
           setAadharChecking(false);
@@ -899,7 +909,7 @@ export default function CustomerListScreen() {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [form.aadhar, showAdd, user]);
+  }, [effectiveOwnerId, form.aadhar, showAdd, user]);
 
   const resetAddCustomerForm = useCallback(() => {
     addLocationRequestRef.current += 1;
@@ -1998,6 +2008,22 @@ export default function CustomerListScreen() {
                 </View>
 
                 <View style={styles.formColumn}>
+                  <Text style={styles.label}>Alternative Mobile Number (Optional)</Text>
+                  <TextInput
+                    placeholder="Alternative phone number"
+                    placeholderTextColor="#9AA6B2"
+                    value={form.alternativePhone}
+                    onChangeText={(text) => setForm((current) => ({
+                      ...current,
+                      alternativePhone: text.replace(/\D/g, "").slice(0, 10),
+                    }))}
+                    style={styles.input}
+                    keyboardType="phone-pad"
+                    maxLength={10}
+                  />
+                </View>
+
+                <View style={styles.formColumn}>
                     <Text style={styles.label}>Aadhar Number</Text>
                     <TextInput
                       placeholder="Aadhar ID"
@@ -2314,6 +2340,7 @@ export default function CustomerListScreen() {
                             numericalId: customId,
                             name: form.name,
                             phone: form.phone,
+                            alternativePhone: form.alternativePhone,
                             aadhar: normalizedAadhar,
                             coName: form.coName || "",
                             coId: form.coId ? Number(form.coId) : null,
@@ -2362,6 +2389,7 @@ export default function CustomerListScreen() {
                               numericalId: customId,
                               name: form.name,
                               phone: form.phone,
+                              alternativePhone: form.alternativePhone,
                               aadhar: normalizedAadhar,
                               locationDesc: form.locationDesc,
                               latitude: form.coordinates?.latitude,

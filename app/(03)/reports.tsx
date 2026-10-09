@@ -27,6 +27,7 @@ import * as Sharing from 'expo-sharing';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../src/firebase';
 import { getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, toMillis, startOfDay } from "../../src/business-logic";
+import { selectCurrentCustomerIds } from "../../src/customer-number-assignments";
 
 // Lazy load heavy XLSX library
 let XLSX: any = null;
@@ -1155,25 +1156,7 @@ interface Payment {
       const reportStart = getStartOfDay(fromTs);
       const reportEnd = getEndOfDay(toTs);
 
-      const customersData = allCustomers.filter((customer) => {
-        if (customer.isActive !== false) return true;
-        
-        const closedAt = customer.closedAt ? toMillis(customer.closedAt) : 0;
-        if (closedAt >= reportStart) return true;
-
-        const hasPaymentsInPeriod = paymentsData.some(
-          (p) => p.customerId === customer.id && p.paymentDate >= reportStart && p.paymentDate <= reportEnd
-        );
-        if (hasPaymentsInPeriod) return true;
-
-        const hasActiveLoanInPeriod = loansData.some(
-          (l) => l.customerId === customer.id &&
-                 l.startDate <= reportEnd &&
-                 (l.status === 'ACTIVE' ||
-                  (l.status === 'CLOSED' && toMillis((l as any).closedAt || (l as any).endDate || Date.now()) >= reportStart))
-        );
-        return hasActiveLoanInPeriod;
-      });
+      const customersData = allCustomers;
 
       if (customersData.length === 0 || villagesData.length === 0) {
         Alert.alert('No Data Found', 'No customers or villages found for this account.');
@@ -1308,20 +1291,36 @@ interface Payment {
                   return history.some((h: any) => h.villageId === village.id);
                 }
                 return c.villageId === village.id || c.movedFromVillage === village.id;
-              })
-              .sort((a, b) => {
-                const getSortId = (cust: any) => {
-                  const history = cust.villageHistory || [];
-                  if (history.length > 0) {
-                    const seg = history.find((h: any) => h.villageId === village.id);
-                    return seg ? (seg.numericalId ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
-                  }
-                  return cust.villageId === village.id ? (cust.numericalId ?? Number.MAX_SAFE_INTEGER) : (cust.movedFromNumericalId ?? Number.MAX_SAFE_INTEGER);
-                };
-                return getSortId(a) - getSortId(b);
               });
-            
-            if (villageCustomers.length === 0) return;
+
+            const getSortId = (customer: any): number | null => {
+              const history = customer.villageHistory || [];
+              const segment = history.find((item: any) => item.villageId === village.id);
+              const rawId = history.length > 0
+                ? segment?.numericalId
+                : customer.villageId === village.id
+                  ? customer.numericalId
+                  : customer.movedFromNumericalId;
+              const numericalId = Number(rawId);
+              return Number.isSafeInteger(numericalId) && numericalId > 0 ? numericalId : null;
+            };
+            const currentCustomerIds = selectCurrentCustomerIds(villageCustomers.map((customer) => ({
+              customerId: customer.id,
+              villageId: village.id,
+              numericalId: getSortId(customer),
+              isCurrent: customer.villageId === village.id,
+              isActive: customer.isActive !== false,
+              createdAt: toMillis(customer.createdAt),
+            })));
+            const exportVillageCustomers = villageCustomers
+              .filter((customer) => currentCustomerIds.has(customer.id))
+              .sort((a, b) => {
+                const aId = getSortId(a) ?? Number.MAX_SAFE_INTEGER;
+                const bId = getSortId(b) ?? Number.MAX_SAFE_INTEGER;
+                return aId - bId || a.id.localeCompare(b.id);
+              });
+
+            if (exportVillageCustomers.length === 0) return;
             
             const villageCollectionDates = getCollectionDatesForVillage(village, reportEnd);
             
@@ -1341,7 +1340,7 @@ interface Payment {
               });
             }
 
-            villageCustomers.forEach((customer) => {
+            exportVillageCustomers.forEach((customer) => {
             const history = ((customer as any).villageHistory || []) as any[];
             const legacyMovedWeek = typeof customer.movedOnWeek === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(customer.movedOnWeek)
               ? getISOWeekString(new Date(customer.movedOnWeek).getTime())
@@ -1366,7 +1365,7 @@ interface Payment {
               segment.numericalId ?? '',
               customer.coId?.toString() ?? customer.coName ?? '',
               customer.name ?? '',
-              `${village.name}\n${customer.phone ?? ''}\n${customer.aadhar ?? ''}`,
+              `${village.name}\n${customer.phone ?? ''}${customer.alternativePhone ? `\nAlt: ${customer.alternativePhone}` : ''}\n${customer.aadhar ?? ''}`,
             ];
             for (let col = 0; col < 4; col += 1) setStyle(rowIndex, col, standardStyle);
 
@@ -1391,7 +1390,9 @@ interface Payment {
               }
 
               const closedWeekStr = customer.closedAt ? getISOWeekString(toMillis(customer.closedAt)) : '';
-              const isClosedLaterWeek = customer.isActive === false && customer.closedAt && colWeekStr > closedWeekStr;
+              const isClosedLaterWeek = customer.isActive === false && (
+                !customer.closedAt || colWeekStr > closedWeekStr
+              );
 
               if (isClosedLaterWeek) {
                 row.push('Closed');

@@ -311,6 +311,7 @@ function createEmptyEditForm() {
     numericalId: "",
     name: "",
     phone: "",
+    alternativePhone: "",
     aadhar: "",
     locationDesc: "",
     coName: "",
@@ -416,6 +417,7 @@ export default function ProfileScreen() {
       numericalId: customer.numericalId?.toString() || "",
       name: customer.name,
       phone: customer.phone,
+      alternativePhone: customer.alternativePhone || "",
       aadhar: customer.aadhar,
       locationDesc: customer.locationDesc || "",
       coName: customer.coName || "",
@@ -491,11 +493,17 @@ export default function ProfileScreen() {
     setEditAadhaarBlocked(false);
     setEditAadhaarWarning("");
     if (normalized.length === 12) {
-      const blocked = await isAadhaarBlocked(normalized, user?.uid);
-      setEditAadhaarBlocked(blocked);
-      setEditAadhaarWarning(blocked ? "This Aadhaar is blocked. Customer edits cannot be saved with this number." : "");
+      try {
+        const blocked = await isAadhaarBlocked(normalized, effectiveOwnerId);
+        setEditAadhaarBlocked(blocked);
+        setEditAadhaarWarning(blocked ? "This Aadhaar is blocked. Customer edits cannot be saved with this number." : "");
+      } catch (error) {
+        console.error("Aadhaar status check failed:", error);
+        setEditAadhaarBlocked(true);
+        setEditAadhaarWarning("Unable to verify Aadhaar status. Customer edits cannot be saved.");
+      }
     }
-  }, [user?.uid]);
+  }, [effectiveOwnerId]);
 
   // Function to open Google Maps with customer location
   const openGoogleMaps = () => {
@@ -1391,7 +1399,7 @@ export default function ProfileScreen() {
 
       if (normalizedAadhar) {
         const [blocked, existingCustomer] = await Promise.all([
-          isAadhaarBlocked(normalizedAadhar, user.uid),
+          isAadhaarBlocked(normalizedAadhar, effectiveOwnerId!),
           getCustomerByAadhar(user.uid, normalizedAadhar, customer.id),
         ]);
         if (blocked) {
@@ -1417,6 +1425,7 @@ export default function ProfileScreen() {
         numericalId: newNumericalId,
         name: editForm.name,
         phone: editForm.phone,
+        alternativePhone: editForm.alternativePhone,
         aadhar: normalizedAadhar,
         locationDesc: editForm.locationDesc,
         coName: editForm.coName,
@@ -1559,6 +1568,13 @@ export default function ProfileScreen() {
                   <Icon name="call-outline" size={15} color="#C4D2E2" />
                   <PhoneLink number={customer.phone} textStyle={styles.headerText} />
                 </View>
+                {customer.alternativePhone ? (
+                  <View style={styles.headerInfoRow}>
+                    <Icon name="call-outline" size={15} color="#C4D2E2" />
+                    <PhoneLink number={customer.alternativePhone} textStyle={styles.headerText} />
+                    <Text style={styles.headerText}>Alternative</Text>
+                  </View>
+                ) : null}
                 <View style={styles.headerInfoRow}>
                   <Icon name="id-card-outline" size={15} color="#C4D2E2" />
                   <Text style={styles.headerText}>{fullAadhaar}</Text>
@@ -2328,6 +2344,13 @@ export default function ProfileScreen() {
 
                   try {
                     setIsRenewing(true);
+                    const renewalOwnerId = effectiveOwnerId || activeLoanObj.userId;
+                    if (!renewalOwnerId) {
+                      throw new Error("Unable to verify customer ownership. Renewal cannot proceed.");
+                    }
+                    if (customer?.aadhar && await isAadhaarBlocked(customer.aadhar, renewalOwnerId)) {
+                      throw new Error("This Aadhaar number is blocked.");
+                    }
                     if (!isOwner) {
                       // 1. Add RENEWAL_CLOSURE to nestedTransactions (if balance > 0)
                       if (activeLoanObj.balanceAmount > 0) {
@@ -2384,7 +2407,13 @@ export default function ProfileScreen() {
                     }
                   } catch (error: any) {
                     console.error("Renewal failed:", error);
-                    showToast("error", "Renewal failed", error?.message || "Could not renew the loan. Please try again.");
+                    showToast(
+                      "error",
+                      "Renewal Failed",
+                      error?.message === "This Aadhaar number is blocked."
+                        ? "This Aadhaar number is blocked."
+                        : error?.message || "Could not renew the loan. Please try again."
+                    );
                   } finally {
                     setIsRenewing(false);
                   }
@@ -2445,6 +2474,19 @@ export default function ProfileScreen() {
                 onChangeText={(text) => setEditForm(prev => ({ ...prev, phone: text }))}
                 style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
                 keyboardType="phone-pad"
+              />
+
+              <TextInput
+                placeholder="Alternative Mobile Number (Optional)"
+                placeholderTextColor={colors.textMuted}
+                value={editForm.alternativePhone}
+                onChangeText={(text) => setEditForm((previous) => ({
+                  ...previous,
+                  alternativePhone: text.replace(/\D/g, "").slice(0, 10),
+                }))}
+                style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
+                keyboardType="phone-pad"
+                maxLength={10}
               />
               
               <TextInput

@@ -125,6 +125,7 @@ function sanitizeCustomerInput<T extends Partial<Customer>>(input: T): T {
     ...input,
     name: cleanText(input.name),
     phone: cleanPhone(input.phone),
+    alternativePhone: input.alternativePhone === undefined ? undefined : cleanPhone(input.alternativePhone),
     aadhar: normalizeAadhar(input.aadhar),
     locationDesc: cleanText(input.locationDesc),
     coName: cleanText(input.coName),
@@ -1412,7 +1413,9 @@ export async function markDue(loan: Loan, paymentDate: number) {
 
 export async function renewLoan(loan: Loan, newPrincipal: number, date: number, paymentMode: PaymentMode = "CASH"): Promise<Loan> {
   assertPositiveAmount(newPrincipal, "Renewal amount");
-  const userId = auth.currentUser?.uid || loan.userId;
+  const userId = loan.userId || auth.currentUser?.uid;
+  if (!userId) throw new Error("Unable to verify customer ownership. Renewal cannot proceed.");
+  await assertCustomerAadhaarNotBlocked(userId, loan.customerId);
   const closureMode = normalizeMode(paymentMode);
   const disbursementMode = closureMode;
   const batch = writeBatch(db);
@@ -2324,6 +2327,24 @@ export async function updateCustomerAndLoan(
       disbursementMode: finalMode,
     };
     batch.set(doc(db, "loans", loan.id), stripUndefined(updatedLoan));
+    if (toMillis(loan.startDate) !== toMillis(loanUpdates.startDate)) {
+      const loanPayments = await getDocs(query(
+        coll.payments,
+        where("userId", "==", loan.userId),
+        where("loanId", "==", loan.id)
+      ));
+      loanPayments.docs.forEach((paymentDoc) => {
+        const payment = paymentDoc.data() as Record<string, unknown>;
+        const paymentType = payment.paymentType ?? payment.payment_type;
+        const paymentDate = payment.paymentDate ?? payment.payment_date ?? payment.date;
+        if (paymentType === "RENEWAL_CLOSURE" && toMillis(paymentDate) !== toMillis(loanUpdates.startDate)) {
+          batch.update(paymentDoc.ref, {
+            paymentDate: loanUpdates.startDate,
+            weekNumber: loanWeekNumber(loanUpdates.startDate, loanUpdates.startDate),
+          });
+        }
+      });
+    }
   }
 
   await batch.commit();
@@ -2428,18 +2449,38 @@ export async function isAadhaarBlocked(aadhaar: string, userId?: string): Promis
   const normalizedAadhaar = normalizeAadhar(aadhaar);
   if (normalizedAadhaar.length !== 12) return false;
   const [snap, legacySnap] = await Promise.all([
-    getDocs(
+    getDocsFromServer(
       userId
         ? query(coll.blockedAadhaar, where("aadhaarNumber", "==", normalizedAadhaar), where("userId", "==", userId), limit(1))
         : query(coll.blockedAadhaar, where("aadhaarNumber", "==", normalizedAadhaar), limit(1))
     ),
-    getDocs(
+    getDocsFromServer(
       userId
         ? query(coll.blockedAadhaar, where("aadhaar", "==", normalizedAadhaar), where("userId", "==", userId), limit(1))
         : query(coll.blockedAadhaar, where("aadhaar", "==", normalizedAadhaar), limit(1))
     ),
   ]);
-  return !snap.empty || !legacySnap.empty;
+  if (!snap.empty || !legacySnap.empty) return true;
+
+  const legacyRecords = await getDocsFromServer(
+    userId
+      ? query(coll.blockedAadhaar, where("userId", "==", userId))
+      : query(coll.blockedAadhaar)
+  );
+  return legacyRecords.docs.some((blockedDoc) => {
+    const data = blockedDoc.data();
+    return [data.aadhaarNumber, data.aadhaar]
+      .some((value) => normalizeAadhar(String(value ?? "")) === normalizedAadhaar);
+  });
+}
+
+export async function assertCustomerAadhaarNotBlocked(userId: string, customerId: string): Promise<void> {
+  const customerSnapshot = await getDocFromServer(doc(db, "customers", customerId));
+  if (!customerSnapshot.exists()) throw new Error("Customer not found. Renewal cannot proceed.");
+  const customer = normalizeCustomerRecord(customerSnapshot.data());
+  if (await isAadhaarBlocked(customer.aadhar, userId)) {
+    throw new Error("This Aadhaar number is blocked.");
+  }
 }
 
 export async function getBlockedAadhaars(userId?: string): Promise<BlockedAadhaar[]> {

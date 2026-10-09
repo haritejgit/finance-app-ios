@@ -159,6 +159,22 @@
         { "fieldPath": "nestedUserId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "blockedAadhaar",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "aadhaarNumber", "order": "ASCENDING" },
+        { "fieldPath": "userId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "blockedAadhaar",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "aadhaar", "order": "ASCENDING" },
+        { "fieldPath": "userId", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

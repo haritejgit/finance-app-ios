@@ -107,6 +107,7 @@ service cloud.firestore {
       return validString('id', 80) &&
         validRequiredString('name', 160) &&
         validString('phone', 24) &&
+        validString('alternativePhone', 24) &&
         validString('aadhar', 20) &&
         validString('locationDesc', 300) &&
         validString('villageId', 80) &&
