@@ -305,13 +305,11 @@ export default function ShiftSelectionScreen() {
     }
   }, [user, effectiveOwnerId, isOwner]);
 
-  // For nested users: refresh dashboard every time they navigate back to this screen
-  // (e.g. after recording a payment or registering a customer)
+  // Dashboard analytics already refresh from Firestore snapshots; only reload
+  // nested expenses here because they are also shown in the local panel.
   useFocusEffect(
     useCallback(() => {
       if (!isOwner) {
-        loadDashboard();
-        // Also refresh nested expenses
         if (user?.uid && effectiveOwnerId) {
           import("firebase/firestore").then(({ getDocs: gd, query: q, collection: col, where: wh, orderBy }) => {
             gd(q(col(db, "nestedExpenses"), wh("nestedUid", "==", user.uid))).then((snap) => {
@@ -320,7 +318,7 @@ export default function ShiftSelectionScreen() {
           });
         }
       }
-    }, [isOwner, loadDashboard, user?.uid, effectiveOwnerId])
+    }, [isOwner, user?.uid, effectiveOwnerId])
   );
 
   useEffect(() => {
@@ -397,14 +395,11 @@ export default function ShiftSelectionScreen() {
     }
   }, [allCustomers.length, user, effectiveOwnerId, isOwner]);
 
-  const searchResults = useMemo(() => {
-    const numericQuery = debouncedQuery.replace(/\D/g, "");
-    return allCustomers
-      .filter((customer) => {
-        const state = analytics?.customerStates[customer.id] ?? "pending";
-        if (customerFilter !== "all" && state !== customerFilter) return false;
-        if (!debouncedQuery) return true;
-        const textMatch = [
+  const searchIndex = useMemo(
+    () =>
+      allCustomers.map((customer) => ({
+        customer,
+        searchableText: [
           customer.name,
           customer.phone,
           customer.aadhar || "",
@@ -416,12 +411,25 @@ export default function ShiftSelectionScreen() {
           customer.villageShift || "",
         ]
           .join(" ")
-          .toLowerCase()
-          .includes(debouncedQuery);
-        const phoneMatch = numericQuery.length > 0 && (customer.phone || "").replace(/\D/g, "").includes(numericQuery);
+          .toLowerCase(),
+        phoneDigits: (customer.phone || "").replace(/\D/g, ""),
+      })),
+    [allCustomers]
+  );
+
+  const searchResults = useMemo(() => {
+    const numericQuery = debouncedQuery.replace(/\D/g, "");
+    return searchIndex
+      .filter(({ customer, searchableText, phoneDigits }) => {
+        const state = analytics?.customerStates[customer.id] ?? "pending";
+        if (customerFilter !== "all" && state !== customerFilter) return false;
+        if (!debouncedQuery) return true;
+        const textMatch = searchableText.includes(debouncedQuery);
+        const phoneMatch = numericQuery.length > 0 && phoneDigits.includes(numericQuery);
         return textMatch || phoneMatch;
       })
       .slice(0, 80);
+      .map(({ customer }) => customer)
   }, [allCustomers, analytics?.customerStates, customerFilter, debouncedQuery]);
 
   const displayName = useMemo(() => (user?.displayName || user?.email || "User").split(/[ @]/)[0], [user?.displayName, user?.email]);

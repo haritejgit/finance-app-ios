@@ -92,6 +92,16 @@ export default function InsightsScreen() {
     const activeLoans = loans.filter((loan) => loan.status === "ACTIVE" && customersById.has(loan.customerId));
     const activeLoanByCustomer = new Map(activeLoans.map((loan) => [loan.customerId, loan]));
     const customerIdByLoan = new Map(loans.map((loan) => [loan.id, loan.customerId]));
+
+    const paymentsByCustomer = new Map<string, Payment[]>();
+    payments.forEach((payment) => {
+      const customerId = payment.customerId ?? customerIdByLoan.get(payment.loanId);
+      if (!customerId) return;
+      const customerPayments = paymentsByCustomer.get(customerId) ?? [];
+      customerPayments.push(payment);
+      paymentsByCustomer.set(customerId, customerPayments);
+    });
+
     const averageLoan = activeLoans.length
       ? activeLoans.reduce((sum, loan) => sum + Number(loan.principalAmount || 0), 0) / activeLoans.length
       : 0;
@@ -105,25 +115,30 @@ export default function InsightsScreen() {
       .reduce((sum, payment) => sum + Number(payment.amountPaid || 0), 0);
     const expectedThisWeek = activeLoans.reduce((sum, loan) => sum + Math.max(1, Math.round(Number(loan.principalAmount || 0) / 10)), 0);
 
+    const collectionDays = new Set<number>();
+    regularPayments.forEach((payment) => {
+      const ts = toMillis(payment.paymentDate);
+      if (ts >= weekStart && ts < weekEnd) {
+        collectionDays.add(Math.floor((ts - weekStart) / (24 * 60 * 60 * 1000)));
+      }
+    });
     const dailyCollectionStreak = Array.from({ length: 7 }, (_, index) => {
-      const dayStart = weekStart + index * 24 * 60 * 60 * 1000;
-      const dayEnd = dayStart + 24 * 60 * 60 * 1000;
-      return regularPayments.some((payment) => {
-        const ts = toMillis(payment.paymentDate);
-        return ts >= dayStart && ts < dayEnd;
-      });
+      return collectionDays.has(index);
     });
 
     const customerRisks = customers
       .map((customer) => {
         const loan = activeLoanByCustomer.get(customer.id);
         if (!loan) return null;
-        const customerPayments = payments.filter((payment) => (payment.customerId ?? customerIdByLoan.get(payment.loanId)) === customer.id);
-        const missedPayments = customerPayments.filter((payment) => payment.paymentType === "DUE").length;
-        const lastRegular = customerPayments
-          .filter((payment) => payment.paymentType !== "DUE")
-          .map((payment) => toMillis(payment.paymentDate))
-          .sort((a, b) => b - a)[0];
+        let missedPayments = 0;
+        let lastRegular = 0;
+        (paymentsByCustomer.get(customer.id) ?? []).forEach((payment) => {
+          if (payment.paymentType === "DUE") {
+            missedPayments += 1;
+          } else {
+            lastRegular = Math.max(lastRegular, toMillis(payment.paymentDate));
+          }
+        });
         const daysOverdue = lastRegular ? Math.max(0, Math.floor((now - lastRegular) / 86400000) - 7) : 14;
         const consistencyRisk = Math.min(35, missedPayments * 10);
         const overdueRisk = Math.min(45, daysOverdue * 3);

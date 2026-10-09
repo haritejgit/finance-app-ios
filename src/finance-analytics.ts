@@ -436,6 +436,16 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
   const monthStart = startOfMonth();
   const monthEnd = endOfMonth();
   const previousMonthStart = startOfMonth(-1);
+  const paymentsByCustomerAndLoan = new Map<string, Map<string, Payment[]>>();
+  payments.forEach((payment) => {
+    const customerId = payment.customerId;
+    if (!customerId) return;
+    const customerPaymentsByLoan = paymentsByCustomerAndLoan.get(customerId) ?? new Map<string, Payment[]>();
+    const loanPayments = customerPaymentsByLoan.get(payment.loanId) ?? [];
+    loanPayments.push(payment);
+    customerPaymentsByLoan.set(payment.loanId, loanPayments);
+    paymentsByCustomerAndLoan.set(customerId, customerPaymentsByLoan);
+  });
   const previousMonthEnd = endOfMonth(-1);
 
   const regularPayments = payments.filter(isRealCollectionPayment);
@@ -652,7 +662,7 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
     if (!customer || !namedListCustomerIds.has(customer.id)) return;
 
     // Payments for this customer and this loan
-    const customerPayments = payments.filter((p) => p.customerId === customer.id && p.loanId === loan.id);
+    const customerPayments = paymentsByCustomerAndLoan.get(customer.id)?.get(loan.id) ?? [];
     const regularPaidWeeks = new Map<number, number>();
     const dueWeekIndices = new Set<number>();
     const duePaymentDates: number[] = [];
@@ -831,8 +841,7 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
 
             if (weekPaidCustomerIds.has(c.id)) {
               paidCustomerCount++;
-              const custWeekPayments = weekPayments.filter(p => p.customerId === c.id);
-              collected += custWeekPayments.reduce((sum, p) => sum + p.amountPaid, 0);
+              collected += weekCollectionByCustomerId.get(c.id) ?? 0;
             } else if (weekDueCustomerIds.has(c.id)) {
               dueCustomerCount++;
               dueAmount += weeklyAmount;
@@ -842,6 +851,14 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
       });
 
       routeProgresses[key] = {
+  const weekCollectionByCustomerId = new Map<string, number>();
+  weekPayments.forEach((payment) => {
+    if (!payment.customerId) return;
+    weekCollectionByCustomerId.set(
+      payment.customerId,
+      (weekCollectionByCustomerId.get(payment.customerId) ?? 0) + payment.amountPaid
+    );
+  });
         target,
         collected,
         dueAmount,
@@ -1058,7 +1075,7 @@ export function subscribeDashboardAnalytics(
         .catch((error) => {
           if (!cancelled) onError?.(error);
         });
-    }, 120);
+    }, 200);
   };
 
   const watch = (name: string) => {
@@ -1085,16 +1102,33 @@ export function subscribeDashboardAnalytics(
     );
   };
 
+  let refreshInProgress = false;
+  let refreshPending = false;
   const watchNested = (name: string, field: string, val: string) =>
     onSnapshot(query(collection(db, name), where(field, "==", val)), refresh, async (error) => {
       console.error(`[Analytics] Nested watch failed for ${name}:`, error);
       if (nestedUserId) {
+      refreshTimer = null;
+      if (cancelled) return;
+      if (refreshInProgress) {
+        refreshPending = true;
+        return;
+      }
+
+      refreshInProgress = true;
         const { addDoc, collection: col } = await import("firebase/firestore");
         await addDoc(col(db, "debugLogs"), {
           timestamp: Date.now(),
           message: `Nested watch failed for ${name}`,
           errorMessage: error?.message || null,
           nestedUserId
+        })
+        .finally(() => {
+          refreshInProgress = false;
+          if (refreshPending && !cancelled) {
+            refreshPending = false;
+            refresh();
+          }
         }).catch(() => {});
       }
       onError?.(error);
