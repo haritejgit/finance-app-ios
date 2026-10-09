@@ -1801,6 +1801,11 @@ export default function AccountScreen() {
             return [customer.id, loan ? String(getExpectedWeeklyCollectionAmount(loan)) : ""];
           })),
         }));
+      } else {
+        setBulkAmounts((previous) => ({
+          ...previous,
+          ...Object.fromEntries(activeCustomers.map((customer) => [customer.id, ""])),
+        }));
       }
     };
     const toggleBulkCustomer = (customerId: string) => {
