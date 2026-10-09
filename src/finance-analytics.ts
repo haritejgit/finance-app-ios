@@ -815,6 +815,14 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
   const weekStartVal = weekStart(Date.now());
   const weekPayments = regularPayments.filter(p => p.paymentDate >= weekStartVal);
   const weekPaidCustomerIds = new Set(weekPayments.map(p => p.customerId));
+  const weekCollectionByCustomerId = new Map<string, number>();
+  weekPayments.forEach((payment) => {
+    if (!payment.customerId) return;
+    weekCollectionByCustomerId.set(
+      payment.customerId,
+      (weekCollectionByCustomerId.get(payment.customerId) ?? 0) + payment.amountPaid
+    );
+  });
   const weekDues = payments.filter(p => p.paymentDate >= weekStartVal && (p.paymentType === "DUE" || p.type === "DUE") && Number(p.amountPaid || 0) === 0);
   const weekDueCustomerIds = new Set(weekDues.map(p => p.customerId));
 
@@ -851,14 +859,6 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
       });
 
       routeProgresses[key] = {
-  const weekCollectionByCustomerId = new Map<string, number>();
-  weekPayments.forEach((payment) => {
-    if (!payment.customerId) return;
-    weekCollectionByCustomerId.set(
-      payment.customerId,
-      (weekCollectionByCustomerId.get(payment.customerId) ?? 0) + payment.amountPaid
-    );
-  });
         target,
         collected,
         dueAmount,
@@ -1064,16 +1064,33 @@ export function subscribeDashboardAnalytics(
 ): Unsubscribe {
   let cancelled = false;
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  let refreshInProgress = false;
+  let refreshPending = false;
 
   const refresh = () => {
     if (refreshTimer) clearTimeout(refreshTimer);
     refreshTimer = setTimeout(() => {
+      refreshTimer = null;
+      if (cancelled) return;
+      if (refreshInProgress) {
+        refreshPending = true;
+        return;
+      }
+
+      refreshInProgress = true;
       getDashboardAnalytics(userId, nestedUserId, selectedVillageId)
         .then((analytics) => {
           if (!cancelled) onData(analytics);
         })
         .catch((error) => {
           if (!cancelled) onError?.(error);
+        })
+        .finally(() => {
+          refreshInProgress = false;
+          if (refreshPending && !cancelled) {
+            refreshPending = false;
+            refresh();
+          }
         });
     }, 200);
   };
@@ -1102,20 +1119,10 @@ export function subscribeDashboardAnalytics(
     );
   };
 
-  let refreshInProgress = false;
-  let refreshPending = false;
   const watchNested = (name: string, field: string, val: string) =>
     onSnapshot(query(collection(db, name), where(field, "==", val)), refresh, async (error) => {
       console.error(`[Analytics] Nested watch failed for ${name}:`, error);
       if (nestedUserId) {
-      refreshTimer = null;
-      if (cancelled) return;
-      if (refreshInProgress) {
-        refreshPending = true;
-        return;
-      }
-
-      refreshInProgress = true;
         const { addDoc, collection: col } = await import("firebase/firestore");
         await addDoc(col(db, "debugLogs"), {
           timestamp: Date.now(),
@@ -1123,13 +1130,7 @@ export function subscribeDashboardAnalytics(
           errorMessage: error?.message || null,
           nestedUserId
         })
-        .finally(() => {
-          refreshInProgress = false;
-          if (refreshPending && !cancelled) {
-            refreshPending = false;
-            refresh();
-          }
-        }).catch(() => {});
+        .catch(() => {});
       }
       onError?.(error);
     });

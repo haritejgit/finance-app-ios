@@ -428,9 +428,9 @@ export default function ShiftSelectionScreen() {
         const phoneMatch = numericQuery.length > 0 && phoneDigits.includes(numericQuery);
         return textMatch || phoneMatch;
       })
-      .slice(0, 80);
       .map(({ customer }) => customer)
-  }, [allCustomers, analytics?.customerStates, customerFilter, debouncedQuery]);
+      .slice(0, 80);
+  }, [searchIndex, analytics?.customerStates, customerFilter, debouncedQuery]);
 
   const displayName = useMemo(() => (user?.displayName || user?.email || "User").split(/[ @]/)[0], [user?.displayName, user?.email]);
   const todayLabel = useMemo(() => new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" }), []);
