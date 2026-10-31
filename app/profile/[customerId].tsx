@@ -25,6 +25,7 @@ import { useAuth } from "../../src/auth-context";
 import { AnimatedListItem } from "../../src/components/AnimatedListItem";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import { PhoneLink } from "../../src/components/PhoneLink";
+import { CustomerPhoneVerification, type PhoneVerificationDecision } from "../../src/components/CustomerPhoneVerification";
 import Icon from "../../src/Icon";
 import { LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
 import {
@@ -353,6 +354,7 @@ export default function ProfileScreen() {
   const [agentUpiId, setAgentUpiId] = useState("karthikeyafinance@ybl");
   const [dueOpen, setDueOpen] = useState(false);
   const [renewOpen, setRenewOpen] = useState(false);
+  const [renewalPhoneDecision, setRenewalPhoneDecision] = useState<PhoneVerificationDecision>({ phone: "", status: "pending" });
   const [recommendationEditOpen, setRecommendationEditOpen] = useState(false);
   const [recommendationAmountInput, setRecommendationAmountInput] = useState("");
   const recommendationTapRef = useRef({ count: 0, lastTap: 0 });
@@ -759,6 +761,7 @@ export default function ProfileScreen() {
     setRenewMode("CASH");
     setRenewProcessingFeeCharged(true);
     setRenewChequeSubmitted(customer.chequeSubmitted === true);
+    setRenewalPhoneDecision({ phone: customer.phone, status: "pending" });
     setRenewDateInput(formatDateInput(Date.now()));
     setRenewDateError("");
     setRenewOpen(true);
@@ -2241,6 +2244,8 @@ export default function ProfileScreen() {
               keyboardShouldPersistTaps="handled"
             >
               <Text style={[styles.modalTitle, { color: colors.text }]}>Renew Loan</Text>
+              <Text style={[styles.sectionLabel, { color: colors.text }]}>Customer phone: {customer?.phone || "No phone number"}</Text>
+              {customer ? <CustomerPhoneVerification phone={customer.phone} onDecisionChange={setRenewalPhoneDecision} colors={colors} /> : null}
               <TextInput placeholder="New Principal Amount" placeholderTextColor={colors.textMuted} value={renewAmount} onChangeText={setRenewAmount} style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]} keyboardType="numeric" />
               <Pressable
                 accessibilityRole="checkbox"
@@ -2378,6 +2383,10 @@ export default function ProfileScreen() {
                 onPress={async () => {
                   const activeLoanObj = localLoan || loan;
                   if (!activeLoanObj || isRenewing || renewingRef.current || activeLoanObj.customerId !== activeCustomerId || customer?.id !== activeCustomerId) return;
+                  if (!customer || renewalPhoneDecision.phone !== customer.phone || renewalPhoneDecision.status === "pending") {
+                    showToast("error", "Phone verification choice required", "Verify the phone by OTP or choose Continue without OTP.");
+                    return;
+                  }
                   const newPrincipal = Number(renewAmount);
                   if (isNaN(newPrincipal) || newPrincipal <= 0) {
                     showToast("error", "Invalid amount", "Please enter a valid principal amount.");
@@ -2400,6 +2409,7 @@ export default function ProfileScreen() {
                     `Less Old Balance: -Rs.${Math.round(activeLoanObj.balanceAmount).toLocaleString("en-IN")}\n\n` +
                     `Net Amount to ${netToGive >= 0 ? "GIVE" : "COLLECT"}: Rs.${Math.abs(netToGive).toLocaleString("en-IN")}/-\n\n` +
                     (requiresChequePrompt ? `Cheque submitted: ${renewChequeSubmitted ? "Yes" : "No"}\n\n` : "") +
+                    `Phone OTP: ${renewalPhoneDecision.status === "verified" ? "Verified" : "Skipped"}\n\n` +
                     `Do you want to confirm renewal?`;
 
                   if (!acquireRenewalSubmitLock(renewingRef)) return;
@@ -2493,6 +2503,7 @@ export default function ProfileScreen() {
                 style={styles.cancelModalBtn}
                 onPress={() => {
                   setRenewOpen(false);
+                  setRenewalPhoneDecision({ phone: customer?.phone || "", status: "pending" });
                   setRenewAmount("");
                   setRenewMode("CASH");
                   setRenewChequeSubmitted(false);

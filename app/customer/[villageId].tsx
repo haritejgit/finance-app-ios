@@ -28,6 +28,7 @@ import { db } from "../../src/firebase";
 import { collection, query as firestoreQuery, where, getDocs, doc, setDoc } from "firebase/firestore";
 import { addNestedTransaction, addNestedTransactionsBatch } from "../../src/repository";
 import { CustomerIdBadge } from "../../src/components/CustomerIdBadge";
+import { CustomerPhoneVerification, type PhoneVerificationDecision } from "../../src/components/CustomerPhoneVerification";
 import Icon from "../../src/Icon";
 import { colors } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
@@ -595,6 +596,7 @@ export default function CustomerListScreen() {
   const [agentUpiId, setAgentUpiId] = useState("karthikeyafinance@ybl");
   const [village, setVillage] = useState<Village | null>(null);
   const [form, setForm] = useState<AddCustomerForm>(createEmptyCustomerForm);
+  const [registrationPhoneDecision, setRegistrationPhoneDecision] = useState<PhoneVerificationDecision>({ phone: "", status: "pending" });
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const addLocationRequestRef = useRef(0);
   const saveLocationRequestRef = useRef(0);
@@ -919,6 +921,7 @@ export default function CustomerListScreen() {
   const resetAddCustomerForm = useCallback(() => {
     addLocationRequestRef.current += 1;
     setForm(createEmptyCustomerForm());
+    setRegistrationPhoneDecision({ phone: "", status: "pending" });
     setRegistrationDate(formatDateInput(Date.now()));
     setTempRegistrationDate(new Date());
     setShowDatePicker(false);
@@ -2012,6 +2015,8 @@ export default function CustomerListScreen() {
                   </View>
                 </View>
 
+                <CustomerPhoneVerification phone={form.phone} onDecisionChange={setRegistrationPhoneDecision} colors={colors} />
+
                 <View style={styles.formColumn}>
                   <Text style={styles.label}>Alternative Mobile Number (Optional)</Text>
                   <TextInput
@@ -2297,6 +2302,10 @@ export default function CustomerListScreen() {
                     style={[styles.save, (!form.name || !form.phone || !form.principal || !form.numericalId || aadharBlocked || isRegistering) ? styles.saveDisabled : null]}
                     onPress={async () => {
                       if (!user || !village || !form.name || !form.phone || !form.principal || !form.numericalId || aadharBlocked || isRegistering) return;
+                      if (registrationPhoneDecision.phone !== form.phone || registrationPhoneDecision.status === "pending") {
+                        showToast("error", "Phone verification choice required", "Verify the phone by OTP or choose Continue without OTP.");
+                        return;
+                      }
                       const customId = Number(form.numericalId);
                       if (isNaN(customId) || customId <= 0) {
                         setFormErrors((f) => ({ ...f, numericalId: "Valid ID is required" }));
