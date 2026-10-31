@@ -745,7 +745,7 @@ export default function ProfileScreen() {
   }, [authLoading, reload]));
 
   const openRenewalWorkflow = useCallback(() => {
-    if (isLoading) {
+    if (authLoading || isLoading) {
       if (activeCustomerId) pendingRenewalCustomerRef.current = activeCustomerId;
       return;
     }
@@ -762,23 +762,23 @@ export default function ProfileScreen() {
     setRenewDateInput(formatDateInput(Date.now()));
     setRenewDateError("");
     setRenewOpen(true);
-  }, [activeCustomerId, customer, isLoading, loadError, loan]);
+  }, [activeCustomerId, authLoading, customer, isLoading, loadError, loan]);
 
   useEffect(() => {
-    if (renew !== "true" || !isRenewalContextReady({ loading: isLoading, hasError: !!loadError, customerId: activeCustomerId, customer, loan })) return;
+    if (renew !== "true" || !isRenewalContextReady({ loading: authLoading || isLoading, hasError: !!loadError, customerId: activeCustomerId, customer, loan })) return;
     openRenewalWorkflow();
     router.setParams({ renew: undefined } as any);
-  }, [renew, isLoading, loadError, customer, loan, activeCustomerId, openRenewalWorkflow]);
+  }, [renew, authLoading, isLoading, loadError, customer, loan, activeCustomerId, openRenewalWorkflow]);
 
   useEffect(() => {
-    if (!shouldOpenPendingRenewal(pendingRenewalCustomerRef.current, activeCustomerId, isLoading)) return;
+    if (!shouldOpenPendingRenewal(pendingRenewalCustomerRef.current, activeCustomerId, authLoading || isLoading)) return;
     pendingRenewalCustomerRef.current = null;
     if (!isRenewalContextReady({ loading: false, hasError: !!loadError, customerId: activeCustomerId, customer, loan })) {
       showToast("error", "Unable to renew", loadError || "The current customer loan is unavailable. Reload the profile and try again.");
       return;
     }
     openRenewalWorkflow();
-  }, [isLoading, loadError, customer, loan, activeCustomerId, openRenewalWorkflow]);
+  }, [authLoading, isLoading, loadError, customer, loan, activeCustomerId, openRenewalWorkflow]);
 
   useEffect(() => {
     if (renewOpen) {
