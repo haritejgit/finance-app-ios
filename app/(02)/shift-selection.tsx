@@ -630,8 +630,7 @@ export default function ShiftSelectionScreen() {
                 },
               ]}
             >
-              <LinearGradient colors={[colors.blue2, colors.blue1]} style={[styles.headerCard, viewportWidth < 500 && styles.headerCompact, { width: "100%", borderColor: "rgba(255,255,255,0.12)", borderWidth: 1 }]}>
-                <View pointerEvents="none" style={styles.headerGlow} />
+              <View style={[styles.headerCard, viewportWidth < 500 && styles.headerCompact, { width: "100%", backgroundColor: colors.blue2, borderColor: colors.blue2, borderWidth: 1 }]}>
                 <View style={[styles.headerTop, viewportWidth < 500 && styles.headerTopCompact]}>
                   <View style={[styles.brandRow, viewportWidth < 500 && styles.brandRowCompact]}>
                   <View style={[styles.brandIcon, viewportWidth < 500 && styles.brandIconCompact, { backgroundColor: "rgba(255,255,255,0.12)" }]}>
@@ -648,8 +647,7 @@ export default function ShiftSelectionScreen() {
                   </Pressable>
                 </View>
 
-                <Pressable accessibilityRole="button" accessibilityLabel={t("collectedToday")} onPress={() => nav.push("/graph")}>
-                  <LinearGradient colors={[colors.teal, "#148276"]} style={[styles.todayCard, viewportWidth < 500 && styles.todayCompact, { borderColor: "rgba(255,255,255,0.2)" }]}>
+                <Pressable style={[styles.todayCard, viewportWidth < 500 && styles.todayCompact, { backgroundColor: colors.lightSeaGreen, borderColor: "rgba(255,255,255,0.16)" }]} onPress={() => nav.push("/graph")}>
                   <View style={[styles.todayIcon, viewportWidth < 500 && styles.todayIconCompact, { backgroundColor: "rgba(255,255,255,0.14)" }]}>
                     <Icon name="cash-outline" size={20} color={colors.white} />
                   </View>
@@ -658,10 +656,8 @@ export default function ShiftSelectionScreen() {
                     <Text style={[styles.todayValue, viewportWidth < 500 && styles.todayValueCompact, { color: colors.white }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>{formatMoney(totals?.collectionToday ?? 0)}</Text>
                     <Text style={[styles.todayHint, viewportWidth < 500 && styles.todayHintCompact, { color: "rgba(255,255,255,0.78)" }]}>{t("distributedTodayHint")} {formatMoney(totals?.distributedToday ?? 0)}</Text>
                   </View>
-                  <Icon name="arrow-forward" size={17} color={colors.white} />
-                  </LinearGradient>
                 </Pressable>
-              </LinearGradient>
+              </View>
 
               {loading && !analytics ? (
                 <DashboardSkeleton />
@@ -765,10 +761,10 @@ export default function ShiftSelectionScreen() {
                     )}
 
                     <Pressable accessibilityLabel={t("startCollection")} onPress={startCollection}>
-                      <LinearGradient colors={[colors.teal, "#0D655F"]} style={styles.primaryAction}>
+                      <View style={styles.primaryAction}>
                         <Text style={styles.primaryActionText}>{t("startCollection")}</Text>
                         <Icon name="arrow-forward" size={18} color={Colors.white} />
-                      </LinearGradient>
+                      </View>
                     </Pressable>
 
                     <View style={styles.walletRouteSummary}>
@@ -1245,8 +1241,7 @@ const styles = StyleSheet.create({
   container: { paddingVertical: 24, paddingBottom: 44 },
   content: { width: "100%", maxWidth: 1180, alignSelf: "center", gap: 18 },
   headerCard: {
-    position: "relative",
-    overflow: "hidden",
+    backgroundColor: Colors.white,
     borderRadius: 28,
     padding: 22,
     gap: 18,
@@ -1256,7 +1251,6 @@ const styles = StyleSheet.create({
     shadowRadius: 22,
     elevation: 7,
   },
-  headerGlow: { position: "absolute", top: -112, right: -58, width: 230, height: 230, borderRadius: 115, backgroundColor: "rgba(233,199,126,0.09)" },
   headerCompact: { borderRadius: 20, padding: 13, gap: 10 },
   headerTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 },
   headerTopCompact: { gap: 10 },
@@ -1273,7 +1267,7 @@ const styles = StyleSheet.create({
   welcomeCompact: { fontSize: 11, marginTop: 2 },
   searchButton: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: Colors.lightSeaGreen },
   searchButtonCompact: { width: 44, height: 44, borderRadius: 14 },
-  todayCard: { minHeight: 102, borderRadius: 21, flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 18, paddingVertical: 16, borderWidth: 1, overflow: "hidden" },
+  todayCard: { minHeight: 102, borderRadius: 21, backgroundColor: "#f6fffe", flexDirection: "row", alignItems: "center", gap: 16, paddingHorizontal: 18, paddingVertical: 16, borderWidth: 1, borderColor: Colors.borderLight },
   todayCompact: { minHeight: 72, borderRadius: 15, gap: 10, paddingHorizontal: 12, paddingVertical: 9 },
   todayIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: Colors.honeyBronze, alignItems: "center", justifyContent: "center" },
   todayIconCompact: { width: 38, height: 38, borderRadius: 13 },
@@ -1319,7 +1313,7 @@ const styles = StyleSheet.create({
   shiftOn: { backgroundColor: Colors.lightSeaGreen, borderColor: Colors.lightSeaGreen },
   shiftText: { color: "#4D666D", fontWeight: "700", fontSize: 13 },
   shiftTextOn: { color: "#FFFFFF", fontWeight: "800" },
-  primaryAction: { borderRadius: 12, minHeight: 48, paddingVertical: 11, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, overflow: "hidden" },
+  primaryAction: { backgroundColor: Colors.lightSeaGreen, borderRadius: 12, minHeight: 46, paddingVertical: 11, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
   primaryActionText: { color: Colors.white, fontWeight: "800", fontSize: 14 },
   walletRouteSummary: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 2 },
   walletRouteText: { color: Colors.textMuted, fontSize: 11, fontWeight: "800" },
