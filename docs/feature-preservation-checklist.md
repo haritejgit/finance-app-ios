@@ -29,6 +29,7 @@ This checklist records the existing product areas inspected while improving Kart
 ## Changes and verification recorded for this improvement branch
 
 - [x] Prevent iOS Safari focus zoom on search and other text fields using a global 16px web input size; live production computed style was checked.
+- [x] Match the pre-hydration web theme to saved/system preferences and the navy design tokens; allow browser zoom for accessibility while keeping 16px inputs.
 - [x] Add a regression test that confirms the global 16px input/textarea rule is loaded by the app root.
 - [x] Guard renewal initialization against stale customer/loan context and prevent duplicate submissions; pure regression tests cover selection readiness and submit locking.
 - [x] Preserve explicit processing-fee choice and net disbursement handling for new loans and renewals, with legacy fallback; unit tests cover enabled/disabled and legacy cases.
@@ -57,7 +58,7 @@ This checklist records the existing product areas inspected while improving Kart
 
 ## Validation snapshot
 
-- `npm test`: 29 tests passed, including Safari input-font regression, safe JPG export rendering, styled Excel export output, AI proxy auth/input/rate-limit/PII validation, and active-loan selection parity against the previous per-customer query.
+- `npm test`: 31 tests passed, including Safari input-font/accessibility regressions, initial theme selection, safe JPG export rendering, styled Excel export output, AI proxy auth/input/rate-limit/PII validation, and active-loan selection parity against the previous per-customer query.
 - Cloud Functions `npm run build`: TypeScript compilation passed after the Node 22 runtime, compatible dependency updates, and secure AI proxy changes; 3 focused due-selection tests passed.
 - Firestore rules emulator tests: 13 tests passed after dependency updates with Temurin JDK 21, including malformed and forged temporary customer import records, nested transaction/expense owner spoofing and tampering, forged nested profile/account creation, trusted owner-link tampering, legacy nested-account profile recovery, nested-profile role/owner tampering and self-deletion attempts, the owner's create/deactivate/delete and transaction reconciliation flow, client denial for server-only AI usage counters, and custom loan recommendation validation with legacy compatibility.
 - `npm run lint -- --no-cache`: completed with 0 errors and 68 warnings after the AI proxy additions.

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#F4F6F9" />
+    <title>%WEB_TITLE%</title>
+    <script>
+      (function () {
+        try {
+          var savedTheme = window.localStorage.getItem('finance_app_theme');
+          var isDark = savedTheme === 'dark' || (savedTheme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var bg = isDark ? '#081526' : '#F4F6F9';
+          var text = isDark ? '#FFFFFF' : '#12294A';
+          document.documentElement.dataset.theme = isDark ? 'dark' : 'light';
+          document.documentElement.style.backgroundColor = bg;
+          document.documentElement.style.setProperty('--app-bg', bg);
+          document.documentElement.style.setProperty('--app-text', text);
+          document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+          document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bg);
+        } catch (error) {}
+      })();
+    </script>
+    <style id="expo-reset">
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        height: 100dvh;
+        margin: 0;
+        overflow: hidden;
+        background: var(--app-bg, #F4F6F9);
+        color: var(--app-text, #12294A);
+        font-family: 'Onest', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        overscroll-behavior-y: none;
+      }
+      #root {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        height: 100dvh;
+        flex: 1;
+        background: var(--app-bg, #F4F6F9);
+        color: var(--app-text, #12294A);
+      }
+      html[data-theme="dark"],
+      html[data-theme="dark"] body {
+        background: #081526;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      input,
+      button,
+      textarea {
+        font: inherit;
+      }
+      input,
+      textarea {
+        font-size: 16px !important;
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  </body>
+</html>
