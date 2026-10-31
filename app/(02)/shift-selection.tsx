@@ -91,18 +91,16 @@ function DashboardPanel({
   subtitle,
   children,
   action,
-  onLayout,
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
   action?: React.ReactNode;
-  onLayout?: (event: any) => void;
 }) {
   const { width } = useWindowDimensions();
   const { colors } = useTheme();
   return (
-    <View onLayout={onLayout} style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }, width < 500 && styles.panelCompact, width >= 1024 && styles.panelWide]}>
+    <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }, width < 500 && styles.panelCompact, width >= 1024 && styles.panelWide]}>
       <View style={styles.sectionHeader}>
         <View style={styles.sectionCopy}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
@@ -122,7 +120,6 @@ function DashboardMetric({
   tone,
   caption,
   valueTone,
-  sparkline,
 }: {
   title: string;
   value: string;
@@ -130,23 +127,12 @@ function DashboardMetric({
   tone: string;
   caption: string;
   valueTone?: string;
-  sparkline?: number[];
 }) {
   const { colors } = useTheme();
   return (
     <View style={[styles.metricCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={styles.metricCardHead}>
-        <View style={[styles.metricIcon, { backgroundColor: `${tone}18` }]}>
-          <Icon name={icon} size={17} color={tone} />
-        </View>
-        {sparkline?.length ? (
-          <View style={styles.metricSparkline} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-            {sparkline.slice(-5).map((point, index, values) => {
-              const peak = Math.max(...values, 1);
-              return <View key={index} style={[styles.metricSparkBar, { height: 6 + (point / peak) * 18, backgroundColor: tone, opacity: 0.28 + index * 0.14 }]} />;
-            })}
-          </View>
-        ) : null}
+      <View style={[styles.metricIcon, { backgroundColor: `${tone}18` }]}>
+        <Icon name={icon} size={17} color={tone} />
       </View>
       <Text style={[styles.metricTitle, { color: colors.textMuted }]}>{title}</Text>
       <Text style={[styles.metricValue, valueTone ? { color: valueTone } : null]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
@@ -182,10 +168,11 @@ function EmptyLine({ text }: { text: string }) {
 }
 
 function BottomNavButton({ label, icon, active, onPress }: { label: string; icon: string; active: boolean; onPress: () => void }) {
+  const { colors } = useTheme();
   return (
     <Pressable accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.bottomNavButton, pressed && styles.pressed]}>
-      <Icon name={icon} size={18} color={active ? Colors.honeyBronze : "#B5C6CE"} />
-      <Text style={[styles.bottomNavText, { color: "#B5C6CE" }, active && styles.bottomNavTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
+      <Icon name={icon} size={18} color={active ? colors.primary : colors.textMuted} />
+      <Text style={[styles.bottomNavText, { color: colors.textMuted }, active && [styles.bottomNavTextActive, { color: colors.text }]]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
     </Pressable>
   );
 }
@@ -209,10 +196,8 @@ export default function ShiftSelectionScreen() {
   const [searchLoading, setSearchLoading] = useState(false);
   const intro = useRef(new Animated.Value(0)).current;
   const bottomNavSlide = useRef(new Animated.Value(0)).current;
-  const dashboardScrollRef = useRef<ScrollView | null>(null);
-  const budgetAlertsOffset = useRef(0);
   const [bottomNavWidth, setBottomNavWidth] = useState(0);
-  const [activeBottomKey, setActiveBottomKey] = useState("dashboard");
+  const [activeBottomKey, setActiveBottomKey] = useState("account");
 
   const logDebug = useCallback(async (message: string, extra: any = {}) => {
     try {
@@ -454,11 +439,10 @@ export default function ShiftSelectionScreen() {
   }, [searchIndex, analytics?.customerStates, customerFilter, debouncedQuery]);
 
   const displayName = useMemo(() => (user?.displayName || user?.email || "User").split(/[ @]/)[0], [user?.displayName, user?.email]);
-  const todayLabel = useMemo(() => new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric" }), []);
+  const todayLabel = useMemo(() => new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" }), []);
   const bottomActions = useMemo(
     () => {
       const actions: BottomAction[] = [
-        { key: "dashboard", label: t("financeDashboard"), icon: "home-outline", action: () => dashboardScrollRef.current?.scrollTo({ y: 0, animated: true }) },
         { key: "reports", label: t("reports"), icon: "document-text-outline", action: () => nav.push("/reports") },
         { key: "account", label: t("account"), icon: "wallet-outline", action: () => nav.push("/account") },
         { key: "analytics", label: t("analytics"), icon: "bar-chart-outline", action: () => nav.push("/graph") },
@@ -515,9 +499,6 @@ export default function ShiftSelectionScreen() {
   const progressPercent = Math.min(100, paidPercent + duePercent);
   const remainingTarget = Math.max(0, routeProgress.target - routeProgress.collected - routeProgress.dueAmount);
   const remainingCustomers = Math.max(0, routeProgress.customerCount - routeProgress.paidCustomerCount - routeProgress.dueCustomerCount);
-  const yesterdayCollection = analytics?.dailyCashFlow?.[Math.max(0, (analytics?.dailyCashFlow?.length ?? 0) - 2)]?.inflow ?? 0;
-  const collectionChange = (totals?.collectionToday ?? 0) - yesterdayCollection;
-  const routeTargetPercent = routeProgress.target > 0 ? Math.round((routeProgress.collected / routeProgress.target) * 100) : 0;
 
   const handleAddExpense = useCallback(async () => {
     const amount = parseFloat(expenseAmount);
@@ -629,8 +610,7 @@ export default function ShiftSelectionScreen() {
       <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
         <SafeAreaView style={styles.safe}>
           <ScrollView
-            ref={dashboardScrollRef}
-            contentContainerStyle={[styles.container, { paddingHorizontal: viewportWidth >= 900 ? 28 : 16, paddingTop: viewportWidth < 500 ? 14 : 24, paddingBottom: 126 }]}
+            contentContainerStyle={[styles.container, { paddingHorizontal: viewportWidth >= 900 ? 28 : 16 }]}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           >
             <Animated.View
@@ -652,34 +632,19 @@ export default function ShiftSelectionScreen() {
               <View style={[styles.headerCard, viewportWidth < 500 && styles.headerCompact, { width: "100%", backgroundColor: colors.blue2, borderColor: colors.blue2, borderWidth: 1 }]}>
                 <View style={styles.headerTop}>
                   <View style={styles.brandRow}>
-                    <View style={[styles.brandIcon, styles.brandIconGold]}>
-                      <Icon name="cash-outline" size={22} color={colors.honeyBronze} />
+                  <View style={[styles.brandIcon, { backgroundColor: "rgba(255,255,255,0.12)" }]}>
+                      <Icon name="business-outline" size={20} color={colors.honeyBronze} />
                     </View>
                     <View style={styles.headerCopy}>
-                      <Text style={[styles.brandTitle, { color: colors.white }]} numberOfLines={1}>Karthikeya <Text style={{ color: colors.honeyBronze }}>Finance</Text></Text>
-                      <View style={styles.brandMeta}>
-                        <Text style={[styles.eyebrow, { color: "#B8CAD2" }]}>{t("premiumWorkspace")}</Text>
-                        <Text style={[styles.versionBadge, { color: colors.honeyBronze }]}>v1.0.0</Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <Text style={[styles.eyebrow, { color: "#9FB2C9" }]}>{t("premiumWorkspace")}</Text>
+                        <Text style={{ fontSize: 10, fontWeight: "800", color: colors.honeyBronze, backgroundColor: "rgba(233,199,126,0.14)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, overflow: "hidden" }}>FINANCE</Text>
                       </View>
+                      <Text style={[styles.header, { color: colors.white }]}>{t("financeDashboard")}</Text>
+                      <Text style={[styles.welcome, { color: "#C0D0D0" }]}>{getGreeting(t)}, {displayName} · {todayLabel}</Text>
                     </View>
                   </View>
-                  <View style={styles.headerActions}>
-                    <Pressable accessibilityRole="button" accessibilityLabel={`${t("budgetAlerts")}: ${dueAlerts.length}`} style={styles.notificationButton} onPress={() => dashboardScrollRef.current?.scrollTo({ y: budgetAlertsOffset.current, animated: true })}>
-                      <Icon name="notifications-outline" size={21} color={colors.white} />
-                      {dueAlerts.length > 0 && <View style={styles.notificationBadge}><Text style={styles.notificationBadgeText}>{dueAlerts.length > 9 ? "9+" : dueAlerts.length}</Text></View>}
-                    </Pressable>
-                    <Pressable accessibilityRole="button" accessibilityLabel={t("account")} style={styles.avatarButton} onPress={() => nav.push("/account")}>
-                      <Text style={styles.avatarText}>{displayName.slice(0, 1).toUpperCase()}</Text>
-                    </Pressable>
-                  </View>
-                </View>
-
-                <View style={styles.greetingRow}>
-                  <View style={styles.greetingCopy}>
-                    <Text style={[styles.welcome, { color: colors.white }]}>{getGreeting(t)}, {displayName} 👋</Text>
-                    <Text style={styles.dateLabel}>{todayLabel}</Text>
-                  </View>
-                  <Pressable accessibilityRole="button" accessibilityLabel={t("searchCustomers")} style={[styles.searchButton, { backgroundColor: colors.honeyBronze }]} onPress={openCustomerSearch}>
+                  <Pressable accessibilityLabel={t("searchCustomers")} style={[styles.searchButton, { backgroundColor: colors.honeyBronze }]} onPress={openCustomerSearch}>
                     <Icon name="search" size={20} color={Colors.nearBlack} />
                   </Pressable>
                 </View>
@@ -691,17 +656,7 @@ export default function ShiftSelectionScreen() {
                   <View style={styles.todayCopy}>
                     <Text style={[styles.todayLabel, { color: "rgba(255,255,255,0.76)" }]}>{t("collectedToday")}</Text>
                     <Text style={[styles.todayValue, viewportWidth < 500 && styles.todayValueCompact, { color: colors.white }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>{formatMoney(totals?.collectionToday ?? 0)}</Text>
-                    <View style={styles.todayChangeRow}>
-                      <Icon name={collectionChange >= 0 ? "arrow-up" : "arrow-down"} size={13} color={collectionChange >= 0 ? "#54E18A" : "#FF8A83"} />
-                      <Text style={[styles.todayChange, { color: collectionChange >= 0 ? "#54E18A" : "#FF8A83" }]}>{collectionChange >= 0 ? "+" : "−"}{formatMoney(Math.abs(collectionChange))}</Text>
-                      <Text style={styles.todayCompare}>vs yesterday</Text>
-                    </View>
                     <Text style={[styles.todayHint, { color: "rgba(255,255,255,0.78)" }]}>{t("distributedTodayHint")} {formatMoney(totals?.distributedToday ?? 0)}</Text>
-                  </View>
-                  <View style={styles.todayTarget}>
-                    <View style={styles.targetLabelRow}><Text style={styles.targetLabel}>ROUTE TARGET</Text><Icon name="navigate-circle-outline" size={17} color={colors.white} /></View>
-                    <Text style={styles.targetAmount}>{routeProgress.target > 0 ? formatMoney(routeProgress.target) : "—"}</Text>
-                    <View style={styles.targetRing}><Text style={styles.targetRingValue}>{routeProgress.target > 0 ? `${routeTargetPercent}%` : "—"}</Text></View>
                   </View>
                 </Pressable>
               </View>
@@ -787,24 +742,15 @@ export default function ShiftSelectionScreen() {
                           )}
                         </View>
                         <View style={styles.progressDetails}>
-                          <View style={styles.progressStatRow}>
-                            <View style={styles.progressStat}>
-                              <View style={[styles.progressStatDot, { backgroundColor: Colors.success }]} />
-                              <View><Text style={[styles.progressStatValue, { color: Colors.success }]}>{formatMoney(routeProgress.collected)}</Text><Text style={styles.progressStatLabel}>Paid</Text></View>
-                            </View>
-                            <View style={styles.progressStatDivider} />
-                            <View style={styles.progressStat}>
-                              <View style={[styles.progressStatDot, { backgroundColor: Colors.danger }]} />
-                              <View><Text style={[styles.progressStatValue, { color: Colors.danger }]}>{formatMoney(routeProgress.dueAmount)}</Text><Text style={styles.progressStatLabel}>Dues / {formatMoney(routeProgress.target)}</Text></View>
-                            </View>
-                            <View style={styles.progressStatDivider} />
-                            <View style={styles.progressStat}>
-                              <Icon name="people-outline" size={16} color={Colors.nearBlack} />
-                              <View><Text style={[styles.progressStatValue, { color: Colors.nearBlack }]}>{remainingCustomers}</Text><Text style={styles.progressStatLabel}>Customers left</Text></View>
-                            </View>
-                          </View>
+                          <Text style={[styles.progressDetailText, { color: colors.textMuted }]}>
+                            Paid: <Text style={{fontWeight: "800", color: Colors.lightSeaGreen}}>{formatMoney(routeProgress.collected)}</Text>
+                            {routeProgress.dueAmount > 0 && (
+                              <> • Dues: <Text style={{fontWeight: "900", color: "#d94841"}}>{formatMoney(routeProgress.dueAmount)}</Text></>
+                            )}
+                            {" "}/ {formatMoney(routeProgress.target)}
+                          </Text>
                           {remainingCustomers > 0 ? (
-                            <Text style={[styles.progressHintText, styles.progressHintCompact, { color: colors.textMuted }]}>
+                            <Text style={[styles.progressHintText, { color: colors.textMuted }]}>
                               Rs. {Math.round(remainingTarget).toLocaleString("en-IN")} left • {remainingCustomers} customer{remainingCustomers === 1 ? "" : "s"} remaining
                             </Text>
                           ) : (
@@ -824,11 +770,9 @@ export default function ShiftSelectionScreen() {
                     </Pressable>
 
                     <View style={styles.walletRouteSummary}>
-                      <View style={styles.walletBadge}><Icon name="cash-outline" size={14} color={colors.primary} /><Text style={[styles.walletRouteText, { color: colors.textSecondary }]}>Cash: {formatMoney(totals?.cashWalletBalance ?? 0)}</Text></View>
+                      <Text style={[styles.walletRouteText, { color: colors.textSecondary }]}>Cash: {formatMoney(totals?.cashWalletBalance ?? 0)}</Text>
                       <View style={[styles.walletRouteDot, { backgroundColor: colors.border }]} />
-                      <View style={styles.walletBadge}><Icon name="phone-portrait-outline" size={14} color={colors.primary} /><Text style={[styles.walletRouteText, { color: colors.textSecondary }]}>PhonePe: {formatMoney(totals?.phonePeWalletBalance ?? 0)}</Text></View>
-                      <View style={[styles.walletRouteDot, { backgroundColor: colors.border }]} />
-                      <View style={styles.walletBadge}><Icon name="wallet-outline" size={14} color={colors.primary} /><Text style={[styles.walletRouteText, { color: colors.textSecondary }]}>Total: {formatMoney(totals?.totalWalletFunds ?? 0)}</Text></View>
+                      <Text style={[styles.walletRouteText, { color: colors.textSecondary }]}>PhonePe: {formatMoney(totals?.phonePeWalletBalance ?? 0)}</Text>
                     </View>
                   </DashboardPanel>
 
@@ -869,11 +813,10 @@ export default function ShiftSelectionScreen() {
                   <View style={[styles.metricGrid, viewportWidth >= 1024 && styles.panelWide]}>
                     {isOwner ? (
                       <>
-                        <DashboardMetric title={t("balance")} value={formatMoney(balance)} caption={t("collectedMinusPending")} icon="cash-outline" tone="#B03A3A" valueTone="#B03A3A" sparkline={analytics?.weeklyTrend.map((item) => item.collection)} />
-                        <DashboardMetric title={t("income")} value={formatMoney(totals?.monthlyRevenue ?? 0)} caption={t("collectedThisMonth")} icon="trending-up-outline" tone={Colors.success} valueTone={Colors.success} sparkline={analytics?.weeklyTrend.map((item) => item.collection)} />
-                        <DashboardMetric title={t("expense")} value={formatMoney(totals?.distributedThisMonth ?? 0)} caption={t("distributedThisMonth")} icon="arrow-down-outline" tone="#9A6B1E" valueTone="#9A6B1E" sparkline={analytics?.weeklyTrend.map((item) => item.distribution)} />
-                        <DashboardMetric title="Current Amount" value={formatMoney(mainCurrentAmount)} caption="BF + invested + collection - dist. - exp." icon="alert-triangle-outline" tone="#B03A3A" valueTone="#B03A3A" sparkline={analytics?.weeklyTrend.map((item) => item.collection)} />
-                        <DashboardMetric title="Total Customers" value={String(totals?.customerCount ?? 0)} caption="Active customer accounts" icon="people-outline" tone="#3478C4" valueTone="#245D99" sparkline={analytics?.weeklyTrend.map((item) => item.collection)} />
+                        <DashboardMetric title={t("balance")} value={formatMoney(balance)} caption={t("collectedMinusPending")} icon="cash-outline" tone="#B03A3A" valueTone="#B03A3A" />
+                        <DashboardMetric title={t("income")} value={formatMoney(totals?.monthlyRevenue ?? 0)} caption={t("collectedThisMonth")} icon="trending-up-outline" tone={Colors.success} valueTone={Colors.success} />
+                        <DashboardMetric title={t("expense")} value={formatMoney(totals?.distributedThisMonth ?? 0)} caption={t("distributedThisMonth")} icon="arrow-down-outline" tone="#9A6B1E" valueTone="#9A6B1E" />
+                        <DashboardMetric title="Current Amount" value={formatMoney(mainCurrentAmount)} caption="BF + invested + collection - dist. - exp." icon="alert-triangle-outline" tone="#B03A3A" valueTone="#B03A3A" />
                       </>
                     ) : (
                       <>
@@ -1039,7 +982,6 @@ export default function ShiftSelectionScreen() {
                     title={t("budgetAlerts")}
                     subtitle={t("customersNeedingFollowup")}
                     action={<Text style={styles.alertBadge}>{dueAlerts.length} {t("active")}</Text>}
-                    onLayout={(event) => { budgetAlertsOffset.current = event.nativeEvent.layout.y + (viewportWidth < 500 ? 14 : 24); }}
                   >
                     {dueAlerts.length ? (
                       dueAlerts.slice(0, 4).map((alert) => (
@@ -1065,38 +1007,41 @@ export default function ShiftSelectionScreen() {
                     )}
                   </DashboardPanel>
 
+                  <View
+                    style={[styles.bottomNav, { width: "100%", backgroundColor: colors.card, borderColor: colors.border }]}
+                    onLayout={(event) => setBottomNavWidth(event.nativeEvent.layout.width)}
+                  >
+                    {bottomNavItemWidth > 0 ? (
+                      <Animated.View
+                        pointerEvents="none"
+                        style={[
+                          styles.bottomNavIndicator,
+                          { backgroundColor: colors.primarySoft },
+                          {
+                            width: bottomNavItemWidth,
+                            transform: [{ translateX: bottomNavSlide }],
+                          },
+                        ]}
+                      />
+                    ) : null}
+                    {bottomActions.map((item) => (
+                      <BottomNavButton
+                        key={item.key}
+                        label={item.label}
+                        icon={item.icon}
+                        active={visibleActiveBottomKey === item.key}
+                        onPress={() => {
+                          lightImpact();
+                          setActiveBottomKey(item.key);
+                          item.action();
+                        }}
+                      />
+                    ))}
+                  </View>
                 </>
               )}
             </Animated.View>
           </ScrollView>
-          <View
-            style={[styles.bottomNav, { backgroundColor: colors.blue2, borderColor: "rgba(255,255,255,0.15)" }]}
-            onLayout={(event) => setBottomNavWidth(event.nativeEvent.layout.width)}
-          >
-            {bottomNavItemWidth > 0 ? (
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  styles.bottomNavIndicator,
-                  { backgroundColor: "rgba(233,199,126,0.14)" },
-                  { width: bottomNavItemWidth, transform: [{ translateX: bottomNavSlide }] },
-                ]}
-              />
-            ) : null}
-            {bottomActions.map((item) => (
-              <BottomNavButton
-                key={item.key}
-                label={item.label}
-                icon={item.icon}
-                active={visibleActiveBottomKey === item.key}
-                onPress={() => {
-                  lightImpact();
-                  setActiveBottomKey(item.key);
-                  item.action();
-                }}
-              />
-            ))}
-          </View>
         </SafeAreaView>
 
         {/* Add Expense Modal — nested users only */}
@@ -1297,45 +1242,34 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   container: { paddingVertical: 24, paddingBottom: 44 },
   content: { width: "100%", maxWidth: 1180, alignSelf: "center", gap: 18 },
-  headerCard: { backgroundColor: Colors.nearBlack, borderRadius: 25, padding: 18, gap: 16, shadowColor: "#102D39", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.16, shadowRadius: 22, elevation: 7 },
-  headerCompact: { borderRadius: 22, padding: 15, gap: 15 },
+  headerCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 28,
+    padding: 22,
+    gap: 18,
+    shadowColor: "#102D39",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.14,
+    shadowRadius: 22,
+    elevation: 7,
+  },
+  headerCompact: { borderRadius: 23, padding: 16, gap: 14 },
   headerTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 },
-  brandRow: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 11 },
+  brandRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 14 },
   brandIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: Colors.frozenWater, alignItems: "center", justifyContent: "center" },
-  brandIconGold: { width: 43, height: 43, borderRadius: 22, borderWidth: 2, borderColor: Colors.honeyBronze, backgroundColor: "rgba(233,199,126,0.12)" },
   headerCopy: { flex: 1 },
-  brandTitle: { fontSize: 16, lineHeight: 20, fontWeight: "900", letterSpacing: -0.35 },
-  brandMeta: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 3 },
-  eyebrow: { color: Colors.textMuted, fontSize: 9, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.55 },
-  versionBadge: { overflow: "hidden", borderRadius: 999, backgroundColor: "rgba(233,199,126,0.14)", paddingHorizontal: 6, paddingVertical: 2, fontSize: 8, fontWeight: "800" },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
-  notificationButton: { position: "relative", width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.08)" },
-  notificationBadge: { position: "absolute", top: 4, right: 4, minWidth: 13, height: 13, paddingHorizontal: 3, borderRadius: 7, alignItems: "center", justifyContent: "center", backgroundColor: "#E44747", borderWidth: 1, borderColor: Colors.nearBlack },
-  notificationBadgeText: { color: Colors.white, fontSize: 7, lineHeight: 9, fontWeight: "900" },
-  avatarButton: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", backgroundColor: "#1B4B73", borderWidth: 1, borderColor: "rgba(255,255,255,0.14)" },
-  avatarText: { color: Colors.white, fontSize: 15, fontWeight: "800" },
-  greetingRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  greetingCopy: { flex: 1, minWidth: 0 },
-  welcome: { color: Colors.white, fontSize: 15, marginTop: 0, fontWeight: "800" },
-  dateLabel: { color: "#B5C7D0", fontSize: 12, marginTop: 3, fontWeight: "500" },
-  searchButton: { width: 44, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: Colors.honeyBronze },
-  todayCard: { minHeight: 128, borderRadius: 18, backgroundColor: "#11766E", flexDirection: "row", alignItems: "center", gap: 11, paddingHorizontal: 12, paddingVertical: 12, borderWidth: 1, borderColor: "rgba(255,255,255,0.16)" },
-  todayCompact: { minHeight: 128, borderRadius: 17, gap: 9, paddingHorizontal: 10, paddingVertical: 10 },
-  todayIcon: { width: 43, height: 43, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
-  todayCopy: { flex: 1, minWidth: 0 },
-  todayLabel: { color: "rgba(255,255,255,0.78)", fontSize: 10, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.8 },
-  todayValue: { color: Colors.white, fontSize: 29, lineHeight: 34, fontWeight: "900", marginTop: 2 },
-  todayValueCompact: { fontSize: 25, lineHeight: 30 },
-  todayChangeRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
-  todayChange: { fontSize: 10, fontWeight: "900" },
-  todayCompare: { color: "rgba(255,255,255,0.76)", fontSize: 10, fontWeight: "600" },
-  todayHint: { color: "rgba(255,255,255,0.76)", fontSize: 9, fontWeight: "600", marginTop: 3 },
-  todayTarget: { width: 94, minHeight: 104, alignItems: "center", justifyContent: "space-between", padding: 8, borderRadius: 14, backgroundColor: "rgba(9,35,53,0.3)" },
-  targetLabelRow: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  targetLabel: { color: "#D5E1E3", fontSize: 8, fontWeight: "800", letterSpacing: 0.2 },
-  targetAmount: { color: Colors.white, alignSelf: "flex-start", fontSize: 11, fontWeight: "800" },
-  targetRing: { width: 48, height: 48, borderRadius: 24, borderWidth: 4, borderColor: "#47D880", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(71,216,128,0.08)" },
-  targetRingValue: { color: Colors.white, fontSize: 11, fontWeight: "900" },
+  eyebrow: { color: Colors.textMuted, fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1.1 },
+  header: { color: Colors.nearBlack, fontSize: 29, lineHeight: 35, fontWeight: "800", marginTop: 4 },
+  welcome: { color: "#426c67", fontSize: 13, marginTop: 4, fontWeight: "600" },
+  searchButton: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: Colors.lightSeaGreen },
+  todayCard: { minHeight: 102, borderRadius: 21, backgroundColor: "#f6fffe", flexDirection: "row", alignItems: "center", gap: 16, paddingHorizontal: 18, paddingVertical: 16, borderWidth: 1, borderColor: Colors.borderLight },
+  todayCompact: { minHeight: 88, borderRadius: 17, gap: 12, paddingHorizontal: 14, paddingVertical: 11 },
+  todayIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: Colors.honeyBronze, alignItems: "center", justifyContent: "center" },
+  todayCopy: { flex: 1 },
+  todayLabel: { color: Colors.textMuted, fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.9 },
+  todayValue: { color: Colors.nearBlack, fontSize: 33, lineHeight: 39, fontWeight: "800", marginTop: 2 },
+  todayValueCompact: { fontSize: 29, lineHeight: 34 },
+  todayHint: { color: "#426c67", fontSize: 12, fontWeight: "600", marginTop: 2 },
   panel: {
     backgroundColor: Colors.white,
     borderRadius: 21,
@@ -1355,32 +1289,28 @@ const styles = StyleSheet.create({
   sectionCopy: { flex: 1 },
   sectionTitle: { color: Colors.nearBlack, fontSize: 17, lineHeight: 23, fontWeight: "800" },
   sectionSub: { color: Colors.textMuted, fontSize: 12, fontWeight: "500", marginTop: 3 },
-  routeMeta: { color: "#536979", fontSize: 10, fontWeight: "800", backgroundColor: "#EDF1F6", borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
+  routeMeta: { color: "#6B7A8D", fontSize: 12, fontWeight: "700" },
   controlLabel: { color: "#9AA6B2", fontSize: 10.5, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.3 },
   dayGrid: { flexDirection: "row", gap: 6 },
-  dayGridCompact: { flexWrap: "nowrap", gap: 4 },
+  dayGridCompact: { flexWrap: "wrap" },
   dayChip: { flex: 1, minHeight: 44, borderWidth: 1, borderColor: Colors.borderLight, borderRadius: 12, paddingVertical: 11, alignItems: "center", justifyContent: "center", backgroundColor: "#F7FAF9", minWidth: 38 },
-  dayChipCompact: { flexBasis: 0, minWidth: 0, minHeight: 44, paddingHorizontal: 0 },
-  dayChipOn: { backgroundColor: Colors.honeyBronze, borderColor: Colors.honeyBronze },
+  dayChipCompact: { flexBasis: "22%", minWidth: 54 },
+  dayChipOn: { backgroundColor: Colors.lightSeaGreen, borderColor: Colors.lightSeaGreen },
   dayChipText: { color: "#4D666D", fontSize: 12, fontWeight: "700" },
-  dayChipTextOn: { color: Colors.nearBlack, fontWeight: "900" },
+  dayChipTextOn: { color: "#FFFFFF", fontWeight: "800" },
   shiftRow: { flexDirection: "row", gap: 10 },
   shift: { flex: 1, minHeight: 48, borderRadius: 13, borderWidth: 1, borderColor: Colors.borderLight, backgroundColor: "#F7FAF9", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, paddingHorizontal: 10 },
-  shiftOn: { backgroundColor: Colors.honeyBronze, borderColor: Colors.honeyBronze },
+  shiftOn: { backgroundColor: Colors.lightSeaGreen, borderColor: Colors.lightSeaGreen },
   shiftText: { color: "#4D666D", fontWeight: "700", fontSize: 13 },
-  shiftTextOn: { color: Colors.nearBlack, fontWeight: "900" },
-  primaryAction: { backgroundColor: Colors.nearBlack, borderRadius: 13, minHeight: 50, paddingVertical: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 9 },
+  shiftTextOn: { color: "#FFFFFF", fontWeight: "800" },
+  primaryAction: { backgroundColor: Colors.lightSeaGreen, borderRadius: 14, minHeight: 50, paddingVertical: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 9 },
   primaryActionText: { color: Colors.white, fontWeight: "800", fontSize: 15 },
-  walletRouteSummary: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 7, paddingTop: 2 },
-  walletBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
-  walletRouteText: { color: Colors.textMuted, fontSize: 9, fontWeight: "800" },
+  walletRouteSummary: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 2 },
+  walletRouteText: { color: Colors.textMuted, fontSize: 11, fontWeight: "800" },
   walletRouteDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.borderLight },
   metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   metricCard: { flexGrow: 1, flexBasis: "46%", minWidth: 150, minHeight: 132, borderRadius: 18, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: Colors.borderLight, padding: 18 },
-  metricCardHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
-  metricSparkline: { height: 28, flexDirection: "row", alignItems: "flex-end", gap: 3 },
-  metricSparkBar: { width: 4, borderRadius: 3 },
-  metricIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 0 },
+  metricIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 12 },
   metricTitle: { color: Colors.textMuted, fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8 },
   metricValue: { color: Colors.nearBlack, fontSize: 21, lineHeight: 27, fontWeight: "800", marginTop: 5 },
   metricCaption: { color: Colors.textMuted, fontSize: 12, fontWeight: "500", marginTop: 3 },
@@ -1410,26 +1340,20 @@ const styles = StyleSheet.create({
   alertRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9, borderTopWidth: 1, borderTopColor: "#EEF1F5" },
   alertIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#FBEAEA", alignItems: "center", justifyContent: "center" },
   emptyText: { color: Colors.textMuted, fontSize: 13, fontWeight: "800", paddingVertical: 12 },
-  bottomNav: { position: "absolute", left: 12, right: 12, bottom: 7, flexDirection: "row", justifyContent: "space-between", borderRadius: 18, borderWidth: 1, padding: 6, overflow: "hidden", shadowColor: "#102D39", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.16, shadowRadius: 12, elevation: 8, zIndex: 8 },
-  bottomNavIndicator: { position: "absolute", top: 6, bottom: 6, left: 6, borderRadius: 13, backgroundColor: "rgba(233,199,126,0.14)" },
-  bottomNavButton: { flex: 1, minHeight: 54, borderRadius: 13, borderWidth: 0, alignItems: "center", justifyContent: "center", gap: 4, paddingHorizontal: 3, paddingVertical: 5, zIndex: 1 },
+  bottomNav: { position: "relative", flexDirection: "row", justifyContent: "space-between", backgroundColor: "#FFFFFF", borderRadius: 19, borderWidth: 1, borderColor: Colors.borderLight, padding: 7, overflow: "hidden", shadowColor: "#102D39", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 2 },
+  bottomNavIndicator: { position: "absolute", top: 7, bottom: 7, left: 7, borderRadius: 13, backgroundColor: "#EAF4F1" },
+  bottomNavButton: { flex: 1, minHeight: 60, borderRadius: 13, borderWidth: 0, alignItems: "center", justifyContent: "center", gap: 5, paddingHorizontal: 3, paddingVertical: 7, zIndex: 1 },
   bottomNavText: { color: "#70838A", fontSize: 11, fontWeight: "600", textAlign: "center" },
-  bottomNavTextActive: { color: Colors.honeyBronze, fontWeight: "900" },
-  progressCard: { backgroundColor: "#fafbfc", borderRadius: 14, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: Colors.borderLight },
+  bottomNavTextActive: { color: Colors.nearBlack, fontWeight: "800" },
+  progressCard: { backgroundColor: "#fafbfc", borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: Colors.borderLight },
   progressHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
   progressTitle: { fontSize: 12, fontWeight: "900", color: Colors.nearBlack },
   progressPercentText: { fontSize: 13, fontWeight: "900", color: Colors.lightSeaGreen },
-  progressBarBg: { height: 9, backgroundColor: "#e2e8f0", borderRadius: 6, overflow: "hidden", marginBottom: 10, flexDirection: "row" },
+  progressBarBg: { height: 8, backgroundColor: "#e2e8f0", borderRadius: 4, overflow: "hidden", marginBottom: 8, flexDirection: "row" },
   progressBarFill: { height: "100%", borderRadius: 4 },
-  progressDetails: { gap: 7 },
-  progressStatRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 5 },
-  progressStat: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5 },
-  progressStatDot: { width: 8, height: 8, borderRadius: 4 },
-  progressStatValue: { fontSize: 10, lineHeight: 13, fontWeight: "900" },
-  progressStatLabel: { color: Colors.textMuted, fontSize: 9, lineHeight: 11, fontWeight: "700" },
-  progressStatDivider: { width: 1, height: 28, backgroundColor: Colors.borderLight },
+  progressDetails: { gap: 2 },
+  progressDetailText: { fontSize: 11, fontWeight: "800", color: Colors.textMuted },
   progressHintText: { fontSize: 10, fontWeight: "800", color: Colors.amberGlow },
-  progressHintCompact: { marginTop: 5 },
   pressed: { opacity: 0.76, transform: [{ scale: 0.98 }] },
   skeletonPanel: { width: "100%", backgroundColor: Colors.white, borderRadius: 18, borderWidth: 1, borderColor: Colors.borderLight, padding: 16, gap: 14 },
   skeletonLine: { height: 16, borderRadius: 999, backgroundColor: "#DCE6F7" },
@@ -1455,7 +1379,7 @@ const styles = StyleSheet.create({
   searchCustomerMeta: { color: "#6B7280", fontSize: 12, fontWeight: "500", marginTop: 2 },
   searchCustomerPhone: { color: "#9CA3AF", fontSize: 12, marginTop: 2 },
   statePill: { color: Colors.lightSeaGreen, backgroundColor: Colors.frozenWater, fontSize: 10, fontWeight: "700", paddingHorizontal: 8, paddingVertical: 5, borderRadius: 999, overflow: "hidden", textTransform: "uppercase" },
-  aiFab: { position: "absolute", right: 18, bottom: 88, width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: Colors.amberGlow, shadowColor: Colors.amberGlow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.45, shadowRadius: 14, elevation: 8 },
+  aiFab: { position: "absolute", right: 18, bottom: 24, width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: Colors.amberGlow, shadowColor: Colors.amberGlow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.45, shadowRadius: 14, elevation: 8 },
   nestedGroupContainer: { marginBottom: 16, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: "#E2E8F0" },
   nestedGroupHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8, borderBottomWidth: 1, paddingBottom: 6 },
   nestedGroupTitle: { fontSize: 14, fontWeight: "700" },
