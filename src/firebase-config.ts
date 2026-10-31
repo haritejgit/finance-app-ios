@@ -1,4 +1,4 @@
-const PRODUCTION_FIREBASE_PROJECT_ID = "finance-for-ios";
+import { assertFirebaseProjectId } from "./firebase-project-guard";
 
 export const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -19,9 +19,9 @@ if (missingConfig.length > 0) {
   );
 }
 
-// A release must never silently connect to an empty or unrelated project.
-if (firebaseConfig.projectId !== PRODUCTION_FIREBASE_PROJECT_ID) {
-  throw new Error(
-    `Firebase project must be ${PRODUCTION_FIREBASE_PROJECT_ID}; received ${firebaseConfig.projectId ?? "none"}.`
-  );
-}
+// Production stays pinned by default. A staging build must explicitly name its target
+// in EXPO_PUBLIC_FIREBASE_EXPECTED_PROJECT_ID as well as its Firebase app config.
+assertFirebaseProjectId(
+  firebaseConfig.projectId,
+  process.env.EXPO_PUBLIC_FIREBASE_EXPECTED_PROJECT_ID || "finance-for-ios"
+);
