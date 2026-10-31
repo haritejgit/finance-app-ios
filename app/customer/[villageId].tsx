@@ -2620,7 +2620,7 @@ const styles = StyleSheet.create({
   versionPill: { overflow: "hidden", borderRadius: 5, backgroundColor: "#1E3A63", color: "#D4AF6A", fontSize: 10, fontWeight: "900", paddingHorizontal: 4, paddingVertical: 1 },
   headerSub: { color: "#9FB2C9", fontSize: 11.5, marginTop: 2 },
   searchShell: { flexDirection: "row", alignItems: "center", gap: 9, backgroundColor: "#1E3A63", borderWidth: 0, borderRadius: 10, paddingHorizontal: 13, marginBottom: 12 },
-  search: { flex: 1, paddingVertical: 11, fontSize: 13 },
+  search: { flex: 1, paddingVertical: 11, fontSize: 16 },
   compactFilterRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   compactFilterBtn: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 7, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: colors.white, borderWidth: 0 },
   compactFilterText: { color: colors.blue2, fontSize: 12.5, fontWeight: "900" },
