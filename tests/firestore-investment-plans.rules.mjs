@@ -200,6 +200,33 @@ test("cash-flow reserve settings stay owner-only and reject negative balances", 
   await assertFails(getDoc(doc(ownerDb, "users", "owner-a", "privateFinance", "other")));
 });
 
+test("custom loan recommendations persist on the correct customer and reject invalid amounts", async () => {
+  const ownerDb = testEnv.authenticatedContext("owner-a").firestore();
+  const otherDb = testEnv.authenticatedContext("owner-b").firestore();
+  const customerRef = doc(ownerDb, "customers", "recommendation-customer");
+  await assertSucceeds(setDoc(customerRef, {
+    id: "recommendation-customer", userId: "owner-a", name: "Recommendation customer",
+    customRecommendedLoanAmount: 12000,
+  }));
+  await assertSucceeds(updateDoc(customerRef, { customRecommendedLoanAmount: 18000 }));
+  assert.equal((await getDoc(customerRef)).data()?.customRecommendedLoanAmount, 18000);
+
+  for (const invalidAmount of [0, -1, 18000.5, 50000001, "18000"]) {
+    await assertFails(updateDoc(customerRef, { customRecommendedLoanAmount: invalidAmount }));
+  }
+  await assertFails(getDoc(doc(otherDb, "customers", "recommendation-customer")));
+
+  const legacyRef = doc(ownerDb, "customers", "legacy-recommendation-customer");
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "customers", "legacy-recommendation-customer"), {
+      id: "legacy-recommendation-customer", userId: "owner-a", name: "Legacy recommendation",
+      phone: "9876543210", customRecommendedLoanAmount: 18000.5,
+    });
+  });
+  await assertSucceeds(updateDoc(legacyRef, { phone: "9876543211" }));
+  await assertFails(updateDoc(legacyRef, { customRecommendedLoanAmount: 18000.75 }));
+});
+
 test("debug logs accept only small, sanitized records owned by the signed-in user", async () => {
   const ownerDb = testEnv.authenticatedContext("owner-a").firestore();
   const otherDb = testEnv.authenticatedContext("owner-b").firestore();

@@ -96,6 +96,16 @@ service cloud.firestore {
         (request.resource.data.longitude is number && request.resource.data.longitude >= -180 && request.resource.data.longitude <= 180));
     }
 
+    function validOptionalCustomRecommendation() {
+      return !request.resource.data.keys().hasAny(['customRecommendedLoanAmount']) ||
+        (resource != null &&
+          resource.data.get('customRecommendedLoanAmount', null) == request.resource.data.customRecommendedLoanAmount) ||
+        (request.resource.data.customRecommendedLoanAmount is number &&
+          request.resource.data.customRecommendedLoanAmount > 0 &&
+          request.resource.data.customRecommendedLoanAmount <= 50000000 &&
+          request.resource.data.customRecommendedLoanAmount % 1 == 0);
+    }
+
     function validVillageFields() {
       return validString('id', 80) &&
         validRequiredString('name', 120) &&
@@ -118,6 +128,7 @@ service cloud.firestore {
         validOptionalBoolean('isActive') &&
         validOptionalBoolean('aadharSubmitted') &&
         validOptionalBoolean('passportPhotoSubmitted') &&
+        validOptionalCustomRecommendation() &&
         validCoordinates();
     }
 
