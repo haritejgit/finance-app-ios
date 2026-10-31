@@ -417,7 +417,14 @@ service cloud.firestore {
     }
 
     match /debugLogs/{docId} {
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.keys().hasOnly(['timestamp', 'userUid', 'message']) &&
+        request.resource.data.keys().hasAll(['timestamp', 'userUid', 'message']) &&
+        request.resource.data.userUid == request.auth.uid &&
+        request.resource.data.timestamp is number &&
+        request.resource.data.timestamp >= 0 &&
+        request.resource.data.message is string &&
+        request.resource.data.message.size() <= 120;
       allow read: if false;
     }
 
