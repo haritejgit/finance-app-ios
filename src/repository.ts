@@ -32,6 +32,7 @@ import { BlockedAadhaar, Customer, Expense, Investment, Loan, Payment, PaymentMo
 import { endOfDay, getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, loanWeekNumber, money, startOfDay, toMillis, weekStart } from "./business-logic";
 import { calculateProcessingFee } from "./processing-fee";
 import { validateInvestmentPlan, type InvestmentPlan } from "./investment-planning";
+import { selectLoanForCustomer } from "./loan-selection";
 import { filterCustomersWithVillage } from "./utils";
 
 const coll = {
@@ -687,20 +688,8 @@ export async function getActiveLoan(userId: string, customerId: string, forceRef
   
   const activeLoans = loans.filter((l) => l.status === "ACTIVE");
   if (activeLoans.length > 1) {
-    activeLoans.sort((a, b) => b.startDate - a.startDate);
-    const latestActive = activeLoans[0];
-    const batch = writeBatch(db);
-    for (let i = 1; i < activeLoans.length; i++) {
-      const oldLoan = activeLoans[i];
-      batch.update(doc(db, "loans", oldLoan.id), {
-        status: "RENEWED",
-        balanceAmount: 0
-      });
-      oldLoan.status = "RENEWED";
-      oldLoan.balanceAmount = 0;
-    }
-    await batch.commit();
-    return latestActive;
+    console.warn("Multiple active loans found for a customer; preserving stored records and selecting the latest for display.");
+    return selectLoanForCustomer(activeLoans);
   }
   
   const active = loans.find((l) => l.status === "ACTIVE");
@@ -757,53 +746,15 @@ export async function getActiveLoansByCustomerIds(userId: string, customerIds: s
         customerLoans[loan.customerId].push(loan);
       });
 
-      const batch = writeBatch(db);
-      let needsCommit = false;
-
       Object.entries(customerLoans).forEach(([custId, loans]) => {
         const activeLoans = loans.filter((l) => l.status === "ACTIVE");
         if (activeLoans.length > 1) {
-          activeLoans.sort((a, b) => b.startDate - a.startDate);
-          const latestActive = activeLoans[0];
-          for (let i = 1; i < activeLoans.length; i++) {
-            const oldLoan = activeLoans[i];
-            batch.update(doc(db, "loans", oldLoan.id), {
-              status: "RENEWED",
-              balanceAmount: 0
-            });
-            oldLoan.status = "RENEWED";
-            oldLoan.balanceAmount = 0;
-            needsCommit = true;
-          }
+          console.warn("Multiple active loans found for a customer; preserving stored records and selecting the latest for display.");
         }
 
-        if (targetDate !== undefined) {
-          const sorted = [...loans].sort((a, b) => b.startDate - a.startDate);
-          const loanOnDate = sorted.find((l) => l.startDate <= targetDate);
-          if (loanOnDate) {
-            loansByCustomer[custId] = loanOnDate;
-          } else {
-            const oldest = sorted[sorted.length - 1];
-            if (oldest) loansByCustomer[custId] = oldest;
-          }
-        } else {
-          const active = loans.find((l) => l.status === "ACTIVE");
-          if (active) {
-            loansByCustomer[custId] = active;
-          } else {
-            const closed = loans.filter((l) => l.status === "CLOSED");
-            if (closed.length > 0) {
-              loansByCustomer[custId] = closed.sort((a, b) => b.startDate - a.startDate)[0];
-            } else if (loans.length > 0) {
-              loansByCustomer[custId] = loans[0];
-            }
-          }
-        }
+        const selectedLoan = selectLoanForCustomer(loans, targetDate);
+        if (selectedLoan) loansByCustomer[custId] = selectedLoan;
       });
-
-      if (needsCommit) {
-        await batch.commit();
-      }
     })
   );
 
@@ -3390,3 +3341,4 @@ export async function getNestedExpenses(
   const snap = await getDocs(q);
   return snap.docs.map((d) => d.data() as NestedExpense);
 }
+
