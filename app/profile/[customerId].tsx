@@ -576,7 +576,6 @@ export default function ProfileScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const logDebug = useCallback(async (message: string, extra: any = {}) => {
-    console.log(`[DEBUG] ${message}`, extra);
     const isError = message.toLowerCase().includes("fail") || 
                     message.toLowerCase().includes("error") || 
                     extra?.error || 
@@ -586,14 +585,13 @@ export default function ProfileScreen() {
       const { addDoc, collection } = await import("firebase/firestore");
       await addDoc(collection(db, "debugLogs"), {
         timestamp: Date.now(),
-        message,
-        profileCustomerId: activeCustomerId,
-        ...extra
+        userUid: user?.uid || null,
+        message: message.slice(0, 120)
       });
     } catch (e) {
       console.error("Failed to write debug log", e);
     }
-  }, [activeCustomerId]);
+  }, [user?.uid]);
 
   const reload = useCallback(async (options?: { showLoading?: boolean; skipAutoDue?: boolean; forceRefresh?: boolean }) => {
     const requestId = loadRequestRef.current + 1;
