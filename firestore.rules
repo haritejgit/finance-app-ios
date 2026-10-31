@@ -163,6 +163,39 @@ service cloud.firestore {
         validNonNegative('createdAt');
     }
 
+    function validInvestmentPlan(planId) {
+      let data = request.resource.data;
+      return data.keys().hasAll([
+          'id', 'name', 'currentBalance', 'monthlyContribution', 'annualReturnPercent',
+          'withdrawalStartDate', 'monthlyWithdrawal', 'minimumBalance', 'notes', 'status', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'name', 'currentBalance', 'monthlyContribution', 'annualReturnPercent',
+          'withdrawalStartDate', 'monthlyWithdrawal', 'endDate', 'minimumBalance', 'notes', 'status', 'updatedAt'
+        ]) &&
+        data.id == planId &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
+        data.currentBalance is number && data.currentBalance >= 0 && data.currentBalance <= 1000000000000 &&
+        data.monthlyContribution is number && data.monthlyContribution >= 0 && data.monthlyContribution <= 1000000000000 &&
+        data.annualReturnPercent is number && data.annualReturnPercent >= -99 && data.annualReturnPercent <= 100 &&
+        data.withdrawalStartDate is number && data.withdrawalStartDate > 0 &&
+        data.monthlyWithdrawal is number && data.monthlyWithdrawal > 0 && data.monthlyWithdrawal <= 1000000000000 &&
+        data.minimumBalance is number && data.minimumBalance >= 0 && data.minimumBalance <= 1000000000000 &&
+        data.notes is string && data.notes.size() <= 1000 &&
+        data.status in ['active', 'paused'] &&
+        data.updatedAt is number && data.updatedAt > 0 &&
+        (!data.keys().hasAny(['endDate']) || (data.endDate is number && data.endDate >= data.withdrawalStartDate));
+    }
+
+    function validPrivateCashFlowSettings() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['minimumCashReserve', 'updatedAt']) &&
+        data.keys().hasAny(['minimumCashReserve', 'updatedAt']) &&
+        (!data.keys().hasAny(['minimumCashReserve']) ||
+          (data.minimumCashReserve is number && data.minimumCashReserve >= 0 && data.minimumCashReserve <= 1000000000000)) &&
+        (!data.keys().hasAny(['updatedAt']) || (data.updatedAt is number && data.updatedAt > 0));
+    }
+
     function validMoneyEntryFields() {
       return validPositive('amount') &&
         validNonNegative('date') &&
@@ -211,6 +244,20 @@ service cloud.firestore {
       allow create: if isSignedIn() && (request.auth.uid == uid || (request.resource.data.role == 'nested' && request.resource.data.parentUid == request.auth.uid)) && validUserProfileFields();
       allow update: if isSignedIn() && (request.auth.uid == uid || (resource.data.role == 'nested' && resource.data.parentUid == request.auth.uid)) && validUserProfileFields();
       allow delete: if isSignedIn() && (request.auth.uid == uid || (resource.data.role == 'nested' && resource.data.parentUid == request.auth.uid));
+    }
+
+    // Keep financial planning private to the account owner. Nested collectors
+    // can read the owner profile under existing rules, but cannot read this data.
+    match /users/{uid}/investmentPlans/{planId} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow create, update: if isSignedIn() && request.auth.uid == uid && validInvestmentPlan(planId);
+      allow delete: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /users/{uid}/privateFinance/{settingsId} {
+      allow read: if isSignedIn() && request.auth.uid == uid && settingsId == 'settings';
+      allow create, update: if isSignedIn() && request.auth.uid == uid && settingsId == 'settings' && validPrivateCashFlowSettings();
+      allow delete: if false;
     }
 
     match /villages/{docId} {

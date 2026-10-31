@@ -10,6 +10,8 @@
     "web": "expo start --web",
     "build": "expo export --platform web --output-dir dist",
     "export:web": "npm run build",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test:rules": "firebase emulators:exec --project demo-finance-rules --only firestore \"node --test tests/firestore-investment-plans.rules.mjs\"",
     "deploy:hosting": "npm run build && firebase deploy --only hosting",
     "deploy:firebase": "firebase deploy --only firestore,hosting",
     "lint": "expo lint"
@@ -53,6 +55,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@firebase/rules-unit-testing": "^4.0.1",
     "@types/react": "~19.1.10",
     "babel-plugin-transform-remove-console": "^6.9.4",
     "eslint": "^9.0.0",
