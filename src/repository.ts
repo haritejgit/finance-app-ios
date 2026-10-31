@@ -33,6 +33,7 @@ import { endOfDay, getLoanDistributedAmount, getLoanPrincipalAmount, isRealColle
 import { calculateProcessingFee } from "./processing-fee";
 import { validateInvestmentPlan, type InvestmentPlan } from "./investment-planning";
 import { assertNoConflictingActiveLoan, selectLoanForCustomer } from "./loan-selection";
+import { assertRenewalRevision } from "./renewal-workflow";
 import { filterCustomersWithVillage } from "./utils";
 
 const coll = {
@@ -1378,17 +1379,22 @@ export async function renewLoan(
   const userId = loan.userId || auth.currentUser?.uid;
   if (!userId) throw new Error("Unable to verify customer ownership. Renewal cannot proceed.");
   await assertCustomerAadhaarNotBlocked(userId, loan.customerId);
+  const customerRef = doc(db, "customers", loan.customerId);
+  const customerServerSnap = await getDocFromServer(customerRef).catch(() => {
+    throw new Error("Unable to verify the customer's current loan state. Check your connection and try again.");
+  });
+  if (!customerServerSnap.exists() || customerServerSnap.data().userId !== userId) {
+    throw new Error("Unable to verify customer ownership. Renewal cannot proceed.");
+  }
+  const expectedRenewalRevision = Number(customerServerSnap.data().renewalRevision ?? 0);
   const customerLoansQuery = query(
     coll.loans,
     where("userId", "==", userId),
     where("customerId", "==", loan.customerId)
   );
-  let customerLoansSnap;
-  try {
-    customerLoansSnap = await getDocsFromServer(customerLoansQuery);
-  } catch {
-    customerLoansSnap = await getDocs(customerLoansQuery);
-  }
+  const customerLoansSnap = await getDocsFromServer(customerLoansQuery).catch(() => {
+    throw new Error("Unable to verify the customer's current loans. Check your connection and try again.");
+  });
   assertNoConflictingActiveLoan(
     customerLoansSnap.docs.map((snapshot) => ({ id: snapshot.id, ...(snapshot.data() as Loan) })),
     loan.id
@@ -1396,7 +1402,6 @@ export async function renewLoan(
   const closureMode = normalizeMode(paymentMode);
   const disbursementMode = closureMode;
   const loanRef = doc(db, "loans", loan.id);
-  const customerRef = doc(db, "customers", loan.customerId);
   const newLoanRef = doc(coll.loans);
   const closureRef = doc(collection(db, "payments"));
 
@@ -1431,6 +1436,7 @@ export async function renewLoan(
     if (currentLoan.status === "RENEWED") throw new Error("This loan has already been renewed.");
     if (currentLoan.status !== "ACTIVE" && currentLoan.status !== "CLOSED") throw new Error("This loan cannot be renewed in its current status.");
     if (currentLoan.status === "CLOSED" && money(currentLoan.balanceAmount) > 0) throw new Error("The closed loan balance is inconsistent. Reload and review it before renewing.");
+    assertRenewalRevision(expectedRenewalRevision, Number(currentCustomer.renewalRevision ?? 0));
     const currentBalance = Math.max(0, money(currentLoan.balanceAmount));
     if (currentBalance > 0) {
       const closure: Payment = {
@@ -1449,7 +1455,7 @@ export async function renewLoan(
       transaction.set(closureRef, stripUndefined(closure));
     }
     transaction.update(loanRef, { balanceAmount: 0, status: "RENEWED" });
-    transaction.update(customerRef, { isActive: true });
+    transaction.update(customerRef, { isActive: true, renewalRevision: expectedRenewalRevision + 1 });
     transaction.set(newLoanRef, stripUndefined(newLoan));
   });
   invalidateUserDataCache(userId);
