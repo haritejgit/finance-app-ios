@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { selectLoanForCustomer } from "../src/loan-selection.ts";
+import { assertSingleActiveLoan, selectLoanForCustomer } from "../src/loan-selection.ts";
 
 test("latest active loan remains the displayed selection without rewriting duplicates", () => {
   const loans = [
@@ -36,5 +36,14 @@ test("closed loans choose the most recent record and preserve the original fallb
   const legacy = [{ id: "legacy", startDate: 100, status: "ARCHIVED" }];
   assert.equal(selectLoanForCustomer(legacy)?.id, "legacy");
   assert.equal(selectLoanForCustomer([]), undefined);
+});
+
+test("renewal is blocked when multiple active loans would create an ambiguous settlement", () => {
+  assert.doesNotThrow(() => assertSingleActiveLoan([{ status: "ACTIVE" }]));
+  assert.doesNotThrow(() => assertSingleActiveLoan([{ status: "ACTIVE" }, { status: "RENEWED" }]));
+  assert.throws(
+    () => assertSingleActiveLoan([{ status: "ACTIVE" }, { status: "ACTIVE" }]),
+    /Review the loan records before renewing/
+  );
 });
 

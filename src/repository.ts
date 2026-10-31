@@ -32,7 +32,7 @@ import { BlockedAadhaar, Customer, Expense, Investment, Loan, Payment, PaymentMo
 import { endOfDay, getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, loanWeekNumber, money, startOfDay, toMillis, weekStart } from "./business-logic";
 import { calculateProcessingFee } from "./processing-fee";
 import { validateInvestmentPlan, type InvestmentPlan } from "./investment-planning";
-import { selectLoanForCustomer } from "./loan-selection";
+import { assertSingleActiveLoan, selectLoanForCustomer } from "./loan-selection";
 import { filterCustomersWithVillage } from "./utils";
 
 const coll = {
@@ -1378,6 +1378,18 @@ export async function renewLoan(
   const userId = loan.userId || auth.currentUser?.uid;
   if (!userId) throw new Error("Unable to verify customer ownership. Renewal cannot proceed.");
   await assertCustomerAadhaarNotBlocked(userId, loan.customerId);
+  const customerLoansQuery = query(
+    coll.loans,
+    where("userId", "==", userId),
+    where("customerId", "==", loan.customerId)
+  );
+  let customerLoansSnap;
+  try {
+    customerLoansSnap = await getDocsFromServer(customerLoansQuery);
+  } catch {
+    customerLoansSnap = await getDocs(customerLoansQuery);
+  }
+  assertSingleActiveLoan(customerLoansSnap.docs.map((snapshot) => snapshot.data() as Loan));
   const closureMode = normalizeMode(paymentMode);
   const disbursementMode = closureMode;
   const loanRef = doc(db, "loans", loan.id);
