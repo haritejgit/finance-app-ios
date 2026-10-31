@@ -64,6 +64,7 @@ export type Customer = {
   villageHistory?: VillageHistorySegment[];
   cycleStartDay?: number;
   customRecommendedLoanAmount?: number;
+  renewalRevision?: number;
 };
 
 export type VillageHistorySegment = {
