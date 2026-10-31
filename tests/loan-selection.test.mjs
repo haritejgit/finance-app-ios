@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assertSingleActiveLoan, selectLoanForCustomer } from "../src/loan-selection.ts";
+import { assertNoConflictingActiveLoan, selectLoanForCustomer } from "../src/loan-selection.ts";
 
 test("latest active loan remains the displayed selection without rewriting duplicates", () => {
   const loans = [
@@ -38,11 +38,16 @@ test("closed loans choose the most recent record and preserve the original fallb
   assert.equal(selectLoanForCustomer([]), undefined);
 });
 
-test("renewal is blocked when multiple active loans would create an ambiguous settlement", () => {
-  assert.doesNotThrow(() => assertSingleActiveLoan([{ status: "ACTIVE" }]));
-  assert.doesNotThrow(() => assertSingleActiveLoan([{ status: "ACTIVE" }, { status: "RENEWED" }]));
+test("renewal is allowed only when no other loan is active for the customer", () => {
+  assert.doesNotThrow(() => assertNoConflictingActiveLoan([{ id: "renewing", status: "ACTIVE" }], "renewing"));
+  assert.doesNotThrow(() => assertNoConflictingActiveLoan([{ id: "closed", status: "CLOSED" }], "closed"));
+  assert.doesNotThrow(() => assertNoConflictingActiveLoan([{ id: "renewing", status: "ACTIVE" }, { id: "old", status: "RENEWED" }], "renewing"));
   assert.throws(
-    () => assertSingleActiveLoan([{ status: "ACTIVE" }, { status: "ACTIVE" }]),
+    () => assertNoConflictingActiveLoan([{ id: "other", status: "ACTIVE" }, { id: "renewing", status: "CLOSED" }], "renewing"),
+    /Another active loan exists/
+  );
+  assert.throws(
+    () => assertNoConflictingActiveLoan([{ id: "one", status: "ACTIVE" }, { id: "two", status: "ACTIVE" }], "one"),
     /Review the loan records before renewing/
   );
 });
