@@ -181,6 +181,7 @@ export default function ShiftSelectionScreen() {
   const nav = useRouter();
   const { width: viewportWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const mobileWebTopFallback = Platform.OS === "web" && viewportWidth <= 500 ? Math.max(0, 44 - insets.top) : 0;
   const { user, userProfile } = useAuth();
   const { colors } = useTheme();
   const { t, language } = useLanguage();
@@ -609,7 +610,7 @@ export default function ShiftSelectionScreen() {
   return (
     <AnimatedScreen style={styles.root}>
       <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
-        <SafeAreaView style={styles.safe}>
+        <SafeAreaView style={[styles.safe, mobileWebTopFallback > 0 && { paddingTop: mobileWebTopFallback }]}>
           <ScrollView
             contentContainerStyle={[styles.container, { paddingHorizontal: viewportWidth >= 900 ? 28 : 16, paddingBottom: Math.max(44, insets.bottom + 44) }]}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
@@ -630,7 +631,7 @@ export default function ShiftSelectionScreen() {
                 },
               ]}
             >
-              <View style={[styles.headerCard, viewportWidth < 500 && styles.headerCompact, { width: "100%", backgroundColor: colors.blue2, borderColor: colors.blue2, borderWidth: 1 }]}>
+              <View style={[styles.headerCard, viewportWidth < 500 && styles.headerCompact, { width: "100%", backgroundColor: "#142B4F", borderColor: "#142B4F", borderWidth: 1 }]}>
                 <View style={styles.headerTop}>
                   <View style={styles.brandRow}>
                   <View style={[styles.brandIcon, { backgroundColor: "rgba(255,255,255,0.12)" }]}>
@@ -639,7 +640,7 @@ export default function ShiftSelectionScreen() {
                     <View style={styles.headerCopy}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                         <Text style={[styles.eyebrow, { color: "#9FB2C9" }]}>{t("premiumWorkspace")}</Text>
-                        <Text style={{ fontSize: 10, fontWeight: "800", color: colors.blue2, backgroundColor: colors.honeyBronze, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, overflow: "hidden" }}>v1.0.3</Text>
+                        <Text numberOfLines={1} style={{ flexShrink: 0, fontSize: 10, fontWeight: "800", color: colors.blue2, backgroundColor: colors.honeyBronze, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, overflow: "hidden" }}>v1.0.3</Text>
                       </View>
                       <Text style={[styles.header, viewportWidth < 500 && styles.headerTextCompact, { color: colors.white }]}>{t("financeDashboard")}</Text>
                       <Text style={[styles.welcome, { color: "#C0D0D0" }]}>{getGreeting(t)}, {displayName} · {todayLabel}</Text>
@@ -1305,7 +1306,7 @@ const styles = StyleSheet.create({
   shiftOn: { backgroundColor: Colors.honeyBronze, borderColor: Colors.honeyBronze },
   shiftText: { color: "#4D666D", fontWeight: "700", fontSize: 13 },
   shiftTextOn: { color: Colors.nearBlack, fontWeight: "800" },
-  primaryAction: { backgroundColor: Colors.blue2, borderRadius: 14, minHeight: 50, paddingVertical: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 9 },
+  primaryAction: { backgroundColor: "#142B4F", borderRadius: 14, minHeight: 50, paddingVertical: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 9 },
   primaryActionText: { color: Colors.white, fontWeight: "800", fontSize: 15 },
   walletRouteSummary: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 2 },
   walletRouteText: { color: Colors.textMuted, fontSize: 11, fontWeight: "800" },

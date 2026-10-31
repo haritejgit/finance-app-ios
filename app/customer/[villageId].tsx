@@ -20,6 +20,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useAuth } from "../../src/auth-context";
@@ -581,6 +582,8 @@ export default function CustomerListScreen() {
   const { colors } = useTheme();
   const { language } = useLanguage();
   const insets = useSafeAreaInsets();
+  const { width: viewportWidth } = useWindowDimensions();
+  const mobileWebTopFallback = Platform.OS === "web" && viewportWidth <= 500 ? Math.max(0, 72 - insets.top) : 0;
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const cameraRef = useRef<any>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -1654,7 +1657,7 @@ export default function CustomerListScreen() {
   return (
     <AnimatedScreen style={styles.root}>
     <LinearGradient colors={[colors.background, colors.backgroundSecondary]} style={styles.root}>
-      <SafeAreaView style={[styles.safe, { paddingTop: insets.top }]} edges={['top']}>
+      <SafeAreaView style={[styles.safe, mobileWebTopFallback > 0 && { paddingTop: mobileWebTopFallback }]} edges={['top']}>
         <View style={styles.content}>
           <View style={styles.routeHeader}>
           {/* Header with back button */}
