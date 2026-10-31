@@ -24,6 +24,7 @@ import { useAuth } from "../../src/auth-context";
 import { AnimatedListItem } from "../../src/components/AnimatedListItem";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import { CustomerIdBadge } from "../../src/components/CustomerIdBadge";
+import { CashFlowRadar } from "../../src/components/CashFlowRadar";
 
 import { getDashboardAnalytics, subscribeDashboardAnalytics, type CustomerState, type DashboardAnalytics } from "../../src/finance-analytics";
 import Icon from "../../src/Icon";
@@ -900,6 +901,8 @@ export default function ShiftSelectionScreen() {
                           </View>
                         );
                       })()}
+
+                      {analytics && isOwner && user?.uid ? <CashFlowRadar analytics={analytics} userId={user.uid} /> : null}
 
                       <DashboardPanel
                         title={t("monthlyOverview")}
