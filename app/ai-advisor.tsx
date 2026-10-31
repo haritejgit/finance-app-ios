@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Ionicons } from "@expo/vector-icons";
+import Icon from "../src/Icon";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
@@ -104,7 +104,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       <View style={styles.messageMeta}>
         {!isUser ? (
           <View style={styles.assistantAvatar}>
-            <Ionicons name="sparkles-outline" size={15} color={Colors.lightSeaGreen} />
+            <Icon name="sparkles-outline" size={15} color={Colors.lightSeaGreen} />
           </View>
         ) : null}
         <Text style={styles.messageLabel}>{isUser ? "You" : "AI Advisor"}</Text>
@@ -195,7 +195,7 @@ export default function AIAdvisorScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.safe}>
           <View style={styles.header}>
             <Pressable accessibilityLabel="Go back" style={styles.iconButton} onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={20} color={Colors.nearBlack} />
+              <Icon name="arrow-back" size={20} color={Colors.nearBlack} />
             </Pressable>
             <View style={styles.headerCopy}>
               <Text style={styles.eyebrow}>Finance workspace</Text>
@@ -214,7 +214,7 @@ export default function AIAdvisorScreen() {
                 <Text style={styles.contextSub}>Used for every AI answer</Text>
               </View>
               <Pressable accessibilityLabel="Clear chat" style={styles.clearButton} onPress={() => setMessages([])}>
-                <Ionicons name="trash-outline" size={17} color={Colors.textMuted} />
+                <Icon name="trash-outline" size={17} color={Colors.textMuted} />
               </Pressable>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statRow}>
@@ -225,7 +225,7 @@ export default function AIAdvisorScreen() {
             </ScrollView>
             {!apiReady ? (
               <View style={styles.setupNotice}>
-                <Ionicons name="key-outline" size={17} color="#8a5a00" />
+                <Icon name="key-outline" size={17} color="#8a5a00" />
                 <Text style={styles.setupText}>Add EXPO_PUBLIC_GEMINI_API_KEY in local .env or Firebase build environment. Do not commit the real key to GitHub.</Text>
               </View>
             ) : null}
@@ -256,7 +256,7 @@ export default function AIAdvisorScreen() {
             {messages.length === 0 && !loading && !booting ? (
               <View style={styles.emptyState}>
                 <View style={styles.emptyIcon}>
-                  <Ionicons name="sparkles-outline" size={26} color={Colors.lightSeaGreen} />
+                  <Icon name="sparkles-outline" size={26} color={Colors.lightSeaGreen} />
                 </View>
                 <Text style={styles.emptyTitle}>{apiReady ? "Ask a finance question" : "AI setup is pending"}</Text>
                 <Text style={styles.emptySub}>
@@ -275,7 +275,7 @@ export default function AIAdvisorScreen() {
               <View style={[styles.messageBlock, styles.messageBlockAi]}>
                 <View style={styles.messageMeta}>
                   <View style={styles.assistantAvatar}>
-                    <Ionicons name="sparkles-outline" size={15} color={Colors.lightSeaGreen} />
+                    <Icon name="sparkles-outline" size={15} color={Colors.lightSeaGreen} />
                   </View>
                   <Text style={styles.messageLabel}>AI Advisor</Text>
                 </View>
@@ -298,7 +298,7 @@ export default function AIAdvisorScreen() {
               editable={apiReady && !!stats}
             />
             <Pressable style={[styles.sendButton, !canSend && styles.sendButtonDisabled]} disabled={!canSend} onPress={() => send()}>
-              <Ionicons name="paper-plane" size={19} color={Colors.white} />
+              <Icon name="paper-plane" size={19} color={Colors.white} />
             </Pressable>
           </View>
         </KeyboardAvoidingView>
