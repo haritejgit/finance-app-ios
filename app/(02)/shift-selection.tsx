@@ -34,6 +34,8 @@ import { Colors } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
 import { useLanguage } from "../../src/language-context";
 import { translateTelugu } from "../../src/exports";
+import { groupNestedActivity } from "../../src/nested-activity";
+import { withMissingIndexFallback } from "../../src/firestore-query-fallback";
 
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const shortDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -256,16 +258,7 @@ export default function ShiftSelectionScreen() {
   }, [user?.uid, isOwner]);
 
   const groupedActivity = useMemo(() => {
-    const map: Record<string, { label: string; email: string; payments: any[] }> = {};
-    nestedActivity.forEach((act) => {
-      const acc = nestedAccounts.find(a => a.nestedUid === act.nestedUid);
-      const name = acc?.label || act.nestedEmail || acc?.nestedEmail || "Nested Account";
-      if (!map[act.nestedUid]) {
-        map[act.nestedUid] = { label: name, email: acc?.nestedEmail || "", payments: [] };
-      }
-      map[act.nestedUid].payments.push(act);
-    });
-    return Object.values(map);
+    return groupNestedActivity(nestedActivity, nestedAccounts);
   }, [nestedActivity, nestedAccounts]);
 
   useEffect(() => {
@@ -312,10 +305,17 @@ export default function ShiftSelectionScreen() {
     useCallback(() => {
       if (!isOwner) {
         if (user?.uid && effectiveOwnerId) {
-          import("firebase/firestore").then(({ getDocs: gd, query: q, collection: col, where: wh, orderBy }) => {
-            gd(q(col(db, "nestedExpenses"), wh("nestedUid", "==", user.uid))).then((snap) => {
-              setNestedExpenses(snap.docs.map((d) => d.data() as NestedExpense));
-            }).catch(() => {});
+          import("firebase/firestore").then(async ({ getDocs: gd, query: q, collection: col, where: wh, orderBy, limit }) => {
+            const expenses = col(db, "nestedExpenses");
+            const ownerFilter = wh("nestedUid", "==", user.uid);
+            const snap = await withMissingIndexFallback(
+              () => gd(q(expenses, ownerFilter, orderBy("date", "desc"), limit(10))),
+              // Keep the panel functional while a newly deployed composite index is building.
+              () => gd(q(expenses, ownerFilter))
+            );
+            setNestedExpenses(snap.docs.slice(0, 10).map((d) => d.data() as NestedExpense));
+          }).catch(() => {
+            // Keep existing dashboard error handling: expense history is auxiliary to the main finance summary.
           });
         }
       }
@@ -476,15 +476,9 @@ export default function ShiftSelectionScreen() {
 
   const totals = analytics?.totals;
   const balance = (totals?.totalCollection ?? 0) - (totals?.pendingAmount ?? 0);
-  const savings = (totals?.monthlyRevenue ?? 0) - (totals?.distributedThisMonth ?? 0);
   // Main account current amount follows the Analytics Center all-time ledger.
   const mainCurrentAmount = totals?.netCashPosition ?? 0;
   const dueAlerts = analytics?.dueAlerts ?? [];
-  // Nested account current amount: BF + collectionToday - distributedToday - expensesToday
-  const nestedExpensesToday = useMemo(() => {
-    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-    return nestedExpenses.filter(e => e.date >= todayStart.getTime()).reduce((s,e) => s + e.amount, 0);
-  }, [nestedExpenses]);
 
   const activeRouteKey = `${selectedDay}:${selectedShift}`;
   const routeProgress = analytics?.routeProgresses?.[activeRouteKey] ?? {
@@ -530,7 +524,7 @@ export default function ShiftSelectionScreen() {
     } finally {
       setSavingExpense(false);
     }
-  }, [expenseAmount, expenseNote, user, effectiveOwnerId, loadDashboard]);
+  }, [expenseAmount, expenseNote, user, effectiveOwnerId, loadDashboard, logDebug]);
 
   const handleOpenEditExpense = (expense: NestedExpense) => {
     setEditingExpense(expense);
@@ -570,7 +564,7 @@ export default function ShiftSelectionScreen() {
     } finally {
       setSavingEditExpense(false);
     }
-  }, [editingExpense, editExpenseAmount, editExpenseNote, loadDashboard]);
+  }, [editingExpense, editExpenseAmount, editExpenseNote, loadDashboard, logDebug]);
 
   const handleConfirmDeleteExpense = (expense: NestedExpense) => {
     const performDelete = async () => {

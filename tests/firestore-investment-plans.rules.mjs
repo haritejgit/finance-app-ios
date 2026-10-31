@@ -4,7 +4,8 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { assertFails, assertSucceeds, initializeTestEnvironment } from "@firebase/rules-unit-testing";
-import { collection, deleteDoc, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, runTransaction, setDoc, updateDoc } from "firebase/firestore";
+import { assertRenewalRevision } from "../src/renewal-workflow.ts";
 
 const projectId = "demo-finance-rules";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -214,7 +215,7 @@ test("custom loan recommendations persist on the correct customer and reject inv
   for (const invalidAmount of [0, -1, 18000.5, 50000001, "18000"]) {
     await assertFails(updateDoc(customerRef, { customRecommendedLoanAmount: invalidAmount }));
   }
-  for (const invalidRevision of [-1, 1.5, "2"]) {
+  for (const invalidRevision of [-1, 1.5, "2", 0, 3]) {
     await assertFails(updateDoc(customerRef, { renewalRevision: invalidRevision }));
   }
   await assertFails(getDoc(doc(otherDb, "customers", "recommendation-customer")));

@@ -67,6 +67,12 @@ service cloud.firestore {
         (request.resource.data[field] is int && request.resource.data[field] >= 0);
     }
 
+    function renewalRevisionAdvancesAtMostOnce() {
+      let oldRevision = resource.data.get('renewalRevision', 0);
+      let newRevision = request.resource.data.get('renewalRevision', 0);
+      return newRevision == oldRevision || newRevision == oldRevision + 1;
+    }
+
     function validPositive(field) {
       return !request.resource.data.keys().hasAny([field]) ||
         (request.resource.data[field] is number && request.resource.data[field] > 0);
@@ -361,7 +367,7 @@ service cloud.firestore {
     match /customers/{docId} {
       allow read: if canReadDoc();
       allow create: if createsOwnDoc() && validCustomerFields();
-      allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validCustomerFields();
+      allow update: if ownsExistingDoc() && keepsOwnerImmutable() && validCustomerFields() && renewalRevisionAdvancesAtMostOnce();
       allow delete: if ownsExistingDoc();
     }
 

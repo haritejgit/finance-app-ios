@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "nestedExpenses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "nestedUid", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "customers",
       "queryScope": "COLLECTION",
       "fields": [
