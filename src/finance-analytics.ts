@@ -2,9 +2,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { collection, doc, getDocs, onSnapshot, query, where, getDoc, type Unsubscribe } from "firebase/firestore";
 import { db } from "./firebase";
 import { Customer, Loan, Payment, Village } from "./types";
-import { DAY_MS as DAY, calculateDisbursedAmount, endOfMonth, getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, money, startOfDay, startOfMonth, toMillis, weekStart } from "./business-logic";
+import { DAY_MS as DAY, endOfMonth, getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, money, startOfDay, startOfMonth, toMillis, weekStart } from "./business-logic";
+import { getRecordedNetDisbursement } from "./processing-fee";
+import { estimateExpectedCollections } from "./cash-flow-radar";
 import { filterCustomersWithVillage } from "./utils";
 import type { Investment, Expense, NestedExpense } from "./repository";
+import type { InvestmentPlan } from "./investment-planning";
 import { calculateWalletBalances } from "./wallet-balances";
 
 export type CustomerState = "paid" | "pending" | "overdue" | "closed";
@@ -85,6 +88,16 @@ export type DashboardAnalytics = {
   };
   predictions: PredictionItem[];
   expectedCollectionTomorrow: number;
+  cashFlowRadar: {
+    weeklyScheduledCollections: number;
+    expectedNext7Days: number;
+    expectedNext30Days: number;
+    expectedNext90Days: number;
+    walletBalanceReliable: boolean;
+    onTimePercent: number;
+    minimumReserve: number;
+    investmentPlans: InvestmentPlan[];
+  };
   recentTransactions: {
     id: string;
     customerId?: string;
@@ -198,6 +211,8 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
   let expensesRaw: Expense[] = [];
   let bfAmount = 0;
   let userProfile: any = {};
+  let privateFinanceSettings: any = {};
+  let privateInvestmentPlans: InvestmentPlan[] = [];
   let nestedTxns: any[] = [];
   let nestedCusts: any[] = [];
 
@@ -218,7 +233,7 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
       userProfile = userSnap.exists() ? userSnap.data() : {};
     } else {
       // Owner user gets standard complete load
-      const [vSnap, cSnap, lSnap, pSnap, iSnap, eSnap, bfSnap, userSnap] = await Promise.all([
+      const [vSnap, cSnap, lSnap, pSnap, iSnap, eSnap, bfSnap, userSnap, privateFinanceSnap, privatePlansSnap] = await Promise.all([
         getUserCollection<Village>(userId, "villages"),
         getUserCollection<Customer>(userId, "customers"),
         getUserCollection<Loan>(userId, "loans"),
@@ -227,6 +242,8 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
         getUserCollection<Expense>(userId, "expenses"),
         getDoc(doc(db, "balancingFund", userId)),
         getDoc(doc(db, "users", userId)),
+        getDoc(doc(db, "users", userId, "privateFinance", "settings")),
+        getDocs(collection(db, "users", userId, "investmentPlans")),
       ]);
       villages = vSnap;
       customersRaw = cSnap;
@@ -238,6 +255,8 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
         bfAmount = Number(bfSnap.data().amount || 0);
       }
       userProfile = userSnap.exists() ? userSnap.data() : {};
+      privateFinanceSettings = privateFinanceSnap.exists() ? privateFinanceSnap.data() : {};
+      privateInvestmentPlans = privatePlansSnap.docs.map((plan) => plan.data() as InvestmentPlan);
     }
   } catch (error: any) {
     console.error("Dashboard analytics build failed:", error);
@@ -754,6 +773,17 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
   const openCustomers = Object.values(customerStates).filter((state) => state === "paid" || state === "pending" || state === "overdue").length;
   const onTimeCustomers = Object.values(customerStates).filter((state) => state === "paid" || state === "pending").length;
   const onTimePaymentRate = openCustomers > 0 ? Math.round((onTimeCustomers / openCustomers) * 100) : 100;
+  const weeklyScheduledCollections = activeLoans.reduce((sum, loan) => sum + (loan.startDate < startOfDay(Date.now()) ? getExpectedWeeklyCollectionAmount(loan) : 0), 0);
+  const cashFlowRadar = {
+    weeklyScheduledCollections,
+    expectedNext7Days: estimateExpectedCollections(weeklyScheduledCollections, pendingAmount, onTimePaymentRate, 7),
+    expectedNext30Days: estimateExpectedCollections(weeklyScheduledCollections, pendingAmount, onTimePaymentRate, 30),
+    expectedNext90Days: estimateExpectedCollections(weeklyScheduledCollections, pendingAmount, onTimePaymentRate, 90),
+    walletBalanceReliable: !!userProfile.walletOpeningDate,
+    onTimePercent: onTimePaymentRate,
+    minimumReserve: Math.max(0, money(privateFinanceSettings.minimumCashReserve)),
+    investmentPlans: privateInvestmentPlans,
+  };
 
   const dueMarksThisMonth = payments.filter(
     (payment) => (payment.paymentType === "DUE" || (payment as any).type === "DUE") && payment.paymentDate >= monthStart && payment.paymentDate <= monthEnd
@@ -923,6 +953,7 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
     },
     predictions,
     expectedCollectionTomorrow,
+    cashFlowRadar,
     recentTransactions,
     dueAlerts,
     customerStates,
@@ -946,23 +977,24 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
 
     // 2. Calculate disbursements (nestedCustomers registrations + renewals)
     const nestedRenewalDisbursements = nestedTxns.filter(t => t.type === "RENEWAL_DISBURSEMENT");
+    const nestedNetDisbursed = (record: any, principal: number) => getRecordedNetDisbursement({ principalAmount: principal, processingFeeCharged: record.processingFeeCharged, processingFeeAmount: record.processingFeeAmount });
     
-    const totalDisb = nestedCusts.reduce((sum, c) => sum + calculateDisbursedAmount(Number(c.principal || 0)), 0)
-      + nestedRenewalDisbursements.reduce((sum, t) => sum + calculateDisbursedAmount(t.amount || 0), 0);
+    const totalDisb = nestedCusts.reduce((sum, c) => sum + nestedNetDisbursed(c, Number(c.principal || 0)), 0)
+      + nestedRenewalDisbursements.reduce((sum, t) => sum + nestedNetDisbursed(t, Number(t.amount || 0)), 0);
 
     const disbThisMonth = nestedCusts
       .filter(c => c.createdAt >= monthStart && c.createdAt <= monthEnd)
-      .reduce((sum, c) => sum + calculateDisbursedAmount(Number(c.principal || 0)), 0)
+      .reduce((sum, c) => sum + nestedNetDisbursed(c, Number(c.principal || 0)), 0)
       + nestedRenewalDisbursements
       .filter(t => t.date >= monthStart && t.date <= monthEnd)
-      .reduce((sum, t) => sum + calculateDisbursedAmount(t.amount || 0), 0);
+      .reduce((sum, t) => sum + nestedNetDisbursed(t, Number(t.amount || 0)), 0);
 
     const disbToday = nestedCusts
       .filter(c => c.createdAt >= todayStart && c.createdAt <= todayEnd)
-      .reduce((sum, c) => sum + calculateDisbursedAmount(Number(c.principal || 0)), 0)
+      .reduce((sum, c) => sum + nestedNetDisbursed(c, Number(c.principal || 0)), 0)
       + nestedRenewalDisbursements
       .filter(t => t.date >= todayStart && t.date <= todayEnd)
-      .reduce((sum, t) => sum + calculateDisbursedAmount(t.amount || 0), 0);
+      .reduce((sum, t) => sum + nestedNetDisbursed(t, Number(t.amount || 0)), 0);
 
     // 3. Calculate wallet balances
     let cashColl = 0;
@@ -978,14 +1010,14 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
     let disbursePhone = 0;
     nestedCusts.forEach(c => {
       const isPhone = c.disbursementMode === "PHONE";
-      const actualDisb = calculateDisbursedAmount(Number(c.principal || 0));
+      const actualDisb = nestedNetDisbursed(c, Number(c.principal || 0));
       if (isPhone) disbursePhone += actualDisb;
       else disburseCash += actualDisb;
     });
     nestedRenewalDisbursements.forEach(t => {
       const tNotes = t.notes || "";
       const isPhone = tNotes.toUpperCase().includes("PHONE") || t.type === "PHONE";
-      const actualDisb = calculateDisbursedAmount(t.amount || 0);
+      const actualDisb = nestedNetDisbursed(t, Number(t.amount || 0));
       if (isPhone) disbursePhone += actualDisb;
       else disburseCash += actualDisb;
     });
@@ -1030,6 +1062,16 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
       repaidThisMonth: monthlyRev,
       activeLentOut: pendingAmount,
       outstandingDues: dueAlerts.reduce((sum, alert) => sum + alert.dueAmount, 0),
+    };
+    dashboardAnalytics.cashFlowRadar = {
+      weeklyScheduledCollections: 0,
+      expectedNext7Days: 0,
+      expectedNext30Days: 0,
+      expectedNext90Days: 0,
+      walletBalanceReliable: false,
+      onTimePercent: 0,
+      minimumReserve: 0,
+      investmentPlans: [],
     };
 
     dashboardAnalytics.recentTransactions = nestedTxns
@@ -1144,6 +1186,13 @@ export function subscribeDashboardAnalytics(
     watch("expenses"),
     onSnapshot(doc(db, "users", userId), refresh, (error) => onError?.(error)),
   ];
+
+  if (!nestedUserId) {
+    unsubs.push(
+      onSnapshot(doc(db, "users", userId, "privateFinance", "settings"), refresh, (error) => onError?.(error)),
+      onSnapshot(collection(db, "users", userId, "investmentPlans"), refresh, (error) => onError?.(error))
+    );
+  }
 
   if (nestedUserId) {
     unsubs.push(

@@ -30,6 +30,8 @@ import { createUserWithEmailAndPassword, getAuth, initializeAuth, inMemoryPersis
 import { firebaseConfig } from "./firebase-config";
 import { BlockedAadhaar, Customer, Expense, Investment, Loan, Payment, PaymentMode, UserProfile, Village, VillageHistorySegment } from "./types";
 import { endOfDay, getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, loanWeekNumber, money, startOfDay, toMillis, weekStart } from "./business-logic";
+import { calculateProcessingFee } from "./processing-fee";
+import { validateInvestmentPlan, type InvestmentPlan } from "./investment-planning";
 import { filterCustomersWithVillage } from "./utils";
 
 const coll = {
@@ -479,7 +481,8 @@ export async function addCustomerWithLoan(
   principalAmount: number,
   startDate: number,
   disbursementMode: PaymentMode = "CASH",
-  villageName?: string
+  villageName?: string,
+  processingFeeCharged = true
 ) {
   assertPositiveAmount(principalAmount, "Loan amount");
   const sanitizedInput = sanitizeCustomerInput(input);
@@ -525,6 +528,8 @@ export async function addCustomerWithLoan(
     status: "ACTIVE",
     disbursement_mode: mode,
     disbursementMode: mode,
+    processingFeeCharged,
+    processingFeeAmount: calculateProcessingFee(principalAmount, processingFeeCharged),
   };
   const batch = writeBatch(db);
   batch.set(doc(db, "customers", customer.id), stripUndefined(customer));
@@ -1411,38 +1416,28 @@ export async function markDue(loan: Loan, paymentDate: number) {
   invalidateUserDataCache(loan.userId);
 }
 
-export async function renewLoan(loan: Loan, newPrincipal: number, date: number, paymentMode: PaymentMode = "CASH"): Promise<Loan> {
+export async function renewLoan(
+  loan: Loan,
+  newPrincipal: number,
+  date: number,
+  paymentMode: PaymentMode = "CASH",
+  processingFeeCharged = true
+): Promise<Loan> {
   assertPositiveAmount(newPrincipal, "Renewal amount");
   const userId = loan.userId || auth.currentUser?.uid;
   if (!userId) throw new Error("Unable to verify customer ownership. Renewal cannot proceed.");
   await assertCustomerAadhaarNotBlocked(userId, loan.customerId);
   const closureMode = normalizeMode(paymentMode);
   const disbursementMode = closureMode;
-  const batch = writeBatch(db);
-
-  if (loan.balanceAmount > 0) {
-    const closure: Payment = {
-      id: id(),
-      loanId: loan.id,
-      customerId: loan.customerId,
-      amountPaid: loan.balanceAmount,
-      paymentDate: date,
-      weekNumber: loanWeekNumber(loan.startDate, date),
-      paymentType: "RENEWAL_CLOSURE",
-      paymentMode: closureMode,
-      type: closureMode,
-      notes: "Loan renewed - old balance cleared",
-      userId,
-    };
-    batch.set(doc(db, "payments", closure.id), stripUndefined(closure));
-  }
-  batch.update(doc(db, "loans", loan.id), { balanceAmount: 0, status: "RENEWED" });
-  batch.update(doc(db, "customers", loan.customerId), { isActive: true });
+  const loanRef = doc(db, "loans", loan.id);
+  const customerRef = doc(db, "customers", loan.customerId);
+  const newLoanRef = doc(coll.loans);
+  const closureRef = doc(collection(db, "payments"));
 
   const interest = newPrincipal * 0.2;
   const totalPayable = newPrincipal + interest;
   const newLoan: Loan = {
-    id: id(),
+    id: newLoanRef.id,
     customerId: loan.customerId,
     principalAmount: newPrincipal,
     interestAmount: interest,
@@ -1453,9 +1448,44 @@ export async function renewLoan(loan: Loan, newPrincipal: number, date: number, 
     status: "ACTIVE",
     disbursement_mode: disbursementMode,
     disbursementMode,
+    processingFeeCharged,
+    processingFeeAmount: calculateProcessingFee(newPrincipal, processingFeeCharged),
   };
-  batch.set(doc(db, "loans", newLoan.id), stripUndefined(newLoan));
-  await batch.commit();
+  await runTransaction(db, async (transaction) => {
+    const [oldLoanSnap, customerSnap] = await Promise.all([
+      transaction.get(loanRef),
+      transaction.get(customerRef),
+    ]);
+    if (!oldLoanSnap.exists() || !customerSnap.exists()) throw new Error("The selected customer or loan no longer exists.");
+    const currentLoan = oldLoanSnap.data() as Loan;
+    const currentCustomer = customerSnap.data() as Customer;
+    if (currentLoan.userId !== userId || currentLoan.customerId !== loan.customerId || currentCustomer.userId !== userId) {
+      throw new Error("Customer or loan ownership changed. Reload and try again.");
+    }
+    if (currentLoan.status === "RENEWED") throw new Error("This loan has already been renewed.");
+    if (currentLoan.status !== "ACTIVE" && currentLoan.status !== "CLOSED") throw new Error("This loan cannot be renewed in its current status.");
+    if (currentLoan.status === "CLOSED" && money(currentLoan.balanceAmount) > 0) throw new Error("The closed loan balance is inconsistent. Reload and review it before renewing.");
+    const currentBalance = Math.max(0, money(currentLoan.balanceAmount));
+    if (currentBalance > 0) {
+      const closure: Payment = {
+        id: closureRef.id,
+        loanId: currentLoan.id,
+        customerId: currentLoan.customerId,
+        amountPaid: currentBalance,
+        paymentDate: date,
+        weekNumber: loanWeekNumber(currentLoan.startDate, date),
+        paymentType: "RENEWAL_CLOSURE",
+        paymentMode: closureMode,
+        type: closureMode,
+        notes: "Loan renewed - old balance cleared",
+        userId,
+      };
+      transaction.set(closureRef, stripUndefined(closure));
+    }
+    transaction.update(loanRef, { balanceAmount: 0, status: "RENEWED" });
+    transaction.update(customerRef, { isActive: true });
+    transaction.set(newLoanRef, stripUndefined(newLoan));
+  });
   invalidateUserDataCache(userId);
   return newLoan;
 }
@@ -2552,6 +2582,31 @@ export async function getInvestments(userId: string): Promise<Investment[]> {
   }).sort((a, b) => b.date - a.date);
 }
 
+/** Plans live in the authenticated owner's profile document; they never touch loan or payment records. */
+export async function getInvestmentPlans(userId: string): Promise<InvestmentPlan[]> {
+  const snapshot = await getDoc(doc(db, "users", userId, "privateFinance", "settings"));
+  const plans = snapshot.exists() ? snapshot.data().investmentPlans : [];
+  return Array.isArray(plans) ? plans.filter((plan: any) => plan && typeof plan.id === "string" && typeof plan.name === "string") as InvestmentPlan[] : [];
+}
+
+export async function saveInvestmentPlan(userId: string, plan: InvestmentPlan): Promise<void> {
+  validateInvestmentPlan(plan);
+  const planRef = doc(db, "users", userId, "investmentPlans", plan.id);
+  await runTransaction(db, async (transaction) => {
+    await transaction.get(planRef);
+    transaction.set(planRef, { ...plan, name: plan.name.trim(), notes: plan.notes.trim(), updatedAt: Date.now() });
+  });
+}
+
+export async function removeInvestmentPlan(userId: string, planId: string): Promise<void> {
+  await deleteDoc(doc(db, "users", userId, "investmentPlans", planId));
+}
+
+export async function saveMinimumCashReserve(userId: string, amount: number): Promise<void> {
+  if (!Number.isFinite(amount) || amount < 0) throw new Error("Reserve must be zero or a positive amount.");
+  await setDoc(doc(db, "users", userId, "privateFinance", "settings"), { minimumCashReserve: amount, updatedAt: Date.now() }, { merge: true });
+}
+
 export async function addInvestment(userId: string, amount: number, date: number, investorName?: string, paymentMode: PaymentMode = "CASH"): Promise<Investment> {
   return addInvestmentWithMode(userId, amount, date, investorName, paymentMode);
 }
@@ -2908,6 +2963,8 @@ export async function addNestedTransaction(txn: {
   type: string;
   date: number;
   notes: string;
+  processingFeeCharged?: boolean;
+  processingFeeAmount?: number;
 }): Promise<void> {
   const ref = doc(collection(db, "nestedTransactions"));
   await setDoc(ref, {
@@ -2955,6 +3012,8 @@ export async function addNestedTransactionsBatch(
     type: string;
     date: number;
     notes: string;
+    processingFeeCharged?: boolean;
+    processingFeeAmount?: number;
   }[]
 ): Promise<void> {
   if (entries.length === 0) return;

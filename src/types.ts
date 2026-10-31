@@ -63,6 +63,7 @@ export type Customer = {
   movedFromNumericalId?: number;
   villageHistory?: VillageHistorySegment[];
   cycleStartDay?: number;
+  customRecommendedLoanAmount?: number;
 };
 
 export type VillageHistorySegment = {
@@ -85,6 +86,9 @@ export type Loan = {
   status: LoanStatus;
   disbursement_mode?: PaymentMode;
   disbursementMode?: PaymentMode;
+  /** Missing on legacy loans; in that case the established fee rule applies. */
+  processingFeeCharged?: boolean;
+  processingFeeAmount?: number;
 };
 
 export type Payment = {

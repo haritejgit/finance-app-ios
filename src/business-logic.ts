@@ -1,4 +1,5 @@
 import type { Loan } from "./types";
+import { calculateNetDisbursement, getRecordedNetDisbursement } from "./processing-fee";
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const WEEK_MS = 7 * DAY_MS;
@@ -60,8 +61,7 @@ export function getLoanPrincipalAmount(loan?: Partial<Loan> & Record<string, any
 }
 
 export function calculateDisbursedAmount(loanAmount: number): number {
-  const principal = money(loanAmount);
-  return Math.max(0, principal - Math.floor(principal / 1000) * 20);
+  return calculateNetDisbursement(money(loanAmount));
 }
 
 export function getNetDistributedAmount(amount: number): number {
@@ -69,7 +69,8 @@ export function getNetDistributedAmount(amount: number): number {
 }
 
 export function getLoanDistributedAmount(loan?: Partial<Loan> & Record<string, any> | null): number {
-  return calculateDisbursedAmount(getLoanPrincipalAmount(loan));
+  if (!loan) return 0;
+  return getRecordedNetDisbursement(loan as any);
 }
 
 export function isRealCollectionPayment(payment?: Record<string, any> | null): boolean {
