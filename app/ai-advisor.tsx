@@ -52,11 +52,6 @@ function formatTime(ts: number) {
   return new Date(ts).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 }
 
-function hasGeminiKey() {
-  const key = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-  return !!key && key !== "your_key_here";
-}
-
 async function loadBusinessStats(userId: string): Promise<BusinessStats> {
   const [analytics, allTime] = await Promise.all([getDashboardAnalytics(userId), getAllTimeTotals(userId)]);
   return {
@@ -130,7 +125,8 @@ export default function AIAdvisorScreen() {
   const [stats, setStats] = useState<BusinessStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [booting, setBooting] = useState(true);
-  const apiReady = hasGeminiKey();
+  const proxyEnabled = process.env.EXPO_PUBLIC_AI_PROXY_ENABLED === "true";
+  const apiReady = !!user && proxyEnabled;
 
   const addAssistantMessage = useCallback((text: string) => {
     setMessages((current) => [...current, { id: makeId(), role: "assistant", text, timestamp: Date.now() }]);
@@ -165,7 +161,7 @@ export default function AIAdvisorScreen() {
       };
       run().catch(() => {
         if (!cancelled) {
-          addAssistantMessage("AI is unavailable right now. Check your connection and API key.");
+          addAssistantMessage("AI is unavailable right now. Check your connection and try again.");
           setBooting(false);
         }
       });
@@ -187,7 +183,7 @@ export default function AIAdvisorScreen() {
   }, [apiReady, input, loading, stats]);
 
   const canSend = useMemo(() => input.trim().length > 0 && !loading && !!stats && apiReady, [apiReady, input, loading, stats]);
-  const statusText = !apiReady ? "Setup needed" : booting ? "Loading" : "Ready";
+  const statusText = !user ? "Sign in" : !proxyEnabled ? "Setup needed" : booting ? "Loading" : "Ready";
 
   return (
     <LinearGradient colors={Gradients.screenBg} style={styles.root}>
@@ -226,7 +222,7 @@ export default function AIAdvisorScreen() {
             {!apiReady ? (
               <View style={styles.setupNotice}>
                 <Icon name="key-outline" size={17} color="#8a5a00" />
-                <Text style={styles.setupText}>Add EXPO_PUBLIC_GEMINI_API_KEY in local .env or Firebase build environment. Do not commit the real key to GitHub.</Text>
+        <Text style={styles.setupText}>{user ? "The AI service is being set up. Ask the account owner to enable it." : "Sign in to use the AI advisor."}</Text>
               </View>
             ) : null}
           </View>
@@ -262,7 +258,9 @@ export default function AIAdvisorScreen() {
                 <Text style={styles.emptySub}>
                   {apiReady
                     ? "Use the quick prompts or ask about collections, dues, renewals, and risk."
-                    : "The screen is ready. Add the Gemini API key before sending messages."}
+                    : user
+                      ? "The account owner needs to finish setting up the secure AI service."
+                      : "Sign in before sending messages to the AI advisor."}
                 </Text>
               </View>
             ) : null}
@@ -291,7 +289,7 @@ export default function AIAdvisorScreen() {
             <TextInput
               value={input}
               onChangeText={setInput}
-              placeholder={apiReady ? "Ask about dues, loans, or collections..." : "Add API key to enable AI chat"}
+              placeholder={apiReady ? "Ask about dues, loans, or collections..." : "AI service setup is pending"}
               placeholderTextColor={Colors.textMuted}
               style={styles.input}
               multiline

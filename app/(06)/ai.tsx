@@ -22,6 +22,8 @@ import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import { getDashboardAnalytics } from "../../src/finance-analytics";
 import Icon from "../../src/Icon";
 import { useTheme } from "../../src/theme-context";
+import { getApp } from "firebase/app";
+import { getFunctions, httpsCallable } from "firebase/functions";
 
 type ChatMessage = {
   id: string;
@@ -29,8 +31,11 @@ type ChatMessage = {
   text: string;
 };
 
-const SYSTEM_PROMPT =
-  "You are a smart finance assistant for a loan management business. You help track collections, answer questions about customers, dues, and loan status, and give actionable insights. Be concise, friendly, and professional.";
+const generateAnthropic = httpsCallable<{
+  messages: { role: "user" | "assistant"; content: string }[];
+  context?: unknown;
+}, { text: string }>(getFunctions(getApp(), "us-central1"), "generateAnthropic");
+const aiProxyEnabled = process.env.EXPO_PUBLIC_AI_PROXY_ENABLED === "true";
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -90,7 +95,7 @@ export default function AIScreen() {
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
-    if (!text || loading) return;
+    if (!text || loading || !user || !aiProxyEnabled) return;
 
     const userMessage: ChatMessage = { id: makeId(), role: "user", text };
     const nextMessages = [...messages, userMessage];
@@ -100,45 +105,25 @@ export default function AIScreen() {
 
     try {
       const context = user ? await getDashboardAnalytics(user.uid) : null;
-      const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY || "";
-      if (!apiKey || apiKey === "your_key_here") {
-        throw new Error("Anthropic API key is not configured.");
-      }
-
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
+      const response = await generateAnthropic({
+        context: {
+          totals: context?.totals,
+          recentTransactions: context?.recentTransactions?.slice(0, 5).map(({ amountPaid, paymentDate, paymentMode, paymentType }) => ({ amountPaid, paymentDate, paymentMode, paymentType })),
+          dueAlerts: context?.dueAlerts?.slice(0, 5).map(({ balanceAmount, weeklyAmount, dueAmount, dueCount, lastDueDate }) => ({ balanceAmount, weeklyAmount, dueAmount, dueCount, lastDueDate })),
         },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1500,
-          system: `${SYSTEM_PROMPT}\n\nCurrent dashboard context: ${JSON.stringify({
-            totals: context?.totals,
-            recentTransactions: context?.recentTransactions?.slice(0, 5),
-            dueAlerts: context?.dueAlerts?.slice(0, 5),
-          })}`,
-          messages: nextMessages.map((message) => ({
-            role: message.role === "assistant" ? "assistant" : "user",
-            content: message.text,
-          })),
-        }),
+        messages: nextMessages.slice(-20).map((message) => ({
+          role: message.role === "assistant" ? "assistant" : "user",
+          content: message.text,
+        })),
       });
-
-      if (!response.ok) {
-        const body = await response.text();
-        throw new Error(response.status === 429 ? "Rate limit reached. Try again in a minute." : body || "AI request failed.");
-      }
-      const data = await response.json();
-      const reply = data.content?.[0]?.text || "I could not generate a response. Please try again.";
-      setMessages((current) => [...current, { id: makeId(), role: "assistant", text: reply }]);
+      setMessages((current) => [...current, { id: makeId(), role: "assistant", text: response.data.text || "I could not generate a response. Please try again." }]);
     } catch (error) {
-      const message = error instanceof Error && error.message.includes("Rate limit")
-        ? error.message
-        : "I could not reach the finance assistant right now. Please check the network or API key.";
+      const code = (error as { code?: string })?.code;
+      const message = code === "functions/failed-precondition"
+        ? "AI is not configured yet. Ask the account owner to configure the Anthropic server API key."
+        : code === "functions/resource-exhausted"
+          ? "AI request limit reached. Try again shortly."
+          : "I could not reach the finance assistant right now. Please check your connection and try again.";
       setMessages((current) => [...current, { id: makeId(), role: "assistant", text: message }]);
     } finally {
       setLoading(false);
@@ -170,7 +155,7 @@ export default function AIScreen() {
               <Text style={styles.headerTitle}>Finance AI Assistant 🤖</Text>
               <View style={styles.statusRow}>
                 <Animated.View style={[styles.statusDot, { opacity: statusPulse }]} />
-                <Text style={styles.statusText}>Online</Text>
+                <Text style={styles.statusText}>{aiProxyEnabled ? "Ready" : "Setup needed"}</Text>
               </View>
             </View>
             <Pressable accessibilityLabel="Clear chat" style={styles.headerBtn} onPress={clearChat}>
@@ -181,8 +166,10 @@ export default function AIScreen() {
           {messages.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyArt}>🤖💬</Text>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>Ask me anything about your finances!</Text>
-              <Text style={[styles.emptySub, { color: colors.textSecondary }]}>Collections, dues, loan status, and route priorities.</Text>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>{aiProxyEnabled ? "Ask me anything about your finances!" : "AI setup is pending"}</Text>
+              <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
+                {aiProxyEnabled ? "Collections, dues, loan status, and route priorities." : "Ask the account owner to enable the secure AI service."}
+              </Text>
             </View>
           ) : (
             <FlatList
@@ -239,12 +226,13 @@ export default function AIScreen() {
               placeholder="Ask about collections, dues, or customers..."
               placeholderTextColor={colors.textMuted}
               style={[styles.input, { color: colors.text }]}
+              editable={aiProxyEnabled && !!user}
               multiline
             />
             <Pressable
               accessibilityLabel="Send message"
-              style={[styles.sendBtn, (!input.trim() || loading) && styles.sendBtnDisabled]}
-              disabled={!input.trim() || loading}
+              style={[styles.sendBtn, (!input.trim() || loading || !user || !aiProxyEnabled) && styles.sendBtnDisabled]}
+              disabled={!input.trim() || loading || !user || !aiProxyEnabled}
               onPress={sendMessage}
             >
               {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.sendText}>Send</Text>}

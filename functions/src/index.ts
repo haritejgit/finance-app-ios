@@ -1,5 +1,7 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import { selectFirstActiveLoansByCustomer } from "./due-marking";
+export { generateAnthropic, generateGemini } from "./ai-proxy";
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -42,23 +44,24 @@ export const dailyAutoMarkDues = functions.pubsub
     console.log(`Running dailyAutoMarkDues at: ${new Date(now).toISOString()}`);
 
     try {
-      // 1. Get all customers and filter active ones in memory (to handle undefined isActive correctly)
-      const customersSnap = await db.collection("customers").get();
+      // Keep the legacy isActive !== false behavior, including records with no isActive field.
+      const [customersSnap, activeLoansSnap] = await Promise.all([
+        db.collection("customers").get(),
+        db.collection("loans").where("status", "==", "ACTIVE").get(),
+      ]);
       const activeCustomers = customersSnap.docs
         .map(doc => ({ id: doc.id, ...doc.data() }) as any)
         .filter(c => c.isActive !== false);
+      const activeLoans = activeLoansSnap.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }) as any);
+      const activeLoanByCustomer = selectFirstActiveLoansByCustomer(activeLoans);
 
       console.log(`Found ${activeCustomers.length} active customers.`);
 
       for (const customer of activeCustomers) {
-        // 2. Fetch all loans for this customer and filter for active in memory to avoid index requirements
-        const loansSnap = await db.collection("loans")
-          .where("customerId", "==", customer.id)
-          .get();
-
-        const activeLoan = loansSnap.docs
-          .map(doc => ({ id: doc.id, ...doc.data() }) as any)
-          .find(l => l.status === "ACTIVE");
+        // The global active-loan query returns document-ID order, matching the
+        // old customer-filtered query's first ACTIVE result for each customer.
+        const activeLoan = activeLoanByCustomer.get(customer.id);
 
         if (!activeLoan) {
           continue;
@@ -78,14 +81,14 @@ export const dailyAutoMarkDues = functions.pubsub
           continue;
         }
 
-        // 3. Fetch all payments and dues for this customer/loan
+        // Read only this loan's payments; the previous customer-wide query
+        // loaded older and unrelated loan histories before filtering them out.
         const paymentsSnap = await db.collection("payments")
           .where("customerId", "==", customer.id)
+          .where("loanId", "==", activeLoan.id)
           .get();
 
-        const loanPayments = paymentsSnap.docs
-          .map(doc => doc.data() as any)
-          .filter(p => p.loanId === activeLoan.id);
+        const loanPayments = paymentsSnap.docs.map(doc => doc.data() as any);
 
         // Group payments by their personal cycle week start timestamp
         const paidCycleStarts = new Set<number>();

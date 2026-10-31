@@ -163,6 +163,11 @@ service cloud.firestore {
         validNonNegative('createdAt');
     }
 
+    function keepsProfileIdentityImmutable() {
+      return request.resource.data.get('role', null) == resource.data.get('role', null) &&
+        request.resource.data.get('parentUid', null) == resource.data.get('parentUid', null);
+    }
+
     function validInvestmentPlan(planId) {
       let data = request.resource.data;
       return data.keys().hasAll([
@@ -239,11 +244,80 @@ service cloud.firestore {
         validEnum('paymentMode', ['CASH', 'PHONE']);
     }
 
+    function validNestedTransactionFields() {
+      return request.resource.data.ownerUid is string &&
+        request.resource.data.nestedUid is string &&
+        request.resource.data.customerId is string && request.resource.data.customerId.size() <= 120 &&
+        request.resource.data.customerName is string && request.resource.data.customerName.size() <= 160 &&
+        request.resource.data.amount is number && request.resource.data.amount >= 0 && request.resource.data.amount <= 1000000000000 &&
+        request.resource.data.date is number && request.resource.data.date >= 0 &&
+        request.resource.data.type is string && request.resource.data.type.size() > 0 && request.resource.data.type.size() <= 64 &&
+        request.resource.data.notes is string && request.resource.data.notes.size() <= 1000 &&
+        validOptionalBoolean('exported') &&
+        validNonNegative('processingFeeAmount') &&
+        validOptionalBoolean('processingFeeCharged');
+    }
+
+    function validNestedExpenseFields() {
+      return request.resource.data.ownerUid is string &&
+        request.resource.data.nestedUid is string &&
+        request.resource.data.amount is number && request.resource.data.amount > 0 && request.resource.data.amount <= 1000000000000 &&
+        request.resource.data.date is number && request.resource.data.date >= 0 &&
+        validString('note', 1000);
+    }
+
+    function validNestedCustomerFields(docId) {
+      let data = request.resource.data;
+      return data.keys().hasAll([
+          'id', 'numericalId', 'name', 'phone', 'alternativePhone', 'aadhar', 'coName', 'coId',
+          'locationDesc', 'latitude', 'longitude', 'villageId', 'masterUserId', 'nestedUserId',
+          'createdAt', 'isActive', 'isTemp', 'principal', 'processingFeeCharged',
+          'processingFeeAmount', 'disbursementMode'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'numericalId', 'name', 'phone', 'alternativePhone', 'aadhar', 'coName', 'coId',
+          'locationDesc', 'latitude', 'longitude', 'villageId', 'masterUserId', 'nestedUserId',
+          'createdAt', 'isActive', 'isTemp', 'principal', 'processingFeeCharged',
+          'processingFeeAmount', 'disbursementMode'
+        ]) &&
+        data.id == docId && data.id is string && data.id.size() <= 80 &&
+        data.numericalId is number && data.numericalId >= 0 &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 160 &&
+        validString('phone', 24) && validString('alternativePhone', 24) && validString('aadhar', 20) &&
+        validString('coName', 160) && (data.coId == null || (data.coId is number && data.coId >= 0)) &&
+        validString('locationDesc', 300) &&
+        (data.latitude == null || (data.latitude is number && data.latitude >= -90 && data.latitude <= 90)) &&
+        (data.longitude == null || (data.longitude is number && data.longitude >= -180 && data.longitude <= 180)) &&
+        data.villageId is string && data.villageId.size() > 0 && data.villageId.size() <= 80 &&
+        data.masterUserId is string && data.nestedUserId == request.auth.uid &&
+        data.createdAt is number && data.createdAt > 0 &&
+        data.isActive == true && data.isTemp == true &&
+        data.principal is number && data.principal > 0 && data.principal <= 1000000000000 &&
+        data.processingFeeCharged is bool && data.processingFeeAmount is number &&
+        data.processingFeeAmount >= 0 && data.processingFeeAmount <= data.principal &&
+        data.disbursementMode in ['CASH', 'PHONE'];
+    }
+
     match /users/{uid} {
       allow read: if isSignedIn() && (request.auth.uid == uid || isNestedUserOf(uid) || (resource.data.role == 'nested' && resource.data.parentUid == request.auth.uid));
-      allow create: if isSignedIn() && (request.auth.uid == uid || (request.resource.data.role == 'nested' && request.resource.data.parentUid == request.auth.uid)) && validUserProfileFields();
-      allow update: if isSignedIn() && (request.auth.uid == uid || (resource.data.role == 'nested' && resource.data.parentUid == request.auth.uid)) && validUserProfileFields();
-      allow delete: if isSignedIn() && (request.auth.uid == uid || (resource.data.role == 'nested' && resource.data.parentUid == request.auth.uid));
+      allow create: if isSignedIn() && (
+        (request.auth.uid == uid && (
+          ((!request.resource.data.keys().hasAny(['role']) || request.resource.data.role == 'owner') &&
+           (!request.resource.data.keys().hasAny(['parentUid']) || request.resource.data.parentUid == null)) ||
+          (request.resource.data.role == 'nested' && request.resource.data.parentUid is string &&
+           exists(/databases/$(database)/documents/nestedAccounts/$(uid)) &&
+           (get(/databases/$(database)/documents/nestedAccounts/$(uid)).data.get('ownerUid', null) == request.resource.data.parentUid ||
+            get(/databases/$(database)/documents/nestedAccounts/$(uid)).data.get('masterUserId', null) == request.resource.data.parentUid) &&
+           (!get(/databases/$(database)/documents/nestedAccounts/$(uid)).data.keys().hasAny(['active']) ||
+            get(/databases/$(database)/documents/nestedAccounts/$(uid)).data.active != false))
+        )) ||
+        (request.resource.data.role == 'nested' && request.resource.data.parentUid == request.auth.uid)
+      ) && validUserProfileFields();
+      allow update: if isSignedIn() && keepsProfileIdentityImmutable() &&
+        ((request.auth.uid == uid && request.resource.data.get('active', null) == resource.data.get('active', null)) ||
+         (resource.data.role == 'nested' && resource.data.parentUid == request.auth.uid)) &&
+        validUserProfileFields();
+      allow delete: if isSignedIn() && resource.data.role == 'nested' && resource.data.parentUid == request.auth.uid;
     }
 
     // Keep financial planning private to the account owner. Nested collectors
@@ -335,19 +409,33 @@ service cloud.firestore {
         request.auth.uid == docId
         || resource.data.ownerUid == request.auth.uid
       );
-      allow create, update: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow create: if isSignedIn() && request.auth.uid != docId &&
+        request.resource.data.ownerUid == request.auth.uid &&
+        request.resource.data.masterUserId == request.auth.uid &&
+        request.resource.data.nestedUid == docId;
+      allow update: if isSignedIn() && resource.data.ownerUid == request.auth.uid &&
+        request.resource.data.ownerUid == resource.data.ownerUid &&
+        request.resource.data.masterUserId == resource.data.masterUserId &&
+        request.resource.data.nestedUid == resource.data.nestedUid;
       allow delete: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
     }
 
     // Nested Transactions: nested user enters payments, owner reconciles them
     match /nestedTransactions/{docId} {
       allow create: if isSignedIn()
-        && request.resource.data.nestedUid == request.auth.uid;
+        && request.resource.data.nestedUid == request.auth.uid
+        && isNestedUserOf(request.resource.data.ownerUid)
+        && validNestedTransactionFields();
       allow read: if isSignedIn() && (
         resource.data.ownerUid == request.auth.uid
         || resource.data.nestedUid == request.auth.uid
       );
-      allow update, delete: if isSignedIn() && (
+      allow update: if isSignedIn() && validNestedTransactionFields() &&
+        request.resource.data.ownerUid == resource.data.ownerUid &&
+        request.resource.data.nestedUid == resource.data.nestedUid &&
+        ((resource.data.ownerUid == request.auth.uid) ||
+         (resource.data.nestedUid == request.auth.uid && resource.data.exported == false && request.resource.data.exported == resource.data.exported));
+      allow delete: if isSignedIn() && (
         resource.data.ownerUid == request.auth.uid
         || (resource.data.nestedUid == request.auth.uid && resource.data.exported == false)
       );
@@ -375,7 +463,8 @@ service cloud.firestore {
       );
       allow create: if isSignedIn() 
         && request.resource.data.nestedUserId == request.auth.uid 
-        && isNestedUserOf(request.resource.data.masterUserId);
+        && isNestedUserOf(request.resource.data.masterUserId)
+        && validNestedCustomerFields(docId);
       allow update: if false;
       allow delete: if isSignedIn() && (
         resource.data.masterUserId == request.auth.uid 
@@ -400,12 +489,17 @@ service cloud.firestore {
     // Nested Expenses: nested user records their own expenses; owner can read
     match /nestedExpenses/{docId} {
       allow create: if isSignedIn()
-        && request.resource.data.nestedUid == request.auth.uid;
+        && request.resource.data.nestedUid == request.auth.uid
+        && isNestedUserOf(request.resource.data.ownerUid)
+        && validNestedExpenseFields();
       allow read: if isSignedIn() && (
         resource.data.ownerUid == request.auth.uid
         || resource.data.nestedUid == request.auth.uid
       );
-      allow update: if isSignedIn() && resource.data.nestedUid == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.nestedUid == request.auth.uid &&
+        request.resource.data.nestedUid == resource.data.nestedUid &&
+        request.resource.data.ownerUid == resource.data.ownerUid &&
+        validNestedExpenseFields();
       allow delete: if isSignedIn() && resource.data.nestedUid == request.auth.uid;
     }
 

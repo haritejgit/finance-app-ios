@@ -29,27 +29,41 @@ This checklist records the existing product areas inspected while improving Kart
 ## Changes and verification recorded for this improvement branch
 
 - [x] Prevent iOS Safari focus zoom on search and other text fields using a global 16px web input size; live production computed style was checked.
+- [x] Add a regression test that confirms the global 16px input/textarea rule is loaded by the app root.
 - [x] Guard renewal initialization against stale customer/loan context and prevent duplicate submissions; pure regression tests cover selection readiness and submit locking.
 - [x] Preserve explicit processing-fee choice and net disbursement handling for new loans and renewals, with legacy fallback; unit tests cover enabled/disabled and legacy cases.
 - [x] Add triple-tap custom recommendation editing with validation; unit tests cover tap behavior and valid/invalid values.
 - [x] Add owner-private investment plans with projection calculations; tests cover contributions, withdrawals, reserve thresholds, and invalid inputs.
 - [x] Add Cash Flow Radar projections with separate receivables and cash, configurable reserve threshold, and incomplete-data handling.
 - [x] Restrict diagnostic log creation to short, sanitized records owned by the signed-in user; Firestore emulator tests cover valid and rejected records.
+- [x] Route Gemini and Anthropic requests through signed-in Firebase callable functions, validate prompt and chat sizes, limit each account to 20 provider requests per minute, remove direct client API-key use, and strip customer names, IDs, phone numbers, and village names from provider context; tests cover authentication, input bounds, rate limits, chat roles, and PII stripping. Firestore's default-deny rule keeps the server-only usage counters inaccessible to clients.
+- [x] Prevent a nested account from changing its profile role/owner or deleting and recreating its profile to gain access to another owner's records; preserve the owner's active-status and nested-account deletion workflow. Firestore emulator regression tests cover both denied escalation and allowed owner management.
+- [x] Prevent users from self-assigning a nested role and arbitrary owner during profile creation; preserve owner self-profile creation and legacy nested-account profile recovery only when an owner-managed nested-account record establishes the relationship.
+- [x] Lock nested-account owner, master, and nested-user identity fields to the existing owner; only owners can update or delete an established account, and new accounts must match the owner-created user ID relationship.
+- [x] Keep nested transaction and expense entries tied to the established owner/agent pair; prevent forged cross-owner submissions, ownership changes, and nested-agent changes to the exported state while allowing owner reconciliation.
+- [x] Validate temporary nested customer records before owner import, including field shape, positive principal, bounded processing fee, identifiers, contact field sizes, coordinates, and owner/agent relationship; reject unexpected fields.
+- [x] Reduce scheduled due-marking reads without changing first-active-loan or legacy customer activity semantics: query active loans once, retain the first active loan per customer in Firestore document order, and fetch only payments matching that customer and loan.
 - [x] Honor the operating system's reduced-motion preference in shared screen, list, and login animations; subscribe once at the app root and clean up the accessibility listener.
 - [x] Replace the web icon-font barrel import with platform-specific SVG/native icon renderers; preserve the same SVG icon paths on web and Ionicons on iOS/Android.
+- [x] Remove the unused vulnerable `xlsx` package while retaining the lazy-loaded `xlsx-js-style` export implementation; verify array and base64 workbook output with styled in-memory fixtures.
 - [x] Preserve and deploy the existing app/Firestore rules and indexes configuration; rules tests pass against the emulator.
 - [ ] Exercise every owner-authenticated workflow on a production-like test account, including renewal, fee scenarios, reports/exports, plans, radar, and mobile Safari. Do not use or publish customer data as test fixtures.
 - [ ] Collect comparable before/after runtime profiles on representative desktop and iPhone Safari devices. Bundle export results alone are not a runtime performance measurement.
 - [ ] Complete a full responsive visual QA pass of every existing screen and dark-mode state.
-- [ ] Resolve the current type-check environment failure caused by unavailable `firebase-functions` and `firebase-admin` dependencies, then rerun type checking.
-- [ ] Run a dependency vulnerability audit when the package registry is reachable; the current environment could not resolve the registry.
+- [x] Resolve the type-check environment issue by installing Cloud Functions dependencies from the checked-in lockfile; `npx tsc --noEmit` now passes.
+- [x] Complete live root and Cloud Functions npm audits and apply compatible lockfile updates. Remove the unused vulnerable `xlsx` direct dependency while preserving exports through the existing lazy-loaded `xlsx-js-style` library. The root production dependency tree still reports 38 advisories (0 critical, 9 high, 28 moderate, 1 low); the Cloud Functions production dependency tree reports 10 moderate advisories and no high or critical items. Remaining high findings require major Expo/React Native/Firebase SDK upgrades; plan those compatibility upgrades separately rather than forcing a framework migration into this preservation pass.
 
 ## Validation snapshot
 
-- `npm test`: 18 tests passed.
-- Firestore rules emulator tests: 6 tests passed with Temurin JDK 21.
-- `npm run lint -- --no-cache`: completed with 0 errors and 69 warnings.
-- `npm run build`: production web export completed after the reduced-motion and icon updates; the entry bundle dropped from 3.13 MB to 2.66 MB, and emitted assets dropped from 41 to 22. The web export no longer contains icon font assets; the 1.24 MB spreadsheet export remains in its separate on-demand chunk. These are build artifact sizes, not transfer or runtime profile measurements.
-- `npx tsc --noEmit`: blocked by missing `firebase-functions` and `firebase-admin` packages in `functions/src/index.ts`.
+- `npm test`: 28 tests passed, including Safari input-font regression, styled Excel export output, AI proxy auth/input/rate-limit/PII validation, and active-loan selection parity against the previous per-customer query.
+- Cloud Functions `npm run build`: TypeScript compilation passed after the Node 22 runtime, compatible dependency updates, and secure AI proxy changes; 3 focused due-selection tests passed.
+- Firestore rules emulator tests: 12 tests passed after dependency updates with Temurin JDK 21, including malformed and forged temporary customer import records, nested transaction/expense owner spoofing and tampering, forged nested profile/account creation, trusted owner-link tampering, legacy nested-account profile recovery, nested-profile role/owner tampering and self-deletion attempts, the owner's create/deactivate/delete and transaction reconciliation flow, and client denial for server-only AI usage counters.
+- `npm run lint -- --no-cache`: completed with 0 errors and 68 warnings after the AI proxy additions.
+- `npm run build`: production web export completed after the reduced-motion and icon updates; the entry bundle dropped from 3.13 MB to 2.66 MB at that stage. The current AI callable client build is 2.69 MB and emits 22 assets (down from 41); the web export contains no icon font assets, and the 1.24 MB styled spreadsheet export remains in its separate on-demand chunk. These are build artifact sizes, not transfer or runtime profile measurements.
+- `npx tsc --noEmit`: passed after installing Cloud Functions dependencies from the checked-in lockfile.
 - Production Hosting and Firestore rules deployed to Firebase project `finance-for-ios`, Hosting target `app`.
-- The source folder supplied for this task is a snapshot without `.git`; changes are synchronized to the existing GitHub improvement branch rather than created from local Git history.
+- Latest guarded Hosting build deployed successfully and returned HTTP 200; the deployed entry bundle contains setup-mode messaging and no direct Gemini/Anthropic URLs or provider-key variable names. AI requests remain disabled by the unset `EXPO_PUBLIC_AI_PROXY_ENABLED` flag until both server functions are deployed.
+- The due-marking function optimization and its composite index are deployed. The function now uses the supported Node.js 22 runtime; its current production status was confirmed with Firebase.
+- The secure AI proxy is implemented locally and its input/PII validation is tested. Firebase Secret Manager is disabled and neither server key is configured, so the new endpoints and frontend migration are not deployed. Follow [AI server setup](ai-server-setup.md) to provision keys without putting them in source control. No key values were copied to Firebase or another service.
+- The source folder supplied for this task is a snapshot without `.git`. Earlier changes were synchronized to the existing GitHub improvement branch, but the latest Firestore security, due-marking, index, and runtime changes could not be pushed from this snapshot. Git is not installed, and its installer requested administrator elevation.
+- Rotate any provider key previously included in a client build before adding its replacement to Firebase Secret Manager.

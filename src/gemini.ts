@@ -1,4 +1,24 @@
-const GEMINI_MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+import { getApp } from "firebase/app";
+import { getFunctions, httpsCallable } from "firebase/functions";
+
+const generateGemini = httpsCallable<{ prompt: string; temperature?: number; maxOutputTokens?: number }, { text: string }>(
+  getFunctions(getApp(), "us-central1"),
+  "generateGemini"
+);
+
+async function requestGemini(prompt: string, temperature: number, maxOutputTokens: number): Promise<string> {
+  try {
+    const result = await generateGemini({ prompt, temperature, maxOutputTokens });
+    return result.data.text || "Unable to get an AI response.";
+  } catch (error: any) {
+    if (error?.code === "functions/failed-precondition") {
+      return "AI is not configured yet. Ask the account owner to configure the Gemini server API key.";
+    }
+    if (error?.code === "functions/unauthenticated") return "Sign in to use the finance assistant.";
+    if (error?.code === "functions/resource-exhausted") return "AI request limit reached. Try again shortly.";
+    return "AI is unavailable right now. Check your connection and try again.";
+  }
+}
 
 export interface BusinessStats {
   totalCustomers: number;
@@ -29,29 +49,7 @@ Reply with a detailed, comprehensive, and practical answer. Be specific to micro
 `;
 
 export const askGemini = async (query: string, stats: BusinessStats): Promise<string> => {
-  try {
-    if (!process.env.EXPO_PUBLIC_GEMINI_API_KEY || process.env.EXPO_PUBLIC_GEMINI_API_KEY === "your_key_here") {
-      return "AI is unavailable. Add EXPO_PUBLIC_GEMINI_API_KEY to your local .env file.";
-    }
-
-    const res = await fetch(`${GEMINI_MODEL_URL}?key=${process.env.EXPO_PUBLIC_GEMINI_API_KEY}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: buildPrompt(query, stats) }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      console.error("Gemini API error:", res.status, JSON.stringify(data));
-      return `AI error (${res.status}): ${data?.error?.message ?? "Unknown error. Check API key and quota."}`;
-    }
-    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "Unable to get AI response.";
-  } catch (err) {
-    console.error("Gemini fetch error:", err);
-    return "AI is unavailable. Check your connection or API key.";
-  }
+  return requestGemini(buildPrompt(query, stats), 0.7, 2048);
 };
 
 export interface ForecastStats extends BusinessStats {
@@ -93,23 +91,6 @@ Keep the total response under 180 words. Be specific with numbers.
 `;
 
 export const askGeminiForecast = async (stats: ForecastStats): Promise<string> => {
-  try {
-    if (!process.env.EXPO_PUBLIC_GEMINI_API_KEY || process.env.EXPO_PUBLIC_GEMINI_API_KEY === "your_key_here") {
-      return "AI Forecast is unavailable. Add EXPO_PUBLIC_GEMINI_API_KEY to your .env file.";
-    }
-    const res = await fetch(`${GEMINI_MODEL_URL}?key=${process.env.EXPO_PUBLIC_GEMINI_API_KEY}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: buildForecastPrompt(stats) }] }],
-        generationConfig: { temperature: 0.5, maxOutputTokens: 512 },
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) return `AI error (${res.status}): ${data?.error?.message ?? "Unknown error."}`;
-    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "Unable to generate forecast.";
-  } catch (err) {
-    return "AI Forecast unavailable. Check your connection or API key.";
-  }
+  return requestGemini(buildForecastPrompt(stats), 0.5, 512);
 };
 
