@@ -53,6 +53,7 @@ import {
   getPersonalCycleStartTs,
   getPersonalCycleWeekIndex,
   formatPersonalCycleRange,
+  addNestedTransactionsBatch,
   addNestedTransaction,
   getNestedTransactionsForCustomer,
   updateNestedTransaction,
@@ -64,7 +65,10 @@ import { doc, getDoc } from "firebase/firestore";
 import { useTheme } from "../../src/theme-context";
 import { colors } from "../../src/theme";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { calculateDisbursedAmount, money, toMillis, weekStart } from "../../src/business-logic";
+import { money, toMillis, weekStart } from "../../src/business-logic";
+import { calculateNetDisbursement, calculateProcessingFee, getRecordedNetDisbursement } from "../../src/processing-fee";
+import { acquireRenewalSubmitLock, isRenewalContextReady } from "../../src/renewal-workflow";
+import { isValidCustomRecommendation, nextRecommendationTap } from "../../src/smart-recommendation";
 import { useLanguage } from "../../src/language-context";
 import { translateTelugu } from "../../src/exports";
 import { openCustomerLedgerPrint } from "../../src/exports";
@@ -120,9 +124,9 @@ function confirmRenewal(message: string): Promise<boolean> {
   });
 }
 
-function buildRenewalSummary(newPrincipal: number, oldBalance: number) {
-  const deduction = Math.floor(newPrincipal / 1000) * 20;
-  const disbursed = calculateDisbursedAmount(newPrincipal);
+function buildRenewalSummary(newPrincipal: number, oldBalance: number, feeCharged = true) {
+  const deduction = calculateProcessingFee(newPrincipal, feeCharged);
+  const disbursed = calculateNetDisbursement(newPrincipal, feeCharged);
   const netToGive = disbursed - oldBalance;
   return { deduction, disbursed, netToGive };
 }
@@ -349,6 +353,9 @@ export default function ProfileScreen() {
   const [agentUpiId, setAgentUpiId] = useState("karthikeyafinance@ybl");
   const [dueOpen, setDueOpen] = useState(false);
   const [renewOpen, setRenewOpen] = useState(false);
+  const [recommendationEditOpen, setRecommendationEditOpen] = useState(false);
+  const [recommendationAmountInput, setRecommendationAmountInput] = useState("");
+  const recommendationTapRef = useRef({ count: 0, lastTap: 0 });
   const [isRenewing, setIsRenewing] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [isSavingPaymentEdit, setIsSavingPaymentEdit] = useState(false);
@@ -357,6 +364,8 @@ export default function ProfileScreen() {
   const [mode, setMode] = useState<PaymentMode>("CASH");
   const [renewAmount, setRenewAmount] = useState("");
   const [renewMode, setRenewMode] = useState<PaymentMode>("CASH");
+  const [renewProcessingFeeCharged, setRenewProcessingFeeCharged] = useState(true);
+  const renewingRef = useRef(false);
   const [renewChequeSubmitted, setRenewChequeSubmitted] = useState(false);
   const [paymentDateInput, setPaymentDateInput] = useState(formatDateInput(Date.now()));
   const [dueDateInput, setDueDateInput] = useState(formatDateInput(Date.now()));
@@ -704,6 +713,8 @@ export default function ProfileScreen() {
     locationRequestRef.current += 1;
     setCustomer(null);
     setLoan(null);
+    recommendationTapRef.current = { count: 0, lastTap: 0 };
+    setRecommendationEditOpen(false);
     setPayments([]);
     setEditOpen(false);
     setEditForm(createEmptyEditForm());
@@ -727,22 +738,30 @@ export default function ProfileScreen() {
   };
 
   // Load and reload on dependency changes
-  useEffect(() => {
-    if (authLoading || !user || !activeCustomerId || !effectiveOwnerId) return;
-    reload({ forceRefresh: false });
-  }, [authLoading, activeCustomerId, user, effectiveOwnerId, reload]);
-
   useFocusEffect(useCallback(() => {
     // Wait for Firebase Auth to resolve before fetching
     if (authLoading) return;
     reload({ forceRefresh: false });
   }, [authLoading, reload]));
 
+  const openRenewalWorkflow = useCallback(() => {
+    if (!isRenewalContextReady({ loading: isLoading, hasError: !!loadError, customerId: activeCustomerId, customer, loan })) return;
+    renewingRef.current = false;
+    setIsRenewing(false);
+    setRenewAmount("");
+    setRenewMode("CASH");
+    setRenewProcessingFeeCharged(true);
+    setRenewChequeSubmitted(customer.chequeSubmitted === true);
+    setRenewDateInput(formatDateInput(Date.now()));
+    setRenewDateError("");
+    setRenewOpen(true);
+  }, [activeCustomerId, customer, isLoading, loadError, loan]);
+
   useEffect(() => {
-    if (renew === "true" && loan) {
-      setRenewOpen(true);
-    }
-  }, [renew, loan]);
+    if (renew !== "true" || !isRenewalContextReady({ loading: isLoading, hasError: !!loadError, customerId: activeCustomerId, customer, loan })) return;
+    openRenewalWorkflow();
+    router.setParams({ renew: undefined } as any);
+  }, [renew, isLoading, loadError, customer, loan, activeCustomerId, openRenewalWorkflow]);
 
   useEffect(() => {
     if (renewOpen) {
@@ -1044,7 +1063,7 @@ export default function ProfileScreen() {
       
     const reminderMsg = `Hi ${customer.name}, this is a payment reminder. Please pay this week's amount Rs.${Math.round(weeklyAmount).toLocaleString("en-IN")} ASAP.`;
     
-    const disbursed = localLoan ? localLoan.principalAmount - Math.floor(localLoan.principalAmount / 1000) * 20 : 0;
+    const disbursed = localLoan ? getRecordedNetDisbursement(localLoan) : 0;
     const statementMsg = `*Karthikeya Finance - Account Statement* 📖\n` +
       `------------------------------------\n` +
       `*Customer:* ${customer.name}\n` +
@@ -1739,7 +1758,7 @@ export default function ProfileScreen() {
                         }] : []),
                         {
                           text: "Renew Loan",
-                          onPress: () => setRenewOpen(true),
+                          onPress: openRenewalWorkflow,
                         },
                         { text: "Cancel", style: "cancel" as const },
                       ]
@@ -1768,7 +1787,7 @@ export default function ProfileScreen() {
                     showToast("info", "No active loan", "This customer does not have an active loan to renew.");
                     return;
                   }
-                  setRenewOpen(true);
+                  openRenewalWorkflow();
                 }}
                 disabled={!localLoan}
               >
@@ -1868,9 +1887,18 @@ export default function ProfileScreen() {
                 reason = "Needs payment improvement";
                 reasonIcon = "⚠️";
               }
+              if (Number(customer?.customRecommendedLoanAmount) > 0) recommended = Number(customer?.customRecommendedLoanAmount);
               const isGood = creditSummary.score >= 700;
               return (
-                <View style={styles.loanRecoCard}>
+                <Pressable style={styles.loanRecoCard} onPress={() => {
+                  if (!isOwner || !customer || customer.id !== activeCustomerId) return;
+                  const result = nextRecommendationTap(recommendationTapRef.current, Date.now());
+                  recommendationTapRef.current = result.state;
+                  if (result.shouldOpenEditor) {
+                    setRecommendationAmountInput(String(recommended));
+                    setRecommendationEditOpen(true);
+                  }
+                }}>
                   <View style={styles.loanRecoHeader}>
                     <View style={styles.loanRecoIconWrap}>
                       <Icon name="sparkles-outline" size={14} color="#1E7A4C" />
@@ -1889,7 +1917,7 @@ export default function ProfileScreen() {
                       <Text style={styles.loanRecoReason}>{reason}</Text>
                     </View>
                   </View>
-                </View>
+                </Pressable>
               );
             })()}
 
@@ -2197,6 +2225,17 @@ export default function ProfileScreen() {
             >
               <Text style={[styles.modalTitle, { color: colors.text }]}>Renew Loan</Text>
               <TextInput placeholder="New Principal Amount" placeholderTextColor={colors.textMuted} value={renewAmount} onChangeText={setRenewAmount} style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]} keyboardType="numeric" />
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: renewProcessingFeeCharged }}
+                style={[styles.docsDetailRow, { backgroundColor: colors.surfaceTint, borderColor: colors.border, width: "100%" }]}
+                onPress={() => setRenewProcessingFeeCharged((value) => !value)}
+              >
+                <View style={[styles.docsDetailCheckbox, { backgroundColor: colors.card, borderColor: colors.border }, renewProcessingFeeCharged && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
+                  {renewProcessingFeeCharged ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
+                </View>
+                <Text style={[styles.docsDetailText, { color: colors.text }]}>Deduct processing fee</Text>
+              </Pressable>
               
               <Text style={[styles.sectionLabel, { color: colors.text }]}>Renewal Date</Text>
               <TextInput
@@ -2279,12 +2318,18 @@ export default function ProfileScreen() {
                 if (!loan || !renewAmount) return null;
                 const newPrincipal = Number(renewAmount);
                 if (isNaN(newPrincipal) || newPrincipal <= 0) return null;
-                const { deduction, disbursed, netToGive } = buildRenewalSummary(newPrincipal, loan.balanceAmount);
+                const { deduction, disbursed, netToGive } = buildRenewalSummary(newPrincipal, loan.balanceAmount, renewProcessingFeeCharged);
                 
                 return (
                   <View style={{ marginVertical: 12, padding: 12, backgroundColor: colors.surfaceTint, borderRadius: 10, borderWidth: 1, borderColor: colors.border, width: "100%" }}>
                     <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 4 }}>
-                      New Disbursed Amount: <Text style={{ fontWeight: "700", color: colors.text }}>Rs.{disbursed.toLocaleString("en-IN")}</Text> (after Rs.{deduction} deduction)
+                      Gross loan: <Text style={{ fontWeight: "700", color: colors.text }}>Rs.{newPrincipal.toLocaleString("en-IN")}</Text>
+                    </Text>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 4 }}>
+                      Processing fee: <Text style={{ fontWeight: "700", color: colors.text }}>Rs.{deduction.toLocaleString("en-IN")}</Text>
+                    </Text>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 4 }}>
+                      Net disbursement: <Text style={{ fontWeight: "700", color: colors.text }}>Rs.{disbursed.toLocaleString("en-IN")}</Text>
                     </Text>
                     <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 4 }}>
                       Old Loan Balance: <Text style={{ fontWeight: "700", color: colors.text }}>Rs.{Math.round(loan.balanceAmount).toLocaleString("en-IN")}</Text>
@@ -2315,7 +2360,7 @@ export default function ProfileScreen() {
                 disabled={isRenewing}
                 onPress={async () => {
                   const activeLoanObj = localLoan || loan;
-                  if (!activeLoanObj || isRenewing) return;
+                  if (!activeLoanObj || isRenewing || renewingRef.current || activeLoanObj.customerId !== activeCustomerId || customer?.id !== activeCustomerId) return;
                   const newPrincipal = Number(renewAmount);
                   if (isNaN(newPrincipal) || newPrincipal <= 0) {
                     showToast("error", "Invalid amount", "Please enter a valid principal amount.");
@@ -2328,22 +2373,24 @@ export default function ProfileScreen() {
                   }
                   setRenewDateError("");
 
-                  const { deduction, disbursed, netToGive } = buildRenewalSummary(newPrincipal, activeLoanObj.balanceAmount);
+                  const { deduction, disbursed, netToGive } = buildRenewalSummary(newPrincipal, activeLoanObj.balanceAmount, renewProcessingFeeCharged);
                   const requiresChequePrompt = newPrincipal >= 10000;
                   const msg =
                     `Please confirm the renewal details:\n\n` +
-                    `New Loan: Rs.${newPrincipal.toLocaleString("en-IN")}\n` +
+                    `Gross New Loan: Rs.${newPrincipal.toLocaleString("en-IN")}\n` +
+                    `Processing Fee: Rs.${deduction.toLocaleString("en-IN")}\n` +
                     `Actual Disbursed: Rs.${disbursed.toLocaleString("en-IN")} (after Rs.${deduction} deduction)\n` +
                     `Less Old Balance: -Rs.${Math.round(activeLoanObj.balanceAmount).toLocaleString("en-IN")}\n\n` +
                     `Net Amount to ${netToGive >= 0 ? "GIVE" : "COLLECT"}: Rs.${Math.abs(netToGive).toLocaleString("en-IN")}/-\n\n` +
                     (requiresChequePrompt ? `Cheque submitted: ${renewChequeSubmitted ? "Yes" : "No"}\n\n` : "") +
                     `Do you want to confirm renewal?`;
 
+                  if (!acquireRenewalSubmitLock(renewingRef)) return;
+                  setIsRenewing(true);
                   const confirmed = await confirmRenewal(msg);
-                  if (!confirmed) return;
+                  if (!confirmed) { renewingRef.current = false; setIsRenewing(false); return; }
 
                   try {
-                    setIsRenewing(true);
                     const renewalOwnerId = effectiveOwnerId || activeLoanObj.userId;
                     if (!renewalOwnerId) {
                       throw new Error("Unable to verify customer ownership. Renewal cannot proceed.");
@@ -2352,9 +2399,9 @@ export default function ProfileScreen() {
                       throw new Error("This Aadhaar number is blocked.");
                     }
                     if (!isOwner) {
-                      // 1. Add RENEWAL_CLOSURE to nestedTransactions (if balance > 0)
+                      const renewalEntries = [];
                       if (activeLoanObj.balanceAmount > 0) {
-                        await addNestedTransaction({
+                        renewalEntries.push({
                           ownerUid: effectiveOwnerId!,
                           nestedUid: user.uid,
                           nestedEmail: user.email || "",
@@ -2366,9 +2413,7 @@ export default function ProfileScreen() {
                           notes: "Loan renewed - old balance cleared (closure)",
                         });
                       }
-                      
-                      // 2. Add RENEWAL_DISBURSEMENT to nestedTransactions
-                      await addNestedTransaction({
+                      renewalEntries.push({
                         ownerUid: effectiveOwnerId!,
                         nestedUid: user.uid,
                         nestedEmail: user.email || "",
@@ -2377,8 +2422,11 @@ export default function ProfileScreen() {
                         amount: newPrincipal,
                         type: "RENEWAL_DISBURSEMENT",
                         date: renewalDateMs + 1,
+                        processingFeeCharged: renewProcessingFeeCharged,
+                        processingFeeAmount: calculateProcessingFee(newPrincipal, renewProcessingFeeCharged),
                         notes: `New loan disbursed via renewal (disbursement) | Mode: ${renewMode}${requiresChequePrompt ? ` | Cheque submitted: ${renewChequeSubmitted ? "Yes" : "No"}` : ""}`,
                       });
+                      await addNestedTransactionsBatch(renewalEntries);
                       
                       setRenewOpen(false);
                       setRenewAmount("");
@@ -2389,7 +2437,7 @@ export default function ProfileScreen() {
                       await reload({ showLoading: false, skipAutoDue: true, forceRefresh: true });
                       showToast("success", "Loan renewed", "Renewal recorded successfully.");
                     } else {
-                      const createdLoan = await renewLoan(activeLoanObj as Loan, newPrincipal, renewalDateMs, renewMode);
+                      const createdLoan = await renewLoan(activeLoanObj as Loan, newPrincipal, renewalDateMs, renewMode, renewProcessingFeeCharged);
                       if (requiresChequePrompt && customer) {
                         const updatedCustomer = { ...customer, chequeRequired: true, chequeSubmitted: renewChequeSubmitted };
                         await updateCustomer(updatedCustomer);
@@ -2415,6 +2463,7 @@ export default function ProfileScreen() {
                         : error?.message || "Could not renew the loan. Please try again."
                     );
                   } finally {
+                    renewingRef.current = false;
                     setIsRenewing(false);
                   }
                 }}
@@ -2440,6 +2489,44 @@ export default function ProfileScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
+      <Modal visible={recommendationEditOpen} transparent animationType="fade" onRequestClose={() => setRecommendationEditOpen(false)}>
+        <KeyboardAvoidingView style={styles.modalWrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <View style={[styles.modal, { backgroundColor: colors.card }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Edit recommended amount</Text>
+            <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>This changes this customer’s recommendation only. It does not create a loan.</Text>
+            <TextInput
+              accessibilityLabel="Custom recommended loan amount"
+              placeholder="Amount in rupees"
+              placeholderTextColor={colors.textMuted}
+              value={recommendationAmountInput}
+              onChangeText={setRecommendationAmountInput}
+              style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]}
+              keyboardType="numeric"
+            />
+            <Pressable style={styles.primary} onPress={async () => {
+              const amount = Number(recommendationAmountInput);
+              if (!customer || customer.id !== activeCustomerId || !isValidCustomRecommendation(amount)) {
+                showToast("error", "Invalid amount", "Enter a whole amount from ₹1 to ₹5,00,00,000.");
+                return;
+              }
+              try {
+                const updatedCustomer = { ...customer, customRecommendedLoanAmount: amount };
+                await updateCustomer(updatedCustomer);
+                setCustomer(updatedCustomer);
+                setRecommendationEditOpen(false);
+                showToast("success", "Recommendation updated", "The custom amount was saved for this customer.");
+              } catch (error: any) {
+                showToast("error", "Save failed", error?.message || "Could not save the custom recommendation.");
+              }
+            }}>
+              <Text style={styles.primaryText}>Save amount</Text>
+            </Pressable>
+            <Pressable style={styles.cancelModalBtn} onPress={() => setRecommendationEditOpen(false)}>
+              <Text style={styles.cancelModalBtnText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <Modal visible={editOpen} transparent animationType="slide">
         <KeyboardAvoidingView style={styles.modalWrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
