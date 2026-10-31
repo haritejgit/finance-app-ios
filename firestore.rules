@@ -62,6 +62,11 @@ service cloud.firestore {
         (request.resource.data[field] is number && request.resource.data[field] >= 0);
     }
 
+    function validOptionalNonNegativeInteger(field) {
+      return !request.resource.data.keys().hasAny([field]) ||
+        (request.resource.data[field] is int && request.resource.data[field] >= 0);
+    }
+
     function validPositive(field) {
       return !request.resource.data.keys().hasAny([field]) ||
         (request.resource.data[field] is number && request.resource.data[field] > 0);
@@ -124,6 +129,7 @@ service cloud.firestore {
         validString('coName', 160) &&
         validNonNegative('coId') &&
         validNonNegative('numericalId') &&
+        validOptionalNonNegativeInteger('renewalRevision') &&
         validNonNegative('createdAt') &&
         validOptionalBoolean('isActive') &&
         validOptionalBoolean('aadharSubmitted') &&
