@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { acquireRenewalSubmitLock, isRenewalContextReady } from "../src/renewal-workflow.ts";
+import { acquireRenewalSubmitLock, isRenewalContextReady, runWithRenewalSubmitLock } from "../src/renewal-workflow.ts";
 
 const ready = { loading: false, hasError: false, customerId: "customer-a", customer: { id: "customer-a" }, loan: { customerId: "customer-a", status: "ACTIVE" } };
 
@@ -24,3 +24,14 @@ test("submit lock allows one renewal request and rejects a duplicate click", () 
   lock.current = false;
   assert.equal(acquireRenewalSubmitLock(lock), true);
 });
+
+test("submit lock releases after confirmation is cancelled or rejects", async () => {
+  const lock = { current: true };
+  assert.equal(await runWithRenewalSubmitLock(lock, async () => false), false);
+  assert.equal(lock.current, false);
+
+  lock.current = true;
+  await assert.rejects(runWithRenewalSubmitLock(lock, async () => { throw new Error("confirmation failed"); }), /confirmation failed/);
+  assert.equal(lock.current, false);
+});
+

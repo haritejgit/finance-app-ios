@@ -67,7 +67,7 @@ import { colors } from "../../src/theme";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { money, toMillis, weekStart } from "../../src/business-logic";
 import { calculateNetDisbursement, calculateProcessingFee, getRecordedNetDisbursement } from "../../src/processing-fee";
-import { acquireRenewalSubmitLock, isRenewalContextReady } from "../../src/renewal-workflow";
+import { acquireRenewalSubmitLock, isRenewalContextReady, runWithRenewalSubmitLock } from "../../src/renewal-workflow";
 import { isValidCustomRecommendation, nextRecommendationTap } from "../../src/smart-recommendation";
 import { useLanguage } from "../../src/language-context";
 import { translateTelugu } from "../../src/exports";
@@ -2386,17 +2386,18 @@ export default function ProfileScreen() {
                   if (!acquireRenewalSubmitLock(renewingRef)) return;
                   setIsRenewing(true);
                   try {
-                    const confirmed = await confirmRenewal(msg);
-                    if (!confirmed) return;
+                    await runWithRenewalSubmitLock(renewingRef, async () => {
+                      const confirmed = await confirmRenewal(msg);
+                      if (!confirmed) return;
 
-                    const renewalOwnerId = effectiveOwnerId || activeLoanObj.userId;
-                    if (!renewalOwnerId) {
-                      throw new Error("Unable to verify customer ownership. Renewal cannot proceed.");
-                    }
-                    if (customer?.aadhar && await isAadhaarBlocked(customer.aadhar, renewalOwnerId)) {
-                      throw new Error("This Aadhaar number is blocked.");
-                    }
-                    if (!isOwner) {
+                      const renewalOwnerId = effectiveOwnerId || activeLoanObj.userId;
+                      if (!renewalOwnerId) {
+                        throw new Error("Unable to verify customer ownership. Renewal cannot proceed.");
+                      }
+                      if (customer?.aadhar && await isAadhaarBlocked(customer.aadhar, renewalOwnerId)) {
+                        throw new Error("This Aadhaar number is blocked.");
+                      }
+                      if (!isOwner) {
                       const renewalEntries = [];
                       if (activeLoanObj.balanceAmount > 0) {
                         renewalEntries.push({
@@ -2434,7 +2435,7 @@ export default function ProfileScreen() {
                       setRenewDateError("");
                       await reload({ showLoading: false, skipAutoDue: true, forceRefresh: true });
                       showToast("success", "Loan renewed", "Renewal recorded successfully.");
-                    } else {
+                      } else {
                       const createdLoan = await renewLoan(activeLoanObj as Loan, newPrincipal, renewalDateMs, renewMode, renewProcessingFeeCharged);
                       if (requiresChequePrompt && customer) {
                         const updatedCustomer = { ...customer, chequeRequired: true, chequeSubmitted: renewChequeSubmitted };
@@ -2450,7 +2451,8 @@ export default function ProfileScreen() {
                       setRenewDateError("");
                       await reload({ showLoading: false, skipAutoDue: true, forceRefresh: true });
                       showToast("success", "Loan renewed", "The loan was renewed successfully.");
-                    }
+                      }
+                    });
                   } catch (error: any) {
                     console.error("Renewal failed:", error);
                     showToast(
@@ -2461,7 +2463,6 @@ export default function ProfileScreen() {
                         : error?.message || "Could not renew the loan. Please try again."
                     );
                   } finally {
-                    renewingRef.current = false;
                     setIsRenewing(false);
                   }
                 }}

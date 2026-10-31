@@ -32,6 +32,7 @@ This checklist records the existing product areas inspected while improving Kart
 - [x] Match the pre-hydration web theme to saved/system preferences and the navy design tokens; allow browser zoom for accessibility while keeping 16px inputs.
 - [x] Add a regression test that confirms the global 16px input/textarea rule is loaded by the app root.
 - [x] Guard renewal initialization against stale customer/loan context and prevent duplicate submissions; pure regression tests cover selection readiness and submit locking.
+- [x] Keep the renewal submit lock held through confirmation and writes, and release it after cancellation or thrown confirmation errors; regression coverage checks both paths.
 - [x] Preserve explicit processing-fee choice and net disbursement handling for new loans and renewals, with legacy fallback; unit tests cover enabled/disabled and legacy cases.
 - [x] Add triple-tap custom recommendation editing with validation; unit tests cover tap behavior and valid/invalid values.
 - [x] Validate persisted custom recommendation amounts in Firestore as positive whole numbers within the UI limit; emulator coverage verifies per-customer persistence, owner scope, invalid values, and compatibility with legacy values during unrelated edits.
@@ -58,7 +59,7 @@ This checklist records the existing product areas inspected while improving Kart
 
 ## Validation snapshot
 
-- `npm test`: 31 tests passed, including Safari input-font/accessibility regressions, initial theme selection, safe JPG export rendering, styled Excel export output, AI proxy auth/input/rate-limit/PII validation, and active-loan selection parity against the previous per-customer query.
+- `npm test`: 32 tests passed, including renewal-lock cleanup after cancellation/failure, Safari input-font/accessibility regressions, initial theme selection, safe JPG export rendering, styled Excel export output, AI proxy auth/input/rate-limit/PII validation, and active-loan selection parity against the previous per-customer query.
 - Cloud Functions `npm run build`: TypeScript compilation passed after the Node 22 runtime, compatible dependency updates, and secure AI proxy changes; 3 focused due-selection tests passed.
 - Firestore rules emulator tests: 13 tests passed after dependency updates with Temurin JDK 21, including malformed and forged temporary customer import records, nested transaction/expense owner spoofing and tampering, forged nested profile/account creation, trusted owner-link tampering, legacy nested-account profile recovery, nested-profile role/owner tampering and self-deletion attempts, the owner's create/deactivate/delete and transaction reconciliation flow, client denial for server-only AI usage counters, and custom loan recommendation validation with legacy compatibility.
 - `npm run lint -- --no-cache`: completed with 0 errors and 68 warnings after the AI proxy additions.
@@ -68,5 +69,6 @@ This checklist records the existing product areas inspected while improving Kart
 - Latest guarded Hosting build deployed successfully and returned HTTP 200; the deployed entry bundle contains setup-mode messaging and no direct Gemini/Anthropic URLs or provider-key variable names. AI requests remain disabled by the unset `EXPO_PUBLIC_AI_PROXY_ENABLED` flag until both server functions are deployed.
 - The due-marking function optimization and its composite index are deployed. The function now uses the supported Node.js 22 runtime; its current production status was confirmed with Firebase.
 - The secure AI proxy is implemented locally and its input/PII validation is tested. Firebase Secret Manager is disabled and neither server key is configured, so the new endpoints and frontend migration are not deployed. Follow [AI server setup](ai-server-setup.md) to provision keys without putting them in source control. No key values were copied to Firebase or another service.
-- The source folder supplied for this task is a snapshot without `.git`. Earlier changes were synchronized to the existing GitHub improvement branch, but the latest Firestore security, due-marking, index, and runtime changes could not be pushed from this snapshot. Git is not installed, and its installer requested administrator elevation.
-- Rotate any provider key previously included in a client build before adding its replacement to Firebase Secret Manager.
+- The source folder supplied for this task is a snapshot without `.git`, and Git is not installed. Changes are synchronized to the existing GitHub improvement branch through the connected GitHub integration; the renewal confirmation cleanup was pushed in commit `5f64696`.
+- A provider-key-looking value was sent in chat and was not used or deployed. Treat it as compromised: revoke it, set fresh provider secrets only through the Firebase CLI prompts, and do not share secret values in chat. The AI callable functions remain undeployed until new secrets are safely configured.
+

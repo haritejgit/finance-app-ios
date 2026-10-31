@@ -16,3 +16,13 @@ export function acquireRenewalSubmitLock(lock: { current: boolean }): boolean {
   lock.current = true;
   return true;
 }
+
+/** Release the already-acquired submit lock after confirmation and all writes finish, even on cancellation or failure. */
+export async function runWithRenewalSubmitLock<T>(lock: { current: boolean }, submit: () => Promise<T>): Promise<T> {
+  try {
+    return await submit();
+  } finally {
+    lock.current = false;
+  }
+}
+
