@@ -49,12 +49,7 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./app/src/main/ic_launcher-playstore.png",
-      "fonts": [
-        "node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf",
-        "node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialIcons.ttf",
-        "node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf"
-      ]
+      "favicon": "./app/src/main/ic_launcher-playstore.png"
     },
     "plugins": [
       "expo-router",
