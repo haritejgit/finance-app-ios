@@ -15,7 +15,8 @@ import Icon from "../../src/Icon";
 import { Customer, Loan, Payment, Village } from "../../src/types";
 import { createBackupSnapshot, makeBackupFilename, parseBackupSnapshot, restoreBackupSnapshot } from "../../src/backup";
 import { downloadTextFile } from "../../src/exports";
-import { toMillis, money, startOfDay, isRealCollectionPayment, getLoanDistributedAmount, weekStart, calculateDisbursedAmount } from "../../src/business-logic";
+import { toMillis, money, startOfDay, isRealCollectionPayment, getLoanDistributedAmount, weekStart } from "../../src/business-logic";
+import { getRecordedNetDisbursement } from "../../src/processing-fee";
 import { useLanguage } from "../../src/language-context";
 import { createNestedAuthUser, updateNestedAccountStatus, deleteNestedAccount, reconcileNestedTransactions } from "../../src/repository";
 import { showToast } from "../../src/notify";
@@ -418,7 +419,12 @@ export default function SettingsScreen() {
                     : (renewalDisb ? (renewalDisb.amount || 0) : 0);
                   
                   const displayedAmount = principalVal * 1.2;
-                  weeklyDisbursed[weekIndex] += calculateDisbursedAmount(principalVal);
+                  const feeRecord = isTempCustomerDisbursedThisWeek ? customer : renewalDisb || {};
+                  weeklyDisbursed[weekIndex] += getRecordedNetDisbursement({
+                    principalAmount: principalVal,
+                    processingFeeCharged: feeRecord.processingFeeCharged,
+                    processingFeeAmount: feeRecord.processingFeeAmount,
+                  });
 
                   const closureTxn = weekTxns.find(t => t.type === "RENEWAL_CLOSURE");
                   if (closureTxn) {
