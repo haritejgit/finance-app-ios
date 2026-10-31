@@ -32,7 +32,7 @@ import { BlockedAadhaar, Customer, Expense, Investment, Loan, Payment, PaymentMo
 import { endOfDay, getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, loanWeekNumber, money, startOfDay, toMillis, weekStart } from "./business-logic";
 import { calculateProcessingFee } from "./processing-fee";
 import { validateInvestmentPlan, type InvestmentPlan } from "./investment-planning";
-import { assertSingleActiveLoan, selectLoanForCustomer } from "./loan-selection";
+import { assertNoConflictingActiveLoan, selectLoanForCustomer } from "./loan-selection";
 import { filterCustomersWithVillage } from "./utils";
 
 const coll = {
@@ -1389,7 +1389,10 @@ export async function renewLoan(
   } catch {
     customerLoansSnap = await getDocs(customerLoansQuery);
   }
-  assertSingleActiveLoan(customerLoansSnap.docs.map((snapshot) => snapshot.data() as Loan));
+  assertNoConflictingActiveLoan(
+    customerLoansSnap.docs.map((snapshot) => ({ id: snapshot.id, ...(snapshot.data() as Loan) })),
+    loan.id
+  );
   const closureMode = normalizeMode(paymentMode);
   const disbursementMode = closureMode;
   const loanRef = doc(db, "loans", loan.id);
