@@ -1342,7 +1342,7 @@ const styles = StyleSheet.create({
   searchCloseBtn: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#F8FAFC" },
   searchModalContent: { flex: 1, padding: 16 },
   customerSearchShell: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 16, borderWidth: 1, borderColor: "#DCE6F7", backgroundColor: "#FFFFFF", paddingHorizontal: 12, marginBottom: 10 },
-  customerSearchInput: { flex: 1, paddingVertical: 13, fontSize: 15, color: "#111827" },
+  customerSearchInput: { flex: 1, paddingVertical: 13, fontSize: 16, color: "#111827" },
   filterRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingBottom: 6 },
   filterChip: { borderRadius: 999, borderWidth: 1, borderColor: "#DCE6F7", paddingHorizontal: 12, paddingVertical: 6, backgroundColor: "#FFFFFF" },
   filterChipOn: { backgroundColor: Colors.lightSeaGreen, borderColor: Colors.lightSeaGreen },
