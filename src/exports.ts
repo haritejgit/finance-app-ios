@@ -563,7 +563,7 @@ function waitForAccountStatementExport(win: any, timeoutMs = 45000): Promise<{ s
       resolve({ success, message });
     };
     const handleMessage = (event: MessageEvent) => {
-      if (win && event.source && event.source !== win) return;
+      if (!win || event.source !== win || event.origin !== window.location.origin) return;
       const data = event.data;
       if (!data || data.type !== "account-statement-export") return;
       if (data.status === "ready") {
@@ -877,7 +877,7 @@ export async function openAccountStatementPrint(
                     type: 'account-statement-export',
                     status: status,
                     message: message
-                  }, '*');
+                  }, window.location.origin);
                 }
               }
               function showError(message) {
