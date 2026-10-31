@@ -215,12 +215,12 @@ function DatePickerField({ value, onChange, placeholder, style }: DatePickerFiel
             borderWidth: "1px",
             borderStyle: "solid",
             borderColor: colors.border || "#d8f7f4",
-            borderRadius: "10px",
-            padding: "8px 12px",
-            fontSize: "16px",
+            borderRadius: "12px",
+            padding: "12px 14px",
+            fontSize: "15px",
             color: value ? (colors.text || "#111827") : (colors.textMuted || "#78909c"),
             width: "100%",
-            minHeight: "54px",
+            minHeight: "45px",
             display: "flex",
             alignItems: "center",
             boxSizing: "border-box",
@@ -269,16 +269,16 @@ function DatePickerField({ value, onChange, placeholder, style }: DatePickerFiel
               backgroundColor: colors.surfaceTint || "#f6fffe",
               borderWidth: 1,
               borderColor: colors.border || "#d8f7f4",
-              borderRadius: 10,
-              paddingVertical: 8,
-              paddingHorizontal: 12,
-              minHeight: 54,
+              borderRadius: 12,
+              paddingVertical: 12,
+              paddingHorizontal: 14,
+              minHeight: 45,
               justifyContent: "center",
             },
             style,
           ]}
         >
-          <Text style={{ fontSize: 16, color: value ? (colors.text || "#111827") : (colors.textMuted || "#78909c") }}>
+          <Text style={{ fontSize: 15, color: value ? (colors.text || "#111827") : (colors.textMuted || "#78909c") }}>
             {value || placeholder || "DD/MM/YYYY"}
           </Text>
         </Pressable>
@@ -1650,11 +1650,11 @@ export default function AccountScreen() {
   };
 
   const renderCalculateCard = () => (
-    <View style={[styles.card, isNarrow && styles.cardCompact]}>
-      <Text style={[styles.cardTitle, isNarrow && styles.cardTitleCompact]}>{t("calculateTotals")}</Text>
-      <Text style={[styles.cardDesc, isNarrow && styles.cardDescCompact]}>{t("calculateTotalsDesc")}</Text>
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>{t("calculateTotals")}</Text>
+      <Text style={styles.cardDesc}>{t("calculateTotalsDesc")}</Text>
 
-      <View style={isNarrow ? { flexDirection: "column", gap: 8 } : styles.datePickerRow}>
+      <View style={isNarrow ? { flexDirection: "column", gap: 12 } : styles.datePickerRow}>
         <View style={isNarrow ? styles.inputContainer : [styles.inputContainer, { flex: 1 }]}>
           <Text style={styles.inputLabel}>{t("startDate")}</Text>
           <DatePickerField
@@ -1673,8 +1673,8 @@ export default function AccountScreen() {
         </View>
       </View>
 
-      <View style={[styles.breakdownHeaderRow, isNarrow && styles.breakdownHeaderRowCompact]}>
-        <Text style={[styles.breakdownTitle, isNarrow && styles.breakdownTitleCompact]}>{t("liveSummary")}</Text>
+      <View style={styles.breakdownHeaderRow}>
+        <Text style={styles.breakdownTitle}>{t("liveSummary")}</Text>
         {rangeSummaryLoading ? (
           <ActivityIndicator size="small" color="#64748b" />
         ) : null}
@@ -3018,11 +3018,8 @@ const styles = StyleSheet.create({
   bulkSubmitButton: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#D4AF6A", borderRadius: 12, marginTop: 2 },
   bulkSubmitText: { color: "#12294A", fontSize: 14, fontWeight: "900" },
   card: { backgroundColor: "#ffffff", borderRadius: 12, padding: 16, gap: 12, borderWidth: 1, borderColor: "#E1E6ED" },
-  cardCompact: { borderRadius: 12, padding: 14, gap: 10 },
   cardTitle: { color: "#12294A", fontSize: 15, fontWeight: "900" },
-  cardTitleCompact: { fontSize: 15 },
   cardDesc: { color: "#6B7A8D", fontSize: 12, fontWeight: "700", marginTop: -4 },
-  cardDescCompact: { marginTop: -2, lineHeight: 17 },
   inputContainer: { gap: 6 },
   inputLabel: { color: "#6B7A8D", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
   textInput: { backgroundColor: "#F9FAFC", borderWidth: 1, borderColor: "#E1E6ED", borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12, fontSize: 13, color: "#12294A" },
@@ -3070,23 +3067,21 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: "#12294A", fontSize: 14, fontWeight: "900" },
   datePickerRow: { flexDirection: "row", gap: 10 },
   breakdownHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 },
-  breakdownHeaderRowCompact: { marginTop: 4, gap: 6 },
   breakdownTitle: { color: "#12294A", fontSize: 15, fontWeight: "900" },
-  breakdownTitleCompact: { fontSize: 14, flex: 1, flexShrink: 1 },
   summaryActions: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
-  pdfButton: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 8, backgroundColor: "#F4F6F9", paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: "#E1E6ED" },
+  pdfButton: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 8, backgroundColor: "#F4F6F9", paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#E1E6ED" },
   pdfButtonText: { color: "#12294A", fontSize: 12, fontWeight: "800" },
-  whatsappShareBtn: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 8, backgroundColor: "#12294A", paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: "#12294A" },
+  whatsappShareBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 8, backgroundColor: "#12294A", paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#12294A" },
   whatsappShareText: { color: "#D4AF6A", fontSize: 12, fontWeight: "900" },
-  sparklineCard: { borderRadius: 10, backgroundColor: "#F4F6F9", padding: 10, gap: 7, maxHeight: 108 },
+  sparklineCard: { borderRadius: 10, backgroundColor: "#F4F6F9", padding: 12, gap: 8, maxHeight: 120 },
   sparklineHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   sparklineLabel: { color: "#6B7A8D", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
-  sparklineTotal: { fontSize: 14, fontWeight: "900" },
-  sparklineBars: { height: 52, flexDirection: "row", alignItems: "flex-end", gap: 6 },
-  sparklineBarSlot: { flex: 1, height: 52, justifyContent: "flex-end", alignItems: "center", borderRadius: 4, backgroundColor: "#E7EBF0" },
+  sparklineTotal: { fontSize: 15, fontWeight: "900" },
+  sparklineBars: { height: 62, flexDirection: "row", alignItems: "flex-end", gap: 6 },
+  sparklineBarSlot: { flex: 1, height: 62, justifyContent: "flex-end", alignItems: "center", borderRadius: 4, backgroundColor: "#E7EBF0" },
   sparklineBar: { width: "58%", minWidth: 8, borderRadius: 4 },
-  monospacePanel: { backgroundColor: "#12294A", borderRadius: 10, padding: 12 },
-  monospaceText: { fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace", color: "#C4D2E2", fontSize: 11, lineHeight: 16, fontWeight: "600" },
+  monospacePanel: { backgroundColor: "#12294A", borderRadius: 10, padding: 14 },
+  monospaceText: { fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace", color: "#C4D2E2", fontSize: 12, lineHeight: 18, fontWeight: "600" },
   emptyText: { color: "#6B7A8D", fontSize: 13, fontStyle: "italic", textAlign: "center", paddingVertical: 16 },
   logRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#E1E6ED" },
   logDetails: { flex: 1, gap: 2 },
