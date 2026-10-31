@@ -37,6 +37,7 @@ This checklist records the existing product areas inspected while improving Kart
 - [x] Add owner-private investment plans with projection calculations; tests cover contributions, withdrawals, reserve thresholds, and invalid inputs.
 - [x] Add Cash Flow Radar projections with separate receivables and cash, configurable reserve threshold, and incomplete-data handling.
 - [x] Restrict diagnostic log creation to short, sanitized records owned by the signed-in user; Firestore emulator tests cover valid and rejected records.
+- [x] Remove HTML injection from the JPG export status panel by rendering errors, filenames, and generated URLs through text and DOM properties; add a source-level regression test.
 - [x] Route Gemini and Anthropic requests through signed-in Firebase callable functions, validate prompt and chat sizes, limit each account to 20 provider requests per minute, remove direct client API-key use, and strip customer names, IDs, phone numbers, and village names from provider context; tests cover authentication, input bounds, rate limits, chat roles, and PII stripping. Firestore's default-deny rule keeps the server-only usage counters inaccessible to clients.
 - [x] Prevent a nested account from changing its profile role/owner or deleting and recreating its profile to gain access to another owner's records; preserve the owner's active-status and nested-account deletion workflow. Firestore emulator regression tests cover both denied escalation and allowed owner management.
 - [x] Prevent users from self-assigning a nested role and arbitrary owner during profile creation; preserve owner self-profile creation and legacy nested-account profile recovery only when an owner-managed nested-account record establishes the relationship.
@@ -56,7 +57,7 @@ This checklist records the existing product areas inspected while improving Kart
 
 ## Validation snapshot
 
-- `npm test`: 28 tests passed, including Safari input-font regression, styled Excel export output, AI proxy auth/input/rate-limit/PII validation, and active-loan selection parity against the previous per-customer query.
+- `npm test`: 29 tests passed, including Safari input-font regression, safe JPG export rendering, styled Excel export output, AI proxy auth/input/rate-limit/PII validation, and active-loan selection parity against the previous per-customer query.
 - Cloud Functions `npm run build`: TypeScript compilation passed after the Node 22 runtime, compatible dependency updates, and secure AI proxy changes; 3 focused due-selection tests passed.
 - Firestore rules emulator tests: 13 tests passed after dependency updates with Temurin JDK 21, including malformed and forged temporary customer import records, nested transaction/expense owner spoofing and tampering, forged nested profile/account creation, trusted owner-link tampering, legacy nested-account profile recovery, nested-profile role/owner tampering and self-deletion attempts, the owner's create/deactivate/delete and transaction reconciliation flow, client denial for server-only AI usage counters, and custom loan recommendation validation with legacy compatibility.
 - `npm run lint -- --no-cache`: completed with 0 errors and 68 warnings after the AI proxy additions.

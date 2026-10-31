@@ -841,7 +841,7 @@ export async function openAccountStatementPrint(
       </head>
       <body>
         ${format === "jpg" ? `
-          <div class="status-overlay" id="status-overlay">
+          <div class="status-overlay" id="status-overlay" data-export-filename="${escapeHtml(jpgFilename)}">
             <div class="spinner" id="status-spinner"></div>
             <div id="status-msg">
               <strong>${language === "te" ? "చిత్ర నివేదికను రూపొందిస్తున్నాము..." : "Generating JPG Statement..."}</strong><br>
@@ -868,7 +868,8 @@ export async function openAccountStatementPrint(
         <script>
           setTimeout(function() {
             if ("${format}" === 'jpg') {
-              var filename = ${JSON.stringify(jpgFilename)};
+              var statusOverlay = document.getElementById('status-overlay');
+              var filename = statusOverlay ? statusOverlay.getAttribute('data-export-filename') || 'finance_statement.jpg' : 'finance_statement.jpg';
               var objectUrl = null;
               function notify(status, message) {
                 if (window.opener) {
@@ -882,7 +883,18 @@ export async function openAccountStatementPrint(
               function showError(message) {
                 var overlay = document.getElementById('status-overlay');
                 if (overlay) {
-                  overlay.innerHTML = '<div class="error-panel"><strong>Export failed</strong><p class="ready-copy">' + message + '</p></div>';
+                  while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
+                  overlay.className = 'status-overlay';
+                  var panel = document.createElement('div');
+                  panel.className = 'error-panel';
+                  var title = document.createElement('strong');
+                  title.textContent = 'Export failed';
+                  var copy = document.createElement('p');
+                  copy.className = 'ready-copy';
+                  copy.textContent = message;
+                  panel.appendChild(title);
+                  panel.appendChild(copy);
+                  overlay.appendChild(panel);
                 }
                 notify('error', message);
               }
@@ -890,17 +902,40 @@ export async function openAccountStatementPrint(
                 var overlay = document.getElementById('status-overlay');
                 if (!overlay) return;
                 overlay.className = 'status-overlay ready';
-                overlay.innerHTML = [
-                  '<div class="ready-panel">',
-                  '<p class="ready-title">JPG export is ready</p>',
-                  '<p class="ready-copy">If the file did not download automatically, use the Download JPG button below.</p>',
-                  '<div class="download-actions">',
-                  '<a class="download-button" id="download-link" download="' + filename + '" href="' + url + '">Download JPG</a>',
-                  '<a class="open-image-button" target="_blank" rel="noopener" href="' + url + '">Open Image</a>',
-                  '</div>',
-                  '</div>',
-                  '<img class="export-preview" alt="Account statement preview" src="' + url + '">'
-                ].join('');
+                while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
+                var panel = document.createElement('div');
+                panel.className = 'ready-panel';
+                var title = document.createElement('p');
+                title.className = 'ready-title';
+                title.textContent = 'JPG export is ready';
+                var copy = document.createElement('p');
+                copy.className = 'ready-copy';
+                copy.textContent = 'If the file did not download automatically, use the Download JPG button below.';
+                var actions = document.createElement('div');
+                actions.className = 'download-actions';
+                var downloadLink = document.createElement('a');
+                downloadLink.className = 'download-button';
+                downloadLink.id = 'download-link';
+                downloadLink.download = filename;
+                downloadLink.href = url;
+                downloadLink.textContent = 'Download JPG';
+                var openImageLink = document.createElement('a');
+                openImageLink.className = 'open-image-button';
+                openImageLink.target = '_blank';
+                openImageLink.rel = 'noopener';
+                openImageLink.href = url;
+                openImageLink.textContent = 'Open Image';
+                actions.appendChild(downloadLink);
+                actions.appendChild(openImageLink);
+                panel.appendChild(title);
+                panel.appendChild(copy);
+                panel.appendChild(actions);
+                var preview = document.createElement('img');
+                preview.className = 'export-preview';
+                preview.alt = 'Account statement preview';
+                preview.src = url;
+                overlay.appendChild(panel);
+                overlay.appendChild(preview);
                 notify('ready', 'JPG is ready in the export tab.');
                 setTimeout(function() {
                   var link = document.getElementById('download-link');
