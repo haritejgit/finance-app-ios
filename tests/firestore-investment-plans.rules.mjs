@@ -76,3 +76,14 @@ test("cash-flow reserve settings stay owner-only and reject negative balances", 
   await assertFails(getDoc(doc(otherDb, "users", "owner-a", "privateFinance", "settings")));
   await assertFails(getDoc(doc(ownerDb, "users", "owner-a", "privateFinance", "other")));
 });
+
+test("debug logs accept only small, sanitized records owned by the signed-in user", async () => {
+  const ownerDb = testEnv.authenticatedContext("owner-a").firestore();
+  const otherDb = testEnv.authenticatedContext("owner-b").firestore();
+  const validLog = { timestamp: Date.now(), userUid: "owner-a", message: "profile reload failed" };
+  await assertSucceeds(setDoc(doc(ownerDb, "debugLogs", "owner-log"), validLog));
+  await assertFails(getDoc(doc(ownerDb, "debugLogs", "owner-log")));
+  await assertFails(setDoc(doc(otherDb, "debugLogs", "spoofed-log"), validLog));
+  await assertFails(setDoc(doc(ownerDb, "debugLogs", "sensitive-log"), { ...validLog, error: "private details" }));
+  await assertFails(setDoc(doc(ownerDb, "debugLogs", "long-log"), { ...validLog, message: "x".repeat(121) }));
+});
