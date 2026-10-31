@@ -197,13 +197,13 @@ export default function ShiftSelectionScreen() {
       const { addDoc, collection } = await import("firebase/firestore");
       await addDoc(collection(db, "debugLogs"), {
         timestamp: Date.now(),
-        message,
-        ...extra
+        userUid: user?.uid || null,
+        message: message.slice(0, 120)
       });
     } catch (e) {
       console.error("Failed to write debug log", e);
     }
-  }, []);
+  }, [user?.uid]);
 
   const isOwner = !userProfile || userProfile.role !== "nested";
   const effectiveOwnerId = isOwner ? user?.uid : userProfile?.parentUid;
