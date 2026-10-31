@@ -21,6 +21,14 @@ export default function Root({ children }: PropsWithChildren) {
           dangerouslySetInnerHTML={{
             __html: `
               (function () {
+                var updateAppHeight = function () {
+                  var viewport = window.visualViewport;
+                  var height = viewport ? viewport.height : window.innerHeight;
+                  document.documentElement.style.setProperty('--app-height', Math.round(height) + 'px');
+                };
+                updateAppHeight();
+                window.addEventListener('resize', updateAppHeight, { passive: true });
+                window.visualViewport?.addEventListener('resize', updateAppHeight, { passive: true });
                 try {
                   var savedTheme = window.localStorage.getItem('finance_app_theme');
                   var isDark = savedTheme === 'dark' || (savedTheme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -40,13 +48,13 @@ export default function Root({ children }: PropsWithChildren) {
         <style
           dangerouslySetInnerHTML={{
             __html: `
-              html, body { width: 100%; height: 100%; height: 100dvh; background: var(--app-bg, #F3F7F6); color: var(--app-text, #102D39); font-family: 'Onest', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; }
-              #root { width: 100%; height: 100%; height: 100dvh; margin: 0; background: var(--app-bg, #F3F7F6); color: var(--app-text, #102D39); display: flex; flex-direction: column; overflow: hidden; }
+              html, body { width: 100%; height: var(--app-height, 100dvh); min-height: 0; background: var(--app-bg, #F3F7F6); color: var(--app-text, #102D39); font-family: 'Onest', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overflow: hidden; }
+              #root { width: 100%; height: var(--app-height, 100dvh); min-height: 0; margin: 0; background: var(--app-bg, #F3F7F6); color: var(--app-text, #102D39); display: flex; flex-direction: column; overflow: hidden; }
               html[data-theme="dark"], html[data-theme="dark"] body { background: #0B1C22; }
               * { box-sizing: border-box; }
               body { margin: 0; overscroll-behavior-y: none; }
               input, button, textarea { font: inherit; }
-              input, textarea { font-size: 16px !important; }
+              input, textarea, select, [contenteditable="true"] { font-size: 16px !important; touch-action: manipulation; }
               /* iPhone 13 and similar devices */
               @media (max-width: 430px) {
                 html, body, #root { width: 100%; max-width: 100%; overflow-x: hidden; }

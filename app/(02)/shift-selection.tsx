@@ -19,7 +19,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../src/auth-context";
 import { AnimatedListItem } from "../../src/components/AnimatedListItem";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
@@ -180,6 +180,7 @@ function BottomNavButton({ label, icon, active, onPress }: { label: string; icon
 export default function ShiftSelectionScreen() {
   const nav = useRouter();
   const { width: viewportWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const { user, userProfile } = useAuth();
   const { colors } = useTheme();
   const { t, language } = useLanguage();
@@ -610,7 +611,7 @@ export default function ShiftSelectionScreen() {
       <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
         <SafeAreaView style={styles.safe}>
           <ScrollView
-            contentContainerStyle={[styles.container, { paddingHorizontal: viewportWidth >= 900 ? 28 : 16 }]}
+            contentContainerStyle={[styles.container, { paddingHorizontal: viewportWidth >= 900 ? 28 : 16, paddingBottom: Math.max(44, insets.bottom + 44) }]}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           >
             <Animated.View
@@ -638,20 +639,20 @@ export default function ShiftSelectionScreen() {
                     <View style={styles.headerCopy}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                         <Text style={[styles.eyebrow, { color: "#9FB2C9" }]}>{t("premiumWorkspace")}</Text>
-                        <Text style={{ fontSize: 10, fontWeight: "800", color: colors.honeyBronze, backgroundColor: "rgba(233,199,126,0.14)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, overflow: "hidden" }}>FINANCE</Text>
+                        <Text style={{ fontSize: 10, fontWeight: "800", color: colors.blue2, backgroundColor: colors.honeyBronze, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, overflow: "hidden" }}>v1.0.3</Text>
                       </View>
-                      <Text style={[styles.header, { color: colors.white }]}>{t("financeDashboard")}</Text>
+                      <Text style={[styles.header, viewportWidth < 500 && styles.headerTextCompact, { color: colors.white }]}>{t("financeDashboard")}</Text>
                       <Text style={[styles.welcome, { color: "#C0D0D0" }]}>{getGreeting(t)}, {displayName} · {todayLabel}</Text>
                     </View>
                   </View>
-                  <Pressable accessibilityLabel={t("searchCustomers")} style={[styles.searchButton, { backgroundColor: colors.honeyBronze }]} onPress={openCustomerSearch}>
-                    <Icon name="search" size={20} color={Colors.nearBlack} />
+                  <Pressable accessibilityLabel={t("searchCustomers")} style={[styles.searchButton, { backgroundColor: "#203B66" }]} onPress={openCustomerSearch}>
+                    <Icon name="search" size={20} color={colors.honeyBronze} />
                   </Pressable>
                 </View>
 
-                <Pressable style={[styles.todayCard, viewportWidth < 500 && styles.todayCompact, { backgroundColor: colors.lightSeaGreen, borderColor: "rgba(255,255,255,0.16)" }]} onPress={() => nav.push("/graph")}>
+                <Pressable style={[styles.todayCard, viewportWidth < 500 && styles.todayCompact, { backgroundColor: "#203B66", borderColor: "rgba(255,255,255,0.16)" }]} onPress={() => nav.push("/graph")}>
                   <View style={[styles.todayIcon, { backgroundColor: "rgba(255,255,255,0.14)" }]}>
-                    <Icon name="cash-outline" size={20} color={colors.white} />
+                    <Icon name="cash-outline" size={20} color={colors.honeyBronze} />
                   </View>
                   <View style={styles.todayCopy}>
                     <Text style={[styles.todayLabel, { color: "rgba(255,255,255,0.76)" }]}>{t("collectedToday")}</Text>
@@ -700,7 +701,7 @@ export default function ShiftSelectionScreen() {
                             }}
                             style={[styles.shift, { backgroundColor: colors.surfaceTint, borderColor: colors.border }, active && styles.shiftOn]}
                           >
-                        <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={17} color={active ? colors.white : colors.textSecondary} />
+                        <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={17} color={active ? colors.blue2 : colors.textSecondary} />
                             <Text style={[styles.shiftText, active && styles.shiftTextOn]}>{shift}</Text>
                           </Pressable>
                         );
@@ -1223,7 +1224,7 @@ export default function ShiftSelectionScreen() {
         {isOwner && (
           <Pressable
             accessibilityLabel="Open AI Business Advisor"
-            style={styles.aiFab}
+            style={[styles.aiFab, { bottom: Math.max(24, insets.bottom + 12) }]}
             onPress={() => {
               lightImpact();
               nav.push("/ai-advisor" as any);
@@ -1260,6 +1261,7 @@ const styles = StyleSheet.create({
   headerCopy: { flex: 1 },
   eyebrow: { color: Colors.textMuted, fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1.1 },
   header: { color: Colors.nearBlack, fontSize: 29, lineHeight: 35, fontWeight: "800", marginTop: 4 },
+  headerTextCompact: { fontSize: 22, lineHeight: 27 },
   welcome: { color: "#426c67", fontSize: 13, marginTop: 4, fontWeight: "600" },
   searchButton: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: Colors.lightSeaGreen },
   todayCard: { minHeight: 102, borderRadius: 21, backgroundColor: "#f6fffe", flexDirection: "row", alignItems: "center", gap: 16, paddingHorizontal: 18, paddingVertical: 16, borderWidth: 1, borderColor: Colors.borderLight },
@@ -1292,18 +1294,18 @@ const styles = StyleSheet.create({
   routeMeta: { color: "#6B7A8D", fontSize: 12, fontWeight: "700" },
   controlLabel: { color: "#9AA6B2", fontSize: 10.5, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.3 },
   dayGrid: { flexDirection: "row", gap: 6 },
-  dayGridCompact: { flexWrap: "wrap" },
+  dayGridCompact: { flexWrap: "nowrap" },
   dayChip: { flex: 1, minHeight: 44, borderWidth: 1, borderColor: Colors.borderLight, borderRadius: 12, paddingVertical: 11, alignItems: "center", justifyContent: "center", backgroundColor: "#F7FAF9", minWidth: 38 },
-  dayChipCompact: { flexBasis: "22%", minWidth: 54 },
-  dayChipOn: { backgroundColor: Colors.lightSeaGreen, borderColor: Colors.lightSeaGreen },
+  dayChipCompact: { flexBasis: 0, minWidth: 0, paddingHorizontal: 2 },
+  dayChipOn: { backgroundColor: Colors.honeyBronze, borderColor: Colors.honeyBronze },
   dayChipText: { color: "#4D666D", fontSize: 12, fontWeight: "700" },
-  dayChipTextOn: { color: "#FFFFFF", fontWeight: "800" },
+  dayChipTextOn: { color: Colors.nearBlack, fontWeight: "800" },
   shiftRow: { flexDirection: "row", gap: 10 },
   shift: { flex: 1, minHeight: 48, borderRadius: 13, borderWidth: 1, borderColor: Colors.borderLight, backgroundColor: "#F7FAF9", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, paddingHorizontal: 10 },
-  shiftOn: { backgroundColor: Colors.lightSeaGreen, borderColor: Colors.lightSeaGreen },
+  shiftOn: { backgroundColor: Colors.honeyBronze, borderColor: Colors.honeyBronze },
   shiftText: { color: "#4D666D", fontWeight: "700", fontSize: 13 },
-  shiftTextOn: { color: "#FFFFFF", fontWeight: "800" },
-  primaryAction: { backgroundColor: Colors.lightSeaGreen, borderRadius: 14, minHeight: 50, paddingVertical: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 9 },
+  shiftTextOn: { color: Colors.nearBlack, fontWeight: "800" },
+  primaryAction: { backgroundColor: Colors.blue2, borderRadius: 14, minHeight: 50, paddingVertical: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 9 },
   primaryActionText: { color: Colors.white, fontWeight: "800", fontSize: 15 },
   walletRouteSummary: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 2 },
   walletRouteText: { color: Colors.textMuted, fontSize: 11, fontWeight: "800" },

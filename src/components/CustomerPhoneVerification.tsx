@@ -17,7 +17,8 @@ type OtpSession = { app: ReturnType<typeof initializeApp>; auth: Auth; verifier:
 
 function e164(phone: string) {
   const digits = phone.replace(/\D/g, "");
-  return validateIndianPhone(digits) ? `+91${digits}` : "";
+  const error = validateIndianPhone(digits);
+  return error ? "" : `+91${digits}`;
 }
 
 export function CustomerPhoneVerification({ phone, onDecisionChange, colors }: Props) {
