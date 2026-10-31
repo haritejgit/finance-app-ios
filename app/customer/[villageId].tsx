@@ -38,7 +38,8 @@ import { showToast } from "../../src/notify";
 import { getCachedCoordinates, LOCATION_PERMISSION_DENIED, LOCATION_TIMEOUT, requestCurrentCoordinates } from "../../src/location";
 import { addCustomerWithLoan, addPayment, addPaymentsBatch, checkAndAutoMarkDues, getActiveLoansByCustomerIds, getCustomers, getClosedCustomers, closeCustomer, reopenCustomer, getPaymentStatusesForCustomersThisWeek, getVillageById, getCustomerByAadhar, getLastRegularPaymentDatesForCustomers, isAadhaarBlocked, markDue, updateCustomer, isNumericalIdTaken, getNextNumericalId, renewLoan, saveNestedBF } from "../../src/repository";
 import { Customer, Loan, PaymentMode, Village } from "../../src/types";
-import { calculateDisbursedAmount, weekStart } from "../../src/business-logic";
+import { weekStart } from "../../src/business-logic";
+import { calculateNetDisbursement, calculateProcessingFee } from "../../src/processing-fee";
 import { validateAadhaar, validateIndianPhone, validatePositiveAmount } from "../../src/validation";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -94,6 +95,7 @@ type AddCustomerForm = {
   aadharSubmitted: boolean;
   passportPhotoSubmitted: boolean;
   chequeSubmitted: boolean;
+  processingFeeCharged: boolean;
 };
 
 function createEmptyCustomerForm(): AddCustomerForm {
@@ -112,6 +114,7 @@ function createEmptyCustomerForm(): AddCustomerForm {
     aadharSubmitted: false,
     passportPhotoSubmitted: false,
     chequeSubmitted: false,
+    processingFeeCharged: true,
   };
 }
 
@@ -628,7 +631,10 @@ export default function CustomerListScreen() {
   const [scannedData, setScannedData] = useState<AadhaarScanResult | null>(null);
   const [formErrors, setFormErrors] = useState<{ phone?: string; aadhar?: string; principal?: string; numericalId?: string }>({});
   const [nestedAccounts, setNestedAccounts] = useState<{ nestedUid: string; label: string; nestedEmail: string }[]>([]);
-  const cashToHand = useMemo(() => calculateDisbursedAmount(Number(form.principal || 0)), [form.principal]);
+  const cashToHand = useMemo(
+    () => calculateNetDisbursement(Number(form.principal || 0), form.processingFeeCharged),
+    [form.principal, form.processingFeeCharged]
+  );
 
   const logDebug = useCallback(async (message: string, extra: any = {}) => {
     console.log(`[DEBUG] ${message}`, extra);
@@ -2137,9 +2143,24 @@ export default function CustomerListScreen() {
                 </View>
 
                 <Text style={styles.label}>How was money given to customer?</Text>
+                <Pressable
+                  style={styles.checkRow}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: form.processingFeeCharged }}
+                  onPress={() => setForm((f) => ({ ...f, processingFeeCharged: !f.processingFeeCharged }))}
+                >
+                  <View style={[styles.checkbox, form.processingFeeCharged && styles.checkboxOn]}>
+                    {form.processingFeeCharged ? <Icon name="checkmark" size={14} color={colors.white} /> : null}
+                  </View>
+                  <Text style={styles.checkLabel}>Charge processing fee (checked by default)</Text>
+                </Pressable>
                 {Number(form.principal || 0) > 0 ? (
                   <View style={styles.cashToHandCard}>
-                    <Text style={styles.cashToHandLabel}>Cash to hand</Text>
+                    <View>
+                      <Text style={styles.cashToHandLabel}>Gross loan: ₹{Number(form.principal || 0).toLocaleString("en-IN")}</Text>
+                      <Text style={styles.cashToHandLabel}>Processing fee: ₹{calculateProcessingFee(Number(form.principal || 0), form.processingFeeCharged).toLocaleString("en-IN")}</Text>
+                      <Text style={styles.cashToHandLabel}>Net disbursement</Text>
+                    </View>
                     <Text style={styles.cashToHandValue}>{"\u20B9"}{cashToHand.toLocaleString("en-IN")}</Text>
                   </View>
                 ) : null}
@@ -2354,6 +2375,8 @@ export default function CustomerListScreen() {
                             isActive: true,
                             isTemp: true,
                             principal: Number(form.principal || 0),
+                            processingFeeCharged: form.processingFeeCharged,
+                            processingFeeAmount: calculateProcessingFee(Number(form.principal || 0), form.processingFeeCharged),
                             disbursementMode: form.disbursementMode || "CASH",
                           };
                           await setDoc(doc(db, "nestedCustomers", tempId), nestedCustDoc);
@@ -2369,6 +2392,8 @@ export default function CustomerListScreen() {
                             startDate: nestedCustDoc.createdAt,
                             status: "ACTIVE",
                             disbursement_mode: form.disbursementMode || "CASH",
+                            processingFeeCharged: form.processingFeeCharged,
+                            processingFeeAmount: calculateProcessingFee(Number(form.principal || 0), form.processingFeeCharged),
                             isTemp: true,
                           } as any;
 
@@ -2404,7 +2429,8 @@ export default function CustomerListScreen() {
                             Number(form.principal || 0),
                             parsedDate,
                             form.disbursementMode,
-                            village.name
+                            village.name,
+                            form.processingFeeCharged
                           );
 
                           setCustomers((prev) => [...prev, createdCustomer].sort((a, b) => a.numericalId - b.numericalId));
