@@ -44,6 +44,7 @@ export default function Root({ children }: PropsWithChildren) {
               * { box-sizing: border-box; }
               body { margin: 0; overscroll-behavior-y: none; }
               input, button, textarea { font: inherit; }
+              input, textarea { font-size: 16px !important; }
               /* iPhone 13 and similar devices */
               @media (max-width: 430px) {
                 html, body, #root { width: 100%; max-width: 100%; overflow-x: hidden; }
