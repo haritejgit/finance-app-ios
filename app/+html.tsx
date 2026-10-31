@@ -8,7 +8,7 @@ export default function Root({ children }: PropsWithChildren) {
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        <meta name="theme-color" content="#F3F7F6" />
+        <meta name="theme-color" content="#F4F6F9" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Finance Manager" />
@@ -32,8 +32,8 @@ export default function Root({ children }: PropsWithChildren) {
                 try {
                   var savedTheme = window.localStorage.getItem('finance_app_theme');
                   var isDark = savedTheme === 'dark' || (savedTheme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-                  var bg = isDark ? '#0B1C22' : '#F3F7F6';
-                  var text = isDark ? '#FFFFFF' : '#102D39';
+                  var bg = isDark ? '#081526' : '#F4F6F9';
+                  var text = isDark ? '#FFFFFF' : '#12294A';
                   document.documentElement.dataset.theme = isDark ? 'dark' : 'light';
                   document.documentElement.style.backgroundColor = bg;
                   document.documentElement.style.setProperty('--app-bg', bg);
@@ -48,9 +48,9 @@ export default function Root({ children }: PropsWithChildren) {
         <style
           dangerouslySetInnerHTML={{
             __html: `
-              html, body { width: 100%; height: var(--app-height, 100dvh); min-height: 0; background: var(--app-bg, #F3F7F6); color: var(--app-text, #102D39); font-family: 'Onest', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overflow: hidden; }
-              #root { width: 100%; height: var(--app-height, 100dvh); min-height: 0; margin: 0; background: var(--app-bg, #F3F7F6); color: var(--app-text, #102D39); display: flex; flex-direction: column; overflow: hidden; }
-              html[data-theme="dark"], html[data-theme="dark"] body { background: #0B1C22; }
+              html, body { width: 100%; height: var(--app-height, 100dvh); min-height: 0; background: var(--app-bg, #F4F6F9); color: var(--app-text, #12294A); font-family: 'Onest', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overflow: hidden; }
+              #root { width: 100%; height: var(--app-height, 100dvh); min-height: 0; margin: 0; background: var(--app-bg, #F4F6F9); color: var(--app-text, #12294A); display: flex; flex-direction: column; overflow: hidden; }
+              html[data-theme="dark"], html[data-theme="dark"] body { background: #081526; }
               * { box-sizing: border-box; }
               body { margin: 0; overscroll-behavior-y: none; }
               input, button, textarea { font: inherit; }
