@@ -11,6 +11,7 @@ import { ErrorBoundary } from "../src/ErrorBoundary";
 import { ThemeProvider, useTheme } from "../src/theme-context";
 import Toast from "react-native-toast-message";
 import { LanguageProvider } from "../src/language-context";
+import { ReducedMotionProvider } from "../src/useReducedMotion";
 
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
@@ -123,10 +124,12 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <ThemeProvider>
           <LanguageProvider>
-            <AuthProvider>
-              <RootLayoutContent />
-              <Toast />
-            </AuthProvider>
+            <ReducedMotionProvider>
+              <AuthProvider>
+                <RootLayoutContent />
+                <Toast />
+              </AuthProvider>
+            </ReducedMotionProvider>
           </LanguageProvider>
         </ThemeProvider>
       </SafeAreaProvider>
