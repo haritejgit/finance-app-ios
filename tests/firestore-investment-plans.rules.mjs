@@ -206,13 +206,16 @@ test("custom loan recommendations persist on the correct customer and reject inv
   const customerRef = doc(ownerDb, "customers", "recommendation-customer");
   await assertSucceeds(setDoc(customerRef, {
     id: "recommendation-customer", userId: "owner-a", name: "Recommendation customer",
-    customRecommendedLoanAmount: 12000,
+    customRecommendedLoanAmount: 12000, renewalRevision: 0,
   }));
-  await assertSucceeds(updateDoc(customerRef, { customRecommendedLoanAmount: 18000 }));
+  await assertSucceeds(updateDoc(customerRef, { customRecommendedLoanAmount: 18000, renewalRevision: 1 }));
   assert.equal((await getDoc(customerRef)).data()?.customRecommendedLoanAmount, 18000);
 
   for (const invalidAmount of [0, -1, 18000.5, 50000001, "18000"]) {
     await assertFails(updateDoc(customerRef, { customRecommendedLoanAmount: invalidAmount }));
+  }
+  for (const invalidRevision of [-1, 1.5, "2"]) {
+    await assertFails(updateDoc(customerRef, { renewalRevision: invalidRevision }));
   }
   await assertFails(getDoc(doc(otherDb, "customers", "recommendation-customer")));
 
