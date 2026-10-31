@@ -3,7 +3,7 @@ import * as WebBrowser from "expo-web-browser";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, Dimensions, Easing, StyleSheet, Text, TextInput, View, ActivityIndicator, Platform, Pressable, ScrollView } from "react-native";
+import { Animated, Easing, StyleSheet, Text, TextInput, View, ActivityIndicator, Platform, Pressable, ScrollView, useWindowDimensions } from "react-native";
 import { useAuth } from "../../src/auth-context";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import { colors as baseColors, getGradient } from "../../src/theme";
@@ -18,6 +18,7 @@ import { signInWithEmailAndPassword as fbSignIn, signOut } from "firebase/auth";
 WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
+  const { width: viewportWidth } = useWindowDimensions();
   const { user, loading: authLoading, signInEmail, signUpEmail, resetPassword, signInGoogleWithIdToken } = useAuth();
   const { colors } = useTheme();
   const [name, setName] = useState("");
@@ -208,7 +209,7 @@ export default function LoginScreen() {
     <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
       <SafeAreaView style={styles.safe}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          <View style={styles.content}>
+          <View style={[styles.content, { maxWidth: Math.min(viewportWidth - 40, 460) }]}>
             <Animated.View
               style={[
                 styles.brand,
@@ -360,14 +361,12 @@ export default function LoginScreen() {
   );
 }
 
-const screenWidth = Dimensions.get("window").width;
-
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
   centered: { alignItems: "center", justifyContent: "center" },
   container: { paddingHorizontal: 20, paddingVertical: 18, flexGrow: 1, justifyContent: "center" },
-  content: { width: "100%", maxWidth: Math.min(screenWidth - 40, 390), alignSelf: "center", gap: 18 },
+  content: { width: "100%", maxWidth: 460, alignSelf: "center", gap: 22 },
   brand: { alignItems: "center", gap: 8 },
   motionStage: { width: "100%", height: 150, alignItems: "center", justifyContent: "center" },
   logo: {
@@ -383,12 +382,12 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 30, fontWeight: "800", color: baseColors.white, textAlign: "center" },
   subtitle: { fontSize: 14, color: "rgba(255,255,255,0.78)", textAlign: "center" },
-  card: { backgroundColor: baseColors.white, borderRadius: 20, padding: 18, gap: 12, borderWidth: 1, shadowColor: "#0f172a", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 16, elevation: 6 },
+  card: { backgroundColor: baseColors.white, borderRadius: 24, padding: 22, gap: 14, borderWidth: 1, shadowColor: "#102D39", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.14, shadowRadius: 22, elevation: 6 },
   formTitle: { color: baseColors.ink, fontSize: 22, fontWeight: "800" },
   formSub: { color: baseColors.gray, fontSize: 13, lineHeight: 18, marginTop: -6 },
-  inputShell: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: baseColors.surfaceTint, borderRadius: 14, paddingHorizontal: 12, borderWidth: 1, borderColor: baseColors.border },
+  inputShell: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: baseColors.surfaceTint, borderRadius: 15, paddingHorizontal: 14, borderWidth: 1, borderColor: baseColors.border, minHeight: 54 },
   input: { flex: 1, paddingVertical: 14, color: baseColors.ink, fontSize: 15 },
-  button: { backgroundColor: baseColors.coral, borderRadius: 14, paddingVertical: 15, alignItems: "center", marginTop: 2 },
+  button: { backgroundColor: baseColors.teal, borderRadius: 15, paddingVertical: 16, alignItems: "center", marginTop: 4 },
   buttonDisabled: { opacity: 0.55 },
   buttonText: { color: baseColors.white, fontWeight: "800", fontSize: 15 },
   link: { color: baseColors.blue2, alignSelf: "flex-end", marginBottom: 2, fontWeight: "700" },

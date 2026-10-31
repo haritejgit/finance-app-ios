@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { Colors, darkColors } from "../src/theme.ts";
 
 const rootHtml = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
+const expoHtml = await readFile(new URL("../app/+html.tsx", import.meta.url), "utf8");
 
 test("web startup applies the saved or system theme using the design-system colors", () => {
   assert.match(rootHtml, /localStorage\.getItem\('finance_app_theme'\)/);
@@ -13,6 +14,9 @@ test("web startup applies the saved or system theme using the design-system colo
   for (const color of [Colors.bg, Colors.nearBlack, darkColors.background, darkColors.text]) {
     assert.ok(normalizedHtml.includes(color.toLowerCase()), `expected initial web theme to use ${color}`);
   }
+  assert.match(rootHtml, /viewport-fit=cover/);
+  assert.doesNotMatch(rootHtml, /#root\s*\{[^}]*max-width:\s*430px/);
+  assert.doesNotMatch(expoHtml, /#root\s*\{[^}]*max-width:\s*430px/);
 });
 
 test("text fields avoid focus zoom without disabling browser zoom", () => {

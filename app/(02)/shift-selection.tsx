@@ -6,7 +6,6 @@ import { collection, query, where, onSnapshot, getDocs } from "firebase/firestor
 import {
   Alert,
   Animated,
-  Dimensions,
   Easing,
   FlatList,
   Modal,
@@ -17,6 +16,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -30,7 +30,7 @@ import { getDashboardAnalytics, subscribeDashboardAnalytics, type CustomerState,
 import Icon from "../../src/Icon";
 import { lightImpact } from "../../src/interactions";
 import { CustomerSearchResult, getAllActiveCustomersWithVillages, runRetroactiveCleanup, addNestedExpense, updateNestedExpense, deleteNestedExpense, type NestedExpense } from "../../src/repository";
-import { Colors } from "../../src/theme";
+import { Colors, getGradient } from "../../src/theme";
 import { useTheme } from "../../src/theme-context";
 import { useLanguage } from "../../src/language-context";
 import { translateTelugu } from "../../src/exports";
@@ -97,12 +97,14 @@ function DashboardPanel({
   children: React.ReactNode;
   action?: React.ReactNode;
 }) {
+  const { width } = useWindowDimensions();
+  const { colors } = useTheme();
   return (
-    <View style={styles.panel}>
+    <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }, width < 500 && styles.panelCompact, width >= 1024 && styles.panelWide]}>
       <View style={styles.sectionHeader}>
         <View style={styles.sectionCopy}>
-          <Text style={styles.sectionTitle}>{title}</Text>
-          {subtitle ? <Text style={styles.sectionSub}>{subtitle}</Text> : null}
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
+          {subtitle ? <Text style={[styles.sectionSub, { color: colors.textMuted }]}>{subtitle}</Text> : null}
         </View>
         {action}
       </View>
@@ -126,16 +128,17 @@ function DashboardMetric({
   caption: string;
   valueTone?: string;
 }) {
+  const { colors } = useTheme();
   return (
-    <View style={styles.metricCard}>
+    <View style={[styles.metricCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={[styles.metricIcon, { backgroundColor: `${tone}18` }]}>
         <Icon name={icon} size={17} color={tone} />
       </View>
-      <Text style={styles.metricTitle}>{title}</Text>
+      <Text style={[styles.metricTitle, { color: colors.textMuted }]}>{title}</Text>
       <Text style={[styles.metricValue, valueTone ? { color: valueTone } : null]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
         {value}
       </Text>
-      <Text style={styles.metricCaption}>{caption}</Text>
+      <Text style={[styles.metricCaption, { color: colors.textMuted }]}>{caption}</Text>
     </View>
   );
 }
@@ -150,7 +153,7 @@ function MoneyMovementChart({ analytics }: { analytics: DashboardAnalytics }) {
         <View key={week.label} style={styles.chartColumn}>
           <View style={styles.chartBarWrap}>
             <View style={[styles.chartBar, styles.chartBarOut, { height: Math.max(8, (week.distribution / maxValue) * 116) }]} />
-            <View style={[styles.chartBar, styles.chartBarIn, { height: Math.max(8, (week.collection / maxValue) * 116) }]} />
+            <View style={[styles.chartBar, { backgroundColor: colors.primary, height: Math.max(8, (week.collection / maxValue) * 116) }]} />
           </View>
           <Text style={[styles.chartLabel, { color: colors.textMuted }]}>{week.label}</Text>
         </View>
@@ -165,16 +168,18 @@ function EmptyLine({ text }: { text: string }) {
 }
 
 function BottomNavButton({ label, icon, active, onPress }: { label: string; icon: string; active: boolean; onPress: () => void }) {
+  const { colors } = useTheme();
   return (
     <Pressable accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.bottomNavButton, pressed && styles.pressed]}>
-      <Icon name={icon} size={17} color={active ? "#12294A" : "#4B5A6D"} />
-      <Text style={[styles.bottomNavText, active && styles.bottomNavTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
+      <Icon name={icon} size={18} color={active ? colors.primary : colors.textMuted} />
+      <Text style={[styles.bottomNavText, { color: colors.textMuted }, active && [styles.bottomNavTextActive, { color: colors.text }]]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
     </Pressable>
   );
 }
 
 export default function ShiftSelectionScreen() {
   const nav = useRouter();
+  const { width: viewportWidth } = useWindowDimensions();
   const { user, userProfile } = useAuth();
   const { colors } = useTheme();
   const { t, language } = useLanguage();
@@ -602,49 +607,56 @@ export default function ShiftSelectionScreen() {
 
   return (
     <AnimatedScreen style={styles.root}>
-      <LinearGradient colors={["#F4F6F9", "#F4F6F9"]} style={styles.root}>
+      <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
         <SafeAreaView style={styles.safe}>
           <ScrollView
-            contentContainerStyle={styles.container}
+            contentContainerStyle={[styles.container, { paddingHorizontal: viewportWidth >= 900 ? 28 : 16 }]}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           >
             <Animated.View
               style={[
                 styles.content,
                 {
+                  maxWidth: Math.min(viewportWidth - (viewportWidth >= 900 ? 56 : 32), 1180),
+                  gap: viewportWidth >= 900 ? 18 : 14,
+                  flexDirection: viewportWidth >= 1024 ? "row" : "column",
+                  flexWrap: viewportWidth >= 1024 ? "wrap" : "nowrap",
+                  alignItems: "stretch",
+                },
+                {
                   opacity: intro,
                   transform: [{ translateY: intro.interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) }],
                 },
               ]}
             >
-              <View style={[styles.headerCard, { backgroundColor: colors.blue2, borderColor: colors.blue2, borderWidth: 1 }]}>
+              <View style={[styles.headerCard, viewportWidth < 500 && styles.headerCompact, { width: "100%", backgroundColor: colors.blue2, borderColor: colors.blue2, borderWidth: 1 }]}>
                 <View style={styles.headerTop}>
                   <View style={styles.brandRow}>
-                    <View style={[styles.brandIcon, { backgroundColor: colors.blue1 }]}>
-                      <Icon name="business-outline" size={19} color={colors.amberGlow} />
+                  <View style={[styles.brandIcon, { backgroundColor: "rgba(255,255,255,0.12)" }]}>
+                      <Icon name="business-outline" size={20} color={colors.honeyBronze} />
                     </View>
                     <View style={styles.headerCopy}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                         <Text style={[styles.eyebrow, { color: "#9FB2C9" }]}>{t("premiumWorkspace")}</Text>
-                        <Text style={{ fontSize: 9, fontWeight: "900", color: "#12294A", backgroundColor: colors.amberGlow, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, overflow: "hidden" }}>v1.0.3</Text>
+                        <Text style={{ fontSize: 10, fontWeight: "800", color: colors.honeyBronze, backgroundColor: "rgba(233,199,126,0.14)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, overflow: "hidden" }}>FINANCE</Text>
                       </View>
                       <Text style={[styles.header, { color: colors.white }]}>{t("financeDashboard")}</Text>
-                      <Text style={[styles.welcome, { color: "#C4D2E2" }]}>{getGreeting(t)}, {displayName} | {todayLabel}</Text>
+                      <Text style={[styles.welcome, { color: "#C0D0D0" }]}>{getGreeting(t)}, {displayName} · {todayLabel}</Text>
                     </View>
                   </View>
-                  <Pressable accessibilityLabel={t("searchCustomers")} style={[styles.searchButton, { backgroundColor: colors.blue1 }]} onPress={openCustomerSearch}>
-                    <Icon name="search" size={20} color={colors.amberGlow} />
+                  <Pressable accessibilityLabel={t("searchCustomers")} style={[styles.searchButton, { backgroundColor: colors.honeyBronze }]} onPress={openCustomerSearch}>
+                    <Icon name="search" size={20} color={Colors.nearBlack} />
                   </Pressable>
                 </View>
 
-                <Pressable style={[styles.todayCard, { backgroundColor: colors.blue1, borderColor: colors.blue1 }]} onPress={() => nav.push("/graph")}>
-                  <View style={[styles.todayIcon, { backgroundColor: "rgba(212,175,106,0.14)" }]}>
-                    <Icon name="cash-outline" size={18} color={colors.amberGlow} />
+                <Pressable style={[styles.todayCard, viewportWidth < 500 && styles.todayCompact, { backgroundColor: colors.lightSeaGreen, borderColor: "rgba(255,255,255,0.16)" }]} onPress={() => nav.push("/graph")}>
+                  <View style={[styles.todayIcon, { backgroundColor: "rgba(255,255,255,0.14)" }]}>
+                    <Icon name="cash-outline" size={20} color={colors.white} />
                   </View>
                   <View style={styles.todayCopy}>
-                    <Text style={[styles.todayLabel, { color: "#9FB2C9" }]}>{t("collectedToday")}</Text>
-                    <Text style={[styles.todayValue, { color: colors.white }]}>{formatMoney(totals?.collectionToday ?? 0)}</Text>
-                    <Text style={[styles.todayHint, { color: "#7E93AC" }]}>{t("distributedTodayHint")} {formatMoney(totals?.distributedToday ?? 0)}</Text>
+                    <Text style={[styles.todayLabel, { color: "rgba(255,255,255,0.76)" }]}>{t("collectedToday")}</Text>
+                    <Text style={[styles.todayValue, viewportWidth < 500 && styles.todayValueCompact, { color: colors.white }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>{formatMoney(totals?.collectionToday ?? 0)}</Text>
+                    <Text style={[styles.todayHint, { color: "rgba(255,255,255,0.78)" }]}>{t("distributedTodayHint")} {formatMoney(totals?.distributedToday ?? 0)}</Text>
                   </View>
                 </Pressable>
               </View>
@@ -655,10 +667,10 @@ export default function ShiftSelectionScreen() {
                 <>
                   <DashboardPanel
                     title={t("collectionRoute")}
-                    action={<Text style={styles.routeMeta}>{selectedDay} / {selectedShift}</Text>}
+                    action={<Text style={[styles.routeMeta, { color: colors.textMuted }]}>{selectedDay} / {selectedShift}</Text>}
                   >
-                    <Text style={styles.controlLabel}>{t("day")}</Text>
-                    <View style={styles.dayGrid}>
+                    <Text style={[styles.controlLabel, { color: colors.textMuted }]}>{t("day")}</Text>
+                    <View style={[styles.dayGrid, viewportWidth < 500 && styles.dayGridCompact]}>
                       {days.map((day, index) => (
                         <Pressable
                            key={day}
@@ -667,14 +679,14 @@ export default function ShiftSelectionScreen() {
                              lightImpact();
                              setSelectedDay(day);
                            }}
-                           style={[styles.dayChip, selectedDay === day && styles.dayChipOn]}
+                           style={[styles.dayChip, { backgroundColor: colors.surfaceTint, borderColor: colors.border }, viewportWidth < 500 && styles.dayChipCompact, selectedDay === day && styles.dayChipOn]}
                         >
-                          <Text style={[styles.dayChipText, selectedDay === day && styles.dayChipTextOn]}>{shortDays[index]}</Text>
+                          <Text style={[styles.dayChipText, { color: colors.textSecondary }, selectedDay === day && styles.dayChipTextOn]}>{shortDays[index]}</Text>
                         </Pressable>
                       ))}
                     </View>
 
-                    <Text style={styles.controlLabel}>{t("shift")}</Text>
+                    <Text style={[styles.controlLabel, { color: colors.textMuted }]}>{t("shift")}</Text>
                     <View style={styles.shiftRow}>
                       {shifts.map((shift) => {
                         const active = selectedShift === shift;
@@ -686,9 +698,9 @@ export default function ShiftSelectionScreen() {
                               lightImpact();
                               setSelectedShift(shift);
                             }}
-                            style={[styles.shift, active && styles.shiftOn]}
+                            style={[styles.shift, { backgroundColor: colors.surfaceTint, borderColor: colors.border }, active && styles.shiftOn]}
                           >
-                        <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={17} color={active ? "#12294A" : "#4B5A6D"} />
+                        <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={17} color={active ? colors.white : colors.textSecondary} />
                             <Text style={[styles.shiftText, active && styles.shiftTextOn]}>{shift}</Text>
                           </Pressable>
                         );
@@ -696,21 +708,21 @@ export default function ShiftSelectionScreen() {
                     </View>
 
                     {routeProgress.customerCount > 0 && (
-                      <View style={styles.progressCard}>
+                      <View style={[styles.progressCard, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
                         <View style={styles.progressHeader}>
-                          <Text style={styles.progressTitle}>
+                          <Text style={[styles.progressTitle, { color: colors.text }]}>
                             {selectedDay} {selectedShift === "Morning" ? "☀️" : "🌙"} Route Progress
                           </Text>
-                          <Text style={styles.progressPercentText}>{progressPercent}%</Text>
+                          <Text style={[styles.progressPercentText, { color: colors.primary }]}>{progressPercent}%</Text>
                         </View>
-                        <View style={styles.progressBarBg}>
+                        <View style={[styles.progressBarBg, { backgroundColor: colors.borderLight }]}>
                           {paidPercent > 0 && (
                             <View
                               style={[
                                 styles.progressBarFill,
                                 {
                                   width: `${paidPercent}%`,
-                                  backgroundColor: "#D4AF6A", // Orange
+                                  backgroundColor: Colors.amberGlow,
                                   borderRadius: 0,
                                 },
                               ]}
@@ -730,19 +742,19 @@ export default function ShiftSelectionScreen() {
                           )}
                         </View>
                         <View style={styles.progressDetails}>
-                          <Text style={styles.progressDetailText}>
-                            Paid: <Text style={{fontWeight: "900", color: "#D4AF6A"}}>{formatMoney(routeProgress.collected)}</Text>
+                          <Text style={[styles.progressDetailText, { color: colors.textMuted }]}>
+                            Paid: <Text style={{fontWeight: "800", color: Colors.lightSeaGreen}}>{formatMoney(routeProgress.collected)}</Text>
                             {routeProgress.dueAmount > 0 && (
                               <> • Dues: <Text style={{fontWeight: "900", color: "#d94841"}}>{formatMoney(routeProgress.dueAmount)}</Text></>
                             )}
                             {" "}/ {formatMoney(routeProgress.target)}
                           </Text>
                           {remainingCustomers > 0 ? (
-                            <Text style={styles.progressHintText}>
+                            <Text style={[styles.progressHintText, { color: colors.textMuted }]}>
                               Rs. {Math.round(remainingTarget).toLocaleString("en-IN")} left • {remainingCustomers} customer{remainingCustomers === 1 ? "" : "s"} remaining
                             </Text>
                           ) : (
-                            <Text style={[styles.progressHintText, {color: "#1E7A4C", fontWeight: "900"}]}>
+                            <Text style={[styles.progressHintText, {color: Colors.success, fontWeight: "800"}]}>
                               🎉 Route Visited! {routeProgress.paidCustomerCount} Paid • {routeProgress.dueCustomerCount} Dues
                             </Text>
                           )}
@@ -798,21 +810,21 @@ export default function ShiftSelectionScreen() {
                     </DashboardPanel>
                   )}
 
-                  <View style={styles.metricGrid}>
+                  <View style={[styles.metricGrid, viewportWidth >= 1024 && styles.panelWide]}>
                     {isOwner ? (
                       <>
                         <DashboardMetric title={t("balance")} value={formatMoney(balance)} caption={t("collectedMinusPending")} icon="cash-outline" tone="#B03A3A" valueTone="#B03A3A" />
-                        <DashboardMetric title={t("income")} value={formatMoney(totals?.monthlyRevenue ?? 0)} caption={t("collectedThisMonth")} icon="trending-up-outline" tone="#1E7A4C" valueTone="#1E7A4C" />
+                        <DashboardMetric title={t("income")} value={formatMoney(totals?.monthlyRevenue ?? 0)} caption={t("collectedThisMonth")} icon="trending-up-outline" tone={Colors.success} valueTone={Colors.success} />
                         <DashboardMetric title={t("expense")} value={formatMoney(totals?.distributedThisMonth ?? 0)} caption={t("distributedThisMonth")} icon="arrow-down-outline" tone="#9A6B1E" valueTone="#9A6B1E" />
                         <DashboardMetric title="Current Amount" value={formatMoney(mainCurrentAmount)} caption="BF + invested + collection - dist. - exp." icon="alert-triangle-outline" tone="#B03A3A" valueTone="#B03A3A" />
                       </>
                     ) : (
                       <>
-                        <DashboardMetric title="BF (Opening)" value={formatMoney(totals?.balancingFund ?? 0)} caption="Opening balance" icon="wallet-outline" tone="#12294A" valueTone="#12294A" />
+                        <DashboardMetric title="BF (Opening)" value={formatMoney(totals?.balancingFund ?? 0)} caption="Opening balance" icon="wallet-outline" tone={Colors.nearBlack} valueTone={Colors.nearBlack} />
                         <DashboardMetric title="Current Amount" value={formatMoney(totals?.netCashPosition ?? 0)} caption="BF + collected - dist. - exp." icon="calculator-outline" tone="#B03A3A" valueTone="#B03A3A" />
-                        <DashboardMetric title="Today Collected" value={formatMoney(totals?.collectionToday ?? 0)} caption="Collected today" icon="cash-outline" tone="#1E7A4C" valueTone="#1E7A4C" />
+                        <DashboardMetric title="Today Collected" value={formatMoney(totals?.collectionToday ?? 0)} caption="Collected today" icon="cash-outline" tone={Colors.success} valueTone={Colors.success} />
                         <DashboardMetric title="Today Distributed" value={formatMoney(totals?.distributedToday ?? 0)} caption="Distributed today" icon="trending-up-outline" tone="#9A6B1E" valueTone="#9A6B1E" />
-                        <DashboardMetric title="Total Collected" value={formatMoney(totals?.totalCollection ?? 0)} caption="All-time collected" icon="cash-outline" tone="#1E7A4C" valueTone="#1E7A4C" />
+                        <DashboardMetric title="Total Collected" value={formatMoney(totals?.totalCollection ?? 0)} caption="All-time collected" icon="cash-outline" tone={Colors.success} valueTone={Colors.success} />
                         <DashboardMetric title="Total Distributed" value={formatMoney(totals?.totalDistributed ?? 0)} caption="All-time distributed" icon="trending-up-outline" tone="#9A6B1E" valueTone="#9A6B1E" />
                       </>
                     )}
@@ -875,10 +887,10 @@ export default function ShiftSelectionScreen() {
                         const confColor = conf >= 75 ? "#4ADE80" : conf >= 50 ? "#FACC15" : "#F87171";
                         const confBg   = conf >= 75 ? "rgba(74,222,128,0.16)" : conf >= 50 ? "rgba(250,204,21,0.16)" : "rgba(248,113,113,0.16)";
                         return (
-                          <View style={styles.forecastCard}>
+                          <View style={[styles.forecastCard, viewportWidth >= 1024 && styles.panelWide]}>
                             <View style={styles.forecastLeft}>
                               <View style={styles.forecastIconWrap}>
-                                <Icon name="sparkles-outline" size={15} color="#D4AF6A" />
+                                <Icon name="sparkles-outline" size={15} color={Colors.amberGlow} />
                               </View>
                               <View>
                                 <Text style={styles.forecastLabel}>{"Tomorrow's Forecast"}</Text>
@@ -903,7 +915,7 @@ export default function ShiftSelectionScreen() {
                         subtitle={t("collectedVsDistributedByWeek")}
                         action={
                           <View style={styles.legend}>
-                            <View style={[styles.legendDot, { backgroundColor: "#12294A" }]} />
+                            <View style={[styles.legendDot, { backgroundColor: Colors.nearBlack }]} />
                             <Text style={styles.legendText}>{t("in")}</Text>
                             <View style={[styles.legendDot, { backgroundColor: Colors.amberGlow }]} />
                             <Text style={styles.legendText}>{t("out")}</Text>
@@ -918,7 +930,7 @@ export default function ShiftSelectionScreen() {
                         subtitle={t("alertsFromTransactions")}
                         action={
                           <View style={styles.panelIcon}>
-                            <Icon name="sparkles-outline" size={14} color="#D4AF6A" />
+                            <Icon name="sparkles-outline" size={14} color={Colors.amberGlow} />
                           </View>
                         }
                       >
@@ -948,7 +960,7 @@ export default function ShiftSelectionScreen() {
                               onPress={() => item.customerId && router.push(`/profile/${item.customerId}`)}
                             >
                             <View style={styles.transactionIcon}>
-                                <Icon name="cash-outline" size={14} color="#1E7A4C" />
+                                <Icon name="cash-outline" size={14} color={Colors.success} />
                               </View>
                               <View style={styles.rowCopy}>
                                 <Text style={styles.rowTitle}>{item.customerName}</Text>
@@ -987,7 +999,7 @@ export default function ShiftSelectionScreen() {
                               {alert.villageName} / {alert.dueCount} due / {formatMoney(alert.dueAmount)}
                             </Text>
                           </View>
-                          <Icon name="warning" size={14} color="#D4AF6A" />
+                          <Icon name="warning" size={14} color={Colors.amberGlow} />
                         </Pressable>
                       ))
                     ) : (
@@ -996,7 +1008,7 @@ export default function ShiftSelectionScreen() {
                   </DashboardPanel>
 
                   <View
-                    style={styles.bottomNav}
+                    style={[styles.bottomNav, { width: "100%", backgroundColor: colors.card, borderColor: colors.border }]}
                     onLayout={(event) => setBottomNavWidth(event.nativeEvent.layout.width)}
                   >
                     {bottomNavItemWidth > 0 ? (
@@ -1004,6 +1016,7 @@ export default function ShiftSelectionScreen() {
                         pointerEvents="none"
                         style={[
                           styles.bottomNavIndicator,
+                          { backgroundColor: colors.primarySoft },
                           {
                             width: bottomNavItemWidth,
                             transform: [{ translateX: bottomNavSlide }],
@@ -1216,7 +1229,7 @@ export default function ShiftSelectionScreen() {
               nav.push("/ai-advisor" as any);
             }}
           >
-            <Icon name="sparkles-outline" size={24} color="#12294A" />
+            <Icon name="sparkles-outline" size={24} color={Colors.nearBlack} />
           </Pressable>
         )}
       </LinearGradient>
@@ -1224,72 +1237,83 @@ export default function ShiftSelectionScreen() {
   );
 }
 
-const screenWidth = Dimensions.get("window").width;
-
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  container: { paddingHorizontal: 14, paddingVertical: 14, paddingBottom: 36, backgroundColor: "#F4F6F9" },
-  content: { width: "100%", maxWidth: Math.min(screenWidth - 28, 380), alignSelf: "center", gap: 12 },
+  container: { paddingVertical: 24, paddingBottom: 44 },
+  content: { width: "100%", maxWidth: 1180, alignSelf: "center", gap: 18 },
   headerCard: {
     backgroundColor: Colors.white,
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
-    shadowOpacity: 0,
-    elevation: 0,
+    borderRadius: 28,
+    padding: 22,
+    gap: 18,
+    shadowColor: "#102D39",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.14,
+    shadowRadius: 22,
+    elevation: 7,
   },
-  headerTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-  brandRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
-  brandIcon: { width: 36, height: 36, borderRadius: 9, backgroundColor: Colors.frozenWater, alignItems: "center", justifyContent: "center" },
+  headerCompact: { borderRadius: 23, padding: 16, gap: 14 },
+  headerTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 },
+  brandRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 14 },
+  brandIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: Colors.frozenWater, alignItems: "center", justifyContent: "center" },
   headerCopy: { flex: 1 },
-  eyebrow: { color: Colors.textMuted, fontSize: 10, fontWeight: "900", textTransform: "uppercase" },
-  header: { color: Colors.nearBlack, fontSize: 22, lineHeight: 27, fontWeight: "900" },
-  welcome: { color: "#426c67", fontSize: 12, marginTop: 2, fontWeight: "800" },
-  searchButton: { width: 36, height: 36, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: Colors.lightSeaGreen },
-  todayCard: { minHeight: 74, borderRadius: 10, backgroundColor: "#f6fffe", flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: Colors.borderLight },
-  todayIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.honeyBronze, alignItems: "center", justifyContent: "center" },
+  eyebrow: { color: Colors.textMuted, fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1.1 },
+  header: { color: Colors.nearBlack, fontSize: 29, lineHeight: 35, fontWeight: "800", marginTop: 4 },
+  welcome: { color: "#426c67", fontSize: 13, marginTop: 4, fontWeight: "600" },
+  searchButton: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: Colors.lightSeaGreen },
+  todayCard: { minHeight: 102, borderRadius: 21, backgroundColor: "#f6fffe", flexDirection: "row", alignItems: "center", gap: 16, paddingHorizontal: 18, paddingVertical: 16, borderWidth: 1, borderColor: Colors.borderLight },
+  todayCompact: { minHeight: 88, borderRadius: 17, gap: 12, paddingHorizontal: 14, paddingVertical: 11 },
+  todayIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: Colors.honeyBronze, alignItems: "center", justifyContent: "center" },
   todayCopy: { flex: 1 },
-  todayLabel: { color: Colors.textMuted, fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
-  todayValue: { color: Colors.nearBlack, fontSize: 27, lineHeight: 31, fontWeight: "900" },
-  todayHint: { color: "#426c67", fontSize: 11, fontWeight: "800" },
+  todayLabel: { color: Colors.textMuted, fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.9 },
+  todayValue: { color: Colors.nearBlack, fontSize: 33, lineHeight: 39, fontWeight: "800", marginTop: 2 },
+  todayValueCompact: { fontSize: 29, lineHeight: 34 },
+  todayHint: { color: "#426c67", fontSize: 12, fontWeight: "600", marginTop: 2 },
   panel: {
     backgroundColor: Colors.white,
-    borderRadius: 12,
+    borderRadius: 21,
     borderWidth: 1,
     borderColor: Colors.borderLight,
-    padding: 16,
-    gap: 12,
-    shadowOpacity: 0,
-    elevation: 0,
+    padding: 20,
+    gap: 15,
+    shadowColor: "#102D39",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.045,
+    shadowRadius: 14,
+    elevation: 2,
   },
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
+  panelWide: { width: "48%", flexGrow: 1 },
+  panelCompact: { borderRadius: 20, padding: 16, gap: 14 },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
   sectionCopy: { flex: 1 },
-  sectionTitle: { color: "#12294A", fontSize: 15, lineHeight: 20, fontWeight: "900" },
-  sectionSub: { color: "#9AA6B2", fontSize: 11.5, fontWeight: "700", marginTop: 1 },
+  sectionTitle: { color: Colors.nearBlack, fontSize: 17, lineHeight: 23, fontWeight: "800" },
+  sectionSub: { color: Colors.textMuted, fontSize: 12, fontWeight: "500", marginTop: 3 },
   routeMeta: { color: "#6B7A8D", fontSize: 12, fontWeight: "700" },
   controlLabel: { color: "#9AA6B2", fontSize: 10.5, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.3 },
   dayGrid: { flexDirection: "row", gap: 6 },
-  dayChip: { flex: 1, borderWidth: 0, borderRadius: 8, paddingVertical: 7, alignItems: "center", backgroundColor: "#F4F6F9", minWidth: 38 },
-  dayChipOn: { backgroundColor: Colors.amberGlow, borderColor: Colors.amberGlow },
-  dayChipText: { color: "#4B5A6D", fontSize: 12, fontWeight: "700" },
-  dayChipTextOn: { color: "#12294A", fontWeight: "900" },
-  shiftRow: { flexDirection: "row", gap: 8 },
-  shift: { flex: 1, minHeight: 38, borderRadius: 8, borderWidth: 0, backgroundColor: "#F4F6F9", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7, paddingHorizontal: 8 },
-  shiftOn: { backgroundColor: Colors.amberGlow, borderColor: Colors.amberGlow },
-  shiftText: { color: "#4B5A6D", fontWeight: "700", fontSize: 13 },
-  shiftTextOn: { color: "#12294A", fontWeight: "900" },
-  primaryAction: { backgroundColor: "#12294A", borderRadius: 9, paddingVertical: 13, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
-  primaryActionText: { color: Colors.white, fontWeight: "900", fontSize: 15 },
+  dayGridCompact: { flexWrap: "wrap" },
+  dayChip: { flex: 1, minHeight: 44, borderWidth: 1, borderColor: Colors.borderLight, borderRadius: 12, paddingVertical: 11, alignItems: "center", justifyContent: "center", backgroundColor: "#F7FAF9", minWidth: 38 },
+  dayChipCompact: { flexBasis: "22%", minWidth: 54 },
+  dayChipOn: { backgroundColor: Colors.lightSeaGreen, borderColor: Colors.lightSeaGreen },
+  dayChipText: { color: "#4D666D", fontSize: 12, fontWeight: "700" },
+  dayChipTextOn: { color: "#FFFFFF", fontWeight: "800" },
+  shiftRow: { flexDirection: "row", gap: 10 },
+  shift: { flex: 1, minHeight: 48, borderRadius: 13, borderWidth: 1, borderColor: Colors.borderLight, backgroundColor: "#F7FAF9", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, paddingHorizontal: 10 },
+  shiftOn: { backgroundColor: Colors.lightSeaGreen, borderColor: Colors.lightSeaGreen },
+  shiftText: { color: "#4D666D", fontWeight: "700", fontSize: 13 },
+  shiftTextOn: { color: "#FFFFFF", fontWeight: "800" },
+  primaryAction: { backgroundColor: Colors.lightSeaGreen, borderRadius: 14, minHeight: 50, paddingVertical: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 9 },
+  primaryActionText: { color: Colors.white, fontWeight: "800", fontSize: 15 },
   walletRouteSummary: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 2 },
   walletRouteText: { color: Colors.textMuted, fontSize: 11, fontWeight: "800" },
   walletRouteDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.borderLight },
   metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  metricCard: { flexGrow: 1, flexBasis: "46%", minWidth: 150, minHeight: 122, borderRadius: 12, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E1E6ED", padding: 16 },
-  metricIcon: { width: 26, height: 26, borderRadius: 7, alignItems: "center", justifyContent: "center", marginBottom: 8 },
-  metricTitle: { color: "#9AA6B2", fontSize: 11, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.3 },
-  metricValue: { color: "#12294A", fontSize: 19, lineHeight: 24, fontWeight: "900", marginTop: 3 },
-  metricCaption: { color: "#9AA6B2", fontSize: 11, fontWeight: "700", marginTop: 2 },
+  metricCard: { flexGrow: 1, flexBasis: "46%", minWidth: 150, minHeight: 132, borderRadius: 18, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: Colors.borderLight, padding: 18 },
+  metricIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 12 },
+  metricTitle: { color: Colors.textMuted, fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8 },
+  metricValue: { color: Colors.nearBlack, fontSize: 21, lineHeight: 27, fontWeight: "800", marginTop: 5 },
+  metricCaption: { color: Colors.textMuted, fontSize: 12, fontWeight: "500", marginTop: 3 },
   legend: { flexDirection: "row", alignItems: "center", gap: 5 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { color: Colors.textMuted, fontSize: 10, fontWeight: "900" },
@@ -1298,14 +1322,14 @@ const styles = StyleSheet.create({
   chartBarWrap: { height: 116, flexDirection: "row", alignItems: "flex-end", gap: 5 },
   chartBar: { width: 10, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
   chartBarOut: { backgroundColor: Colors.amberGlow },
-  chartBarIn: { backgroundColor: "#12294A" },
+  chartBarIn: { backgroundColor: Colors.nearBlack },
   chartLabel: { color: Colors.textMuted, fontSize: 10, fontWeight: "900" },
-  panelIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#F4F6F9", alignItems: "center", justifyContent: "center" },
+  panelIcon: { width: 36, height: 36, borderRadius: 13, backgroundColor: Colors.frozenWater, alignItems: "center", justifyContent: "center" },
   insightRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   insightDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.amberGlow, marginTop: 5 },
   insightText: { flex: 1, color: "#3E4C5E", fontSize: 13, lineHeight: 19, fontWeight: "700" },
-  csvButton: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 6, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E1E6ED", paddingHorizontal: 8, paddingVertical: 5 },
-  csvText: { color: "#12294A", fontSize: 10, fontWeight: "900" },
+  csvButton: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 10, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 11, paddingVertical: 8 },
+  csvText: { color: Colors.nearBlack, fontSize: 11, fontWeight: "800" },
   transactionRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9, borderTopWidth: 1, borderTopColor: "#EEF1F5" },
   transactionIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#E4F3EA", alignItems: "center", justifyContent: "center" },
   rowCopy: { flex: 1, minWidth: 0 },
@@ -1316,11 +1340,11 @@ const styles = StyleSheet.create({
   alertRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9, borderTopWidth: 1, borderTopColor: "#EEF1F5" },
   alertIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#FBEAEA", alignItems: "center", justifyContent: "center" },
   emptyText: { color: Colors.textMuted, fontSize: 13, fontWeight: "800", paddingVertical: 12 },
-  bottomNav: { position: "relative", flexDirection: "row", justifyContent: "space-between", backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#E1E6ED", padding: 6, overflow: "hidden" },
-  bottomNavIndicator: { position: "absolute", top: 6, bottom: 6, left: 6, borderRadius: 9, backgroundColor: "#F0D28F" },
-  bottomNavButton: { flex: 1, minHeight: 54, borderRadius: 9, borderWidth: 0, alignItems: "center", justifyContent: "center", gap: 3, paddingHorizontal: 2, paddingVertical: 5, zIndex: 1 },
-  bottomNavText: { color: "#4B5A6D", fontSize: 10.5, fontWeight: "800", textAlign: "center" },
-  bottomNavTextActive: { color: "#12294A", fontWeight: "900" },
+  bottomNav: { position: "relative", flexDirection: "row", justifyContent: "space-between", backgroundColor: "#FFFFFF", borderRadius: 19, borderWidth: 1, borderColor: Colors.borderLight, padding: 7, overflow: "hidden", shadowColor: "#102D39", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 2 },
+  bottomNavIndicator: { position: "absolute", top: 7, bottom: 7, left: 7, borderRadius: 13, backgroundColor: "#EAF4F1" },
+  bottomNavButton: { flex: 1, minHeight: 60, borderRadius: 13, borderWidth: 0, alignItems: "center", justifyContent: "center", gap: 5, paddingHorizontal: 3, paddingVertical: 7, zIndex: 1 },
+  bottomNavText: { color: "#70838A", fontSize: 11, fontWeight: "600", textAlign: "center" },
+  bottomNavTextActive: { color: Colors.nearBlack, fontWeight: "800" },
   progressCard: { backgroundColor: "#fafbfc", borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: Colors.borderLight },
   progressHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
   progressTitle: { fontSize: 12, fontWeight: "900", color: Colors.nearBlack },
@@ -1331,7 +1355,7 @@ const styles = StyleSheet.create({
   progressDetailText: { fontSize: 11, fontWeight: "800", color: Colors.textMuted },
   progressHintText: { fontSize: 10, fontWeight: "800", color: Colors.amberGlow },
   pressed: { opacity: 0.76, transform: [{ scale: 0.98 }] },
-  skeletonPanel: { backgroundColor: Colors.white, borderRadius: 18, borderWidth: 1, borderColor: Colors.borderLight, padding: 16, gap: 14 },
+  skeletonPanel: { width: "100%", backgroundColor: Colors.white, borderRadius: 18, borderWidth: 1, borderColor: Colors.borderLight, padding: 16, gap: 14 },
   skeletonLine: { height: 16, borderRadius: 999, backgroundColor: "#DCE6F7" },
   searchModalSafe: { flex: 1 },
   searchModalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingVertical: 14, backgroundColor: "#FFFFFF", borderBottomWidth: 1, borderBottomColor: "#DCE6F7" },
@@ -1341,7 +1365,7 @@ const styles = StyleSheet.create({
   customerSearchShell: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 16, borderWidth: 1, borderColor: "#DCE6F7", backgroundColor: "#FFFFFF", paddingHorizontal: 12, marginBottom: 10 },
   customerSearchInput: { flex: 1, paddingVertical: 13, fontSize: 16, color: "#111827" },
   filterRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingBottom: 6 },
-  filterChip: { borderRadius: 999, borderWidth: 1, borderColor: "#DCE6F7", paddingHorizontal: 12, paddingVertical: 6, backgroundColor: "#FFFFFF" },
+  filterChip: { minHeight: 40, borderRadius: 999, borderWidth: 1, borderColor: "#DCE6F7", paddingHorizontal: 12, paddingVertical: 9, backgroundColor: "#FFFFFF", justifyContent: "center" },
   filterChipOn: { backgroundColor: Colors.lightSeaGreen, borderColor: Colors.lightSeaGreen },
   filterChipText: { color: "#6B7280", fontSize: 12, fontWeight: "700", textTransform: "capitalize" },
   filterChipTextOn: { color: "#FFFFFF" },
@@ -1378,8 +1402,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#0D1E30",
-    borderRadius: 16,
+    backgroundColor: "#102D39",
+    borderRadius: 19,
     borderWidth: 1,
     borderColor: "rgba(212,175,106,0.35)",
     paddingVertical: 14,
@@ -1393,7 +1417,7 @@ const styles = StyleSheet.create({
   },
   forecastLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
   forecastIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(212,175,106,0.18)", alignItems: "center", justifyContent: "center" },
-  forecastLabel: { color: "#D4AF6A", fontSize: 10, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.6 },
+  forecastLabel: { color: "#E9C77E", fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.9 },
   forecastAmount: { color: "#FFFFFF", fontSize: 22, fontWeight: "900", marginTop: 2 },
   forecastSub: { color: "rgba(255,255,255,0.65)", fontSize: 10, fontWeight: "700", marginTop: 2 },
   forecastConfBadge: { borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8, alignItems: "center", justifyContent: "center" },

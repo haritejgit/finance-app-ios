@@ -4,15 +4,15 @@
     <meta charset="utf-8" />
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#F4F6F9" />
+    <meta name="theme-color" content="#F3F7F6" />
     <title>%WEB_TITLE%</title>
     <script>
       (function () {
         try {
           var savedTheme = window.localStorage.getItem('finance_app_theme');
           var isDark = savedTheme === 'dark' || (savedTheme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-          var bg = isDark ? '#081526' : '#F4F6F9';
-          var text = isDark ? '#FFFFFF' : '#12294A';
+          var bg = isDark ? '#0B1C22' : '#F3F7F6';
+          var text = isDark ? '#FFFFFF' : '#102D39';
           document.documentElement.dataset.theme = isDark ? 'dark' : 'light';
           document.documentElement.style.backgroundColor = bg;
           document.documentElement.style.setProperty('--app-bg', bg);
@@ -30,8 +30,8 @@
         height: 100dvh;
         margin: 0;
         overflow: hidden;
-        background: var(--app-bg, #F4F6F9);
-        color: var(--app-text, #12294A);
+        background: var(--app-bg, #F3F7F6);
+        color: var(--app-text, #102D39);
         font-family: 'Onest', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         overscroll-behavior-y: none;
       }
@@ -41,12 +41,12 @@
         height: 100%;
         height: 100dvh;
         flex: 1;
-        background: var(--app-bg, #F4F6F9);
-        color: var(--app-text, #12294A);
+        background: var(--app-bg, #F3F7F6);
+        color: var(--app-text, #102D39);
       }
       html[data-theme="dark"],
       html[data-theme="dark"] body {
-        background: #081526;
+        background: #0B1C22;
       }
       * {
         box-sizing: border-box;

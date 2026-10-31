@@ -59,10 +59,10 @@ export function CashFlowRadar({ analytics, userId }: { analytics: DashboardAnaly
   };
 
   const styles = useMemo(() => ({
-    panel: { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 18, padding: 16, marginBottom: 16 } as const,
-    title: { color: colors.text, fontSize: 18, fontWeight: "800" as const },
-    muted: { color: colors.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 5 } as const,
-    metric: { backgroundColor: colors.surfaceTint, borderRadius: 12, padding: 12, flexGrow: 1, minWidth: "44%" as any, marginTop: 8 },
+    panel: { width: "100%" as const, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 22, padding: 20, marginBottom: 0 },
+    title: { color: colors.text, fontSize: 19, fontWeight: "800" as const },
+    muted: { color: colors.textSecondary, fontSize: 12, lineHeight: 19, marginTop: 5 } as const,
+    metric: { backgroundColor: colors.surfaceTint, borderRadius: 15, padding: 14, flexGrow: 1, minWidth: "44%" as any, marginTop: 8 },
   }), [colors]);
 
   return <View style={styles.panel}>

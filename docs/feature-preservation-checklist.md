@@ -30,8 +30,10 @@ This checklist records the existing product areas inspected while improving Kart
 ## Changes and verification recorded for this improvement branch
 
 - [x] Prevent iOS Safari focus zoom on search and other text fields using a global 16px web input size; live production computed style was checked.
-- [x] Match the pre-hydration web theme to saved/system preferences and the navy design tokens; allow browser zoom for accessibility while keeping 16px inputs.
-- [x] Add a regression test that confirms the global 16px input/textarea rule is loaded by the app root.
+- [x] Match the pre-hydration web theme to saved/system preferences and the midnight/teal design system; allow browser zoom for accessibility while keeping 16px inputs.
+- [x] Add a responsive, premium dashboard treatment with wide desktop panels and a single-column phone layout; preserve all route, search, report, and account actions.
+- [x] Tune dashboard spacing and tap targets for a 390px iPhone viewport, wrap weekday selection on narrow screens, and keep long collection amounts on one line. App roots now fill the viewport instead of forcing a 430px phone frame; device hardware testing remains outstanding.
+- [x] Add regression checks for the 16px Safari input rule, theme colors, viewport-fit, and full-width app root.
 - [x] Prevent a silent Renew no-op during focus refresh: keep a tap pending for the selected customer and open only after that customer's current loan context loads; tests cover same-customer waiting and customer-switch rejection.
 - [x] Guard renewal initialization against stale customer/loan context and prevent duplicate submissions; pure regression tests cover selection readiness and submit locking.
 - [x] Keep the renewal submit lock held through confirmation and writes, and release it after cancellation or thrown confirmation errors; regression coverage checks both paths.
@@ -67,6 +69,7 @@ This checklist records the existing product areas inspected while improving Kart
 ## Validation snapshot
 
 - `npm test`: 45 tests passed after adding nested-activity grouping and index-fallback coverage. The suite covers read-only duplicate-loan selection, historical loan selection, same-customer Renew waiting through profile refresh, and renewal-lock cleanup after cancellation/failure, alongside Safari input-font/accessibility, theme, exports, AI proxy validation, and due-marking selection tests.
+- UI follow-up: `npm test` passed all 45 tests; web production export completed with 921 modules and 22 assets. Lint completed with 0 errors and 63 existing warnings. No physical iPhone 13 or authenticated customer-account run was available for device-level visual testing.
 - Cloud Functions `npm run build`: TypeScript compilation passed after the Node 22 runtime, compatible dependency updates, and secure AI proxy changes; 3 focused due-selection tests passed.
 - Firestore rules emulator tests: 14 tests passed after dependency updates with Temurin JDK 21, including competing renewals from different closed loans, invalid decreasing/jumping revision rejection, malformed and forged temporary customer import records, nested transaction/expense owner spoofing and tampering, forged nested profile/account creation, trusted owner-link tampering, legacy nested-account profile recovery, nested-profile role/owner tampering and self-deletion attempts, the owner's create/deactivate/delete and transaction reconciliation flow, client denial for server-only AI usage counters, and custom loan recommendation plus renewal revision validation. The latest tested rule change was deployed to production.
 - `npm run lint -- --no-cache`: completed with 0 errors and 68 warnings after the AI proxy additions.
