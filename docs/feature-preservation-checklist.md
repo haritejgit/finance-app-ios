@@ -36,6 +36,7 @@ This checklist records the existing product areas inspected while improving Kart
 - [x] Add Cash Flow Radar projections with separate receivables and cash, configurable reserve threshold, and incomplete-data handling.
 - [x] Restrict diagnostic log creation to short, sanitized records owned by the signed-in user; Firestore emulator tests cover valid and rejected records.
 - [x] Honor the operating system's reduced-motion preference in shared screen, list, and login animations; subscribe once at the app root and clean up the accessibility listener.
+- [x] Replace the web icon-font barrel import with platform-specific SVG/native icon renderers; preserve the same SVG icon paths on web and Ionicons on iOS/Android.
 - [x] Preserve and deploy the existing app/Firestore rules and indexes configuration; rules tests pass against the emulator.
 - [ ] Exercise every owner-authenticated workflow on a production-like test account, including renewal, fee scenarios, reports/exports, plans, radar, and mobile Safari. Do not use or publish customer data as test fixtures.
 - [ ] Collect comparable before/after runtime profiles on representative desktop and iPhone Safari devices. Bundle export results alone are not a runtime performance measurement.
@@ -48,7 +49,7 @@ This checklist records the existing product areas inspected while improving Kart
 - `npm test`: 18 tests passed.
 - Firestore rules emulator tests: 6 tests passed with Temurin JDK 21.
 - `npm run lint -- --no-cache`: completed with 0 errors and 69 warnings.
-- `npm run build -- --clear`: production web export completed after the reduced-motion update; the export contained a 3.13 MB entry JavaScript asset and a separate 1.24 MB spreadsheet export chunk. These are build artifact sizes, not transfer or runtime profile measurements.
+- `npm run build`: production web export completed after the reduced-motion and icon updates; the entry bundle dropped from 3.13 MB to 2.66 MB, and emitted assets dropped from 41 to 22. The web export no longer contains icon font assets; the 1.24 MB spreadsheet export remains in its separate on-demand chunk. These are build artifact sizes, not transfer or runtime profile measurements.
 - `npx tsc --noEmit`: blocked by missing `firebase-functions` and `firebase-admin` packages in `functions/src/index.ts`.
 - Production Hosting and Firestore rules deployed to Firebase project `finance-for-ios`, Hosting target `app`.
 - The source folder supplied for this task is a snapshot without `.git`; changes are synchronized to the existing GitHub improvement branch rather than created from local Git history.
