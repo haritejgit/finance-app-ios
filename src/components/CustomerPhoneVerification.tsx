@@ -4,13 +4,14 @@ import { deleteApp, initializeApp } from "firebase/app";
 import { getAuth, inMemoryPersistence, initializeAuth, RecaptchaVerifier, signInWithPhoneNumber, signOut, type ConfirmationResult, type Auth } from "firebase/auth";
 import { firebaseConfig } from "../firebase-config";
 import { validateIndianPhone } from "../validation";
+import Icon from "../Icon";
 
 export type PhoneVerificationDecision = { phone: string; status: "pending" | "verified" | "skipped" };
 
 type Props = {
   phone: string;
   onDecisionChange: (decision: PhoneVerificationDecision) => void;
-  colors: { text: string; textMuted: string; card: string; surfaceTint: string; border: string; primary: string; white: string; error: string };
+  colors: { text: string; textMuted: string; textSecondary: string; card: string; surfaceTint: string; border: string; primary: string; primarySoft: string; warningSoft: string; successSoft: string; white: string; error: string };
 };
 
 type OtpSession = { app: ReturnType<typeof initializeApp>; auth: Auth; verifier: RecaptchaVerifier; confirmation: ConfirmationResult; phone: string; host: HTMLDivElement };
@@ -130,28 +131,52 @@ export function CustomerPhoneVerification({ phone, onDecisionChange, colors }: P
     } finally { setBusy(false); }
   };
 
-  return <View style={[styles.card, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
-    <Text style={[styles.title, { color: colors.text }]}>Phone verification <Text style={{ color: colors.textMuted, fontWeight: "500" }}>(optional)</Text></Text>
-    {status === "verified" ? <Text style={[styles.status, { color: "#16804a" }]}>✓ Phone number verified by OTP</Text> : status === "skipped" ? <Text style={[styles.status, { color: colors.textMuted }]}>Not verified — continuing with the number provided</Text> : <>
+  return <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <View style={styles.headingRow}>
+      <View style={[styles.iconBadge, { backgroundColor: colors.primarySoft }]}>
+        <Icon name="phone-portrait-outline" size={17} color={colors.primary} />
+      </View>
+      <View style={styles.headingCopy}>
+        <Text style={[styles.title, { color: colors.text }]}>Phone verification</Text>
+        <Text style={[styles.subtitle, { color: colors.textMuted }]}>Confirm this number with a one-time code</Text>
+      </View>
+      <View style={[styles.optionalBadge, { backgroundColor: colors.warningSoft }]}>
+        <Text style={[styles.optionalText, { color: colors.text }]}>OPTIONAL</Text>
+      </View>
+    </View>
+    {status === "verified" ? <View style={[styles.statusBox, { backgroundColor: colors.successSoft }]}><Icon name="checkmark-circle" size={18} color="#16804a" /><Text style={[styles.status, { color: "#16804a" }]}>Phone number verified</Text></View> : status === "skipped" ? <View style={[styles.statusBox, { backgroundColor: colors.surfaceTint }]}><Icon name="information-circle-outline" size={18} color={colors.textMuted} /><Text style={[styles.status, { color: colors.textMuted }]}>Continuing without verification</Text></View> : <>
       {session ? <View style={styles.row}>
-        <TextInput value={code} onChangeText={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))} keyboardType="number-pad" maxLength={6} placeholder="6-digit OTP" placeholderTextColor={colors.textMuted} style={[styles.input, { color: colors.text, backgroundColor: colors.card, borderColor: colors.border }]} />
-        <Pressable disabled={busy} onPress={verifyCode} style={[styles.button, { backgroundColor: colors.primary }]}>{busy ? <ActivityIndicator color={colors.white} /> : <Text style={[styles.buttonText, { color: colors.white }]}>Verify</Text>}</Pressable>
-      </View> : <Pressable disabled={busy || !e164(normalizedPhone)} onPress={sendCode} style={[styles.button, { backgroundColor: colors.primary, alignSelf: "flex-start" }, (!e164(normalizedPhone) || busy) && { opacity: 0.55 }]}>{busy ? <ActivityIndicator color={colors.white} /> : <Text style={[styles.buttonText, { color: colors.white }]}>Send OTP</Text>}</Pressable>}
-      <Pressable disabled={busy} onPress={() => choose("skipped")} style={styles.skip}><Text style={[styles.skipText, { color: colors.primary }]}>Continue without OTP</Text></Pressable>
+        <TextInput value={code} onChangeText={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))} keyboardType="number-pad" maxLength={6} placeholder="6-digit OTP" placeholderTextColor={colors.textMuted} style={[styles.input, { color: colors.text, backgroundColor: colors.surfaceTint, borderColor: colors.border }]} />
+        <Pressable disabled={busy} onPress={verifyCode} style={[styles.button, styles.verifyButton, { backgroundColor: colors.primary }]}>{busy ? <ActivityIndicator color={colors.white} /> : <><Icon name="checkmark" size={17} color={colors.white} /><Text style={[styles.buttonText, { color: colors.white }]}>Verify</Text></>}</Pressable>
+      </View> : null}
+      <View style={styles.actions}>
+        {!session ? <Pressable disabled={busy || !e164(normalizedPhone)} onPress={sendCode} style={[styles.button, styles.sendButton, { backgroundColor: colors.primary }, (!e164(normalizedPhone) || busy) && { opacity: 0.55 }]}>{busy ? <ActivityIndicator color={colors.white} /> : <><Icon name="chatbubble-ellipses-outline" size={17} color={colors.white} /><Text style={[styles.buttonText, { color: colors.white }]}>Send OTP</Text></>}</Pressable> : null}
+        <Pressable disabled={busy} onPress={() => choose("skipped")} style={[styles.skipButton, { borderColor: colors.border, backgroundColor: colors.surfaceTint }]}><Text style={[styles.skipText, { color: colors.textSecondary }]} numberOfLines={2}>Continue without OTP</Text></Pressable>
+      </View>
     </>}
     {!!message && <Text accessibilityLiveRegion="polite" style={[styles.message, { color: message.includes("sent") || message.includes("verified") || message.includes("Continuing") ? colors.textMuted : colors.error }]}>{message}</Text>}
   </View>;
 }
 
 const styles = StyleSheet.create({
-  card: { width: "100%", borderWidth: 1, borderRadius: 12, padding: 12, gap: 9 },
-  title: { fontSize: 14, fontWeight: "700" },
+  card: { width: "100%", borderWidth: 1, borderRadius: 15, padding: 14, gap: 12, shadowColor: "#12294A", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.045, shadowRadius: 7, elevation: 1 },
+  headingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  iconBadge: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  headingCopy: { flex: 1, minWidth: 0, gap: 2 },
+  title: { fontSize: 14, fontWeight: "800" },
+  subtitle: { fontSize: 11, fontWeight: "500" },
+  optionalBadge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5 },
+  optionalText: { fontSize: 9, fontWeight: "900", letterSpacing: 0.5 },
   row: { flexDirection: "row", gap: 8, alignItems: "center" },
-  input: { flex: 1, minWidth: 0, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9, fontSize: 16 },
-  button: { minHeight: 40, borderRadius: 8, paddingHorizontal: 14, alignItems: "center", justifyContent: "center" },
-  buttonText: { fontSize: 14, fontWeight: "700" },
-  skip: { alignSelf: "flex-start", paddingVertical: 3 },
-  skipText: { fontSize: 13, fontWeight: "700", textDecorationLine: "underline" },
-  status: { fontSize: 13, fontWeight: "700" },
-  message: { fontSize: 12 },
+  input: { flex: 1, minWidth: 0, minHeight: 44, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, fontSize: 16 },
+  actions: { flexDirection: "row", alignItems: "stretch", gap: 8 },
+  button: { minHeight: 44, borderRadius: 10, paddingHorizontal: 13, flexDirection: "row", gap: 7, alignItems: "center", justifyContent: "center" },
+  sendButton: { flex: 1 },
+  verifyButton: { minWidth: 96 },
+  buttonText: { fontSize: 13, fontWeight: "800" },
+  skipButton: { flex: 1, minHeight: 44, borderWidth: 1, borderRadius: 10, paddingHorizontal: 8, alignItems: "center", justifyContent: "center" },
+  skipText: { fontSize: 12, fontWeight: "700", textAlign: "center" },
+  statusBox: { minHeight: 42, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9, flexDirection: "row", alignItems: "center", gap: 8 },
+  status: { fontSize: 12, fontWeight: "700" },
+  message: { fontSize: 11, lineHeight: 16 },
 });

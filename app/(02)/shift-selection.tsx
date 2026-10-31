@@ -100,7 +100,7 @@ function DashboardPanel({
   const { width } = useWindowDimensions();
   const { colors } = useTheme();
   return (
-    <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }, width < 500 && styles.panelCompact, width >= 1024 && styles.panelWide]}>
+    <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }, width >= 1024 && styles.panelWide]}>
       <View style={styles.sectionHeader}>
         <View style={styles.sectionCopy}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
