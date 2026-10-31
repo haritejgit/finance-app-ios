@@ -33,6 +33,7 @@ This checklist records the existing product areas inspected while improving Kart
 - [x] Match the pre-hydration web theme to saved/system preferences and the midnight/teal design system; allow browser zoom for accessibility while keeping 16px inputs.
 - [x] Add a responsive, premium dashboard treatment with wide desktop panels and a single-column phone layout; preserve all route, search, report, and account actions.
 - [x] Tune dashboard spacing and tap targets for a 390px iPhone viewport, wrap weekday selection on narrow screens, and keep long collection amounts on one line. App roots now fill the viewport instead of forcing a 430px phone frame; device hardware testing remains outstanding.
+- [x] Reduce mobile header, summary, metric-card, modal, and navigation sizing while keeping form text at 16px and primary route controls at 44px or larger.
 - [x] Add regression checks for the 16px Safari input rule, theme colors, viewport-fit, and full-width app root.
 - [x] Prevent a silent Renew no-op during focus refresh: keep a tap pending for the selected customer and open only after that customer's current loan context loads; tests cover same-customer waiting and customer-switch rejection.
 - [x] Guard renewal initialization against stale customer/loan context and prevent duplicate submissions; pure regression tests cover selection readiness and submit locking.

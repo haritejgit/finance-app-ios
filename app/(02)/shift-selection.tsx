@@ -103,8 +103,8 @@ function DashboardPanel({
     <View style={[styles.panel, { backgroundColor: colors.card, borderColor: colors.border }, width < 500 && styles.panelCompact, width >= 1024 && styles.panelWide]}>
       <View style={styles.sectionHeader}>
         <View style={styles.sectionCopy}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
-          {subtitle ? <Text style={[styles.sectionSub, { color: colors.textMuted }]}>{subtitle}</Text> : null}
+          <Text style={[styles.sectionTitle, width < 500 && styles.sectionTitleCompact, { color: colors.text }]}>{title}</Text>
+          {subtitle ? <Text style={[styles.sectionSub, width < 500 && styles.sectionSubCompact, { color: colors.textMuted }]}>{subtitle}</Text> : null}
         </View>
         {action}
       </View>
@@ -129,13 +129,14 @@ function DashboardMetric({
   valueTone?: string;
 }) {
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
   return (
-    <View style={[styles.metricCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={[styles.metricIcon, { backgroundColor: `${tone}18` }]}>
+    <View style={[styles.metricCard, width < 500 && styles.metricCardCompact, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={[styles.metricIcon, width < 500 && styles.metricIconCompact, { backgroundColor: `${tone}18` }]}>
         <Icon name={icon} size={17} color={tone} />
       </View>
       <Text style={[styles.metricTitle, { color: colors.textMuted }]}>{title}</Text>
-      <Text style={[styles.metricValue, valueTone ? { color: valueTone } : null]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+      <Text style={[styles.metricValue, width < 500 && styles.metricValueCompact, valueTone ? { color: valueTone } : null]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
         {value}
       </Text>
       <Text style={[styles.metricCaption, { color: colors.textMuted }]}>{caption}</Text>
@@ -610,7 +611,7 @@ export default function ShiftSelectionScreen() {
       <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
         <SafeAreaView style={styles.safe}>
           <ScrollView
-            contentContainerStyle={[styles.container, { paddingHorizontal: viewportWidth >= 900 ? 28 : 16 }]}
+            contentContainerStyle={[styles.container, { paddingHorizontal: viewportWidth >= 900 ? 28 : 16, paddingVertical: viewportWidth < 500 ? 14 : 24, paddingBottom: viewportWidth < 500 ? 28 : 44 }]}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           >
             <Animated.View
@@ -618,7 +619,7 @@ export default function ShiftSelectionScreen() {
                 styles.content,
                 {
                   maxWidth: Math.min(viewportWidth - (viewportWidth >= 900 ? 56 : 32), 1180),
-                  gap: viewportWidth >= 900 ? 18 : 14,
+                  gap: viewportWidth >= 900 ? 18 : viewportWidth < 500 ? 10 : 14,
                   flexDirection: viewportWidth >= 1024 ? "row" : "column",
                   flexWrap: viewportWidth >= 1024 ? "wrap" : "nowrap",
                   alignItems: "stretch",
@@ -630,33 +631,30 @@ export default function ShiftSelectionScreen() {
               ]}
             >
               <View style={[styles.headerCard, viewportWidth < 500 && styles.headerCompact, { width: "100%", backgroundColor: colors.blue2, borderColor: colors.blue2, borderWidth: 1 }]}>
-                <View style={styles.headerTop}>
-                  <View style={styles.brandRow}>
-                  <View style={[styles.brandIcon, { backgroundColor: "rgba(255,255,255,0.12)" }]}>
+                <View style={[styles.headerTop, viewportWidth < 500 && styles.headerTopCompact]}>
+                  <View style={[styles.brandRow, viewportWidth < 500 && styles.brandRowCompact]}>
+                  <View style={[styles.brandIcon, viewportWidth < 500 && styles.brandIconCompact, { backgroundColor: "rgba(255,255,255,0.12)" }]}>
                       <Icon name="business-outline" size={20} color={colors.honeyBronze} />
                     </View>
                     <View style={styles.headerCopy}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <Text style={[styles.eyebrow, { color: "#9FB2C9" }]}>{t("premiumWorkspace")}</Text>
-                        <Text style={{ fontSize: 10, fontWeight: "800", color: colors.honeyBronze, backgroundColor: "rgba(233,199,126,0.14)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, overflow: "hidden" }}>FINANCE</Text>
-                      </View>
-                      <Text style={[styles.header, { color: colors.white }]}>{t("financeDashboard")}</Text>
-                      <Text style={[styles.welcome, { color: "#C0D0D0" }]}>{getGreeting(t)}, {displayName} · {todayLabel}</Text>
+                      <Text numberOfLines={1} style={[styles.eyebrow, viewportWidth < 500 && styles.eyebrowCompact, { color: "#9FB2C9" }]}>{t("premiumWorkspace")}</Text>
+                      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={[styles.header, viewportWidth < 500 && styles.headerTextCompact, { color: colors.white }]}>{t("financeDashboard")}</Text>
+                      <Text style={[styles.welcome, viewportWidth < 500 && styles.welcomeCompact, { color: "#C0D0D0" }]}>{getGreeting(t)}, {displayName} · {todayLabel}</Text>
                     </View>
                   </View>
-                  <Pressable accessibilityLabel={t("searchCustomers")} style={[styles.searchButton, { backgroundColor: colors.honeyBronze }]} onPress={openCustomerSearch}>
+                  <Pressable accessibilityLabel={t("searchCustomers")} style={[styles.searchButton, viewportWidth < 500 && styles.searchButtonCompact, { backgroundColor: colors.honeyBronze }]} onPress={openCustomerSearch}>
                     <Icon name="search" size={20} color={Colors.nearBlack} />
                   </Pressable>
                 </View>
 
                 <Pressable style={[styles.todayCard, viewportWidth < 500 && styles.todayCompact, { backgroundColor: colors.lightSeaGreen, borderColor: "rgba(255,255,255,0.16)" }]} onPress={() => nav.push("/graph")}>
-                  <View style={[styles.todayIcon, { backgroundColor: "rgba(255,255,255,0.14)" }]}>
+                  <View style={[styles.todayIcon, viewportWidth < 500 && styles.todayIconCompact, { backgroundColor: "rgba(255,255,255,0.14)" }]}>
                     <Icon name="cash-outline" size={20} color={colors.white} />
                   </View>
                   <View style={styles.todayCopy}>
-                    <Text style={[styles.todayLabel, { color: "rgba(255,255,255,0.76)" }]}>{t("collectedToday")}</Text>
+                    <Text style={[styles.todayLabel, viewportWidth < 500 && styles.todayLabelCompact, { color: "rgba(255,255,255,0.76)" }]}>{t("collectedToday")}</Text>
                     <Text style={[styles.todayValue, viewportWidth < 500 && styles.todayValueCompact, { color: colors.white }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>{formatMoney(totals?.collectionToday ?? 0)}</Text>
-                    <Text style={[styles.todayHint, { color: "rgba(255,255,255,0.78)" }]}>{t("distributedTodayHint")} {formatMoney(totals?.distributedToday ?? 0)}</Text>
+                    <Text style={[styles.todayHint, viewportWidth < 500 && styles.todayHintCompact, { color: "rgba(255,255,255,0.78)" }]}>{t("distributedTodayHint")} {formatMoney(totals?.distributedToday ?? 0)}</Text>
                   </View>
                 </Pressable>
               </View>
@@ -1223,7 +1221,7 @@ export default function ShiftSelectionScreen() {
         {isOwner && (
           <Pressable
             accessibilityLabel="Open AI Business Advisor"
-            style={styles.aiFab}
+            style={[styles.aiFab, viewportWidth < 500 && styles.aiFabCompact]}
             onPress={() => {
               lightImpact();
               nav.push("/ai-advisor" as any);
@@ -1253,23 +1251,33 @@ const styles = StyleSheet.create({
     shadowRadius: 22,
     elevation: 7,
   },
-  headerCompact: { borderRadius: 23, padding: 16, gap: 14 },
+  headerCompact: { borderRadius: 20, padding: 13, gap: 10 },
   headerTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 },
+  headerTopCompact: { gap: 10 },
   brandRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 14 },
+  brandRowCompact: { gap: 10 },
   brandIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: Colors.frozenWater, alignItems: "center", justifyContent: "center" },
+  brandIconCompact: { width: 38, height: 38, borderRadius: 13 },
   headerCopy: { flex: 1 },
   eyebrow: { color: Colors.textMuted, fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1.1 },
+  eyebrowCompact: { fontSize: 9, letterSpacing: 0.8 },
   header: { color: Colors.nearBlack, fontSize: 29, lineHeight: 35, fontWeight: "800", marginTop: 4 },
+  headerTextCompact: { fontSize: 19, lineHeight: 23, marginTop: 1 },
   welcome: { color: "#426c67", fontSize: 13, marginTop: 4, fontWeight: "600" },
+  welcomeCompact: { fontSize: 11, marginTop: 2 },
   searchButton: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: Colors.lightSeaGreen },
+  searchButtonCompact: { width: 44, height: 44, borderRadius: 14 },
   todayCard: { minHeight: 102, borderRadius: 21, backgroundColor: "#f6fffe", flexDirection: "row", alignItems: "center", gap: 16, paddingHorizontal: 18, paddingVertical: 16, borderWidth: 1, borderColor: Colors.borderLight },
-  todayCompact: { minHeight: 88, borderRadius: 17, gap: 12, paddingHorizontal: 14, paddingVertical: 11 },
+  todayCompact: { minHeight: 72, borderRadius: 15, gap: 10, paddingHorizontal: 12, paddingVertical: 9 },
   todayIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: Colors.honeyBronze, alignItems: "center", justifyContent: "center" },
+  todayIconCompact: { width: 38, height: 38, borderRadius: 13 },
   todayCopy: { flex: 1 },
   todayLabel: { color: Colors.textMuted, fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.9 },
+  todayLabelCompact: { fontSize: 10, letterSpacing: 0.7 },
   todayValue: { color: Colors.nearBlack, fontSize: 33, lineHeight: 39, fontWeight: "800", marginTop: 2 },
-  todayValueCompact: { fontSize: 29, lineHeight: 34 },
+  todayValueCompact: { fontSize: 24, lineHeight: 28, marginTop: 0 },
   todayHint: { color: "#426c67", fontSize: 12, fontWeight: "600", marginTop: 2 },
+  todayHintCompact: { fontSize: 10, marginTop: 0 },
   panel: {
     backgroundColor: Colors.white,
     borderRadius: 21,
@@ -1284,11 +1292,13 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   panelWide: { width: "48%", flexGrow: 1 },
-  panelCompact: { borderRadius: 20, padding: 16, gap: 14 },
+  panelCompact: { borderRadius: 17, padding: 13, gap: 10 },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
   sectionCopy: { flex: 1 },
-  sectionTitle: { color: Colors.nearBlack, fontSize: 17, lineHeight: 23, fontWeight: "800" },
-  sectionSub: { color: Colors.textMuted, fontSize: 12, fontWeight: "500", marginTop: 3 },
+  sectionTitle: { color: Colors.nearBlack, fontSize: 16, lineHeight: 21, fontWeight: "800" },
+  sectionSub: { color: Colors.textMuted, fontSize: 11, fontWeight: "500", marginTop: 2 },
+  sectionTitleCompact: { fontSize: 14, lineHeight: 18 },
+  sectionSubCompact: { fontSize: 10, marginTop: 1 },
   routeMeta: { color: "#6B7A8D", fontSize: 12, fontWeight: "700" },
   controlLabel: { color: "#9AA6B2", fontSize: 10.5, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.3 },
   dayGrid: { flexDirection: "row", gap: 6 },
@@ -1299,21 +1309,24 @@ const styles = StyleSheet.create({
   dayChipText: { color: "#4D666D", fontSize: 12, fontWeight: "700" },
   dayChipTextOn: { color: "#FFFFFF", fontWeight: "800" },
   shiftRow: { flexDirection: "row", gap: 10 },
-  shift: { flex: 1, minHeight: 48, borderRadius: 13, borderWidth: 1, borderColor: Colors.borderLight, backgroundColor: "#F7FAF9", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, paddingHorizontal: 10 },
+  shift: { flex: 1, minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: Colors.borderLight, backgroundColor: "#F7FAF9", alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7, paddingHorizontal: 8 },
   shiftOn: { backgroundColor: Colors.lightSeaGreen, borderColor: Colors.lightSeaGreen },
   shiftText: { color: "#4D666D", fontWeight: "700", fontSize: 13 },
   shiftTextOn: { color: "#FFFFFF", fontWeight: "800" },
-  primaryAction: { backgroundColor: Colors.lightSeaGreen, borderRadius: 14, minHeight: 50, paddingVertical: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 9 },
-  primaryActionText: { color: Colors.white, fontWeight: "800", fontSize: 15 },
+  primaryAction: { backgroundColor: Colors.lightSeaGreen, borderRadius: 12, minHeight: 46, paddingVertical: 11, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
+  primaryActionText: { color: Colors.white, fontWeight: "800", fontSize: 14 },
   walletRouteSummary: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 2 },
   walletRouteText: { color: Colors.textMuted, fontSize: 11, fontWeight: "800" },
   walletRouteDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.borderLight },
   metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   metricCard: { flexGrow: 1, flexBasis: "46%", minWidth: 150, minHeight: 132, borderRadius: 18, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: Colors.borderLight, padding: 18 },
+  metricCardCompact: { minWidth: 142, minHeight: 112, borderRadius: 15, padding: 13 },
   metricIcon: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 12 },
+  metricIconCompact: { width: 29, height: 29, borderRadius: 10, marginBottom: 8 },
   metricTitle: { color: Colors.textMuted, fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8 },
   metricValue: { color: Colors.nearBlack, fontSize: 21, lineHeight: 27, fontWeight: "800", marginTop: 5 },
-  metricCaption: { color: Colors.textMuted, fontSize: 12, fontWeight: "500", marginTop: 3 },
+  metricValueCompact: { fontSize: 18, lineHeight: 22, marginTop: 3 },
+  metricCaption: { color: Colors.textMuted, fontSize: 11, fontWeight: "500", marginTop: 2 },
   legend: { flexDirection: "row", alignItems: "center", gap: 5 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { color: Colors.textMuted, fontSize: 10, fontWeight: "900" },
@@ -1342,8 +1355,8 @@ const styles = StyleSheet.create({
   emptyText: { color: Colors.textMuted, fontSize: 13, fontWeight: "800", paddingVertical: 12 },
   bottomNav: { position: "relative", flexDirection: "row", justifyContent: "space-between", backgroundColor: "#FFFFFF", borderRadius: 19, borderWidth: 1, borderColor: Colors.borderLight, padding: 7, overflow: "hidden", shadowColor: "#102D39", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 2 },
   bottomNavIndicator: { position: "absolute", top: 7, bottom: 7, left: 7, borderRadius: 13, backgroundColor: "#EAF4F1" },
-  bottomNavButton: { flex: 1, minHeight: 60, borderRadius: 13, borderWidth: 0, alignItems: "center", justifyContent: "center", gap: 5, paddingHorizontal: 3, paddingVertical: 7, zIndex: 1 },
-  bottomNavText: { color: "#70838A", fontSize: 11, fontWeight: "600", textAlign: "center" },
+  bottomNavButton: { flex: 1, minHeight: 52, borderRadius: 12, borderWidth: 0, alignItems: "center", justifyContent: "center", gap: 3, paddingHorizontal: 2, paddingVertical: 5, zIndex: 1 },
+  bottomNavText: { color: "#70838A", fontSize: 10.5, fontWeight: "600", textAlign: "center" },
   bottomNavTextActive: { color: Colors.nearBlack, fontWeight: "800" },
   progressCard: { backgroundColor: "#fafbfc", borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: Colors.borderLight },
   progressHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
@@ -1358,11 +1371,11 @@ const styles = StyleSheet.create({
   skeletonPanel: { width: "100%", backgroundColor: Colors.white, borderRadius: 18, borderWidth: 1, borderColor: Colors.borderLight, padding: 16, gap: 14 },
   skeletonLine: { height: 16, borderRadius: 999, backgroundColor: "#DCE6F7" },
   searchModalSafe: { flex: 1 },
-  searchModalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingVertical: 14, backgroundColor: "#FFFFFF", borderBottomWidth: 1, borderBottomColor: "#DCE6F7" },
-  searchModalTitle: { color: "#111827", fontSize: 22, fontWeight: "700" },
-  searchCloseBtn: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#F8FAFC" },
-  searchModalContent: { flex: 1, padding: 16 },
-  customerSearchShell: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 16, borderWidth: 1, borderColor: "#DCE6F7", backgroundColor: "#FFFFFF", paddingHorizontal: 12, marginBottom: 10 },
+  searchModalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 11, backgroundColor: "#FFFFFF", borderBottomWidth: 1, borderBottomColor: "#DCE6F7" },
+  searchModalTitle: { color: "#111827", fontSize: 19, fontWeight: "700" },
+  searchCloseBtn: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#F8FAFC" },
+  searchModalContent: { flex: 1, padding: 13 },
+  customerSearchShell: { flexDirection: "row", alignItems: "center", gap: 9, borderRadius: 13, borderWidth: 1, borderColor: "#DCE6F7", backgroundColor: "#FFFFFF", paddingHorizontal: 11, marginBottom: 8 },
   customerSearchInput: { flex: 1, paddingVertical: 13, fontSize: 16, color: "#111827" },
   filterRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingBottom: 6 },
   filterChip: { minHeight: 40, borderRadius: 999, borderWidth: 1, borderColor: "#DCE6F7", paddingHorizontal: 12, paddingVertical: 9, backgroundColor: "#FFFFFF", justifyContent: "center" },
@@ -1373,13 +1386,14 @@ const styles = StyleSheet.create({
   searchResultsList: { paddingBottom: 24 },
   searchEmpty: { alignItems: "center", justifyContent: "center", paddingVertical: 60, gap: 10 },
   searchEmptyText: { color: "#6B7280", fontWeight: "700" },
-  searchCustomerRow: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 16, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: "#DCE6F7", backgroundColor: "#FFFFFF" },
+  searchCustomerRow: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 13, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: "#DCE6F7", backgroundColor: "#FFFFFF" },
   searchCustomerInfo: { flex: 1 },
-  searchCustomerName: { color: "#111827", fontSize: 15, fontWeight: "700" },
+  searchCustomerName: { color: "#111827", fontSize: 14, fontWeight: "700" },
   searchCustomerMeta: { color: "#6B7280", fontSize: 12, fontWeight: "500", marginTop: 2 },
   searchCustomerPhone: { color: "#9CA3AF", fontSize: 12, marginTop: 2 },
   statePill: { color: Colors.lightSeaGreen, backgroundColor: Colors.frozenWater, fontSize: 10, fontWeight: "700", paddingHorizontal: 8, paddingVertical: 5, borderRadius: 999, overflow: "hidden", textTransform: "uppercase" },
   aiFab: { position: "absolute", right: 18, bottom: 24, width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: Colors.amberGlow, shadowColor: Colors.amberGlow, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.45, shadowRadius: 14, elevation: 8 },
+  aiFabCompact: { right: 14, bottom: 14, width: 50, height: 50, borderRadius: 25 },
   nestedGroupContainer: { marginBottom: 16, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: "#E2E8F0" },
   nestedGroupHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8, borderBottomWidth: 1, paddingBottom: 6 },
   nestedGroupTitle: { fontSize: 14, fontWeight: "700" },
@@ -1390,12 +1404,12 @@ const styles = StyleSheet.create({
   nestedActivityTime: { fontSize: 11, marginTop: 2 },
   nestedActivityAmount: { fontSize: 13, fontWeight: "700" },
   // Expense modal styles
-  expenseModal: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40, gap: 10 },
+  expenseModal: { borderTopLeftRadius: 21, borderTopRightRadius: 21, padding: 20, paddingBottom: 28, gap: 9 },
   expenseModalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
-  expenseModalTitle: { fontSize: 20, fontWeight: "800" },
+  expenseModalTitle: { fontSize: 18, fontWeight: "800" },
   expenseModalLabel: { fontSize: 13, fontWeight: "600", marginTop: 4 },
-  expenseInput: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
-  expenseSaveBtn: { backgroundColor: Colors.danger, borderRadius: 14, paddingVertical: 14, alignItems: "center", marginTop: 8 },
+  expenseInput: { minHeight: 44, borderWidth: 1, borderRadius: 11, paddingHorizontal: 12, paddingVertical: 9, fontSize: 15 },
+  expenseSaveBtn: { minHeight: 46, backgroundColor: Colors.danger, borderRadius: 12, paddingVertical: 12, alignItems: "center", justifyContent: "center", marginTop: 6 },
   expenseSaveBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "800" },
   // Forecast card
   forecastCard: {
