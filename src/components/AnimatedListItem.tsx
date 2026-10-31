@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef } from "react";
 import { Animated, ViewProps } from "react-native";
+import { useReducedMotion } from "../useReducedMotion";
 
 type Props = ViewProps & {
   children: React.ReactNode;
@@ -10,9 +11,16 @@ export function AnimatedListItem({ children, index = 0, style, ...props }: Props
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(16)).current;
   const delay = useMemo(() => Math.min(index * 50, 300), [index]);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
-    Animated.parallel([
+    if (reduceMotion) {
+      opacity.setValue(1);
+      translateY.setValue(0);
+      return;
+    }
+
+    const animation = Animated.parallel([
       Animated.timing(opacity, {
         toValue: 1,
         duration: 240,
@@ -25,8 +33,10 @@ export function AnimatedListItem({ children, index = 0, style, ...props }: Props
         delay,
         useNativeDriver: true,
       }),
-    ]).start();
-  }, [delay, opacity, translateY]);
+    ]);
+    animation.start();
+    return () => animation.stop();
+  }, [delay, opacity, reduceMotion, translateY]);
 
   return (
     <Animated.View

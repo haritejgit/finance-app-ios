@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { Animated, ViewProps } from "react-native";
+import { useReducedMotion } from "../useReducedMotion";
 
 type Props = ViewProps & {
   children: React.ReactNode;
@@ -9,9 +10,16 @@ type Props = ViewProps & {
 export function AnimatedScreen({ children, delay = 0, style, ...props }: Props) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
-    Animated.parallel([
+    if (reduceMotion) {
+      fadeAnim.setValue(1);
+      slideAnim.setValue(0);
+      return;
+    }
+
+    const animation = Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 400,
@@ -24,8 +32,10 @@ export function AnimatedScreen({ children, delay = 0, style, ...props }: Props) 
         delay,
         useNativeDriver: true,
       }),
-    ]).start();
-  }, [delay, fadeAnim, slideAnim]);
+    ]);
+    animation.start();
+    return () => animation.stop();
+  }, [delay, fadeAnim, reduceMotion, slideAnim]);
 
   return (
     <Animated.View
