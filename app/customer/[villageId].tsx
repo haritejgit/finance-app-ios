@@ -20,7 +20,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { useAuth } from "../../src/auth-context";
@@ -582,8 +581,6 @@ export default function CustomerListScreen() {
   const { colors } = useTheme();
   const { language } = useLanguage();
   const insets = useSafeAreaInsets();
-  const { width: viewportWidth } = useWindowDimensions();
-  const mobileWebTopFallback = Platform.OS === "web" && viewportWidth <= 500 ? Math.max(0, 72 - insets.top) : 0;
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const cameraRef = useRef<any>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -1657,7 +1654,7 @@ export default function CustomerListScreen() {
   return (
     <AnimatedScreen style={styles.root}>
     <LinearGradient colors={[colors.background, colors.backgroundSecondary]} style={styles.root}>
-      <SafeAreaView style={[styles.safe, mobileWebTopFallback > 0 && { paddingTop: mobileWebTopFallback }]} edges={['top']}>
+      <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.content}>
           <View style={styles.routeHeader}>
           {/* Header with back button */}
@@ -2646,7 +2643,7 @@ export default function CustomerListScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1 },
-  content: { flex: 1, width: "100%", maxWidth: 430, alignSelf: "center", paddingHorizontal: 0 },
+  content: { flex: 1, width: "100%", maxWidth: 1180, alignSelf: "center", paddingHorizontal: 0 },
   routeHeader: { backgroundColor: "#12294A", paddingHorizontal: 20, paddingTop: 18, paddingBottom: 14 },
   headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 14, gap: 10 },
   backBtn: { width: 32, height: 32, borderRadius: 9, backgroundColor: "#1E3A63", justifyContent: "center", alignItems: "center", borderWidth: 0 },

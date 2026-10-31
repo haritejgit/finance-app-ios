@@ -181,7 +181,6 @@ export default function ShiftSelectionScreen() {
   const nav = useRouter();
   const { width: viewportWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const mobileWebTopFallback = Platform.OS === "web" && viewportWidth <= 500 ? Math.max(0, 44 - insets.top) : 0;
   const { user, userProfile } = useAuth();
   const { colors } = useTheme();
   const { t, language } = useLanguage();
@@ -610,7 +609,7 @@ export default function ShiftSelectionScreen() {
   return (
     <AnimatedScreen style={styles.root}>
       <LinearGradient colors={[...getGradient(colors)]} style={styles.root}>
-        <SafeAreaView style={[styles.safe, mobileWebTopFallback > 0 && { paddingTop: mobileWebTopFallback }]}>
+        <SafeAreaView style={styles.safe}>
           <ScrollView
             contentContainerStyle={[styles.container, { paddingHorizontal: viewportWidth >= 900 ? 28 : 16, paddingBottom: Math.max(44, insets.bottom + 44) }]}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}

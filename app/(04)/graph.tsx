@@ -7,7 +7,6 @@ import {
   Alert,
   Dimensions,
   Linking,
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -16,7 +15,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../src/auth-context";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import {
@@ -420,9 +419,6 @@ function VillageSelector({
 
 export default function GraphScreen() {
   const { user, userProfile, loading: authLoading } = useAuth();
-  const { width: viewportWidth } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  const mobileWebTopFallback = Platform.OS === "web" && viewportWidth <= 500 ? Math.max(0, 72 - insets.top) : 0;
 
   useEffect(() => {
     if (!authLoading && userProfile && userProfile.role === "nested") {
@@ -591,7 +587,7 @@ export default function GraphScreen() {
     return (
       <AnimatedScreen style={styles.root}>
         <LinearGradient colors={Gradients.screenBg} style={styles.root}>
-          <SafeAreaView style={[styles.safe, mobileWebTopFallback > 0 && { paddingTop: mobileWebTopFallback }]}>
+          <SafeAreaView style={styles.safe}>
             <View style={styles.loading}>
               <ActivityIndicator size="large" color={Colors.nearBlack} />
               <Text style={styles.loadingText}>Loading business intelligence...</Text>
@@ -605,7 +601,7 @@ export default function GraphScreen() {
   return (
     <AnimatedScreen style={styles.root}>
         <LinearGradient colors={Gradients.screenBg} style={styles.root}>
-        <SafeAreaView style={[styles.safe, mobileWebTopFallback > 0 && { paddingTop: mobileWebTopFallback }]}>
+        <SafeAreaView style={styles.safe}>
           <ScrollView
             contentContainerStyle={styles.container}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(false); }} tintColor={Colors.nearBlack} />}
