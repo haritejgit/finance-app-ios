@@ -19,10 +19,11 @@ export function selectLoanForCustomer<T extends SelectableLoan>(loans: T[], targ
   return newestFirst.find((loan) => loan.status === "CLOSED") ?? loans[0];
 }
 
-/** Refuse a new renewal when inconsistent records could leave two loans active. */
-export function assertSingleActiveLoan(loans: { status: string }[]): void {
-  if (loans.filter((loan) => loan.status === "ACTIVE").length > 1) {
-    throw new Error("More than one active loan exists for this customer. Review the loan records before renewing.");
+/** Refuse a renewal if it could leave a different loan active for the customer. */
+export function assertNoConflictingActiveLoan(loans: { id: string; status: string }[], renewingLoanId: string): void {
+  const activeLoans = loans.filter((loan) => loan.status === "ACTIVE");
+  if (activeLoans.some((loan) => loan.id !== renewingLoanId) || activeLoans.length > 1) {
+    throw new Error("Another active loan exists for this customer. Review the loan records before renewing.");
   }
 }
 
