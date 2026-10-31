@@ -15,6 +15,13 @@ export function shouldOpenPendingRenewal(pendingCustomerId: string | null, selec
   return !loading && !!selectedCustomerId && pendingCustomerId === selectedCustomerId;
 }
 
+/** Reject a renewal transaction when another renewal changed the customer's loan state meanwhile. */
+export function assertRenewalRevision(expectedRevision: number, currentRevision: number): void {
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || currentRevision !== expectedRevision) {
+    throw new Error("Customer loan state changed while renewing. Reload the customer and try again.");
+  }
+}
+
 /** Synchronous ref lock prevents a second submit before React commits a disabled state. */
 export function acquireRenewalSubmitLock(lock: { current: boolean }): boolean {
   if (lock.current) return false;
