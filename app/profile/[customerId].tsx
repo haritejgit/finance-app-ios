@@ -67,7 +67,7 @@ import { colors } from "../../src/theme";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { money, toMillis, weekStart } from "../../src/business-logic";
 import { calculateNetDisbursement, calculateProcessingFee, getRecordedNetDisbursement } from "../../src/processing-fee";
-import { acquireRenewalSubmitLock, isRenewalContextReady, runWithRenewalSubmitLock } from "../../src/renewal-workflow";
+import { acquireRenewalSubmitLock, isRenewalContextReady, runWithRenewalSubmitLock, shouldOpenPendingRenewal } from "../../src/renewal-workflow";
 import { isValidCustomRecommendation, nextRecommendationTap } from "../../src/smart-recommendation";
 import { useLanguage } from "../../src/language-context";
 import { translateTelugu } from "../../src/exports";
@@ -366,6 +366,7 @@ export default function ProfileScreen() {
   const [renewMode, setRenewMode] = useState<PaymentMode>("CASH");
   const [renewProcessingFeeCharged, setRenewProcessingFeeCharged] = useState(true);
   const renewingRef = useRef(false);
+  const pendingRenewalCustomerRef = useRef<string | null>(null);
   const [renewChequeSubmitted, setRenewChequeSubmitted] = useState(false);
   const [paymentDateInput, setPaymentDateInput] = useState(formatDateInput(Date.now()));
   const [dueDateInput, setDueDateInput] = useState(formatDateInput(Date.now()));
@@ -709,6 +710,7 @@ export default function ProfileScreen() {
   useEffect(() => {
     loadRequestRef.current += 1;
     locationRequestRef.current += 1;
+    pendingRenewalCustomerRef.current = null;
     setCustomer(null);
     setLoan(null);
     recommendationTapRef.current = { count: 0, lastTap: 0 };
@@ -743,9 +745,16 @@ export default function ProfileScreen() {
   }, [authLoading, reload]));
 
   const openRenewalWorkflow = useCallback(() => {
-    if (!isRenewalContextReady({ loading: isLoading, hasError: !!loadError, customerId: activeCustomerId, customer, loan })) return;
-    renewingRef.current = false;
-    setIsRenewing(false);
+    if (isLoading) {
+      if (activeCustomerId) pendingRenewalCustomerRef.current = activeCustomerId;
+      return;
+    }
+    if (!isRenewalContextReady({ loading: false, hasError: !!loadError, customerId: activeCustomerId, customer, loan })) {
+      pendingRenewalCustomerRef.current = null;
+      showToast("error", "Unable to renew", loadError || "The current customer loan is unavailable. Reload the profile and try again.");
+      return;
+    }
+    pendingRenewalCustomerRef.current = null;
     setRenewAmount("");
     setRenewMode("CASH");
     setRenewProcessingFeeCharged(true);
@@ -760,6 +769,16 @@ export default function ProfileScreen() {
     openRenewalWorkflow();
     router.setParams({ renew: undefined } as any);
   }, [renew, isLoading, loadError, customer, loan, activeCustomerId, openRenewalWorkflow]);
+
+  useEffect(() => {
+    if (!shouldOpenPendingRenewal(pendingRenewalCustomerRef.current, activeCustomerId, isLoading)) return;
+    pendingRenewalCustomerRef.current = null;
+    if (!isRenewalContextReady({ loading: false, hasError: !!loadError, customerId: activeCustomerId, customer, loan })) {
+      showToast("error", "Unable to renew", loadError || "The current customer loan is unavailable. Reload the profile and try again.");
+      return;
+    }
+    openRenewalWorkflow();
+  }, [isLoading, loadError, customer, loan, activeCustomerId, openRenewalWorkflow]);
 
   useEffect(() => {
     if (renewOpen) {

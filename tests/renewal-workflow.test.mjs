@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { acquireRenewalSubmitLock, isRenewalContextReady, runWithRenewalSubmitLock } from "../src/renewal-workflow.ts";
+import { acquireRenewalSubmitLock, isRenewalContextReady, runWithRenewalSubmitLock, shouldOpenPendingRenewal } from "../src/renewal-workflow.ts";
 
 const ready = { loading: false, hasError: false, customerId: "customer-a", customer: { id: "customer-a" }, loan: { customerId: "customer-a", status: "ACTIVE" } };
 
@@ -15,6 +15,13 @@ test("renewal never opens against a stale or already renewed customer loan", () 
   assert.equal(isRenewalContextReady({ ...ready, loan: { customerId: "customer-b", status: "ACTIVE" } }), false);
   assert.equal(isRenewalContextReady({ ...ready, loan: { customerId: "customer-a", status: "RENEWED" } }), false);
   assert.equal(isRenewalContextReady(ready), true);
+});
+
+test("an early Renew tap waits for the same customer's profile load", () => {
+  assert.equal(shouldOpenPendingRenewal("customer-a", "customer-a", true), false);
+  assert.equal(shouldOpenPendingRenewal("customer-a", "customer-b", false), false);
+  assert.equal(shouldOpenPendingRenewal("customer-a", "customer-a", false), true);
+  assert.equal(shouldOpenPendingRenewal(null, "customer-a", false), false);
 });
 
 test("submit lock allows one renewal request and rejects a duplicate click", () => {

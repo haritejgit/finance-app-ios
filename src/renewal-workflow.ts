@@ -10,6 +10,11 @@ export function isRenewalContextReady(input: {
     input.loan.status !== "RENEWED";
 }
 
+/** Keep an early Renew tap pending only while that same customer's profile refresh is in flight. */
+export function shouldOpenPendingRenewal(pendingCustomerId: string | null, selectedCustomerId: string | null | undefined, loading: boolean): boolean {
+  return !loading && !!selectedCustomerId && pendingCustomerId === selectedCustomerId;
+}
+
 /** Synchronous ref lock prevents a second submit before React commits a disabled state. */
 export function acquireRenewalSubmitLock(lock: { current: boolean }): boolean {
   if (lock.current) return false;
