@@ -2385,10 +2385,10 @@ export default function ProfileScreen() {
 
                   if (!acquireRenewalSubmitLock(renewingRef)) return;
                   setIsRenewing(true);
-                  const confirmed = await confirmRenewal(msg);
-                  if (!confirmed) { renewingRef.current = false; setIsRenewing(false); return; }
-
                   try {
+                    const confirmed = await confirmRenewal(msg);
+                    if (!confirmed) return;
+
                     const renewalOwnerId = effectiveOwnerId || activeLoanObj.userId;
                     if (!renewalOwnerId) {
                       throw new Error("Unable to verify customer ownership. Renewal cannot proceed.");
@@ -3466,3 +3466,4 @@ const styles = StyleSheet.create({
   loanRecoIcon: { fontSize: 18 },
   loanRecoReason: { color: "#12502E", fontSize: 9, fontWeight: "800", textAlign: "center", marginTop: 2, maxWidth: 90 },
 });
+
