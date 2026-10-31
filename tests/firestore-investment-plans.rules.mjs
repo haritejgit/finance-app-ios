@@ -230,6 +230,62 @@ test("custom loan recommendations persist on the correct customer and reject inv
   await assertFails(updateDoc(legacyRef, { customRecommendedLoanAmount: 18000.75 }));
 });
 
+test("competing renewals from different closed loans cannot both create an active loan", async () => {
+  const db = testEnv.authenticatedContext("owner-renewal-race").firestore();
+  const customerRef = doc(db, "customers", "renewal-race-customer");
+  const sourceLoans = ["source-loan-a", "source-loan-b"].map((id) => doc(db, "loans", id));
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const adminDb = context.firestore();
+    await setDoc(doc(adminDb, "customers", "renewal-race-customer"), {
+      id: "renewal-race-customer", userId: "owner-renewal-race", name: "Race test", phone: "", aadhar: "",
+      locationDesc: "", villageId: "", isActive: true, createdAt: Date.now(), renewalRevision: 0,
+    });
+    for (const [index, id] of ["source-loan-a", "source-loan-b"].entries()) {
+      await setDoc(doc(adminDb, "loans", id), {
+        id, customerId: "renewal-race-customer", userId: "owner-renewal-race", principalAmount: 1000,
+        interestAmount: 200, totalPayable: 1200, balanceAmount: 0, startDate: index + 1, status: "CLOSED",
+      });
+    }
+  });
+
+  let firstAttempts = 0;
+  let releaseBoth;
+  const bothRead = new Promise((resolve) => { releaseBoth = resolve; });
+  const renew = (sourceRef) => {
+    let attempt = 0;
+    const newLoanRef = doc(db, "loans", `new-${sourceRef.id}`);
+    return runTransaction(db, async (transaction) => {
+      attempt += 1;
+      const [sourceSnap, customerSnap] = await Promise.all([
+        transaction.get(sourceRef),
+        transaction.get(customerRef),
+      ]);
+      if (!sourceSnap.exists() || !customerSnap.exists()) throw new Error("Test fixture missing.");
+      if (attempt === 1) {
+        firstAttempts += 1;
+        if (firstAttempts === 2) releaseBoth();
+        await bothRead;
+      }
+      assertRenewalRevision(0, Number(customerSnap.data().renewalRevision ?? 0));
+      transaction.update(sourceRef, { status: "RENEWED" });
+      transaction.update(customerRef, { renewalRevision: 1 });
+      transaction.set(newLoanRef, {
+        id: newLoanRef.id, customerId: "renewal-race-customer", userId: "owner-renewal-race",
+        principalAmount: 1000, interestAmount: 200, totalPayable: 1200, balanceAmount: 1200,
+        startDate: Date.now(), status: "ACTIVE",
+      });
+    });
+  };
+
+  const outcomes = await Promise.allSettled(sourceLoans.map(renew));
+  assert.equal(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 1);
+  const rejected = outcomes.find((outcome) => outcome.status === "rejected");
+  assert.match(rejected.reason.message, /Customer loan state changed/);
+  const newLoanDocs = await Promise.all(sourceLoans.map((sourceRef) => getDoc(doc(db, "loans", `new-${sourceRef.id}`))));
+  assert.equal(newLoanDocs.filter((snapshot) => snapshot.exists()).length, 1);
+  assert.equal((await getDoc(customerRef)).data()?.renewalRevision, 1);
+});
+
 test("debug logs accept only small, sanitized records owned by the signed-in user", async () => {
   const ownerDb = testEnv.authenticatedContext("owner-a").firestore();
   const otherDb = testEnv.authenticatedContext("owner-b").firestore();
