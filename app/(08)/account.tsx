@@ -20,6 +20,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useAuth } from "../../src/auth-context";
+import { InvestmentPlanningPanel } from "../../src/components/InvestmentPlanningPanel";
 import { useTheme } from "../../src/theme-context";
 import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import Icon from "../../src/Icon";
@@ -2377,6 +2378,7 @@ export default function AccountScreen() {
                 {/* TAB 2: Investments */}
                 {activeTab === "investments" && (
                   <View style={styles.cardContainer}>
+                    {user?.uid ? <InvestmentPlanningPanel userId={user.uid} currentInvestments={investments.reduce((sum, item) => sum + item.amount, 0)} /> : null}
                     
                     {/* Input card */}
                     <View style={styles.card}>
