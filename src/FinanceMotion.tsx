@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import Icon from "./Icon";
 import { colors } from "./theme";
+import { useReducedMotion } from "./useReducedMotion";
 
 type FinanceMotionProps = {
   compact?: boolean;
@@ -10,8 +11,15 @@ type FinanceMotionProps = {
 export default function FinanceMotion({ compact = false }: FinanceMotionProps) {
   const loop = useRef(new Animated.Value(0)).current;
   const pop = useRef(new Animated.Value(0)).current;
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
+    if (reduceMotion) {
+      loop.setValue(0);
+      pop.setValue(0);
+      return;
+    }
+
     const rail = Animated.loop(
       Animated.timing(loop, {
         toValue: 1,
@@ -42,7 +50,7 @@ export default function FinanceMotion({ compact = false }: FinanceMotionProps) {
       rail.stop();
       pulse.stop();
     };
-  }, [loop, pop]);
+  }, [loop, pop, reduceMotion]);
 
   const packets = useMemo(
     () => [
