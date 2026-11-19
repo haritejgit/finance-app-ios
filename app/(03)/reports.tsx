@@ -26,7 +26,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../src/firebase';
-import { getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, toMillis, startOfDay } from "../../src/business-logic";
+import { getLoanDistributedAmount, getLoanPrincipalAmount, isRealCollectionPayment, toMillis, startOfDay, formatLoanDisbursementWeekCell } from "../../src/business-logic";
 import { selectCurrentCustomerIds } from "../../src/customer-number-assignments";
 
 // Lazy load heavy XLSX library
@@ -1528,13 +1528,28 @@ interface Payment {
                   weeklyDisbursed[weekIdx] += getLoanDistributedAmount(l as any);
                 });
 
-                const totalPaidThisWeek = weekPayments
-                  .filter((payment) => isRealCollectionPayment(payment))
+                // Separate RENEWAL_CLOSURE payments (old balance settled) from
+                // regular installment payments made on the same week as the new loan.
+                const renewalClosureAmount = weekPayments
+                  .filter((payment) => payment.paymentType === 'RENEWAL_CLOSURE')
                   .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
+
+                const regularPaidThisWeek = weekPayments
+                  .filter((payment) => isRealCollectionPayment(payment) && payment.paymentType !== 'RENEWAL_CLOSURE')
+                  .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
+
+                const totalPaidThisWeek = renewalClosureAmount + regularPaidThisWeek;
 
                 if (totalPaidThisWeek > 0) {
                   weeklyCollected[weekIdx] += totalPaidThisWeek;
-                  row.push(withCarryForward(`${Math.trunc(totalPaidThisWeek)}\n${Math.trunc(displayedAmount)}`));
+                  row.push(
+                    formatLoanDisbursementWeekCell({
+                      renewalClosureAmount,
+                      displayedAmount,
+                      regularPaidAmount: regularPaidThisWeek,
+                      carryForwardNote,
+                    })
+                  );
                   setStyle(rowIndex, colIndex, orangeStyle);
                 } else {
                   row.push(withCarryForward(Math.trunc(displayedAmount)));

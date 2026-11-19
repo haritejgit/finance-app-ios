@@ -15,7 +15,7 @@ import Icon from "../../src/Icon";
 import { Customer, Loan, Payment, Village } from "../../src/types";
 import { createBackupSnapshot, makeBackupFilename, parseBackupSnapshot, restoreBackupSnapshot } from "../../src/backup";
 import { downloadTextFile } from "../../src/exports";
-import { toMillis, money, startOfDay, isRealCollectionPayment, getLoanDistributedAmount, weekStart } from "../../src/business-logic";
+import { toMillis, money, startOfDay, isRealCollectionPayment, getLoanDistributedAmount, weekStart, formatLoanDisbursementWeekCell } from "../../src/business-logic";
 import { getRecordedNetDisbursement } from "../../src/processing-fee";
 import { useLanguage } from "../../src/language-context";
 import { createNestedAuthUser, updateNestedAccountStatus, deleteNestedAccount, reconcileNestedTransactions } from "../../src/repository";
@@ -738,13 +738,27 @@ export default function SettingsScreen() {
                     weeklyDisbursed[weekIndex] += getLoanDistributedAmount(l);
                   });
 
-                  const totalPaidThisWeek = weekPayments
-                    .filter((payment) => isRealCollectionPayment(payment))
+                  // Separate RENEWAL_CLOSURE payments (old balance settled) from
+                  // regular installment payments made on the same week as the new loan.
+                  const renewalClosureAmount = weekPayments
+                    .filter((payment) => payment.paymentType === "RENEWAL_CLOSURE")
                     .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
+
+                  const regularPaidThisWeek = weekPayments
+                    .filter((payment) => isRealCollectionPayment(payment) && payment.paymentType !== "RENEWAL_CLOSURE")
+                    .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
+
+                  const totalPaidThisWeek = renewalClosureAmount + regularPaidThisWeek;
 
                   if (totalPaidThisWeek > 0) {
                     weeklyCollected[weekIndex] += totalPaidThisWeek;
-                    row.push(`${Math.trunc(totalPaidThisWeek)}\n${Math.trunc(displayedAmount)}`);
+                    row.push(
+                      formatLoanDisbursementWeekCell({
+                        renewalClosureAmount,
+                        displayedAmount,
+                        regularPaidAmount: regularPaidThisWeek,
+                      })
+                    );
                   } else {
                     row.push(Math.trunc(displayedAmount));
                   }
