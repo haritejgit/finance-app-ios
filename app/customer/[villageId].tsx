@@ -2015,8 +2015,6 @@ export default function CustomerListScreen() {
                   </View>
                 </View>
 
-                <CustomerPhoneVerification phone={form.phone} onDecisionChange={setRegistrationPhoneDecision} colors={colors} />
-
                 <View style={styles.formColumn}>
                   <Text style={styles.label}>Alternative Mobile Number (Optional)</Text>
                   <TextInput
@@ -2296,6 +2294,15 @@ export default function CustomerListScreen() {
                     )}
                   </View>
                 )}
+
+                <CustomerPhoneVerification
+                  phone={form.phone}
+                  onDecisionChange={setRegistrationPhoneDecision}
+                  colors={colors}
+                  loanAmount={form.principal}
+                  customerName={form.name}
+                  purpose="new_loan"
+                />
 
                 <View style={styles.buttonContainer}>
                   <Pressable

@@ -2245,7 +2245,6 @@ export default function ProfileScreen() {
             >
               <Text style={[styles.modalTitle, { color: colors.text }]}>Renew Loan</Text>
               <Text style={[styles.sectionLabel, { color: colors.text }]}>Customer phone: {customer?.phone || "No phone number"}</Text>
-              {customer ? <CustomerPhoneVerification phone={customer.phone} onDecisionChange={setRenewalPhoneDecision} colors={colors} /> : null}
               <TextInput placeholder="New Principal Amount" placeholderTextColor={colors.textMuted} value={renewAmount} onChangeText={setRenewAmount} style={[styles.input, { backgroundColor: colors.surfaceTint, borderColor: colors.border, color: colors.text }]} keyboardType="numeric" />
               <Pressable
                 accessibilityRole="checkbox"
@@ -2375,6 +2374,17 @@ export default function ProfileScreen() {
                   </View>
                   <Text style={[styles.docsDetailText, { color: colors.text }]}>Did customer submit cheque?</Text>
                 </Pressable>
+              ) : null}
+
+              {customer ? (
+                <CustomerPhoneVerification
+                  phone={customer.phone}
+                  onDecisionChange={setRenewalPhoneDecision}
+                  colors={colors}
+                  loanAmount={renewAmount}
+                  customerName={customer.name}
+                  purpose="renewal"
+                />
               ) : null}
 
               <Pressable
