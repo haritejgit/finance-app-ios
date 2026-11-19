@@ -43,25 +43,35 @@ export function CustomerPhoneVerification({ phone, onDecisionChange, colors, loa
   const normalizedPhone = phone.replace(/\D/g, "").slice(0, 10);
   const [status, setStatus] = useState<PhoneVerificationDecision["status"]>("pending");
   const [code, setCode] = useState("");
+  const [activeOtpCode, setActiveOtpCode] = useState<string>("");
+  const [otpExpiresAt, setOtpExpiresAt] = useState<number>(0);
   const [session, setSession] = useState<OtpSession | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [copied, setCopied] = useState(false);
   const sessionRef = useRef<OtpSession | null>(null);
   const latestPhone = useRef(normalizedPhone);
   const callbackRef = useRef(onDecisionChange);
   callbackRef.current = onDecisionChange;
 
-  const { promptText, shareMessage } = formatLoanOtpMessage({
+  const parsedAmount = typeof loanAmount === "number" ? loanAmount : parseFloat(String(loanAmount || "").replace(/,/g, ""));
+  const hasValidAmount = Number.isFinite(parsedAmount) && parsedAmount > 0;
+
+  const { promptText, customerMessage, shareMessage } = formatLoanOtpMessage({
     loanAmount,
     customerName,
     purpose,
+    otpCode: activeOtpCode || undefined,
   });
 
   useEffect(() => {
     latestPhone.current = normalizedPhone;
     setStatus("pending");
     setCode("");
+    setActiveOtpCode("");
+    setOtpExpiresAt(0);
     setMessage("");
+    setCopied(false);
     callbackRef.current({ phone: normalizedPhone, status: "pending" });
     const previous = sessionRef.current;
     sessionRef.current = null;
@@ -92,6 +102,7 @@ export function CustomerPhoneVerification({ phone, onDecisionChange, colors, loa
     setMessage(next === "verified" ? "Phone number & loan approval verified." : "Continuing without phone verification.");
     callbackRef.current({ phone: normalizedPhone, status: next });
     setCode("");
+    setActiveOtpCode("");
     const active = sessionRef.current;
     sessionRef.current = null;
     setSession(null);
@@ -104,61 +115,145 @@ export function CustomerPhoneVerification({ phone, onDecisionChange, colors, loa
     }
   };
 
-  const sendCode = async () => {
+  const generateAndDispatchOtp = async (channel?: "whatsapp" | "sms") => {
     const target = e164(normalizedPhone);
-    if (!target) { setMessage("Enter a valid 10-digit Indian mobile number to send an OTP."); return; }
-    if (Platform.OS !== "web" || typeof document === "undefined") { setMessage("SMS OTP is available in the web app. You can continue without OTP."); return; }
-    setBusy(true); setMessage("");
-    let app: ReturnType<typeof initializeApp> | null = null;
-    let verifier: RecaptchaVerifier | null = null;
-    let host: HTMLDivElement | null = null;
-    try {
-      app = initializeApp(firebaseConfig, `phone-otp-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-      let auth: Auth;
-      try { auth = initializeAuth(app, { persistence: inMemoryPersistence }); }
-      catch { auth = getAuth(app); }
-      host = document.createElement("div");
-      host.setAttribute("aria-hidden", "true");
-      host.style.position = "fixed";
-      host.style.left = "-10000px";
-      host.style.top = "0";
-      document.body.appendChild(host);
-      verifier = new RecaptchaVerifier(auth, host, { size: "invisible" });
-      const confirmation = await signInWithPhoneNumber(auth, target, verifier);
-      const created: OtpSession = { app, auth, verifier, confirmation, phone: target, host };
-      if (latestPhone.current !== normalizedPhone) {
-        verifier.clear(); host.remove(); await deleteApp(app); return;
+    if (!target) {
+      setMessage("Enter a valid 10-digit Indian mobile number to send an OTP.");
+      return;
+    }
+    if (!hasValidAmount) {
+      setMessage("Please enter the loan amount above first so it is included in the OTP message.");
+      return;
+    }
+
+    // Generate a secure 6-digit OTP
+    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    setActiveOtpCode(generatedOtp);
+    setOtpExpiresAt(Date.now() + 10 * 60 * 1000);
+    setStatus("pending");
+    callbackRef.current({ phone: normalizedPhone, status: "pending" });
+
+    const msgWithOtp = formatLoanOtpMessage({
+      loanAmount,
+      customerName,
+      purpose,
+      otpCode: generatedOtp,
+    }).customerMessage;
+
+    if (channel === "whatsapp") {
+      const waUrl = `https://wa.me/91${normalizedPhone}?text=${encodeURIComponent(msgWithOtp)}`;
+      Linking.openURL(waUrl).catch(() => undefined);
+      setMessage(`OTP sent to WhatsApp (+91 ${normalizedPhone}).`);
+      return;
+    }
+
+    if (channel === "sms") {
+      const smsSep = Platform.OS === "ios" ? "&" : "?";
+      const smsUrl = `sms:+91${normalizedPhone}${smsSep}body=${encodeURIComponent(msgWithOtp)}`;
+      Linking.openURL(smsUrl).catch(() => undefined);
+      setMessage(`OTP opened in SMS (+91 ${normalizedPhone}).`);
+      return;
+    }
+
+    // Default: also trigger Firebase Phone Auth if in web
+    if (Platform.OS === "web" && typeof document !== "undefined") {
+      setBusy(true);
+      setMessage("");
+      let app: ReturnType<typeof initializeApp> | null = null;
+      let verifier: RecaptchaVerifier | null = null;
+      let host: HTMLDivElement | null = null;
+      try {
+        app = initializeApp(firebaseConfig, `phone-otp-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+        let auth: Auth;
+        try { auth = initializeAuth(app, { persistence: inMemoryPersistence }); }
+        catch { auth = getAuth(app); }
+        host = document.createElement("div");
+        host.setAttribute("aria-hidden", "true");
+        host.style.position = "fixed";
+        host.style.left = "-10000px";
+        host.style.top = "0";
+        document.body.appendChild(host);
+        verifier = new RecaptchaVerifier(auth, host, { size: "invisible" });
+        const confirmation = await signInWithPhoneNumber(auth, target, verifier);
+        const created: OtpSession = { app, auth, verifier, confirmation, phone: target, host };
+        if (latestPhone.current !== normalizedPhone) {
+          verifier.clear(); host.remove(); await deleteApp(app); return;
+        }
+        sessionRef.current = created;
+        setSession(created);
+        setMessage(`OTP dispatched to ${target}. Share with customer via WhatsApp/SMS if needed.`);
+      } catch (error: any) {
+        verifier?.clear();
+        host?.remove();
+        if (app) void deleteApp(app).catch(() => undefined);
+        setMessage(
+          error?.code === "auth/invalid-phone-number"
+            ? "That mobile number is invalid."
+            : error?.code === "auth/too-many-requests"
+            ? "Too many automated attempts. You can still send via WhatsApp or SMS button below."
+            : `OTP generated. Share directly with customer via WhatsApp or SMS.`
+        );
+      } finally {
+        setBusy(false);
       }
-      sessionRef.current = created;
-      setSession(created);
-      setStatus("pending");
-      callbackRef.current({ phone: normalizedPhone, status: "pending" });
-      setMessage(`OTP sent to ${target}.`);
-    } catch (error: any) {
-      verifier?.clear();
-      host?.remove();
-      if (app) void deleteApp(app).catch(() => undefined);
-      setMessage(error?.code === "auth/invalid-phone-number" ? "That mobile number is invalid." : error?.code === "auth/too-many-requests" ? "Too many OTP attempts. Please wait and try again." : error?.message || "Could not send OTP. Check Firebase Phone sign-in settings and try again.");
-    } finally { setBusy(false); }
+    } else {
+      setMessage(`OTP ${generatedOtp} generated. Share via WhatsApp or SMS.`);
+    }
   };
 
   const verifyCode = async () => {
-    if (!session || code.trim().length !== 6) { setMessage("Enter the 6-digit OTP."); return; }
-    setBusy(true); setMessage("");
-    try {
-      const credential = await session.confirmation.confirm(code.trim());
-      if (credential.user.phoneNumber !== session.phone || latestPhone.current !== normalizedPhone) throw new Error("The verified phone number does not match this customer.");
+    const trimmed = code.trim();
+    if (trimmed.length !== 6) {
+      setMessage("Enter the 6-digit OTP.");
+      return;
+    }
+
+    // 1. Check local OTP first (from WhatsApp / SMS / direct dispatch)
+    if (activeOtpCode && trimmed === activeOtpCode) {
+      if (Date.now() > otpExpiresAt) {
+        setMessage("This OTP has expired. Please send a new OTP.");
+        return;
+      }
       choose("verified");
-    } catch (error: any) {
-      setMessage(error?.code === "auth/invalid-verification-code" ? "That OTP is incorrect. Please check it and try again." : error?.message || "Could not verify this OTP.");
-    } finally { setBusy(false); }
+      return;
+    }
+
+    // 2. Check Firebase session confirmation
+    if (session) {
+      setBusy(true);
+      setMessage("");
+      try {
+        const credential = await session.confirmation.confirm(trimmed);
+        if (credential.user.phoneNumber !== session.phone || latestPhone.current !== normalizedPhone) {
+          throw new Error("The verified phone number does not match this customer.");
+        }
+        choose("verified");
+        return;
+      } catch (error: any) {
+        setMessage(
+          error?.code === "auth/invalid-verification-code"
+            ? "That OTP is incorrect. Please check it and try again."
+            : error?.message || "Could not verify this OTP."
+        );
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    setMessage("That OTP is incorrect. Please check it and try again.");
   };
 
-  const shareViaWhatsApp = () => {
-    if (!normalizedPhone || normalizedPhone.length !== 10) return;
-    const url = `https://wa.me/91${normalizedPhone}?text=${encodeURIComponent(shareMessage)}`;
-    Linking.openURL(url).catch(() => undefined);
+  const copyToClipboard = () => {
+    const textToCopy = customerMessage;
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(textToCopy).catch(() => undefined);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
   };
+
+  const isOtpActive = !!activeOtpCode || !!session;
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -177,13 +272,29 @@ export function CustomerPhoneVerification({ phone, onDecisionChange, colors, loa
         </View>
       </View>
 
+      {!hasValidAmount ? (
+        <View style={[styles.warningBanner, { backgroundColor: colors.warningSoft }]}>
+          <Icon name="alert-circle-outline" size={16} color="#B45309" />
+          <Text style={[styles.warningBannerText, { color: colors.text }]}>
+            Please enter the loan amount above so it is included in the OTP message.
+          </Text>
+        </View>
+      ) : null}
+
       <View style={[styles.noticeCard, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
         <View style={styles.noticeHeader}>
           <Icon name="chatbubble-ellipses-outline" size={14} color={colors.primary} />
-          <Text style={[styles.noticeTitle, { color: colors.text }]}>Confirmation Notice</Text>
+          <Text style={[styles.noticeTitle, { color: colors.text }]}>
+            {activeOtpCode ? "Message Sent to Customer (with OTP)" : "Confirmation Message for Customer"}
+          </Text>
+          {activeOtpCode ? (
+            <Pressable onPress={copyToClipboard} style={styles.copyBtn}>
+              <Text style={[styles.copyBtnText, { color: colors.primary }]}>{copied ? "Copied!" : "Copy"}</Text>
+            </Pressable>
+          ) : null}
         </View>
         <Text style={[styles.noticeQuote, { color: colors.textSecondary }]}>
-          "{promptText}"
+          "{customerMessage}"
         </Text>
       </View>
 
@@ -202,14 +313,14 @@ export function CustomerPhoneVerification({ phone, onDecisionChange, colors, loa
         </View>
       ) : (
         <>
-          {session ? (
+          {isOtpActive ? (
             <View style={styles.row}>
               <TextInput
                 value={code}
                 onChangeText={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))}
                 keyboardType="number-pad"
                 maxLength={6}
-                placeholder="6-digit OTP"
+                placeholder="Enter 6-digit OTP"
                 placeholderTextColor={colors.textMuted}
                 style={[styles.input, { color: colors.text, backgroundColor: colors.surfaceTint, borderColor: colors.border }]}
               />
@@ -231,10 +342,10 @@ export function CustomerPhoneVerification({ phone, onDecisionChange, colors, loa
           ) : null}
 
           <View style={styles.actions}>
-            {!session ? (
+            {!isOtpActive ? (
               <Pressable
                 disabled={busy || !e164(normalizedPhone)}
-                onPress={sendCode}
+                onPress={() => generateAndDispatchOtp()}
                 style={[
                   styles.button,
                   styles.sendButton,
@@ -254,22 +365,32 @@ export function CustomerPhoneVerification({ phone, onDecisionChange, colors, loa
             ) : (
               <Pressable
                 disabled={busy}
-                onPress={sendCode}
+                onPress={() => generateAndDispatchOtp()}
                 style={[styles.button, styles.resendButton, { borderColor: colors.border, backgroundColor: colors.surfaceTint }]}
               >
                 <Icon name="refresh-outline" size={15} color={colors.textSecondary} />
-                <Text style={[styles.secondaryButtonText, { color: colors.textSecondary }]}>Resend OTP</Text>
+                <Text style={[styles.secondaryButtonText, { color: colors.textSecondary }]}>Resend</Text>
               </Pressable>
             )}
 
             {e164(normalizedPhone) ? (
-              <Pressable
-                onPress={shareViaWhatsApp}
-                style={[styles.button, styles.whatsAppButton]}
-              >
-                <Icon name="logo-whatsapp" size={16} color="#ffffff" />
-                <Text style={[styles.buttonText, { color: "#ffffff" }]}>WhatsApp</Text>
-              </Pressable>
+              <>
+                <Pressable
+                  onPress={() => generateAndDispatchOtp("whatsapp")}
+                  style={[styles.button, styles.whatsAppButton]}
+                >
+                  <Icon name="logo-whatsapp" size={16} color="#ffffff" />
+                  <Text style={[styles.buttonText, { color: "#ffffff" }]}>WhatsApp OTP</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => generateAndDispatchOtp("sms")}
+                  style={[styles.button, styles.smsButton, { borderColor: colors.border, backgroundColor: colors.surfaceTint }]}
+                >
+                  <Icon name="mail-outline" size={15} color={colors.textSecondary} />
+                  <Text style={[styles.secondaryButtonText, { color: colors.textSecondary }]}>SMS OTP</Text>
+                </Pressable>
+              </>
             ) : null}
 
             <Pressable
@@ -292,7 +413,7 @@ export function CustomerPhoneVerification({ phone, onDecisionChange, colors, loa
             styles.message,
             {
               color:
-                message.includes("sent") || message.includes("verified") || message.includes("Continuing")
+                message.includes("sent") || message.includes("verified") || message.includes("generated") || message.includes("dispatched") || message.includes("opened")
                   ? colors.textMuted
                   : colors.error,
             },
@@ -325,15 +446,29 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 11, fontWeight: "500" },
   optionalBadge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5 },
   optionalText: { fontSize: 9, fontWeight: "900", letterSpacing: 0.5 },
+  warningBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  warningBannerText: {
+    fontSize: 12,
+    fontWeight: "600",
+    flex: 1,
+  },
   noticeCard: {
     borderWidth: 1,
     borderRadius: 10,
     padding: 10,
-    gap: 4,
+    gap: 6,
   },
   noticeHeader: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 6,
   },
   noticeTitle: {
@@ -341,6 +476,16 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.4,
+    flex: 1,
+  },
+  copyBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  copyBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
   noticeQuote: {
     fontSize: 13,
@@ -363,7 +508,7 @@ const styles = StyleSheet.create({
   button: {
     minHeight: 44,
     borderRadius: 10,
-    paddingHorizontal: 13,
+    paddingHorizontal: 12,
     flexDirection: "row",
     gap: 6,
     alignItems: "center",
@@ -373,14 +518,18 @@ const styles = StyleSheet.create({
   resendButton: { borderWidth: 1, paddingHorizontal: 10 },
   whatsAppButton: {
     backgroundColor: "#25D366",
-    paddingHorizontal: 12,
+    paddingHorizontal: 11,
+  },
+  smsButton: {
+    borderWidth: 1,
+    paddingHorizontal: 11,
   },
   verifyButton: { minWidth: 105 },
   buttonText: { fontSize: 13, fontWeight: "800" },
   secondaryButtonText: { fontSize: 12, fontWeight: "700" },
   skipButton: {
     flex: 1,
-    minWidth: 80,
+    minWidth: 75,
     minHeight: 44,
     borderWidth: 1,
     borderRadius: 10,
