@@ -55,5 +55,15 @@ test("formatLoanDisbursementWeekCell shows old balance, new loan, and installmen
     carryForwardNote: "Paid till moved: ₹500\nAmount given: ₹10000",
   });
   assert.equal(withNote, "Paid till moved: ₹500\nAmount given: ₹10000\n1000\n8400\n700");
+
+  // Scenario 5: Customer paid 700 on old loan + 1400 renewal closure on old loan (total 2100 closure),
+  // new loan total payable 12000, and paid 1000 on new loan after renewal on same day
+  const scenario5 = formatLoanDisbursementWeekCell({
+    renewalClosureAmount: 2100,
+    displayedAmount: 12000,
+    regularPaidAmount: 1000,
+  });
+  assert.equal(scenario5, "2100\n12000\n1000");
+  assert.notEqual(scenario5, "1400\n12000\n1700");
 });
 

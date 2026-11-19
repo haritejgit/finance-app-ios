@@ -1528,25 +1528,43 @@ interface Payment {
                   weeklyDisbursed[weekIdx] += getLoanDistributedAmount(l as any);
                 });
 
-                // Separate RENEWAL_CLOSURE payments (old balance settled) from
-                // regular installment payments made on the same week as the new loan.
-                const renewalClosureAmount = weekPayments
-                  .filter((payment) => payment.paymentType === 'RENEWAL_CLOSURE' || (payment as any).type === 'RENEWAL_CLOSURE')
+                const newLoanIds = new Set(loansStartingThisWeek.map((loan) => loan.id));
+
+                // All payments made towards the previous/old loan(s) in this week
+                // (e.g. cash payment before renewal 700 + renewal closure 1400 = 2100)
+                const oldLoanPaidThisWeek = weekPayments
+                  .filter((payment) => {
+                    if (!isRealCollectionPayment(payment)) return false;
+                    if (payment.loanId) {
+                      return !newLoanIds.has(payment.loanId);
+                    }
+                    return payment.paymentType === 'RENEWAL_CLOSURE' || (payment as any).type === 'RENEWAL_CLOSURE';
+                  })
                   .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
 
-                const regularPaidThisWeek = weekPayments
-                  .filter((payment) => isRealCollectionPayment(payment) && payment.paymentType !== 'RENEWAL_CLOSURE' && (payment as any).type !== 'RENEWAL_CLOSURE')
+                // Payments made towards the new loan after renewal / disbursement in this week (e.g. 1000)
+                const newLoanPaidThisWeek = weekPayments
+                  .filter((payment) => {
+                    if (!isRealCollectionPayment(payment)) return false;
+                    if (payment.paymentType === 'RENEWAL_CLOSURE' || (payment as any).type === 'RENEWAL_CLOSURE') {
+                      return false;
+                    }
+                    if (payment.loanId) {
+                      return newLoanIds.has(payment.loanId);
+                    }
+                    return true;
+                  })
                   .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
 
-                const totalPaidThisWeek = renewalClosureAmount + regularPaidThisWeek;
+                const totalPaidThisWeek = oldLoanPaidThisWeek + newLoanPaidThisWeek;
 
                 if (totalPaidThisWeek > 0) {
                   weeklyCollected[weekIdx] += totalPaidThisWeek;
                   row.push(
                     formatLoanDisbursementWeekCell({
-                      renewalClosureAmount,
+                      renewalClosureAmount: oldLoanPaidThisWeek,
                       displayedAmount,
-                      regularPaidAmount: regularPaidThisWeek,
+                      regularPaidAmount: newLoanPaidThisWeek,
                       carryForwardNote,
                     })
                   );
