@@ -1531,11 +1531,11 @@ interface Payment {
                 // Separate RENEWAL_CLOSURE payments (old balance settled) from
                 // regular installment payments made on the same week as the new loan.
                 const renewalClosureAmount = weekPayments
-                  .filter((payment) => payment.paymentType === 'RENEWAL_CLOSURE')
+                  .filter((payment) => payment.paymentType === 'RENEWAL_CLOSURE' || (payment as any).type === 'RENEWAL_CLOSURE')
                   .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
 
                 const regularPaidThisWeek = weekPayments
-                  .filter((payment) => isRealCollectionPayment(payment) && payment.paymentType !== 'RENEWAL_CLOSURE')
+                  .filter((payment) => isRealCollectionPayment(payment) && payment.paymentType !== 'RENEWAL_CLOSURE' && (payment as any).type !== 'RENEWAL_CLOSURE')
                   .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
 
                 const totalPaidThisWeek = renewalClosureAmount + regularPaidThisWeek;
@@ -1629,10 +1629,15 @@ interface Payment {
             { wch: 35 },
             ...weekDates.map(() => ({ wch: 15 })),
           ];
-          ws['!rows'] = sheetData.map((_, index) => {
+          ws['!rows'] = sheetData.map((row, index) => {
             if (index === 0) return { hpt: 24 };
             if (index === 1) return { hpt: 25 };
-            if (index >= 2 && index < collectedRowIndex - 1) return { hpt: 48 };
+            if (index >= 2 && index < collectedRowIndex - 1) {
+              const maxLines = Array.isArray(row)
+                ? Math.max(...row.map((cell) => (typeof cell === 'string' ? cell.split('\n').length : 1)), 1)
+                : 1;
+              return { hpt: Math.max(48, maxLines * 18) };
+            }
             return { hpt: 24 };
           });
 

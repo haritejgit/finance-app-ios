@@ -427,13 +427,21 @@ export default function SettingsScreen() {
                   });
 
                   const closureTxn = weekTxns.find(t => t.type === "RENEWAL_CLOSURE");
-                  if (closureTxn) {
-                    const otherPaymentsSum = weekTxns
-                      .filter((t) => t.id !== closureTxn.id && t.type === "payment")
-                      .reduce((sum, t) => sum + (t.amount || 0), 0);
-                    const previousBalance = (closureTxn.amount || 0) + otherPaymentsSum;
-                    weeklyCollected[weekIndex] += previousBalance;
-                    row.push(`${Math.trunc(previousBalance)}\n${Math.trunc(displayedAmount)}`);
+                  const closureAmount = closureTxn ? (closureTxn.amount || 0) : 0;
+                  const otherPaymentsSum = weekTxns
+                    .filter((t) => (!closureTxn || t.id !== closureTxn.id) && t.type === "payment")
+                    .reduce((sum, t) => sum + (t.amount || 0), 0);
+                  const totalCollectedThisWeek = closureAmount + otherPaymentsSum;
+
+                  if (totalCollectedThisWeek > 0) {
+                    weeklyCollected[weekIndex] += totalCollectedThisWeek;
+                    row.push(
+                      formatLoanDisbursementWeekCell({
+                        renewalClosureAmount: closureAmount,
+                        displayedAmount,
+                        regularPaidAmount: otherPaymentsSum,
+                      })
+                    );
                   } else {
                     row.push(Math.trunc(displayedAmount));
                   }
@@ -479,7 +487,17 @@ export default function SettingsScreen() {
             if (ws[cellRef]) ws[cellRef].s = style;
           });
           ws["!cols"] = [{ wch: 10 }, { wch: 10 }, { wch: 22 }, { wch: 35 }, ...weekDates.map(() => ({ wch: 15 }))];
-          ws["!rows"] = sheetData.map((_, index) => (index >= 2 && index < collectedRowIndex - 1 ? { hpt: 48 } : { hpt: 24 }));
+          ws["!rows"] = sheetData.map((row, index) => {
+            if (index === 0) return { hpt: 24 };
+            if (index === 1) return { hpt: 25 };
+            if (index >= 2 && index < collectedRowIndex - 1) {
+              const maxLines = Array.isArray(row)
+                ? Math.max(...row.map((cell) => (typeof cell === "string" ? cell.split("\n").length : 1)), 1)
+                : 1;
+              return { hpt: Math.max(48, maxLines * 18) };
+            }
+            return { hpt: 24 };
+          });
           XLSX.utils.book_append_sheet(wb, ws, makeSheetName(dayName, shiftName));
         }
       }
@@ -741,11 +759,11 @@ export default function SettingsScreen() {
                   // Separate RENEWAL_CLOSURE payments (old balance settled) from
                   // regular installment payments made on the same week as the new loan.
                   const renewalClosureAmount = weekPayments
-                    .filter((payment) => payment.paymentType === "RENEWAL_CLOSURE")
+                    .filter((payment) => payment.paymentType === "RENEWAL_CLOSURE" || (payment as any).type === "RENEWAL_CLOSURE")
                     .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
 
                   const regularPaidThisWeek = weekPayments
-                    .filter((payment) => isRealCollectionPayment(payment) && payment.paymentType !== "RENEWAL_CLOSURE")
+                    .filter((payment) => isRealCollectionPayment(payment) && payment.paymentType !== "RENEWAL_CLOSURE" && (payment as any).type !== "RENEWAL_CLOSURE")
                     .reduce((sum, payment) => sum + money(payment.amountPaid), 0);
 
                   const totalPaidThisWeek = renewalClosureAmount + regularPaidThisWeek;
@@ -802,7 +820,17 @@ export default function SettingsScreen() {
             if (ws[cellRef]) ws[cellRef].s = style;
           });
           ws["!cols"] = [{ wch: 10 }, { wch: 10 }, { wch: 22 }, { wch: 35 }, ...weekDates.map(() => ({ wch: 15 }))];
-          ws["!rows"] = sheetData.map((_, index) => (index >= 2 && index < collectedRowIndex - 1 ? { hpt: 48 } : { hpt: 24 }));
+          ws["!rows"] = sheetData.map((row, index) => {
+            if (index === 0) return { hpt: 24 };
+            if (index === 1) return { hpt: 25 };
+            if (index >= 2 && index < collectedRowIndex - 1) {
+              const maxLines = Array.isArray(row)
+                ? Math.max(...row.map((cell) => (typeof cell === "string" ? cell.split("\n").length : 1)), 1)
+                : 1;
+              return { hpt: Math.max(48, maxLines * 18) };
+            }
+            return { hpt: 24 };
+          });
           XLSX.utils.book_append_sheet(wb, ws, makeSheetName(dayName, shiftName));
         }
       }
