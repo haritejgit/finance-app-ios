@@ -126,6 +126,29 @@ export type DashboardAnalytics = {
 };
 
 const DASHBOARD_CACHE_PREFIX = "dashboardAnalytics:";
+const memoryAnalyticsCache: Record<string, DashboardAnalytics> = {};
+
+export async function getCachedDashboardAnalytics(
+  userId: string,
+  nestedUserId?: string,
+  selectedVillageId?: string
+): Promise<DashboardAnalytics | null> {
+  const cacheKey = `${DASHBOARD_CACHE_PREFIX}${userId}:${nestedUserId || ""}:${selectedVillageId || "ALL"}:${startOfDay(Date.now())}`;
+  if (memoryAnalyticsCache[cacheKey]) {
+    return memoryAnalyticsCache[cacheKey];
+  }
+  try {
+    const raw = await AsyncStorage.getItem(cacheKey);
+    if (raw) {
+      const parsed = JSON.parse(raw) as DashboardAnalytics;
+      memoryAnalyticsCache[cacheKey] = parsed;
+      return parsed;
+    }
+  } catch {
+    // Ignore cache read failures
+  }
+  return null;
+}
 
 function changeText(current: number, previous: number, label: string) {
   if (previous <= 0 && current > 0) return `${label} started this period with Rs.${Math.round(current).toLocaleString("en-IN")} collected.`;
@@ -1090,6 +1113,7 @@ export async function getDashboardAnalytics(userId: string, nestedUserId?: strin
   }
 
   try {
+    memoryAnalyticsCache[cacheKey] = dashboardAnalytics;
     await AsyncStorage.setItem(cacheKey, JSON.stringify(dashboardAnalytics));
   } catch {
     // Cache failures should not block live dashboard data.
@@ -1108,6 +1132,13 @@ export function subscribeDashboardAnalytics(
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let refreshInProgress = false;
   let refreshPending = false;
+
+  // Immediately emit cached analytics so the dashboard opens instantaneously!
+  void getCachedDashboardAnalytics(userId, nestedUserId, selectedVillageId).then((cached) => {
+    if (cached && !cancelled) {
+      onData(cached);
+    }
+  });
 
   const refresh = () => {
     if (refreshTimer) clearTimeout(refreshTimer);

@@ -26,7 +26,7 @@ import { AnimatedScreen } from "../../src/components/AnimatedScreen";
 import { CustomerIdBadge } from "../../src/components/CustomerIdBadge";
 import { CashFlowRadar } from "../../src/components/CashFlowRadar";
 
-import { getDashboardAnalytics, subscribeDashboardAnalytics, type CustomerState, type DashboardAnalytics } from "../../src/finance-analytics";
+import { getCachedDashboardAnalytics, getDashboardAnalytics, subscribeDashboardAnalytics, type CustomerState, type DashboardAnalytics } from "../../src/finance-analytics";
 import Icon from "../../src/Icon";
 import { lightImpact } from "../../src/interactions";
 import { CustomerSearchResult, getAllActiveCustomersWithVillages, runRetroactiveCleanup, addNestedExpense, updateNestedExpense, deleteNestedExpense, type NestedExpense } from "../../src/repository";
@@ -278,9 +278,23 @@ export default function ShiftSelectionScreen() {
 
   useEffect(() => {
     if (user?.uid && isOwner) {
-      runRetroactiveCleanup(user.uid);
+      const timer = setTimeout(() => {
+        void runRetroactiveCleanup(user.uid);
+      }, 2500);
+      return () => clearTimeout(timer);
     }
   }, [user?.uid, isOwner]);
+
+  useEffect(() => {
+    if (effectiveOwnerId) {
+      void getCachedDashboardAnalytics(effectiveOwnerId, isOwner ? undefined : user?.uid).then((cached) => {
+        if (cached) {
+          setAnalytics((prev) => prev || cached);
+          setLoading(false);
+        }
+      });
+    }
+  }, [effectiveOwnerId, isOwner, user?.uid]);
 
   useEffect(() => {
     const timeout = setTimeout(() => setDebouncedQuery(searchQuery.trim().toLowerCase()), 220);
@@ -662,120 +676,121 @@ export default function ShiftSelectionScreen() {
                 </Pressable>
               </View>
 
+              <DashboardPanel
+                title={t("collectionRoute")}
+                action={<Text style={[styles.routeMeta, { color: colors.textMuted }]}>{selectedDay} / {selectedShift}</Text>}
+              >
+                <Text style={[styles.controlLabel, { color: colors.textMuted }]}>{t("day")}</Text>
+                <View style={styles.dayGrid}>
+                  {days.map((day, index) => (
+                    <Pressable
+                       key={day}
+                       accessibilityLabel={`Select ${day}`}
+                       onPress={() => {
+                         lightImpact();
+                         setSelectedDay(day);
+                       }}
+                       style={[styles.dayChip, selectedDay === day && styles.dayChipOn]}
+                    >
+                      <Text style={[styles.dayChipText, { color: colors.textSecondary }, selectedDay === day && styles.dayChipTextOn]}>{shortDays[index]}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                <Text style={[styles.controlLabel, { color: colors.textMuted }]}>{t("shift")}</Text>
+                <View style={styles.shiftRow}>
+                  {shifts.map((shift) => {
+                    const active = selectedShift === shift;
+                    return (
+                      <Pressable
+                        key={shift}
+                        accessibilityLabel={`Select ${shift} shift`}
+                        onPress={() => {
+                          lightImpact();
+                          setSelectedShift(shift);
+                        }}
+                        style={[styles.shift, { backgroundColor: colors.surfaceTint, borderColor: colors.border }, active && styles.shiftOn]}
+                      >
+                    <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={17} color={active ? colors.blue2 : colors.textSecondary} />
+                        <Text style={[styles.shiftText, active && styles.shiftTextOn]}>{shift}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {routeProgress.customerCount > 0 && (
+                  <View style={[styles.progressCard, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
+                    <View style={styles.progressHeader}>
+                      <Text style={[styles.progressTitle, { color: colors.text }]}>
+                        {selectedDay} {selectedShift === "Morning" ? "☀️" : "🌙"} Route Progress
+                      </Text>
+                      <Text style={[styles.progressPercentText, { color: colors.primary }]}>{progressPercent}%</Text>
+                    </View>
+                    <View style={[styles.progressBarBg, { backgroundColor: colors.borderLight }]}>
+                      {paidPercent > 0 && (
+                        <View
+                          style={[
+                            styles.progressBarFill,
+                            {
+                              width: `${paidPercent}%`,
+                              backgroundColor: Colors.amberGlow,
+                              borderRadius: 0,
+                            },
+                          ]}
+                        />
+                      )}
+                      {duePercent > 0 && (
+                        <View
+                          style={[
+                            styles.progressBarFill,
+                            {
+                              width: `${duePercent}%`,
+                              backgroundColor: "#d94841", // Red
+                              borderRadius: 0,
+                            },
+                          ]}
+                        />
+                      )}
+                    </View>
+                    <View style={styles.progressDetails}>
+                      <Text style={[styles.progressDetailText, { color: colors.textMuted }]}>
+                        Paid: <Text style={{fontWeight: "800", color: Colors.lightSeaGreen}}>{formatMoney(routeProgress.collected)}</Text>
+                        {routeProgress.dueAmount > 0 && (
+                          <> • Dues: <Text style={{fontWeight: "900", color: "#d94841"}}>{formatMoney(routeProgress.dueAmount)}</Text></>
+                        )}
+                        {" "}/ {formatMoney(routeProgress.target)}
+                      </Text>
+                      {remainingCustomers > 0 ? (
+                        <Text style={[styles.progressHintText, { color: colors.textMuted }]}>
+                          Rs. {Math.round(remainingTarget).toLocaleString("en-IN")} left • {remainingCustomers} customer{remainingCustomers === 1 ? "" : "s"} remaining
+                        </Text>
+                      ) : (
+                        <Text style={[styles.progressHintText, {color: Colors.success, fontWeight: "800"}]}>
+                          🎉 Route Visited! {routeProgress.paidCustomerCount} Paid • {routeProgress.dueCustomerCount} Dues
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                )}
+
+                <Pressable accessibilityLabel={t("startCollection")} onPress={startCollection}>
+                  <View style={styles.primaryAction}>
+                    <Text style={styles.primaryActionText}>{t("startCollection")}</Text>
+                    <Icon name="arrow-forward" size={18} color={Colors.white} />
+                  </View>
+                </Pressable>
+
+                <View style={styles.walletRouteSummary}>
+                  <Text style={[styles.walletRouteText, { color: colors.textSecondary }]}>Cash: {formatMoney(totals?.cashWalletBalance ?? 0)}</Text>
+                  <View style={[styles.walletRouteDot, { backgroundColor: colors.border }]} />
+                  <Text style={[styles.walletRouteText, { color: colors.textSecondary }]}>PhonePe: {formatMoney(totals?.phonePeWalletBalance ?? 0)}</Text>
+                </View>
+              </DashboardPanel>
+
               {loading && !analytics ? (
                 <DashboardSkeleton />
               ) : (
                 <>
-                  <DashboardPanel
-                    title={t("collectionRoute")}
-                    action={<Text style={[styles.routeMeta, { color: colors.textMuted }]}>{selectedDay} / {selectedShift}</Text>}
-                  >
-                    <Text style={[styles.controlLabel, { color: colors.textMuted }]}>{t("day")}</Text>
-                    <View style={styles.dayGrid}>
-                      {days.map((day, index) => (
-                        <Pressable
-                           key={day}
-                           accessibilityLabel={`Select ${day}`}
-                           onPress={() => {
-                             lightImpact();
-                             setSelectedDay(day);
-                           }}
-                           style={[styles.dayChip, selectedDay === day && styles.dayChipOn]}
-                        >
-                          <Text style={[styles.dayChipText, { color: colors.textSecondary }, selectedDay === day && styles.dayChipTextOn]}>{shortDays[index]}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-
-                    <Text style={[styles.controlLabel, { color: colors.textMuted }]}>{t("shift")}</Text>
-                    <View style={styles.shiftRow}>
-                      {shifts.map((shift) => {
-                        const active = selectedShift === shift;
-                        return (
-                          <Pressable
-                            key={shift}
-                            accessibilityLabel={`Select ${shift} shift`}
-                            onPress={() => {
-                              lightImpact();
-                              setSelectedShift(shift);
-                            }}
-                            style={[styles.shift, { backgroundColor: colors.surfaceTint, borderColor: colors.border }, active && styles.shiftOn]}
-                          >
-                        <Icon name={shift === "Morning" ? "sunny-outline" : "moon-outline"} size={17} color={active ? colors.blue2 : colors.textSecondary} />
-                            <Text style={[styles.shiftText, active && styles.shiftTextOn]}>{shift}</Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-
-                    {routeProgress.customerCount > 0 && (
-                      <View style={[styles.progressCard, { backgroundColor: colors.surfaceTint, borderColor: colors.border }]}>
-                        <View style={styles.progressHeader}>
-                          <Text style={[styles.progressTitle, { color: colors.text }]}>
-                            {selectedDay} {selectedShift === "Morning" ? "☀️" : "🌙"} Route Progress
-                          </Text>
-                          <Text style={[styles.progressPercentText, { color: colors.primary }]}>{progressPercent}%</Text>
-                        </View>
-                        <View style={[styles.progressBarBg, { backgroundColor: colors.borderLight }]}>
-                          {paidPercent > 0 && (
-                            <View
-                              style={[
-                                styles.progressBarFill,
-                                {
-                                  width: `${paidPercent}%`,
-                                  backgroundColor: Colors.amberGlow,
-                                  borderRadius: 0,
-                                },
-                              ]}
-                            />
-                          )}
-                          {duePercent > 0 && (
-                            <View
-                              style={[
-                                styles.progressBarFill,
-                                {
-                                  width: `${duePercent}%`,
-                                  backgroundColor: "#d94841", // Red
-                                  borderRadius: 0,
-                                },
-                              ]}
-                            />
-                          )}
-                        </View>
-                        <View style={styles.progressDetails}>
-                          <Text style={[styles.progressDetailText, { color: colors.textMuted }]}>
-                            Paid: <Text style={{fontWeight: "800", color: Colors.lightSeaGreen}}>{formatMoney(routeProgress.collected)}</Text>
-                            {routeProgress.dueAmount > 0 && (
-                              <> • Dues: <Text style={{fontWeight: "900", color: "#d94841"}}>{formatMoney(routeProgress.dueAmount)}</Text></>
-                            )}
-                            {" "}/ {formatMoney(routeProgress.target)}
-                          </Text>
-                          {remainingCustomers > 0 ? (
-                            <Text style={[styles.progressHintText, { color: colors.textMuted }]}>
-                              Rs. {Math.round(remainingTarget).toLocaleString("en-IN")} left • {remainingCustomers} customer{remainingCustomers === 1 ? "" : "s"} remaining
-                            </Text>
-                          ) : (
-                            <Text style={[styles.progressHintText, {color: Colors.success, fontWeight: "800"}]}>
-                              🎉 Route Visited! {routeProgress.paidCustomerCount} Paid • {routeProgress.dueCustomerCount} Dues
-                            </Text>
-                          )}
-                        </View>
-                      </View>
-                    )}
-
-                    <Pressable accessibilityLabel={t("startCollection")} onPress={startCollection}>
-                      <View style={styles.primaryAction}>
-                        <Text style={styles.primaryActionText}>{t("startCollection")}</Text>
-                        <Icon name="arrow-forward" size={18} color={Colors.white} />
-                      </View>
-                    </Pressable>
-
-                    <View style={styles.walletRouteSummary}>
-                      <Text style={[styles.walletRouteText, { color: colors.textSecondary }]}>Cash: {formatMoney(totals?.cashWalletBalance ?? 0)}</Text>
-                      <View style={[styles.walletRouteDot, { backgroundColor: colors.border }]} />
-                      <Text style={[styles.walletRouteText, { color: colors.textSecondary }]}>PhonePe: {formatMoney(totals?.phonePeWalletBalance ?? 0)}</Text>
-                    </View>
-                  </DashboardPanel>
 
                   {isOwner && nestedActivity.length > 0 && (
                     <DashboardPanel

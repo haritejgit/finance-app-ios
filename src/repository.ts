@@ -1638,7 +1638,14 @@ export async function checkAndAutoMarkDues(userId: string, activeLoans: Loan[]) 
 
 
 export async function runRetroactiveCleanup(userId: string) {
+  const MIGRATION_KEY = `migration_done_v2_${userId}`;
+  try {
+    const done = await AsyncStorage.getItem(MIGRATION_KEY);
+    if (done) return;
+  } catch {}
+
   if (typeof window !== "undefined" && window.localStorage && window.localStorage.getItem("migration_done_v2")) {
+    try { await AsyncStorage.setItem(MIGRATION_KEY, "true"); } catch {}
     return;
   }
 
@@ -1683,6 +1690,10 @@ export async function runRetroactiveCleanup(userId: string) {
       await batch.commit();
       console.log(`Retroactive cleanup migrated ${updateCount} records.`);
     }
+
+    try {
+      await AsyncStorage.setItem(MIGRATION_KEY, "true");
+    } catch {}
 
     if (typeof window !== "undefined" && window.localStorage) {
       window.localStorage.setItem("migration_done_v2", "true");

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   GoogleAuthProvider,
   User,
@@ -21,6 +22,25 @@ type AuthUserProfile = {
   email?: string;
 };
 
+const PROFILE_CACHE_PREFIX = "auth_profile_v1:";
+
+async function getCachedProfile(uid: string): Promise<AuthUserProfile | null> {
+  try {
+    const raw = await AsyncStorage.getItem(`${PROFILE_CACHE_PREFIX}${uid}`);
+    return raw ? (JSON.parse(raw) as AuthUserProfile) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function setCachedProfile(uid: string, profile: AuthUserProfile): Promise<void> {
+  try {
+    await AsyncStorage.setItem(`${PROFILE_CACHE_PREFIX}${uid}`, JSON.stringify(profile));
+  } catch {
+    // Ignore cache persistence errors
+  }
+}
+
 type AuthContextValue = {
   user: User | null;
   userProfile: AuthUserProfile | null;
@@ -41,22 +61,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let active = true;
+    let inFlightUid: string | null = null;
 
     const handleProfileLoading = async (uid: string, email: string) => {
+      // First check cache to unblock UI immediately
+      const cached = await getCachedProfile(uid);
+      if (cached && active) {
+        setUserProfile(cached);
+        setLoading(false);
+      }
+
       const snap = await getDoc(doc(db, "users", uid));
       if (snap.exists()) {
         const data = snap.data();
         if (data.role === "nested" && data.active === false) {
           return { shouldSignOut: true, profile: null };
         }
+        const profile: AuthUserProfile = {
+          role: (data.role || "owner") as "owner" | "nested",
+          parentUid: data.parentUid || null,
+          active: data.active !== false,
+          email: data.email || email || "",
+        };
+        void setCachedProfile(uid, profile);
         return {
           shouldSignOut: false,
-          profile: {
-            role: (data.role || "owner") as "owner" | "nested",
-            parentUid: data.parentUid || null,
-            active: data.active !== false,
-            email: data.email || email || "",
-          }
+          profile,
         };
       } else {
         // Fallback for pre-existing nested accounts without users/{uid} document
@@ -83,19 +113,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } catch (err) {
             console.error("Auto-heal users document failed:", err);
           }
+          const profile: AuthUserProfile = {
+            role: "nested" as const,
+            parentUid: parentUid,
+            active: nestedData.active !== false,
+            email: nestedData.nestedEmail || email || "",
+          };
+          void setCachedProfile(uid, profile);
           return {
             shouldSignOut: false,
-            profile: {
-              role: "nested" as const,
-              parentUid: parentUid,
-              active: nestedData.active !== false,
-              email: nestedData.nestedEmail || email || "",
-            }
+            profile,
           };
         }
+        const profile: AuthUserProfile = { role: "owner" as const, parentUid: null, active: true };
+        void setCachedProfile(uid, profile);
         return {
           shouldSignOut: false,
-          profile: { role: "owner" as const, parentUid: null, active: true }
+          profile,
         };
       }
     };
@@ -103,6 +137,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsub = onAuthStateChanged(auth, async (nextUser) => {
       if (!active) return;
       if (nextUser) {
+        setUser(nextUser);
+        // Fast-path: check cached profile immediately
+        getCachedProfile(nextUser.uid).then((cached) => {
+          if (active && cached) {
+            setUserProfile(cached);
+            setLoading(false);
+          }
+        });
+
+        if (inFlightUid === nextUser.uid) return;
+        inFlightUid = nextUser.uid;
+
         try {
           const res = await handleProfileLoading(nextUser.uid, nextUser.email || "");
           if (res.shouldSignOut) {
@@ -120,15 +166,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch (e) {
           console.error("Error loading user profile", e);
           if (active) {
-            setUserProfile({ role: "owner", parentUid: null, active: true });
+            setUserProfile((prev) => prev || { role: "owner", parentUid: null, active: true });
+          }
+        } finally {
+          if (active) {
+            setLoading(false);
           }
         }
       } else {
-        if (active) setUserProfile(null);
-      }
-      if (active) {
-        setUser(nextUser);
-        setLoading(false);
+        if (active) {
+          setUser(null);
+          setUserProfile(null);
+          setLoading(false);
+        }
       }
     });
 
@@ -136,6 +186,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!active) return;
       const currentUser = auth.currentUser;
       if (currentUser) {
+        setUser(currentUser);
+        if (inFlightUid === currentUser.uid) return;
+        inFlightUid = currentUser.uid;
+
         try {
           const res = await handleProfileLoading(currentUser.uid, currentUser.email || "");
           if (res.shouldSignOut) {
@@ -153,13 +207,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch (e) {
           console.error("Error loading user profile in authReady", e);
           if (active) {
-            setUserProfile({ role: "owner", parentUid: null, active: true });
+            setUserProfile((prev) => prev || { role: "owner", parentUid: null, active: true });
+          }
+        } finally {
+          if (active) {
+            setLoading(false);
           }
         }
-      }
-      if (active) {
-        setUser(currentUser);
-        setLoading(false);
+      } else {
+        if (active) {
+          setUser(null);
+          setUserProfile(null);
+          setLoading(false);
+        }
       }
     });
 
@@ -211,7 +271,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       resetPassword(email) {
         return sendPasswordResetEmail(auth, email);
       },
-      logout() {
+      async logout() {
+        if (user?.uid) {
+          try {
+            await AsyncStorage.removeItem(`${PROFILE_CACHE_PREFIX}${user.uid}`);
+          } catch {}
+        }
         return signOut(auth);
       },
     }),

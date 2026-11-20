@@ -35,23 +35,32 @@ function RootLayoutContent() {
 
   useEffect(() => {
     if (Platform.OS === "web" && typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      try {
+        if (sessionStorage.getItem("sw_cleaned_v1")) return;
+      } catch {}
       navigator.serviceWorker.getRegistrations().then((registrations) => {
-        for (const registration of registrations) {
-          registration.unregister().then((unregistered) => {
-            if (unregistered) {
-              console.log("Service worker unregistered successfully");
-              if (typeof caches !== "undefined") {
-                caches.keys().then((keys) => {
-                  return Promise.all(keys.map((k) => caches.delete(k)));
-                }).then(() => {
-                  window.location.reload();
-                });
-              } else {
+        if (!registrations || registrations.length === 0) return;
+        let unregisteredCount = 0;
+        Promise.all(
+          registrations.map((reg) =>
+            reg.unregister().then((ok) => {
+              if (ok) unregisteredCount++;
+            })
+          )
+        ).then(() => {
+          if (unregisteredCount > 0) {
+            try {
+              sessionStorage.setItem("sw_cleaned_v1", "true");
+            } catch {}
+            if (typeof caches !== "undefined") {
+              caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))).then(() => {
                 window.location.reload();
-              }
+              });
+            } else {
+              window.location.reload();
             }
-          });
-        }
+          }
+        });
       });
     }
   }, []);
@@ -109,15 +118,24 @@ export default function RootLayout() {
     "Onest-SemiBold": require("../assets/fonts/Onest-SemiBold.ttf"),
     "Onest-Bold": require("../assets/fonts/Onest-Bold.ttf"),
   });
+  const [fontTimeoutPassed, setFontTimeoutPassed] = useState(false);
 
   useEffect(() => {
-    (Text as any).defaultProps = (Text as any).defaultProps || {};
-    (Text as any).defaultProps.style = [{ fontFamily: "Onest-Medium" }, (Text as any).defaultProps.style];
-    (TextInput as any).defaultProps = (TextInput as any).defaultProps || {};
-    (TextInput as any).defaultProps.style = [{ fontFamily: "Onest-Medium" }, (TextInput as any).defaultProps.style];
+    // Prevent indefinite splash hang if fonts take longer than 800ms
+    const timer = setTimeout(() => setFontTimeoutPassed(true), 800);
+    return () => clearTimeout(timer);
   }, []);
 
-  if (!fontsLoaded) return null;
+  useEffect(() => {
+    if (fontsLoaded || Platform.OS === "web") {
+      (Text as any).defaultProps = (Text as any).defaultProps || {};
+      (Text as any).defaultProps.style = [{ fontFamily: "Onest-Medium" }, (Text as any).defaultProps.style];
+      (TextInput as any).defaultProps = (TextInput as any).defaultProps || {};
+      (TextInput as any).defaultProps.style = [{ fontFamily: "Onest-Medium" }, (TextInput as any).defaultProps.style];
+    }
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded && Platform.OS !== "web" && !fontTimeoutPassed) return null;
 
   return (
     <ErrorBoundary>
